@@ -1,0 +1,397 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-adapter-code: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/claude-opus-4-7[1m]
+  warnings: []
+
+meta:
+  bidder_name: mediasquare
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://pbs-front.mediasquare.fr/msq_prebid"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: true
+  maintainer:
+    email: "tech@mediasquare.fr"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 791
+  user_sync:
+    redirect:
+      url: "https://pbs-front.mediasquare.fr/sync?gdpr={{.GDPR}}&consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&redirect={{.RedirectURL}}"
+      userMacro: "$UID"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+# NOTE: encoded as a YAML double-quoted scalar (rather than a `|` literal block) to
+# preserve byte-fidelity. The raw file is 515 bytes terminating with `\n}\n`. A `|`
+# block emitter would normalize the terminating newline (and we lose round-trip
+# determinism). The double-quoted form satisfies R2: sha256(decoded scalar) ==
+# bidder_params_sha256 exactly.
+bidder_params_json: "{\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n  \"title\": \"Mediasquare Adapter Params\",\n  \"description\": \"A schema which validates params accepted by the Mediasquare adapter\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"owner\": {\n      \"type\": \"string\",\n      \"minLength\": 1,\n      \"description\": \"The owner provided for mediasquare.\"\n    },\n    \"code\": {\n      \"type\": \"string\",\n      \"minLength\": 1,\n      \"description\": \"The code provided for mediasquare.\"\n    }\n  },\n  \"required\": [\"owner\", \"code\"]\n}\n"
+bidder_params_sha256: 798a251b3a6b11aa42036a129f8f61b3f0a13335babe539a96658b01ddd44f4d
+
+params:
+  schema_interpretation:
+    properties:
+      - name: owner
+        type: string
+        description: "The owner provided for mediasquare."
+        constraints:
+          minLength: 1
+      - name: code
+        type: string
+        description: "The code provided for mediasquare."
+        constraints:
+          minLength: 1
+    required_fields:
+      - owner
+      - code
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_mediasquare.go
+    type_name: ImpExtMediasquare
+    fields:
+      - name: Owner
+        json_tag: owner
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: Code
+        json_tag: code
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/mediasquare/params_test.go
+    valid_cases_count: 1
+    invalid_cases_count: 10
+    bidder_constant_referenced: openrtb_ext.BidderMediasquare
+
+code:
+  package_or_class: mediasquare
+  directory_name: mediasquare
+  package_directory_mismatch: false
+  # Edge case #4 — multi-file Go layout. The adapter splits implementation across 4
+  # source files (plus 2 test files). All files belong to package `mediasquare`.
+  file_layout:
+    kind: multi-file
+    files:
+      - name: mediasquare.go
+        role: implementation
+        loc: 129
+      - name: structs.go
+        role: types
+        loc: 240
+      - name: parsers.go
+        role: parsers
+        loc: 83
+      - name: utils.go
+        role: utils
+        loc: 95
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party: []
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpoint
+        type: string
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    # Edge case — multi-imp aggregation: each imp becomes one entry in
+    # `msqParameters.Codes[]`, all sent in a single HTTP request.
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: imp-flatten-aggregate
+          custom_body_type: msqParameters
+    # Edge case #5 — custom (non-OpenRTB) request body. The HTTP body is a
+    # `msqParameters` struct (defined in structs.go), NOT an openrtb2.BidRequest.
+    request_body:
+      kind: custom
+      custom_body_type: msqParameters
+    mutation:
+      mutates_request: false
+      entity_strategies: {}
+      go_idiom: none
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtMediasquare
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: makeRequest
+        signature: "func (a *adapter) makeRequest(request *openrtb2.BidRequest, msqParams *msqParameters) (requestData *adapters.RequestData, err error)"
+      - name: initMsqParams
+        signature: "func initMsqParams(request *openrtb2.BidRequest) (msqParams msqParameters)"
+      - name: setContent
+        signature: "func (msqParams *msqParametersCodes) setContent(currentImp openrtb2.Imp) (ok bool)"
+      - name: getContent
+        signature: "func (msqResp *msqResponse) getContent(bidderResponse *adapters.BidderResponse)"
+      - name: parserDSA.getValue
+        signature: "func (parser parserDSA) getValue(request *openrtb2.BidRequest) interface{}"
+      - name: parserGDPR.getValue
+        signature: "func (parser parserGDPR) getValue(field string, request *openrtb2.BidRequest) (gdpr string)"
+      - name: mType
+        signature: "func (msqBids *msqResponseBids) mType() openrtb2.MarkupType"
+      - name: bidType
+        signature: "func (msqBids *msqResponseBids) bidType() openrtb_ext.BidType"
+      - name: extBid
+        signature: "func (msqBids *msqResponseBids) extBid() (raw json.RawMessage)"
+      - name: loadExtBid
+        signature: "func (msqBids *msqResponseBids) loadExtBid() (extBid openrtb_ext.ExtBid, errs []error)"
+      - name: extBidPrebidMeta
+        signature: "func (msqBids *msqResponseBids) extBidPrebidMeta() *openrtb_ext.ExtBidPrebidMeta"
+      - name: ptrInt8ToBool
+        signature: "func ptrInt8ToBool(i *int8) bool"
+      - name: errorWriter
+        signature: "func errorWriter(header string, err error, isEmpty bool) error"
+  make_bids:
+    # Edge case #6 — custom response unmarshal. The body is a `msqResponse`
+    # struct (defined in structs.go), with `responses[]` carrying msqResponseBids
+    # entries that are NOT openrtb2.Bid-shaped (cpm/creative_id/native sub-object).
+    response_type: custom
+    custom_response_type: msqResponse
+    http_status_handling:
+      # Direct StatusCode == http.StatusOK / StatusCode == http.StatusBadRequest checks
+      # at mediasquare.go:98-107 — does not use adapters.IsResponseStatusCodeNoContent
+      # or adapters.CheckResponseStatusCodeForErrors helpers.
+      kind: legacy-raw-go
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      # See utils.go:30-39 — bidType() inspects payload shape (Video!=nil, Native!=nil)
+      # and falls back to banner. Pairs with custom response_type.
+      method_chain:
+        - method: by-response-payload-shape
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: none
+    # `for _, resp := range msqResp.Responses` over a value-receiver slice
+    # (structs.go:215). Bid is built fresh per iteration into tmpTBid.Bid.
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    # structs.go:234 — `bidderResponse.Currency = resp.Currency` on each iteration,
+    # final assignment wins; no guard against empty string.
+    currency_overwrite_safety: unguarded
+
+tests:
+  test_root_directory: mediasquaretest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: multi-format.json
+        sha256: a9f99ce1d0c3ca6894acffc3ac69b13c80a8c1d4a408de88e1b16b6171c5e564
+        bytes: 14320
+      - filename: simple-banner.json
+        sha256: 2ddd17897bdd037ae22bdd861d4add678eac5fdf878d8d34b6dffc8c0216adf7
+        bytes: 7408
+      - filename: simple-native.json
+        sha256: a558c286fb6475d616a61f564cc4cf225633baa5890b3801093397746c581469
+        bytes: 4587
+      - filename: simple-video.json
+        sha256: 88e98c20ca3f87f340ae65a165b77c06e2e37f4e18beb0d514753440354dd11c
+        bytes: 5428
+    supplemental:
+      - filename: no-valid-imp-ext.json
+        sha256: fe02c49061265ef9271e00f08b6663ffb6d4ce822addaf95c92f871dbc367328
+        bytes: 2370
+      - filename: no-valid-response.json
+        sha256: b4517656171d01c1b87adb076dad24858d049eba82e4e5f9ed822584d3e04daa
+        bytes: 2036
+      - filename: status-400.json
+        sha256: 43f6755dd6f4aff15ef87380466cfceffa35e4c521987b9e2be6714de693d477
+        bytes: 3862
+      - filename: status-not-200.json
+        sha256: 4f8cc29aaed304f54e65f329e4cec3ae233079c6d4476d762c00ba0d5bb17a99
+        bytes: 3897
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  # Edge case #4 — multi-file layout justified by the non-OpenRTB request body.
+  - id: multi-file-layout-non-openrtb-payload
+    file: adapters/mediasquare/
+    summary: "Adapter splits across 4 source files (mediasquare.go = 129 LOC orchestrator, structs.go = 240 LOC types/init/setContent/getContent, parsers.go = 83 LOC GDPR/DSA parsers, utils.go = 95 LOC bid-shaping helpers + headerList + errorWriter). The split is justified by the custom payload: msqParameters/msqResponse and their constituent types are large enough that co-locating them with the orchestrator would exceed reviewable bounds."
+    edge_case_taxon: multi-file-layout-justified
+  # Edge case #5 — custom request body shape (paired with batching.rules custom_body_type
+  # AND request_body.custom_body_type so the custom enum value has a quirks entry).
+  - id: custom-request-body-msqparameters
+    file: adapters/mediasquare/structs.go
+    summary: "MakeRequests marshals msqParameters (structs.go:23-32), NOT openrtb2.BidRequest. Codes[] aggregates one entry per imp via setContent (structs.go:155-210); GDPR (consent_required + consent_string), DSA, tech (device/app/site/user verbatim), test, user_uid, pbjs (prebid version) are added at request scope. This is the canonical case for batching.rules: imp-flatten-aggregate."
+    edge_case_taxon: multi-file-layout-justified
+  # Edge case #6 — custom response shape.
+  - id: custom-response-body-msqresponse
+    file: adapters/mediasquare/structs.go
+    summary: "MakeBids unmarshals into msqResponse (structs.go:13-20), with responses[] of msqResponseBids (structs.go:68-86). Each msqResponseBids carries cpm/creative_id/transaction_id/net_revenue/ttl/video{xml,url}/native{title/icon/image/cta/...}/adomain/dsa/burl. getContent (structs.go:213-240) flattens these into adapters.TypedBid records; bidType (utils.go:30-39) and mType (utils.go:18-27) classify by which sub-object is non-nil."
+    edge_case_taxon: multi-file-layout-justified
+  # Test naming — the Go test in mediasquare_test.go uses the canonical RunJSONBidderTest
+  # harness, but TestMakeRequests adds two additional unit-test cases for nil-request
+  # and empty-imp paths (mediasquare_test.go:24-44) that operate outside the JSON
+  # fixture harness.
+  - id: hand-rolled-makerequests-unit-tests
+    file: adapters/mediasquare/mediasquare_test.go
+    summary: "TestMakeRequests (mediasquare_test.go:24-44) exercises nil-request and empty-Imp paths via direct adapter calls + assert.Equal — both paths emit the `<MakeRequests> request: is empty.` error from utils.go:errorWriter. These are not represented in the JSON fixture set; they cover the fast-fail guard at mediasquare.go:30-33."
+    edge_case_taxon: legacy-test-helpers-imported
+  # MakeBids status handling — uses raw http.StatusXxx checks (mediasquare.go:98-117)
+  # rather than canonical helpers (R30 / Rule 30).
+  - id: legacy-raw-status-checks
+    file: adapters/mediasquare/mediasquare.go
+    summary: "MakeBids inspects response.StatusCode directly (mediasquare.go:98-107) with a switch on http.StatusBadRequest (BadInput) vs default (BadServerResponse), then a separate empty-Responses check (mediasquare.go:118-124) that emits BadServerResponse with http.StatusNoContent in the message. Predates and bypasses adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors."
+    edge_case_taxon: legacy-encoding-json-direct-usage
+  # currency_overwrite_safety: unguarded (utils.go:234 inside getContent loop).
+  - id: unguarded-currency-overwrite-on-each-bid
+    file: adapters/mediasquare/structs.go
+    summary: "getContent (structs.go:213-240) sets bidderResponse.Currency = resp.Currency on every iteration (line 234). Last-bid-wins overwrite with no guard against empty string; if the final response has Currency==\"\" the framework's default is silently overwritten to empty."
+    edge_case_taxon: unguarded-currency-overwrite
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/mediasquare/
+    package_name: mediasquare
+    bidder_constant: openrtb_ext.BidderMediasquare
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/mediasquare/
+    bidder_class: MediasquareBidder
+    config_class: MediasquareConfiguration
+    yaml_path: src/main/resources/bidder-config/mediasquare.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/mediasquare/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: false
+  go_specific_concerns:
+    - "Multi-file Go layout (mediasquare.go orchestrator + structs.go types + parsers.go + utils.go) — Java port keeps the equivalent split via co-located classes under bidder/mediasquare/{request,response}/ and a separate proto/.../mediasquare/ExtImpMediasquare.java. Port mapping is type-by-type, not file-by-file."
+    - "Custom request body (msqParameters) marshaled directly via jsonutil.Marshal (mediasquare.go:78). Java port uses Bidder<MediasquareRequest> generic so the framework auto-marshals — see Rule 9 (parameterized Bidder<T>). Cross-language helpers diverge: Go assembles RequestData manually, Java uses BidderUtil.defaultRequest with a typed payload."
+    - "Custom response (msqResponse) unmarshaled directly via jsonutil.Unmarshal (mediasquare.go:111). Java port uses mapper.decodeValue with response-specific class. Both sides require an explicit imp-flatten-aggregate batching rule plus by-response-payload-shape bid_type resolution (Rule 25)."
+    - "GDPR/DSA parsing uses tiny ad-hoc parser structs (parserDSA, parserGDPR) with `setContent` methods that re-Unmarshal sub-fields. Java port simplifies via direct ObjectNode field access. Idiomatic Go-side encapsulation that does not translate cleanly."
+    - "interface{} (any) used for DSA payload (structs.go:28, 84, parsers.go:12). Java side uses ObjectNode/JsonNode. Type erasure on the Go side makes the DSA passthrough opaque — porter must preserve the passthrough behavior, NOT the type."
+    - "headerList is a package-level var (utils.go:12-15) constructed once at package init, shared across all RequestData. Idiomatic Go but Java side allocates fresh via HttpUtil.headers() per request. Functionally equivalent."
+    - "Last-bid-wins currency overwrite (structs.go:234) — getContent sets bidderResponse.Currency on every iteration. Java port should guard via Optional.ofNullable(bid.getCurrency()).filter(StringUtils::isNotEmpty).orElse(...) per the unguarded-currency-overwrite quirk."
+    - "version.Ver used to populate msqParams.PrebidVer (structs.go:144-149). When request.Test==1 the literal `prebid-test-version` is sent (line 144). When unset, `n/a` (line 148). The test-mode override is observable in JSON fixtures."
+    - "ptrInt8ToBool (utils.go:82-87) — niche helper to convert *int8 (request.Regs.GDPR is *int8 in OpenRTB) to a bool with nil-safe semantics. Java port uses BooleanUtils.toBoolean(Boolean) or a direct null check."
+    - "errorWriter (utils.go:90-95) — single-source error formatter with isEmpty branch. All errors emitted from MakeRequests follow this pattern via fmt.Errorf and surface as plain `error` (not errortypes.BadInput). Java port should map to BidderError.badInput per Rule 27."
+  java_specific_concerns: []
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

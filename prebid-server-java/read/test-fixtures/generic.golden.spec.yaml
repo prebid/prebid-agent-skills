@@ -1,0 +1,390 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: generic
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - genericAlias
+    - adrino
+    - ccx
+    - infytv
+    - zeta_global_ssp
+    - blue
+    - cwire
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "maintainer@example.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+        - audio
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+        - audio
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |-
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Generic Adapter Params",
+    "description": "A schema which validates params accepted by the Generic adapter",
+    "type": "object",
+    "properties": {
+      "exampleProperty": {
+        "type": "string",
+        "description": "Example property",
+        "minLength": 1
+      }
+    }
+  }
+bidder_params_sha256: a3e2925fd8108a627621d767cb74d09c690001d2b743b7befa942baa5e93b526
+
+params:
+  schema_interpretation:
+    properties:
+      - name: exampleProperty
+        type: string
+        description: "Example property"
+    required_fields: []
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: null
+    file: null
+    type_name: null
+    fields: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/generic/GenericBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: GenericBidder
+  directory_name: bidder
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: GenericBidder.java
+        role: implementation
+        loc: 70
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: false
+    third_party:
+      - CollectionUtils
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-passthrough
+      custom_body_type: null
+    mutation:
+      mutates_request: false
+      entity_strategies: {}
+      go_idiom: null
+      java_idiom: none
+    imp_ext_unmarshal:
+      kind: none
+      mechanism_go: null
+      mechanism_java: null
+      target_type: null
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: extractBids
+        signature: "private static List<BidderBid> extractBids(BidRequest bidRequest, BidResponse bidResponse)"
+      - name: bidsFromResponse
+        signature: "private static List<BidderBid> bidsFromResponse(BidRequest bidRequest, BidResponse bidResponse)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-imp-mediatype
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: lenient
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/generic/
+  go_directory_naming: null
+  java_it_folder_naming: multi-folder
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: openrtb2/generic/test-auction-generic-request.json
+        sha256: 62b1399d246853db4bdfa1e9a68ec66d1c9b1de4fc447889dea2265b01e57ca7
+        bytes: 306
+        role: auction-request
+      - filename: openrtb2/generic/test-auction-generic-response.json
+        sha256: f5e027938940513783fd4eeeedef0b7a98902b6e3dfec4055fb2abc49c06a174
+        bytes: 722
+        role: auction-response
+      - filename: openrtb2/generic/test-generic-bid-request.json
+        sha256: 83fd806fcff425f7a20645631334fdaf810f4d169dc6b380b7e88fc6ea5f8364
+        bytes: 929
+        role: bidder-bid-request
+      - filename: openrtb2/generic/test-generic-bid-response.json
+        sha256: 51dbb5c5f38ebd65d39ac3ab909e09f18501e6da10e0c5b1854ad9f4b3459153
+        bytes: 405
+        role: bidder-bid-response
+      - filename: openrtb2/generic_core_functionality/test-auction-generic-request.json
+        sha256: 80359cfa29805416bc709f8ca7163139960bf9b318368ba3e856d78e0d83d6ce
+        bytes: 2048
+        role: auction-request
+      - filename: openrtb2/generic_core_functionality/test-auction-generic-response.json
+        sha256: b9f7a2cdac3ffcb7b4d3a689383929d21946de1f5454126d8362f9b6e6ec366c
+        bytes: 2316
+        role: auction-response
+      - filename: openrtb2/generic_core_functionality/test-cache-generic-request.json
+        sha256: 0cd0d2b3af725d7a41644a176cf44f56a2412cfe7339ccd0e5fafc3f6a175a27
+        bytes: 1021
+        role: cache-request
+      - filename: openrtb2/generic_core_functionality/test-cache-generic-response.json
+        sha256: c8de8ebade9857aa47b73773e7af9cb34a8020efc7778ee106e75bcc2969eac6
+        bytes: 89
+        role: cache-response
+      - filename: openrtb2/generic_core_functionality/test-generic-bid-request.json
+        sha256: 492207bc23599413424f61f78added5b8705a3e5e0601ec24a64abc3c1d088d8
+        bytes: 2374
+        role: bidder-bid-request
+      - filename: openrtb2/generic_core_functionality/test-generic-bid-response.json
+        sha256: da05d3592b0a180d3427f127165b4b336489cf85f01792b9422d8c82dbbd8c9a
+        bytes: 993
+        role: bidder-bid-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 10
+  unit_test_loc: 216
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldCreateExpectedUrl
+    - makeBidsShouldReturnErrorIfResponseBodyCouldNotBeParsed
+    - makeBidsShouldReturnEmptyListIfBidResponseIsNull
+    - makeBidsShouldReturnEmptyListIfBidResponseSeatBidIsNull
+    - makeBidsShouldReturnBannerBidIfBannerIsPresentInRequestImp
+    - makeBidsShouldReturnVideoBidIfVideoIsPresentInRequestImp
+    - makeBidsShouldReturnNativeBidIfNativeIsPresentInRequestImp
+    - makeBidsShouldReturnAudioBidIfAudioIsPresentInRequestImp
+    - makeBidsShouldReturnBannerBidIfBannerAndVideoAndAudioAndNativeIsAbsentInRequestImp
+  fixture_handling: count-only
+  test_application_properties_entries_added: 16
+  integration_test_class: GenericTest
+  integration_test_pattern: multi-folder
+
+spring_config:
+  factory_class: GenericBidderConfiguration
+  factory_method: genericBidderDeps
+  property_source_path: classpath:/bidder-config/generic.yaml
+  bidder_creator_lambda: |
+    config -> new GenericBidder(config.getEndpoint(), mapper)
+  configuration_properties_class:
+    name: BidderConfigurationProperties
+    extends: null
+    extra_fields: []
+    nested_classes: []
+    lombok_annotations: []
+  bean_dependencies:
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: GenericBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 2
+    parameters:
+      - name: endpointUrl
+        type: String
+        source: config.endpoint
+        role: properties
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields: []
+  helper_classes_co_located: []
+  helper_classes_in_proto: []
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: null
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: bidder-class-at-bidder-root-no-subdir
+    file: src/main/java/org/prebid/server/bidder/GenericBidder.java
+    summary: "GenericBidder.java lives directly in src/main/java/org/prebid/server/bidder/ rather than in a per-bidder subdirectory bidder/generic/. Unique among production bidders — every other adapter has its own subdirectory. Side effect: helper proto types like ExtImp{Bidder} have no canonical home, but generic has no params POJO so this is moot. Test code DOES live under the canonical bidder/generic/ subdirectory (GenericBidderTest.java)."
+    edge_case_taxon: incomplete-classification
+  - id: configuration-class-naming-variant-bidderconfiguration
+    file: src/main/java/org/prebid/server/spring/config/bidder/GenericBidderConfiguration.java
+    summary: "Spring config class is named GenericBidderConfiguration (with Bidder infix) rather than the canonical GenericConfiguration pattern used by all other bidders. config_class_name_pattern: <Name>BidderConfiguration. Only generic uses this naming variant."
+    edge_case_taxon: incomplete-classification
+  - id: bidderutil-defaultrequest-thin-wrapper
+    file: src/main/java/org/prebid/server/bidder/GenericBidder.java
+    summary: "makeHttpRequests is a single-line delegation to BidderUtil.defaultRequest(bidRequest, endpointUrl, mapper) at line 38. The helper handles HTTP method, headers, impIds population, body encoding, and payload attachment in one call. Generic is the canonical thin-wrapper baseline — no request body modification at all (openrtb2-passthrough)."
+    edge_case_taxon: incomplete-classification
+  - id: bidderutil-getbidtype-shared-helper
+    file: src/main/java/org/prebid/server/bidder/GenericBidder.java
+    summary: "extractBids delegates BidType resolution to BidderUtil.getBidType(bid, impMap) at line 66. The shared helper resolves BidType from imp media types (banner > video > xNative > audio > banner-default fallback when imp is missing). Cross-corpus baseline behaviour for by-imp-mediatype with lenient multi-format detection."
+    edge_case_taxon: incomplete-classification
+  - id: bidder-yaml-as-multi-alias-vendor
+    file: src/main/resources/bidder-config/generic.yaml
+    summary: "generic.yaml carries 7 disabled aliases (genericAlias, adrino, ccx, infytv, zeta_global_ssp, blue, cwire) — each fully-fledged with their own meta-info, vendor-id, and (some) usersync blocks. The 'generic' adapter is overloaded as a generic-OpenRTB facade that other bidders alias into rather than running their own implementations."
+    edge_case_taxon: tilde-alias-syntax
+  - id: minimal-spring-config-only-mapper
+    file: src/main/java/org/prebid/server/spring/config/bidder/GenericBidderConfiguration.java
+    summary: "Constructor takes only endpointUrl and JacksonMapper — no currencyConversionService, no co-located helper classes. Minimum-viable Spring DI baseline (arity 2). Useful as a port-fidelity reference: any bidder requiring more collaborators is doing more work than the OpenRTB-passthrough baseline."
+    edge_case_taxon: incomplete-classification
+  - id: example-property-placeholder-params-schema
+    file: src/main/resources/static/bidder-params/generic.json
+    summary: "bidder-params/generic.json declares a single 'exampleProperty' field with no required[] array — placeholder schema for the canonical generic-OpenRTB facade. No matching ExtImpGeneric POJO exists in proto/openrtb/ext/request/, so the field is never deserialized at runtime."
+    edge_case_taxon: incomplete-classification
+  - id: integration-test-multi-folder-layout
+    file: src/test/resources/org/prebid/server/it/openrtb2/generic/
+    summary: "Integration tests live under TWO sibling folders: openrtb2/generic/ (4 files, simple auction) and openrtb2/generic_core_functionality/ (6 files, includes cache request/response pair). java_it_folder_naming: multi-folder. The _core_functionality suffix is unique to generic — used as the cross-cutting end-to-end smoke test for the framework rather than for the bidder itself."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: null
+    package_name: null
+    bidder_constant: null
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/
+    bidder_class: GenericBidder
+    config_class: GenericBidderConfiguration
+    yaml_path: src/main/resources/bidder-config/generic.yaml
+    proto_dir: null
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: false
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage: null
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "GenericBidder is Java-only; no corresponding adapter exists at /tmp/prebid-server-go/adapters/generic/. The Go side has no 'generic' bidder constant in openrtb_ext nor any static/bidder-params/generic.json. R5 cross-language SHA256 parity is N/A (singleton)."
+    - "GenericBidder.java is the only concrete bidder implementation file at src/main/java/org/prebid/server/bidder/ root level. All other files at that level are framework infrastructure (Bidder.java interface, BidderCatalog, HttpBidderRequester, Usersyncer, etc.). Port skills targeting Java MUST honour this no-subdir layout for generic specifically."
+    - "GenericBidderConfiguration violates the convention <Name>Configuration adopted by all other bidders (KoblerConfiguration, OptidigitalConfiguration). Spring config naming pattern <Name>BidderConfiguration is unique to generic. Port skills must NOT regenerate this as GenericConfiguration."
+    - "BidderUtil.defaultRequest(bidRequest, endpointUrl, mapper) at line 38 is the canonical thin-adapter helper. It handles: HttpMethod.POST, HttpUtil.headers() default Content-Type, impIds(bidRequest) for the impIds tracking field, mapper.encodeToBytes(bidRequest) for the body, and payload(bidRequest) for the response correlation. Anyone using this helper signals openrtb2-passthrough request_body kind."
+    - "BidderUtil.getBidType(bid, impMap) at line 66 returns BidType.banner as the default when imp is missing AND when no media type is set on the imp. Order-of-preference: banner > video > xNative > audio. Lenient multi-format detection — never throws."
+    - "Empty-seatbid shortcircuit at lines 51-54 returns Collections.emptyList() before stream pipeline. Paired with framework-default HTTP status handling. Generic uses framework-default-plus-empty-seatbid-shortcircuit pattern."
+    - "Stream pipeline at lines 61-67 uses three Objects::nonNull filters across SeatBid, SeatBid.Bid, and Bid (defensive against null entries). flatMap(Collection::stream) flattens before mapping each Bid to BidderBid.of(bid, BidderUtil.getBidType(bid, impMap), bidResponse.getCur())."
+    - "extractBids passes bidResponse.getCur() as the currency for each BidderBid — passthrough-from-response, no overwrite, no guard. Empty/missing bidResponse.cur is allowed downstream."
+    - "Constructor calls HttpUtil.validateUrl(Objects.requireNonNull(endpointUrl)) at line 32 — invalid URL triggers IllegalArgumentException at bean construction (covered by creationShouldFailOnInvalidEndpointUrl test at line 43-45)."
+    - "DecodeException catch at line 46-48 returns Result.withError(BidderError.badServerResponse(e.getMessage())) — does not throw, returns single-error Result. The error type is bad_server_response (string-typed enum)."
+    - "GenericBidderTest is a hand-written JUnit class (10 @Test methods) at src/test/java/org/prebid/server/bidder/generic/GenericBidderTest.java — note the canonical bidder/generic/ subdir for tests, even though the production code is at bidder/ root. Tests extend VertxTest (canonical harness)."
+    - "Integration test GenericTest extends IntegrationTest (not VertxTest), wires WireMock stubs at /generic-exchange path, and uses singletonList('generic') as the bidder list. Located at src/test/java/org/prebid/server/it/GenericTest.java with a single @Test method."
+    - "test-application.properties contains 16 lines registering the generic adapter and 7 aliases (genericAlias, adrino, blue, ccx, cwire, infytv, zeta_global_ssp) — each with .enabled=true and .endpoint=http://localhost:8090/{name}-exchange. test_application_properties_entries_added: 16 (largest of any bidder)."
+    - "bidder-config/generic.yaml endpoint is 'https://' literal (line 3) — placeholder value for the disabled-by-default parent. The 7 aliases each carry their own real endpoint URLs and meta-info. Generic-as-overload pattern: the parent is a registration shell, the aliases are the working bidders."
+    - "BidderUtil class import at line 15 is the shared utility — generic uses TWO of its functions: defaultRequest (request shaping) and getBidType (response shaping). Together these two helpers ARE the entire adapter behaviour. Counts as a degenerate case for port-fidelity comparison."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

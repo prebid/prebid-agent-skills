@@ -1,0 +1,346 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-adapter-code: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/claude-opus-4-7[1m]
+  warnings: []
+
+meta:
+  bidder_name: 33across
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://ssc.33across.com/api/v1/s2s"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "headerbidding@33across.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+  geoscope:
+    - "!EEA"
+  gvl_vendor_id: 58
+  user_sync:
+    iframe:
+      url: "https://ssc-cms.33across.com/ps/?m=xch&rt=html&gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&ru={{.RedirectURL}}&id=zzz000000000002zzz"
+      userMacro: "33XUSERID33X"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+# NOTE: encoded as YAML double-quoted scalar (rather than a `|` literal block) to preserve
+# byte-fidelity. The original file begins with a leading blank line ("\n{\n...") AND has
+# NO terminal newline; it also carries trailing whitespace on multiple lines (preserved).
+# A `|` block would clip the leading blank-line nuance and force a terminal newline,
+# breaking sha256(bidder_params_json) == bidder_params_sha256 (R2 contract).
+bidder_params_json: "\n{\n    \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n    \"title\": \"33Across Adapter Params\",\n    \"description\": \"A schema which validates params accepted by the 33Across adapter\",\n  \n    \"type\": \"object\",\n    \"properties\": {\n      \"productId\": {\n        \"type\": \"string\",\n        \"description\": \"Product type\"\n      },\n      \"siteId\": {\n        \"type\": \"string\",\n        \"description\": \"Site Id\"\n      },\n      \"zoneId\": {\n        \"type\": \"string\",\n        \"description\": \"Zone Id\"\n      }\n    },\n    \"anyOf\": [\n      { \"required\": [\"productId\", \"siteId\"] },\n      { \"required\": [\"productId\", \"zoneId\"] }\n    ]\n  }"
+bidder_params_sha256: 7e6b4be5de0aae3391c197f98d6aa172c586eb82769ba5036b9cd43475052cf9
+
+params:
+  schema_interpretation:
+    properties:
+      - name: productId
+        type: string
+        description: "Product type"
+      - name: siteId
+        type: string
+        description: "Site Id"
+      - name: zoneId
+        type: string
+        description: "Zone Id"
+    required_fields: []
+    flexible_types: []
+    combinators_used:
+      - anyOf
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_33across.go
+    type_name: ExtImp33across
+    fields:
+      - name: ZoneId
+        json_tag: zoneId
+        type_native: string
+        omitempty: true
+        notes: []
+      - name: SiteId
+        json_tag: siteId
+        type_native: string
+        omitempty: true
+        notes: []
+      - name: ProductId
+        json_tag: productId
+        type_native: string
+        omitempty: true
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/33across/params_test.go
+    valid_cases_count: 4
+    invalid_cases_count: 8
+    bidder_constant_referenced: openrtb_ext.Bidder33Across
+
+code:
+  package_or_class: ttx
+  directory_name: 33across
+  package_directory_mismatch: true
+  file_layout:
+    kind: single-file
+    files:
+      - name: 33across.go
+        role: implementation
+        loc: 282
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party:
+      - github.com/prebid/openrtb/v20/adcom1
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: TtxAdapter
+    type_visibility: exported
+    fields:
+      - name: endpoint
+        type: string
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: grouped-by-key
+          key: imp.ext.bidder.productId + (imp.ext.bidder.zoneId || imp.ext.bidder.siteId)
+          group_id_construction: "impExt.Ttx.Prod + impExt.Ttx.Zoneid (where Zoneid is set from ZoneId if present, else SiteId)"
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place
+        Video: copy-then-mutate
+        RequestExt: in-place
+      go_idiom: direct-pointer-mutation
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImp33across
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: makeImps
+        signature: "func makeImps(imp openrtb2.Imp) (openrtb2.Imp, error)"
+      - name: makeReqExt
+        signature: "func makeReqExt(request *openrtb2.BidRequest) ([]byte, error)"
+      - name: validateVideoParams
+        signature: "func validateVideoParams(video *openrtb2.Video, prod string) (*openrtb2.Video, error)"
+      - name: getBidType
+        signature: "func getBidType(ext bidExt) openrtb_ext.BidType"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: legacy-raw-go
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.ttx.mediaType
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: lenient
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: none
+
+tests:
+  test_root_directory: 33acrosstest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: bidresponse-defaults.json
+        sha256: acc292577a4e7de95323acb295c32ec4516c7d1138e16114f3b4af10ff2a0d8e
+        bytes: 2415
+      - filename: instream-video-defaults.json
+        sha256: a3c353010c6122f4f81f4e73015e218fb1d54acd8310dcad234271308320a13a
+        bytes: 2579
+      - filename: multi-format.json
+        sha256: 8b960f528d8b8a346307a49c92fe40ad0e7384a5af03d69834fd9eed92d051bc
+        bytes: 2453
+      - filename: multi-imp-banner.json
+        sha256: 73020d33169d1fab9b6b1dd97029fbac49918b860d87aa6e868e0bb0eb087106
+        bytes: 8296
+      - filename: optional-params.json
+        sha256: f097129b3d22de6d30542e8b0543b77527b370d590fb8bbb39cedd9c08eac590
+        bytes: 1267
+      - filename: outstream-video-defaults.json
+        sha256: 71cd3f17bc1246528fba09aba4b95c572e83b43dd678f1de5fb084f651d14098
+        bytes: 2538
+      - filename: site-banner.json
+        sha256: 9cb031bc4ff632370cca2059e82d0f849631e5187d9bd20c565d422d230bc291
+        bytes: 2329
+      - filename: site-video.json
+        sha256: 55d43b683478ef8cc7482d09f7f12ef38706b82e84cfc9c8037abb08fcb90b0c
+        bytes: 2658
+    supplemental:
+      - filename: multi-imp-mixed-validation.json
+        sha256: 51adbaf0945af87cd6d6ab9ae717439c095dea098c6cb242dcb3e83a8371e96b
+        bytes: 2682
+      - filename: status-not-ok.json
+        sha256: c733298f141ea25b49946d675ffb72ba5d2b31c2c1f085aa9492c34e98b92d7d
+        bytes: 1604
+      - filename: video-validation-fail-size-null.json
+        sha256: 05d2a2c556c9551b416b2707d1acc81d05983b880101888843294b01f18eb943
+        bytes: 582
+      - filename: video-validation-fail-size-partial.json
+        sha256: 35c97b15cd579dff4e8c6f61521d1feb2ba36e494805504ee894c0a1b8d99753
+        bytes: 602
+      - filename: video-validation-fail-size-zero.json
+        sha256: 96059d43341cfd4f229badb38a2d029704be3bb462954b1e88d6ae4e131a13f1
+        bytes: 619
+      - filename: video-validation-fail.json
+        sha256: 174ba92e214c0d5efeab86ccbc255caee139ece1f1ae2c870c4e0aaa8fa0ce56
+        bytes: 526
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: hardcoded-caller-name-version
+    file: adapters/33across/33across.go
+    summary: "Package-level var CALLER = TtxCaller{\"Prebid-Server\", \"n/a\"} (line 45) is hardcoded and appended to request.ext.ttx.caller[] on every MakeRequests call (line 194). The Version field is the literal string \"n/a\" rather than being sourced from build metadata or config — should be promoted to a config field or sourced from buildinfo."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: legacy-encoding-json-direct-usage
+    file: adapters/33across/33across.go
+    summary: "Adapter mixes encoding/json (json.Marshal at lines 105, 152, 196) with jsonutil (used for Unmarshal paths at lines 80, 130, 137, 181, 219, 230). Recommended: migrate Marshal calls to the canonical jsonutil package."
+    edge_case_taxon: legacy-encoding-json-direct-usage
+  - id: bid-type-default-on-ext-unmarshal-failure
+    file: adapters/33across/33across.go
+    summary: "MakeBids (lines 230-234) treats jsonutil.Unmarshal(sb.Bid[i].Ext, &bidExt) failure as a silent fallback to BidTypeBanner — no error is appended, no BadServerResponse surfaced. Permissive behavior; canonical adapters throw on missing/malformed ext."
+    edge_case_taxon: hardcoded-bid-type
+  - id: caller-injection-mutates-shared-request-ext
+    file: adapters/33across/33across.go
+    summary: "makeReqExt rewrites request.Ext on the shared input request (line 68) before grouping imps into SRA buckets — mutation persists across all per-group HTTP requests AND aliases back into the framework's BidRequest. Direct-pointer-mutation idiom on RequestExt rather than copy-then-mutate."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/33across/
+    package_name: ttx
+    bidder_constant: openrtb_ext.Bidder33Across
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/ttx/
+    bidder_class: TtxBidder
+    config_class: TtxConfiguration
+    yaml_path: src/main/resources/bidder-config/ttx.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/ttx/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: true
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  go_specific_concerns:
+    - "Package name `ttx` does NOT match directory `33across/` — Go-only constraint (Go forbids package names starting with a digit, so the directory uses the brand name 33across while the package follows Go's identifier rules with the legacy name `ttx`). Java has no analogous constraint; the Java port lives under `bidder/ttx/` (matching directory == class prefix) with no inversion."
+    - "Adapter struct `TtxAdapter` is EXPORTED — most Go adapters use an unexported `adapter` type. Exported variant is rarer and reflects the legacy ttx naming carried forward."
+    - "Multiple package-level types are exported: `TtxAdapter`, `TtxCaller`, `Ext`, `CALLER` package-level var. None are referenced from outside the adapters/33across package — the visibility is over-broad relative to canonical practice."
+    - "MakeRequests groups imps by SRA key (productId+zoneId) and emits one HTTP request per group — this is the `grouped-by-key` batching rule. The Java port must replicate the grouping order; Go uses a `map[string][]Imp` whose iteration order is randomized, which the Java side typically replaces with a deterministic ordering."
+    - "validateVideoParams returns BOTH the videoCopy (mutated with StartDelay default) AND an error in the same call (line 254-256, 265). The caller (makeImps line 163-172) assigns videoCopy unconditionally before checking err — but if err != nil, the imp is dropped, so the assignment is benign in practice; flagged for port-translation as the Java side typically restructures this."
+    - "MakeBids silently maps Unmarshal-failure on bid.Ext to BidTypeBanner (line 230-234) — Java's typeref unmarshal would throw; the port must preserve the Go side's swallow-and-default behavior."
+    - "Direct encoding/json (json.Marshal/json.Unmarshal) is used in 33across.go alongside jsonutil — mixed style. json.Marshal is used at lines 105, 152, 196 (request body, imp ext, request ext); jsonutil.Unmarshal is used for read paths."
+    - "MakeBids uses raw http.StatusXxx checks rather than canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors — pre-dates the helpers."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

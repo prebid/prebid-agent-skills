@@ -1,0 +1,790 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-adapter-code: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: appnexus
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "http://ib.adnxs.com/openrtb2"
+  endpoint_construction:
+    kind: query-parameter-augmentation
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@microsoft.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 32
+  user_sync:
+    key: "adnxs"
+    redirect:
+      url: "https://ib.adnxs.com/getuid?{{.RedirectURL}}"
+      userMacro: "$UID"
+  yaml_extra_fields:
+    platform_id: "5"
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Appnexus Adapter Params",
+    "description": "A schema which validates params accepted by the AppNexus adapter",
+
+    "type": "object",
+    "properties": {
+      "placement_id": {
+        "type": ["integer", "string"],
+        "description": "An ID which identifies this placement of the impression"
+      },
+      "placementId": {
+        "type": ["integer", "string"],
+        "description": "Deprecated, use placement_id instead."
+      },
+      "inv_code": {
+        "type": "string",
+        "description": "A code identifying the inventory of this placement."
+      },
+      "invCode": {
+        "type": "string",
+        "description": "Deprecated, use inv_code instead."
+      },
+      "member": {
+        "type": ["integer", "string"],
+        "description": "An ID which identifies the member selling the impression."
+      },
+      "keywords": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "description": "A key with one or more values associated with it. These are used in buy-side segment targeting.",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["key"]
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "traffic_source_code": {
+        "type": "string",
+        "description": "Specifies the third-party source of this impression."
+      },
+      "trafficSourceCode": {
+        "type": "string",
+        "description": "Deprecated, use traffic_source_code instead."
+      },
+      "reserve": {
+        "type": "number",
+        "description": "The minimium acceptable bid, in CPM, using US Dollars"
+      },
+      "position": {
+        "type": "string",
+        "enum": ["above", "below"],
+        "description": "Specifies the ad unit as above or below the fold"
+      },
+      "use_pmt_rule": {
+        "type": "boolean",
+        "description": "Boolean to signal AppNexus to apply the relevant payment rule"
+      },
+      "use_payment_rule": {
+        "type": "boolean",
+        "description": "Deprecated, Boolean to signal AppNexus to apply the relevant payment rule. use_pmt_rule will get precedence over usePaymentRule."
+      },
+      "generate_ad_pod_id": {
+        "type": "boolean",
+        "description": "Boolean to signal AppNexus to add ad pod id to each request"
+      },
+      "private_sizes" :{
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "w": { "type": "integer" },
+            "h": { "type": "integer" }
+          },
+          "required": [ "w", "h"]
+        },
+        "description": "Private sizes (ex: [{\"w\": 300, \"h\": 250},{...}]), experimental, may not be supported."
+      },
+      "ext_inv_code" : {
+        "type": "string",
+        "description": "Specifies predefined value passed on the query string that can be used in reporting"
+      },
+      "external_imp_id" : {
+        "type": "string",
+        "description": "Unique identifier of an externally generated auction"
+      }
+    },
+
+    "oneOf": [{
+      "oneOf": [{
+        "required": ["placementId"]
+      }, {
+        "required": ["placement_id"]
+      }]
+    }, {
+      "oneOf": [{
+        "required": ["invCode", "member"]
+      }, {
+        "required": ["inv_code", "member"]
+      }]
+    }],
+
+    "not": {
+      "required": ["placementId", "invCode", "member"]
+    }
+  }
+bidder_params_sha256: 20a3f193c62b1b3d6d2a0daf5dfaa3935a045c52b83af236693ebe9c3459106d
+
+params:
+  schema_interpretation:
+    properties:
+      - name: placement_id
+        type: ["integer", "string"]
+        description: "An ID which identifies this placement of the impression"
+      - name: placementId
+        type: ["integer", "string"]
+        description: "Deprecated, use placement_id instead."
+      - name: inv_code
+        type: string
+        description: "A code identifying the inventory of this placement."
+      - name: invCode
+        type: string
+        description: "Deprecated, use inv_code instead."
+      - name: member
+        type: ["integer", "string"]
+        description: "An ID which identifies the member selling the impression."
+      - name: keywords
+        type: anyOf
+        description: "Keywords expressed as string ('k=v,k2=v2'), array of {key, value[]} objects, or object with array values. Each form is folded into a single comma-separated string by ExtImpAppnexusKeywords.UnmarshalJSON."
+      - name: traffic_source_code
+        type: string
+        description: "Specifies the third-party source of this impression."
+      - name: trafficSourceCode
+        type: string
+        description: "Deprecated, use traffic_source_code instead."
+      - name: reserve
+        type: number
+        description: "The minimium acceptable bid, in CPM, using US Dollars"
+      - name: position
+        type: string
+        description: "Specifies the ad unit as above or below the fold"
+        constraints:
+          enum: [above, below]
+      - name: use_pmt_rule
+        type: boolean
+        description: "Boolean to signal AppNexus to apply the relevant payment rule"
+      - name: use_payment_rule
+        type: boolean
+        description: "Deprecated, Boolean to signal AppNexus to apply the relevant payment rule. use_pmt_rule will get precedence over usePaymentRule."
+      - name: generate_ad_pod_id
+        type: boolean
+        description: "Boolean to signal AppNexus to add ad pod id to each request"
+      - name: private_sizes
+        type: array
+        description: "Private sizes (ex: [{\"w\": 300, \"h\": 250},{...}]), experimental, may not be supported."
+      - name: ext_inv_code
+        type: string
+        description: "Specifies predefined value passed on the query string that can be used in reporting"
+      - name: external_imp_id
+        type: string
+        description: "Unique identifier of an externally generated auction"
+    required_fields: []
+    flexible_types:
+      - placement_id
+      - placementId
+      - member
+      - keywords
+    combinators_used:
+      - oneOf
+      - oneOf-of-oneOf
+      - anyOf
+      - not
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_appnexus.go
+    type_name: ExtImpAppnexus
+    fields:
+      - name: DeprecatedPlacementId
+        json_tag: placementId
+        type_native: jsonutil.StringInt
+        omitempty: false
+        notes:
+          - "legacy alias of PlacementId; copied into PlacementId by handleLegacyParams when PlacementId == 0"
+          - "flexible-type via jsonutil.StringInt (accepts integer or string-encoded integer)"
+      - name: LegacyInvCode
+        json_tag: invCode
+        type_native: string
+        omitempty: false
+        notes:
+          - "legacy alias of InvCode; copied into InvCode by handleLegacyParams when InvCode is empty"
+      - name: LegacyTrafficSourceCode
+        json_tag: trafficSourceCode
+        type_native: string
+        omitempty: false
+        notes:
+          - "legacy alias of TrafficSourceCode; copied by handleLegacyParams"
+      - name: PlacementId
+        json_tag: placement_id
+        type_native: jsonutil.StringInt
+        omitempty: false
+        notes:
+          - "flexible-type via jsonutil.StringInt"
+      - name: InvCode
+        json_tag: inv_code
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: Member
+        json_tag: member
+        type_native: jsonutil.IntString
+        omitempty: false
+        notes:
+          - "flexible-type via jsonutil.IntString (accepts integer or string; serialized as string)"
+      - name: Keywords
+        json_tag: keywords
+        type_native: ExtImpAppnexusKeywords
+        omitempty: false
+        notes:
+          - "named string type with custom UnmarshalJSON"
+          - "accepts string, array of {key, value[]} objects, or object with array values"
+      - name: TrafficSourceCode
+        json_tag: traffic_source_code
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: Reserve
+        json_tag: reserve
+        type_native: float64
+        omitempty: false
+        notes:
+          - "feeds imp.bidfloor only when imp.BidFloor <= 0; comment notes USD-only assumption"
+      - name: Position
+        json_tag: position
+        type_native: string
+        omitempty: false
+        notes:
+          - 'enum {"above","below"}; mapped to adcom1.PositionAboveFold / PositionBelowFold'
+      - name: UsePaymentRule
+        json_tag: use_pmt_rule
+        type_native: '*bool'
+        omitempty: false
+        notes: []
+      - name: DeprecatedUsePaymentRule
+        json_tag: use_payment_rule
+        type_native: '*bool'
+        omitempty: false
+        notes:
+          - "legacy alias of UsePaymentRule; copied by handleLegacyParams when UsePaymentRule is nil"
+      - name: PrivateSizes
+        json_tag: private_sizes
+        type_native: json.RawMessage
+        omitempty: false
+        notes:
+          - "passed through verbatim — adapter does not parse"
+      - name: AdPodId
+        json_tag: generate_ad_pod_id
+        type_native: bool
+        omitempty: false
+        notes:
+          - "drives buildAdPodRequests path when isVIDEO == 1"
+      - name: ExtInvCode
+        json_tag: ext_inv_code
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: ExternalImpId
+        json_tag: external_imp_id
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: true
+    custom_unmarshal_accepts:
+      - string
+      - object
+      - array
+  params_test:
+    file: adapters/appnexus/params_test.go
+    valid_cases_count: 16
+    invalid_cases_count: 27
+    bidder_constant_referenced: openrtb_ext.BidderAppnexus
+
+code:
+  package_or_class: appnexus
+  directory_name: appnexus
+  package_directory_mismatch: false
+  file_layout:
+    kind: multi-file
+    files:
+      - name: appnexus.go
+        role: implementation
+        loc: 508
+      - name: models.go
+        role: types
+        loc: 49
+      - name: iab_categories.go
+        role: data-table
+        loc: 99
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party:
+      - github.com/buger/jsonparser
+      - github.com/prebid/openrtb/v20/adcom1
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: uri
+        type: url.URL
+      - name: hbSource
+        type: int
+      - name: randomGenerator
+        type: randomutil.RandomGenerator
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned:
+      - "url.Parse(config.Endpoint) error propagated from Builder"
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: pod-grouping
+          key: imp.id-prefix-before-underscore
+          notes:
+            - "Only fires on the video-adpod path: when reqInfo.PbsEntryPoint == metrics.ReqTypeVideo AND every imp's ext.bidder.generate_ad_pod_id is true (validated to be uniform across imps)."
+            - "Implementation: groupByPods splits imps by strings.Split(imp.ID, '_')[0]; each pod gets its own splitRequests call."
+            - "AdPodID is generated per pod via randomGenerator.GenerateInt63 and written into requestExtAppnexus.AdPodID, so each pod's request body carries a distinct adpod_id."
+        - kind: max-imps-per-request
+          max: 10
+          notes:
+            - "Always applied. Default path: splitRequests(request.Imp, ...) with maxImpsPerReq = 10. On video-adpod path: splitRequests is invoked per-pod, so size-split happens INSIDE each pod group."
+            - "Composes after pod-grouping: pods are formed first, then each pod's imps are sliced into batches of <=10."
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place
+        Banner: copy-then-mutate
+        Source: copy-then-mutate
+        Ext: in-place
+      go_idiom: ptrutil.Clone
+      java_idiom: null
+      schain_mutation: ptrutil.Clone
+      fields_mutated:
+        - request.Imp
+        - request.Imp[i].TagID
+        - request.Imp[i].BidFloor
+        - request.Imp[i].DisplayManagerVer
+        - request.Imp[i].Ext
+        - request.Imp[i].Banner (via shallow-copy bannerCopy then re-point)
+        - request.Source (replaced via ptrutil.Clone)
+        - request.Source.Ext (rewritten without schain key)
+        - request.Ext (re-marshalled with appended/replaced appnexus + schain keys)
+      schain_movement:
+        from: request.Source.Ext.schain
+        to: request.Ext.schain
+        helper: moveSupplyChain
+        notes:
+          - "moveSupplyChain (appnexus.go:461): unmarshals request.Source.Ext to a map, deletes 'schain', clones Source via ptrutil.Clone, re-marshals remaining sourceExtMap (or sets Ext=nil if empty), and writes the schain RawMessage into the request-level extMap['schain']."
+          - "Pre-OpenRTB-2.5 source.ext.schain → OpenRTB-2.6-style request.ext.schain repositioning. Cross-language port concern."
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImpAppnexus
+      wrapper_type: impExtIncoming
+      notes:
+        - "Adapter-local wrapper impExtIncoming { Bidder: ExtImpAppnexus, GPID: string } unmarshals BOTH the standard ExtImpBidder.bidder field (renamed 'bidder') AND a sibling 'gpid' field in one pass — saving the second jsonutil.Unmarshal call."
+        - "Effectively still two-phase semantically (bidder.bidder is the inner ExtImpAppnexus), but mechanically a single jsonutil.Unmarshal of imp.Ext into impExtIncoming."
+    endpoint_resolution:
+      kind: query-parameter-augmentation
+      mechanism_go: net/url
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+      notes:
+        - "Member ID extracted from imp.ext.bidder.member (string-formatted IntString) is appended via appendMemberId — uri.Query().Set('member_id', memberId); uri.RawQuery = q.Encode()."
+        - "All imps in a single request must share the same member_id; mismatch returns an error and aborts."
+    helpers:
+      - name: validateAndBuildImpExt
+        signature: "func validateAndBuildImpExt(imp *openrtb2.Imp) (impExtIncoming, error)"
+      - name: handleLegacyParams
+        signature: "func handleLegacyParams(appnexusExt *openrtb_ext.ExtImpAppnexus)"
+      - name: validateAppnexusExt
+        signature: "func validateAppnexusExt(appnexusExt *openrtb_ext.ExtImpAppnexus) error"
+      - name: buildRequestImp
+        signature: "func buildRequestImp(imp *openrtb2.Imp, ext impExtIncoming, displayManagerVer string) error"
+      - name: groupByPods
+        signature: "func groupByPods(imps []openrtb2.Imp) map[string][]openrtb2.Imp"
+      - name: splitRequests
+        signature: "func splitRequests(imps []openrtb2.Imp, request *openrtb2.BidRequest, requestExt map[string]json.RawMessage, requestExtAppnexus bidReqExtAppnexus, uri string) ([]*adapters.RequestData, []error)"
+      - name: buildAdPodRequests
+        signature: "func (a *adapter) buildAdPodRequests(imps []openrtb2.Imp, request *openrtb2.BidRequest, requestExt map[string]json.RawMessage, requestExtAppnexus bidReqExtAppnexus, uri string) ([]*adapters.RequestData, []error)"
+      - name: getRequestExt
+        signature: "func getRequestExt(ext json.RawMessage) (map[string]json.RawMessage, error)"
+      - name: getAppnexusExt
+        signature: "func (a *adapter) getAppnexusExt(extMap map[string]json.RawMessage, isAMP int, isVIDEO int) (bidReqExtAppnexus, error)"
+      - name: moveSupplyChain
+        signature: "func moveSupplyChain(request *openrtb2.BidRequest, extMap map[string]json.RawMessage) error"
+      - name: appendMemberId
+        signature: "func appendMemberId(uri url.URL, memberId string) url.URL"
+      - name: buildDisplayManageVer
+        signature: "func buildDisplayManageVer(req *openrtb2.BidRequest) string"
+      - name: getMediaTypeForBid
+        signature: "func getMediaTypeForBid(bid *bidExt) (openrtb_ext.BidType, error)"
+      - name: findIabCategoryForBid
+        signature: "func (a *adapter) findIabCategoryForBid(bid *bidExt) (string, bool)"
+      - name: resolvePlatformID
+        signature: "func resolvePlatformID(platformID string) int"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.appnexus.bid_ad_type
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: none
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: guarded
+
+tests:
+  test_root_directory: appnexustest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: dynamic-keywords-params.json
+        sha256: 11800a0c3998fd75fbb7ee667d9acab9a187fd7348457d1a337d63c0e86de7c6
+        bytes: 3763
+      - filename: native-1.1.json
+        sha256: 6a66765966c84be6e1a50a8af050264945381070dc04200ea0c4846f862cc874
+        bytes: 8811
+      - filename: optional-params.json
+        sha256: ef85ac480259f4b5b998656a55f32f8aaf0a7c31c0aee00b72009be1438e1d4c
+        bytes: 2066
+      - filename: schain-24-other-ext.json
+        sha256: 88da360736a20db17a447a4fe4c5fa1574a87f756f89df98be761431fce56d89
+        bytes: 6951
+      - filename: schain-24.json
+        sha256: b5811f9fcb071987d18338209553bd3c26af7b3de92fcca68b093857fc84d350
+        bytes: 6865
+      - filename: schain-25-other-ext.json
+        sha256: 1a00b663b082db6df9685543d80f3535b80b99f1c41a282c6b9b19a5531d0234
+        bytes: 7269
+      - filename: schain-25.json
+        sha256: 768849c5326cf6ae4e964875d1c256f868caecd2eb12933ad81f8c0daefc5def
+        bytes: 6985
+      - filename: simple-banner-foreign-currency.json
+        sha256: 1131d595a1770138708841098172044b0f97fff8e576106c457327e393b899b4
+        bytes: 3361
+      - filename: simple-banner.json
+        sha256: 9a98ca00b9e888148156925019e0acdf94b76fccf97f3e6c0d7aeedb25c409bc
+        bytes: 3788
+      - filename: simple-video.json
+        sha256: ce987a4a0ba94cbc443aa8a54e1bf1c2bd21ad8fa7287e86cac33afe328da66a
+        bytes: 2360
+      - filename: string-keywords-params.json
+        sha256: 66d768040d472efcfaf008952a21d801530b7008e8c5a3d27434d499d9c015e7
+        bytes: 3792
+      - filename: video-invalid-category.json
+        sha256: bc1e26ea17cf4c973951175a2d64fb11c9dcf06510a7b76df0415924507733b4
+        bytes: 2315
+    supplemental:
+      - filename: displaymanager-test.json
+        sha256: c2833acdf7db6b0a52ef669b36cf4e0889ab31eb4fb8b2cff24bfcda741ba248
+        bytes: 4102
+      - filename: explicit-dimensions.json
+        sha256: 084bb2cf766b6d7e014dc120fa4f61cb9d53f741185b52ac3295aff998d269d4
+        bytes: 1249
+      - filename: gpid.json
+        sha256: d686b53bc16dac4ce19837684434f43ac819628f87f67cbc206f94543425dc35
+        bytes: 3701
+      - filename: invalid-bid-type.json
+        sha256: 073e0a43576507c99c3ccd5150df4e8925cc46146e0d9bce81b86c629d917714
+        bytes: 3069
+      - filename: legacy-params.json
+        sha256: 1dee52addf2109a39ea7040e2684b9c3393fff775825fb60fac23d8d220a4861
+        bytes: 3618
+      - filename: member-as-int-test.json
+        sha256: 0acb9c7b37413643091600cbd719901f3af8fc1fd3a3fe766b95add84b74237c
+        bytes: 4815
+      - filename: multi-bid.json
+        sha256: 12d3c1b6adfbed86904d5642eb26c7bddb2ef92613b25f02789fb545cf7524b0
+        bytes: 5046
+      - filename: multiple-member-ids.json
+        sha256: 54bec52fb734d33ae29289d8676e7140deebbe8dda9519b5d984f52832687dcd
+        bytes: 1592
+      - filename: no-placementId-and-member-invcode.json
+        sha256: 57c347b4d454b20a85201367f56a5599195230f76961df522e92235c4bd377e0
+        bytes: 643
+      - filename: placement-id-as-string-test.json
+        sha256: cf0ecefe105de9f9681d89c91d3a14883bf9d571130b4ac42480273a07d8a8ba
+        bytes: 4811
+      - filename: request-ext-appnexus-existing.json
+        sha256: c1b8c535d7fa3aa6297d49fb32b2f7939c9cdea8300522f372e1ad9aa850471d
+        bytes: 6123
+      - filename: reserve-ignored.json
+        sha256: c850ec41690f401688825b186dfe18595caaba745468feff44f88ee471415797
+        bytes: 3730
+      - filename: reserve-test.json
+        sha256: 6270e1fe446b8ea0bd03fea1ed94c9cd8af273dddb561aa34535e2c0a8fa4ad0
+        bytes: 3703
+      - filename: status-400.json
+        sha256: 1d2ffdd9ff2ab341163a3b9086a79d56964a7e291d179e8a6367db244c8c5536
+        bytes: 1600
+      - filename: usePmtRule-test.json
+        sha256: 55f5309a19513c5857cb736eb1a68b90d45609cca99391dd2cbd3e108a9f0def
+        bytes: 2793
+    amp:
+      - filename: simple-banner.json
+        sha256: 97752a4052e1a25ded723c3b2341322957e04c5e325e0f4b88d7861e8fe24f79
+        bytes: 3388
+      - filename: simple-video.json
+        sha256: d9ba669f3d78c0da891fcd18e9f11407d8f2b07ceabf97fedf801b89f48ea816
+        bytes: 2376
+    video:
+      - filename: video-brand-category.json
+        sha256: 55c914c36956d85c396001caef773341e252c0ab3411b6bba5af95558f4cd2e2
+        bytes: 6609
+      - filename: video-no-adpodid-two-imps-different-pod.json
+        sha256: 521330b2c283d9addf35e210f3a78e239a3e7646c8993b8e1c23a1ca6b92817c
+        bytes: 1502
+      - filename: video-same-adpodid-two-imps-same-pod.json
+        sha256: 85b5d3fedc08b06473f2e71c33852bfa166a30b79418f1e0146aef36f2cb7606
+        bytes: 1591
+    videosupplemental:
+      - filename: video-different-adpodid-two-imps-different-pods.json
+        sha256: 9db546ff338e4a56a1c3acbec6eb8803a137b6310a09708c703ec739078990f4
+        bytes: 792
+      - filename: video-different-adpodid-two-imps-same-pod.json
+        sha256: f80b9764b0d307be2363c6a2a0c17916662397831a5bc9fe8c882bc84e01711e
+        bytes: 792
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods:
+    - TestJsonSamples
+    - TestAppendMemberID
+    - TestBuilderWithPlatformID
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: go-data-table
+  yaml_field: null
+  go_data_file: adapters/appnexus/iab_categories.go
+  table_size: 95
+  injection: static-init
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: go-unmarshaljson
+    accepts_shapes:
+      - string
+      - object
+      - array
+    where_branched: type-method
+    notes:
+      - "Method: func (ks *ExtImpAppnexusKeywords) UnmarshalJSON(b []byte) error"
+      - "Branches on b[0]: '{' (object → map[string][]string), '[' (array → []extImpAppnexusKeyVal), '\"' (string → string)."
+      - "Object form: 'k=v1,k=v2,...' produced by iterating map; if values is empty just 'k,'. Trailing comma stripped by [:len-1] slice."
+      - "Array form: same comma-joined format from {key, value[]} structs."
+      - "String form: stored verbatim."
+      - "Go canonical example of runtime polymorphism via UnmarshalJSON; Java port uses jackson-jsondeserialize (separate JsonDeserializer<ExtImpAppnexusKeywords> class) per port-translation Rule 6."
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: keywords-flexible-type-custom-unmarshaljson
+    file: openrtb_ext/imp_appnexus.go
+    summary: "ExtImpAppnexusKeywords.UnmarshalJSON branches on first byte ('{','[','\"') to fold object / array-of-{key,value[]} / string forms into a single comma-separated 'k=v,k2=v2' string. Canonical Go runtime-polymorphism case; Java side requires a JsonDeserializer per Rule 6."
+    edge_case_taxon: port-fidelity-divergence
+  - id: legacy-and-new-params-coexist
+    file: openrtb_ext/imp_appnexus.go
+    summary: "Four legacy camelCase params (placementId, invCode, trafficSourceCode, use_payment_rule) coexist with snake_case successors. JSON Schema declares both via duplicate properties + oneOf-of-oneOf required guard; Go ext struct carries Deprecated*/Legacy* fields and handleLegacyParams copies legacy → new when new is zero/empty/nil."
+    edge_case_taxon: json-key-style-mismatch
+  - id: schain-source-to-request-ext-relocation
+    file: appnexus.go
+    summary: "moveSupplyChain (appnexus.go:461) relocates schain from request.Source.Ext.schain to request.Ext.schain — the OpenRTB-2.4→2.6 schain location migration. Uses ptrutil.Clone(request.Source) to avoid mutating the framework's source pointer; rewrites Source.Ext to omit schain (or nil if it was the only key) and inserts the raw schain message into the request-level ext map before re-marshalling."
+    edge_case_taxon: port-fidelity-divergence
+  - id: composable-batching-pod-grouping-and-max-imps
+    file: appnexus.go
+    summary: "Two composed batching rules: (1) when video adpod requested, groupByPods groups imps by strings.Split(imp.ID, '_')[0] and assigns a fresh AdPodID per group; (2) inside each group (or in the default path), splitRequests slices imps into batches of <= maxImpsPerReq=10. Spec lists rules in apply-order: pod-grouping then max-imps-per-request."
+    edge_case_taxon: incomplete-classification
+  - id: multi-file-go-layout
+    file: adapters/appnexus/
+    summary: "Three Go files: appnexus.go (implementation, 508 LOC), models.go (types, 49 LOC), iab_categories.go (data-table, 99 LOC). The role classifier maps cleanly: implementation/types/data-table. Note: the original Java parallel of this package contains an iab-categories table inlined into bidder-config/appnexus.yaml (yaml-inlined storage_kind), while Go uses a co-located go-data-table."
+    edge_case_taxon: multi-file-layout-justified
+  - id: imp-ext-incoming-wrapper-folds-gpid
+    file: appnexus.go
+    summary: "Adapter-local impExtIncoming wrapper { Bidder: ExtImpAppnexus, GPID: string } combines the standard ExtImpBidder.bidder unmarshal AND a sibling gpid sibling-unmarshal in one jsonutil.Unmarshal call (line 262). The 'bidder' tag is renamed from the canonical adapters.ExtImpBidder pattern; structurally still standard-two-phase but mechanically single-pass."
+    edge_case_taxon: incomplete-classification
+  - id: appnexus-yaml-platform-id-extra-field
+    file: static/bidder-info/appnexus.yaml
+    summary: "Top-level platform_id: '5' is not a canonical BidderInfo field — it's read by the framework into config.Adapter.PlatformID and then resolvePlatformID converts to int (defaulting to 5 if unparsable). Stored under bidder_info.yaml_extra_fields for round-trip fidelity."
+    edge_case_taxon: incomplete-classification
+  - id: bid-type-by-numeric-bid-ad-type
+    file: appnexus.go
+    summary: "getMediaTypeForBid switches on bid.ext.appnexus.bid_ad_type integer (0=banner, 1=video, 3=native; note 2 is skipped). Throws BadServerResponse-equivalent error on unknown value. Uses by-bid-ext-typed-field with throw fallback — no chain, no default."
+    edge_case_taxon: port-fidelity-divergence
+  - id: currency-overwrite-guarded-by-empty-check
+    file: appnexus.go
+    summary: "make_bids guards bidderResponse.Currency = appnexusResponse.Cur with `if appnexusResponse.Cur != \"\"` (line 214). Marked `guarded`; differentiates from optidigital's unguarded overwrite."
+    edge_case_taxon: incomplete-classification
+  - id: imp-banner-pos-and-format-promotion
+    file: appnexus.go
+    summary: "buildRequestImp performs Banner copy-then-mutate: (a) maps ext.bidder.position 'above'/'below' to adcom1.PositionAboveFold/BelowFold pointer, (b) when banner.W and banner.H are both nil and banner.Format is non-empty, promotes the first format's W/H to top-level — Rule 7 banner-format-dimension-promotion. Pointer-swap is via local bannerCopy := *imp.Banner; imp.Banner = &bannerCopy."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/appnexus/
+    package_name: appnexus
+    bidder_constant: openrtb_ext.BidderAppnexus
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/appnexus/
+    bidder_class: AppnexusBidder
+    config_class: AppnexusConfiguration
+    yaml_path: src/main/resources/bidder-config/appnexus.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/appnexus/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: true
+  go_specific_concerns:
+    - "ExtImpAppnexusKeywords.UnmarshalJSON folds three JSON shapes into a single string-typed value. The Java port must use a separate Jackson JsonDeserializer<ExtImpAppnexusKeywords> class (jackson-jsondeserialize per port-rule Rule 6) — this is the canonical multi-shape custom-unmarshal example."
+    - "impExtIncoming is an adapter-local wrapper that combines the standard ExtImpBidder.bidder phase with a sibling 'gpid' field in a single jsonutil.Unmarshal — saves one pass but obscures the standard-two-phase shape. The Java port should use TypeReference<ExtPrebid<ExtImpPrebid, ExtImpAppnexus>> with a separate gpid extraction since Java has no equivalent of the renamed-tag wrapper trick."
+    - "moveSupplyChain (appnexus.go:461) uses ptrutil.Clone for the Source pointer but then RE-ASSIGNS request.Source — the framework's request gets a new Source pointer. Java's lombok-tobuilder rebuild equivalent should reproduce the schain relocation under request.toBuilder().source(...).ext(...).build()."
+    - "request.Imp = validImps (line 116) replaces the imp slice header in-place on the framework's request. validImps was built imp-by-imp via append from request.Imp[i] copies, but the buildRequestImp mutations write through to the original backing array via &request.Imp[i]. Cross-language ports must use immutable rebuild on Java side."
+    - "iabCategoryMap is a 95-entry package-level var in iab_categories.go (Go go-data-table); Java port inlines the same table into bidder-config/appnexus.yaml as 'iab-categories' (yaml-inlined). Cross-language port concern: storage_kind divergence between go-data-table and yaml-inlined."
+    - "platform_id is read from static/bidder-info/appnexus.yaml as a top-level YAML scalar (typed string '5'); resolvePlatformID converts to int (default 5). This is opaque extra_info rather than a canonical BidderInfo field — Java port promotes it into AppnexusConfigurationProperties.platformId with @NotNull. Surfaces as dev-endpoint-config-promotion-style win on Java side."
+    - "splitRequests mutates request.Imp on every batch iteration (line 344: request.Imp = impsForReq) and re-marshals the request inside the loop. Multi-batch correctness depends on the request value not being shared with caller via reference; the framework's BidRequest pointer is mutated through. Reviewers may flag — see ptrutil.Clone usage on Source for the safer pattern."
+    - "splitRequests also mutates request.Ext via maps.Clone(requestExt) + json.Marshal — the cloned map is local but the resulting bytes are written into request.Ext directly, persisting across batches and outliving MakeRequests. Java port via toBuilder will produce a fresh BidRequest per batch."
+    - "MakeBids uses canonical helpers (adapters.IsResponseStatusCodeNoContent + adapters.CheckResponseStatusCodeForErrors); curency overwrite is guarded by appnexusResponse.Cur != \"\" empty-string check (line 214)."
+    - "Bid type comes from numeric bid.ext.appnexus.bid_ad_type (0=banner, 1=video, 3=native); 2 is skipped (mapped to unrecognized → error). The Java port must preserve the same numeric mapping including the 2-skip via a switch with default-throw."
+  java_specific_concerns: []
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - mutation-idiom-tobuilder
+      - custom-unmarshaljson-to-jackson-deserializer
+      - schain-source-to-request-ext-relocation
+      - iab-category-storage-divergence
+  reviewer_cohort:
+    go: [bsardo, SyntaxNode, hhhjort]
+    java: [CTMBNara, AntoxaAntoxic, EmilNadimanov]
+    cross_language_coordinator: bretg

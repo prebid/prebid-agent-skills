@@ -1,0 +1,768 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-adapter-orchestrator: 1.0.0
+      read-adapter-code: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/claude-opus-4-7[1m]
+  warnings:
+    - type: legacy-test-helpers-imported
+      file: adapters/msft/msft_test.go
+      line: 6
+      summary: "Test imports adapterstest and uses adapterstest.RunJSONBidderTest — canonical, but the adapter co-locates test/ and test-extrainfo/ directories rather than the canonical msfttest/ root. Surfaces here as informational naming-convention drift, not a harness violation."
+    - type: bidder-name-rebrand
+      file: openrtb_ext/bidders.go
+      line: 553
+      summary: "Bidder constant is openrtb_ext.BidderMicrosoft = \"msft\" — the YAML directory name (msft) and the Go constant (BidderMicrosoft) do not share a stem. The constant uses the legal entity name (Microsoft) while the bidder code, directory, and external API key use the abbreviation (msft). Reader treats this as informational; meta.bidder_name = msft (the canonical directory/key form)."
+
+meta:
+  bidder_name: msft
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "http://ib.adnxs.com/openrtb2"
+  endpoint_construction:
+    kind: query-parameter-augmentation
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@microsoft.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 32
+  user_sync:
+    key: "adnxs"
+    redirect:
+      url: "https://ib.adnxs.com/getuid?{{.RedirectURL}}"
+      userMacro: "$UID"
+  yaml_extra_fields:
+    platform_id: "5"
+    openrtb:
+      version: 2.6
+  yaml_field_name_quirks: []
+
+# Encoded as a YAML literal block with trailing-newline strip (`|-`) because
+# /tmp/prebid-server-go/static/bidder-params/msft.json has NO terminal newline
+# (last 5 bytes: "  ]\n}"). A bare `|` would inject a `\n` after `}` and break
+# the byte-for-byte sha256 contract (R2). With `|-`, sha256(bidder_params_json) ==
+# bidder_params_sha256 exactly.
+bidder_params_json: |-
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Microsoft Adapter Params",
+    "description": "A schema which validates params accepted by the Microsoft adapter",
+    "type": "object",
+    "properties": {
+      "placement_id": {
+        "type": "integer",
+        "description": "Placement ID from Microsoft Monetize. You may use inv_code with member instead of a placement_id."
+      },
+      "member": {
+        "type": "integer",
+        "description": "Member ID from Microsoft Monetize. Must be used with inv_code."
+      },
+      "inv_code": {
+        "type": "string",
+        "description": "Inventory code from Microsoft Monetize. Must be used with member."
+      },
+      "allow_smaller_sizes": {
+        "type": "boolean",
+        "description": "If true, ads smaller than your ad unit's size array will be allowed to serve."
+      },
+      "use_pmt_rule": {
+        "type": "boolean",
+        "description": "If true, Microsoft Monetize will return net price after publisher payment rules are applied."
+      },
+      "keywords": {
+        "type": "string",
+        "description": "Comma-delimited key-value pairs (max 100). Must be enabled by a Microsoft Monetize account manager."
+      },
+      "traffic_source_code": {
+        "type": "string",
+        "description": "Specifies the third-party source of this impression."
+      },
+      "pubclick": {
+        "type": "string",
+        "description": "Specifies a publisher supplied url for third-party click tracking."
+      },
+      "ext_inv_code": {
+        "type": "string",
+        "description": "Specifies predefined value passed on the query string that can be used in reporting. The value must be entered into Microsoft Monetize before it is logged.."
+      },
+      "ext_imp_id": {
+        "type": "string",
+        "description": "Specifies the unique identifier of an externally generated auction."
+      },
+      "banner_frameworks": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        },
+        "description": "List of supported API frameworks for banner ads supported by the publisher."
+      }
+    },
+    "oneOf": [
+      {
+        "required": [
+          "placement_id"
+        ]
+      },
+      {
+        "required": [
+          "inv_code",
+          "member"
+        ]
+      }
+    ]
+  }
+bidder_params_sha256: f0f5e273bbe4598198aca62942e81de1290d3d111d9a22a9e059a08c1ee20999
+
+params:
+  schema_interpretation:
+    properties:
+      - name: placement_id
+        type: integer
+        description: "Placement ID from Microsoft Monetize. You may use inv_code with member instead of a placement_id."
+      - name: member
+        type: integer
+        description: "Member ID from Microsoft Monetize. Must be used with inv_code."
+      - name: inv_code
+        type: string
+        description: "Inventory code from Microsoft Monetize. Must be used with member."
+      - name: allow_smaller_sizes
+        type: boolean
+        description: "If true, ads smaller than your ad unit's size array will be allowed to serve."
+      - name: use_pmt_rule
+        type: boolean
+        description: "If true, Microsoft Monetize will return net price after publisher payment rules are applied."
+      - name: keywords
+        type: string
+        description: "Comma-delimited key-value pairs (max 100). Must be enabled by a Microsoft Monetize account manager."
+      - name: traffic_source_code
+        type: string
+        description: "Specifies the third-party source of this impression."
+      - name: pubclick
+        type: string
+        description: "Specifies a publisher supplied url for third-party click tracking."
+      - name: ext_inv_code
+        type: string
+        description: "Specifies predefined value passed on the query string that can be used in reporting. The value must be entered into Microsoft Monetize before it is logged.."
+      - name: ext_imp_id
+        type: string
+        description: "Specifies the unique identifier of an externally generated auction."
+      - name: banner_frameworks
+        type: array
+        description: "List of supported API frameworks for banner ads supported by the publisher."
+        items_type: integer
+    required_fields: []
+    flexible_types: []
+    combinators_used:
+      - oneOf
+    # The oneOf requires either {placement_id} OR {inv_code, member}. There is no
+    # top-level `required:` key — required-ness is conditional via oneOf.
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_msft.go
+    type_name: ImpExtMsft
+    fields:
+      - name: PlacementID
+        json_tag: placement_id
+        type_native: int
+        omitempty: false
+        notes: []
+      - name: Member
+        json_tag: member
+        type_native: int
+        omitempty: false
+        notes: []
+      - name: InvCode
+        json_tag: inv_code
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: AllowSmallerSizes
+        json_tag: allow_smaller_sizes
+        type_native: "*bool"
+        omitempty: false
+        notes: []
+      - name: UsePaymentRule
+        json_tag: use_pmt_rule
+        type_native: "*bool"
+        omitempty: false
+        notes:
+          - "Go field name (UsePaymentRule) does not match JSON tag stem (use_pmt_rule). The outgoing-side mirror struct (impExtOutgoingAppnexus.UsePmtRule, models.go:27) uses a name closer to the JSON tag — port-fidelity divergence within the same adapter."
+      - name: Keywords
+        json_tag: keywords
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: TrafficSourceCode
+        json_tag: traffic_source_code
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: PubClick
+        json_tag: pubclick
+        type_native: string
+        omitempty: false
+        notes:
+          - "JSON key is pubclick (no underscore), in contrast to all other underscore-separated tags on the same struct (placement_id, inv_code, allow_smaller_sizes, use_pmt_rule, traffic_source_code, ext_inv_code, ext_imp_id, banner_frameworks). The outgoing mirror impExtOutgoingAppnexus.PubClick uses tag pub_click WITH the underscore (models.go:30) — INCOMING and OUTGOING JSON keys differ. Edge case #7 (json-key-style-mismatch)."
+      - name: ExtInvCode
+        json_tag: ext_inv_code
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: ExtImpID
+        json_tag: ext_imp_id
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: BannerFrameworks
+        json_tag: banner_frameworks
+        type_native: "[]adcom1.APIFramework"
+        omitempty: false
+        notes:
+          - "Imports github.com/prebid/openrtb/v20/adcom1 — only ext struct in the adapter pulling adcom1. Element type is an int alias for OpenRTB API framework codes."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/msft/params_test.go
+    valid_cases_count: 12
+    invalid_cases_count: 21
+    bidder_constant_referenced: openrtb_ext.BidderMicrosoft
+
+code:
+  package_or_class: msft
+  directory_name: msft
+  package_directory_mismatch: false
+  file_layout:
+    kind: multi-file
+    files:
+      - name: msft.go
+        role: implementation
+        loc: 395
+      - name: models.go
+        role: models
+        loc: 60
+      - name: iab_categories.go
+        role: data-table
+        loc: 106
+    # Edge case #4 (multi-file Go layout): three .go files in a single package.
+    # msft.go is the bidder implementation; models.go holds the seven private struct
+    # types (extraAdapterInfo, impExtIncoming, impExtOutgoing, impExtOutgoingAppnexus,
+    # bidExt + nested bidExtAppnexus / bidExtCreative / bidExtVideo, requestExAppnexus);
+    # iab_categories.go holds the static brand-id → IAB-category lookup table and one
+    # function (findIABCategoryForBid). Splitting across roles is intentional and
+    # justified by the table size (95 entries) — see iab_category_storage block.
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party:
+      - github.com/buger/jsonparser
+    # jsonparser is used in two places: (1) initDisplayManageVerBuilder for App.Ext path
+    # walks (msft.go:153, 159 — pulls openrtb_ext.PrebidExtKey/source and /version);
+    # (2) modifyRequestExt for prebid.targeting.includebrandcategory probe (msft.go:268).
+    # ptrutil is the canonical helper (ptrutil.ToPtr at msft.go:274-275).
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: uri
+        type: url.URL
+      - name: hbSource
+        type: int
+      - name: hbSourceVideo
+        type: int
+    # Note: uri is a VALUE (url.URL), NOT a pointer. Builder dereferences the parsed
+    # *url.URL via *uri (msft.go:52). Each MakeRequests call copies a.uri to a local
+    # variable before potentially appending a member_id query param — avoids race-y
+    # mutation of adapter state.
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: true
+    template_parsed_at_build: false
+    errors_returned:
+      - source: url.Parse(config.Endpoint)
+        condition: "endpoint URL malformed"
+      - source: parseExtraInfo(config.ExtraAdapterInfo)
+        condition: "ExtraAdapterInfo is non-empty and not parseable as JSON object {hb_source, hb_source_video}"
+    # Builder consumes both config.Endpoint AND config.ExtraAdapterInfo (the latter
+    # is JSON-decoded into extraAdapterInfo {HBSource, HBSourceVideo}). Defaults are
+    # 5 (HBSource) and 6 (HBSourceVideo) — set in buildDefaultExtraInfo() and also
+    # applied lazily inside parseExtraInfo when individual fields equal zero.
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: filtered-subset
+          predicate: "imp passes per-imp parse + modify; imps that fail jsonutil.Unmarshal of imp.ext OR fail modifyImp are dropped from validImps"
+        - kind: max-imps-per-request
+          max_imps_per_request: 10
+      # Edge case #11: msft chains two batching rules. First, every imp is parsed and
+      # mutated; failed imps accumulate errors and are dropped from validImps. Second,
+      # the surviving imps are split into HTTP requests of <=10 imps each via the
+      # buildRequests loop (msft.go:294 computes ceil(len/10) batches, then
+      # request.Imp = impsForRequest per iteration at msft.go:303). The constant is
+      # named maxImpsPerReq (msft.go:24) — a literal `const = 10`. There is also a
+      # cross-cutting member_id uniqueness check (msft.go:108-117): if two imps carry
+      # different non-zero impExt.Bidder.Member values, MakeRequests returns
+      # errMemberIDMismatch IMMEDIATELY with the accumulated errors and no requests.
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+      # Body is the standard openrtb2.BidRequest, but the adapter rewrites:
+      #   - request.Imp[*].Ext (replaced with impExtOutgoing per imp; original imp.ext
+      #     is consumed and discarded; outgoing wraps a fixed `appnexus` sub-object plus
+      #     optional gpid passthrough — models.go:19-22)
+      #   - request.Imp[*].TagID (set to ext.Bidder.InvCode when InvCode != "")
+      #   - request.Imp[*].Banner (shallow-copied; W/H promoted from Format[0] when
+      #     both nil; API populated from ext.Bidder.BannerFrameworks when banner.API
+      #     is nil)
+      #   - request.Imp[*].DisplayManagerVer (filled lazily from app.ext.prebid.{source,
+      #     version} when imp.DisplayManagerVer is empty)
+      #   - request.Ext (`appnexus` sub-key replaced with computed requestExAppnexus
+      #     containing optional include_brand_category, brand_category_uniqueness,
+      #     is_amp, hb_source — see msft.go:224-244)
+      #   - request.Imp (mutated to validImps subset, then per-batch sliced)
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place
+        Banner: copy-then-mutate
+        Ext: in-place
+      go_idiom: shallow-copy
+      java_idiom: null
+      # `Imp: in-place` — modifyImp takes *openrtb2.Imp and rewrites TagID, Banner ptr,
+      # DisplayManagerVer, Ext directly through the pointer (msft.go:172-215). The
+      # framework's request slice header is shared, so mutations write through.
+      # `Banner: copy-then-mutate` — modifyImp dereferences imp.Banner, mutates the
+      # local copy (W, H, API), then re-points imp.Banner to the copy
+      # (msft.go:177-191). Idiomatic shallow-copy via `bannerCopy := *imp.Banner`.
+      # `Ext: in-place` — both imp.Ext and request.Ext are reassigned via
+      # jsonutil.Marshal output (msft.go:212, 242).
+      # request.Imp itself is replaced wholesale on msft.go:126 (request.Imp = validImps)
+      # and again on msft.go:303 per batch slice — also in-place mutation of the
+      # framework's request struct.
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtMsft
+      wrapper_type: null
+      # Two-phase via the impExtIncoming wrapper (models.go:13-16) which mirrors the
+      # canonical {bidder: ImpExtXyz, gpid: string} shape. The outer ext is unmarshaled
+      # in one shot to impExtIncoming (msft.go:98), then ext.Bidder gives access to
+      # ImpExtMsft fields without a second jsonutil.Unmarshal. This is a structural
+      # shortcut on `standard-two-phase` — semantically equivalent to two phases but
+      # implemented as one Unmarshal of a struct that contains the inner Bidder field.
+    endpoint_resolution:
+      kind: query-parameter-augmentation
+      mechanism_go: net/url
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+      # Endpoint http://ib.adnxs.com/openrtb2 is augmented with a ?member_id=<int>
+      # query parameter ONLY when at least one imp has impExt.Bidder.Member != 0 AND
+      # all member IDs across imps agree (msft.go:128-131, 217-222). The augmentation
+      # uses url.URL.Query()/RawQuery — the canonical net/url pattern, NOT string
+      # concatenation. Kobler-style template macro substitution is NOT used.
+    helpers:
+      - name: parseExtraInfo
+        signature: "func parseExtraInfo(v string) (extraAdapterInfo, error)"
+      - name: buildDefaultExtraInfo
+        signature: "func buildDefaultExtraInfo() extraAdapterInfo"
+      - name: initDisplayManageVerBuilder
+        signature: "func initDisplayManageVerBuilder(req *openrtb2.BidRequest) func() string"
+      - name: modifyImp
+        signature: "func modifyImp(imp *openrtb2.Imp, ext impExtIncoming, displayManagerVerBuilder func() string) error"
+      - name: appendMemberID
+        signature: "func appendMemberID(uri url.URL, memberID int) url.URL"
+      - name: getRequestExt
+        signature: "func getRequestExt(ext json.RawMessage) (map[string]json.RawMessage, error)"
+      - name: getAppnexusExt
+        signature: "func (a *adapter) getAppnexusExt(extMap map[string]json.RawMessage, reqType metrics.RequestType) (requestExAppnexus, error)"
+      - name: modifyRequestExt
+        signature: "func (a *adapter) modifyRequestExt(request *openrtb2.BidRequest, requestInfo *adapters.ExtraRequestInfo) error"
+      - name: buildRequests
+        signature: "func buildRequests(imps []openrtb2.Imp, request *openrtb2.BidRequest, uri string) ([]*adapters.RequestData, []error)"
+      - name: buildHeaders
+        signature: "func buildHeaders() http.Header"
+      - name: getMediaTypeForBid
+        signature: "func getMediaTypeForBid(bid *bidExt) (openrtb_ext.BidType, error)"
+      - name: findIABCategoryForBid
+        signature: "func findIABCategoryForBid(bid *bidExt) (string, bool)"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.appnexus.bid_ad_type
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: none
+      # Resolution is a single-step chain on bid.ext.appnexus.bid_ad_type (an int).
+      # Mapping: 0 -> banner, 1 -> video, 3 -> native. Any other value (including 2,
+      # the OpenRTB audio code, which is unmapped) returns an
+      # `unrecognized bid_ad_type in response: %d` error and the bid is dropped
+      # (msft.go:384-395). The chain has no fallback; it throws via the err return.
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    # MakeBids ranges over response.SeatBid by value (`for _, sb := range`) and over
+    # sb.Bid by index (`for i := range sb.Bid`); inside the inner loop it copies
+    # sb.Bid[i] to a local `bid` variable and then takes &bid for the TypedBid pointer
+    # (msft.go:347, 369). This is a hybrid — the SeatBid loop is range-value and the
+    # Bid loop is indexed — but the Bid pointer ultimately points at the local copy.
+    currency_overwrite_safety: guarded
+    # `if appnexusResponse.Cur != "" { bidderResponse.Currency = appnexusResponse.Cur }`
+    # (msft.go:377-379). The framework default is preserved when the upstream returns
+    # an empty Cur, fixing the optidigital-class anti-pattern.
+
+tests:
+  test_root_directory: adapters/msft/test/
+  go_directory_naming: legacy-test
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: all-params.json
+        sha256: da3a65fb0ec5217b61d19cc7b6a92b39fa1e51793a4dd953b31089d0a4af3806
+        bytes: 4756
+      - filename: simple-banner.json
+        sha256: 1228c105f0aece8e8203bd740e1da4f6b1fcf9337df4acfea85bd67c1c2c6bfe
+        bytes: 3641
+      - filename: simple-native.json
+        sha256: c34d37995c8762a51128ef398f9932dd08eb46f5336185b417b09d2bb288cd12
+        bytes: 5303
+      - filename: simple-video.json
+        sha256: 7dea4090ea6c80ab51b5072fc529ef23e70d6b7811cf325c1be2ff9556700864
+        bytes: 3909
+    supplemental:
+      - filename: banner-api-not-overridden.json
+        sha256: 1320eae2cdc5fbd6ca139f35d1a245c5cc7654b713cd8fbe558e79a3db9fefbf
+        bytes: 4013
+      - filename: bid-cat-brand-category-override.json
+        sha256: 3d72c4fd6907489413fd091cde21c74bad1794aadb379e3981fa6cca8f245d40
+        bytes: 3719
+      - filename: bid-cat-multiple.json
+        sha256: 81f1c346d76b7b50fed7bd87972961fcc8f3063c2f4f991f4961385ff70d6824
+        bytes: 3604
+      - filename: bid-cat.json
+        sha256: e1c1a7a02dc5bc36a55c046ab99e34c58b208983d42b73231cf37b1220000f83
+        bytes: 3633
+      - filename: bid-type-invalid.json
+        sha256: fac5ed88de816a2b594c6615ab3f4dddd947d1fa090bcce2f83eab272ce5866e
+        bytes: 2880
+      - filename: displaymanagerver-generated-missing-source.json
+        sha256: 884a828242608da77b8ef0d08c72999024353d063716f275b75844b1897bfdb7
+        bytes: 3725
+      - filename: displaymanagerver-generated-missing-version.json
+        sha256: 9847be18f70af66d827e86bc82f1534b21ec1376b4eb23aadb403c108cb307c9
+        bytes: 3739
+      - filename: displaymanagerver-generated-multiple-imps.json
+        sha256: 7ddaae066ba13ef7d1f2fd0ec5347f80252d12cf1e5d0debc3f4317a54fd9e20
+        bytes: 4840
+      - filename: displaymanagerver-generated.json
+        sha256: 21b1beb4d6b1808b363a30324eea8805a61d8d372ec65794a3044cef359d61fb
+        bytes: 3863
+      - filename: explicit-dimensions.json
+        sha256: 69d55be29c41e825a36b671e91c755593dee02c1d69e5a791e9fe33f9d465195
+        bytes: 3681
+      - filename: foreign-currency.json
+        sha256: 8dd1caeb0e1588b73a79a12b10533eda857bab01a34904ecef7c97b1ea10c257
+        bytes: 3641
+      - filename: gpid-passthrough.json
+        sha256: cb3fec2eb36afcdd9f7ef82ec1cf1b92b7dbe9a173387861c839735afb75dcb2
+        bytes: 3705
+      - filename: imps-none-valid.json
+        sha256: c1bc81e6d2b49da3bc5fd09aa8111e6fea4434bef4d08b0a0a25dfc546253b43
+        bytes: 1105
+      - filename: include-brand-category.json
+        sha256: 94760b454dfd5cecd1aa533baf0b3cdc93fad24373a545f956de3d00649eec5a
+        bytes: 4241
+      - filename: inv-code-overridden.json
+        sha256: 67bc1ce4a526233ebae77e3cf98d17ebd762f4bc37ddf74b2ee8bc1e576d2005
+        bytes: 3845
+      - filename: member-id-conflict.json
+        sha256: 9d78bb248da25c4e09b62dca126266c03573518b2d9d4a19fa898102de51abce
+        bytes: 1138
+      - filename: member-id.json
+        sha256: 2d8e16d43a400e5c60b20bcf7f3921b0ae472bceb0cf42a54dac040e0c5e552b
+        bytes: 3659
+      - filename: multi-bid.json
+        sha256: 39ffdbdb4b2f8d17e0792931285d3aba160828191441bf4eb0176e8d18d76a4a
+        bytes: 5445
+      - filename: request-ext-appnexus-invalid.json
+        sha256: 11c8203d3e7976a7e7dc8a7a98e7291f4baa03a1ee4840bcfca7e6f19c34f2f8
+        bytes: 734
+      - filename: request-ext-appnexus-passthrough.json
+        sha256: eb500b2500a04879518001be1f7771e514752571a2632a19756b31da694a1f6d
+        bytes: 3780
+      - filename: request-splitting.json
+        sha256: ffe43625043bd1472417a9a21904623e7ef83e74623a458c0e62a3949a7984c7
+        bytes: 10378
+      - filename: status-400.json
+        sha256: f974a5716e2f24b4426a969bec0ee3af7f9bf2b45a78ca20525da23aed8ea5c0
+        bytes: 1709
+      - filename: unmapped-brand-category.json
+        sha256: 87950add7a1a9d5a6d486eb038826b61f7ce016b25a10245a4e36179dec9fe1c
+        bytes: 3587
+    amp:
+      - filename: simple-banner.json
+        sha256: 98ad80f99618b891e55b5c6e560ff1ae056d3bb10b36132337a0d73beae65ff8
+        bytes: 3666
+    video:
+      - filename: simple-video.json
+        sha256: acf7a36e3e6235bb4ac3611e8622c32b9966c42e207495e06ab41db864f200f3
+        bytes: 3909
+    videosupplemental: []
+    integration: []
+    extrainfo_exemplary:
+      - filename: simple-banner.json
+        sha256: 498c574e162fbd120b3aebeb84f66d129601aa1c57ac61215e8179b08e1d45cd
+        bytes: 3642
+        directory: adapters/msft/test-extrainfo/exemplary/
+    extrainfo_video:
+      - filename: simple-video.json
+        sha256: ec371d92e7d684eb7852a0e8b19716aff7c3776f7d314ac4315fe76fef5e0396
+        bytes: 3910
+        directory: adapters/msft/test-extrainfo/video/
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods:
+    - TestJsonSamples
+    - TestJsonSamplesWithExtraInfo
+    - TestBadConfig
+    - TestValidParams
+    - TestInvalidParams
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  # Edge case #3 (test directory naming exception):
+  # msft does NOT use the canonical msfttest/ root directory. Instead, it co-locates
+  # `test/` (passed to RunJSONBidderTest in TestJsonSamples) and `test-extrainfo/`
+  # (passed to RunJSONBidderTest in TestJsonSamplesWithExtraInfo) under the adapter
+  # directory. The dual-suite split lets the test-extrainfo Builder use a non-default
+  # ExtraAdapterInfo string (`{"hb_source": 50, "hb_source_video": 60}`) without
+  # leaking that state into the primary suite. Captured here as
+  # go_directory_naming: legacy-test plus a quirk entry for the non-canonical
+  # `test-extrainfo` sibling. The two sibling roots cannot both be expressed in a
+  # single test_root_directory string; we report the primary one (`adapters/msft/test/`)
+  # and surface the second through fixture_inventory.extrainfo_exemplary /
+  # extrainfo_video (extension fields) plus the test-extrainfo-dual-suite quirk.
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: go-data-table
+  yaml_field: null
+  go_data_file: adapters/msft/iab_categories.go
+  table_size: 95
+  injection: static-init
+  # iabCategoryMap is a package-level map[int]string literal initialized at package
+  # load time (iab_categories.go:10). 95 entries (sparse keys ranging 1..183 — the
+  # source has gaps because some Microsoft brand-category ids do not have IAB
+  # equivalents). The lookup is exposed via findIABCategoryForBid(bid *bidExt)
+  # (string, bool) which reads bid.Appnexus.BrandCategory and returns the IAB tag.
+  # MakeBids consumes the result at msft.go:361-366: a hit assigns bid.Cat to a
+  # single-element slice; a miss with len(bid.Cat) > 1 zeroes bid.Cat to force
+  # downstream rejection (multi-cat-ambiguous policy); a miss with <=1 bid.Cat is
+  # passed through unchanged.
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+  # The adapter does NOT call reqInfo.ConvertCurrency. The `foreign-currency.json`
+  # supplemental fixture verifies that bidfloor/bidfloorcur are passed through
+  # unchanged to ib.adnxs.com — currency conversion is the bidder's responsibility,
+  # not the adapter's.
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+    - name: x-openrtb-version
+      value: "2.6"
+  authentication_kind: none
+  authentication_input: []
+  # Headers are built per-request via buildHeaders() (msft.go:321-327) and shared
+  # across all sibling RequestData emitted by a single MakeRequests call (the same
+  # http.Header value is referenced from each entry — buildRequests:298). All three
+  # custom headers are static literals, so per-request rebuild is cosmetic.
+
+deploy_time_tokens: []
+
+quirks:
+  - id: pubclick-vs-pub-click-style-mismatch
+    file: openrtb_ext/imp_msft.go
+    summary: "Incoming JSON tag is `pubclick` (PubClick string `json:\"pubclick\"`, imp_msft.go:14), bidder-params schema property name is `pubclick` (msft.json:35), but the OUTGOING mirror struct field uses `pub_click` (impExtOutgoingAppnexus.PubClick string `json:\"pub_click,omitempty\"` at models.go:30). The adapter rewrites the key on the wire — incoming key style differs from outgoing key style for the same logical field. Edge case #7."
+    edge_case_taxon: json-key-style-mismatch
+  - id: pubclick-schema-vs-outgoing-style-mismatch
+    file: static/bidder-params/msft.json
+    summary: "static/bidder-params/msft.json properties.pubclick (no underscore, msft.json:35) is the publisher-facing key; impExtOutgoingAppnexus serializes it back out as `pub_click` (with underscore, models.go:30). Schema and outgoing payload disagree on the same logical field's wire name. Edge case #7."
+    edge_case_taxon: json-key-style-mismatch
+  - id: multi-file-go-layout
+    file: adapters/msft/
+    summary: "Adapter is split across three .go files — msft.go (implementation, 395 LOC), models.go (struct types, 60 LOC), iab_categories.go (95-entry lookup table + helper, 106 LOC). The split is justified primarily by the size of the IAB lookup table; isolating it keeps msft.go grep-able. Most adapters are single-file. Edge case #4."
+    edge_case_taxon: multi-file-layout-justified
+  - id: legacy-test-directory-naming
+    file: adapters/msft/test/
+    summary: "Test root is adapters/msft/test/ rather than the canonical adapters/msft/msfttest/. Captured in tests.go_directory_naming: legacy-test."
+    edge_case_taxon: incomplete-classification
+  - id: test-extrainfo-dual-suite
+    file: adapters/msft/test-extrainfo/
+    summary: "Adapter exposes a SECOND test root, adapters/msft/test-extrainfo/, used by TestJsonSamplesWithExtraInfo (msft_test.go:33) with a custom ExtraAdapterInfo string `{\"hb_source\": 50, \"hb_source_video\": 60}`. The dual-suite layout is unique to msft in master — no other adapter co-locates a `test-extrainfo` sibling next to `test/`. Edge case #3 (custom-naming-with-canonical-stem-prefix). The two roots cannot both be encoded in a single tests.test_root_directory; the secondary root is surfaced via tests.fixture_inventory.extrainfo_exemplary and extrainfo_video extension fields."
+    edge_case_taxon: incomplete-classification
+  - id: max-imps-per-request-batching
+    file: adapters/msft/msft.go
+    summary: "Imps split into batches of <=10 (const maxImpsPerReq = 10, msft.go:24). buildRequests slices request.Imp via floor-then-ceil arithmetic at msft.go:294 and reassigns request.Imp = impsForRequest in-place per iteration (msft.go:303). Each batch becomes one HTTP RequestData. The supplemental fixture request-splitting.json (10378 bytes) covers 13 imps -> 2 requests of 10+3."
+    edge_case_taxon: incomplete-classification
+  - id: composed-batching-rules
+    file: adapters/msft/msft.go
+    summary: "Two ordered rules: (1) filtered-subset (validImps loop drops imps with parse/modify failures and short-circuits with errMemberIDMismatch on member-id divergence), (2) max-imps-per-request: 10. Composability captured in code.make_requests.batching.rules[]. Edge case #11."
+    edge_case_taxon: incomplete-classification
+  - id: hardcoded-default-hbsource
+    file: adapters/msft/msft.go
+    summary: "defaultHBSource (5) and defaultHBSourceVideo (6) are package-level const literals (msft.go:22-23). When ExtraAdapterInfo is unset OR sets the field to zero, parseExtraInfo overrides 0 with the default (msft.go:69-75). The defaults should arguably live in YAML (`extra_info` block) rather than the source — but msft is a known internal-ID convention so the hardcoding is justified. Surfaces here for port awareness."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: bid-pointer-local-variable-anti-pattern
+    file: adapters/msft/msft.go
+    summary: "Inside the SeatBid/Bid loop, the adapter copies sb.Bid[i] into a LOCAL `bid := sb.Bid[i]` variable (msft.go:347), unmarshals bid.Ext into bidExt, then takes `&bid` to populate TypedBid.Bid (msft.go:369). The pointer escapes to a value that will be rewritten on the next iteration — but Go's loop-variable lifetime semantics (post-Go-1.22) make `bid` a per-iteration local, so the pattern is safe. Pre-1.22 this would be a capture-by-reference bug."
+    edge_case_taxon: legacy-go-pattern-pre-1.22
+  - id: brand-category-multi-rejection
+    file: adapters/msft/msft.go
+    summary: "If findIABCategoryForBid returns NOT-FOUND AND the upstream bid carries len(bid.Cat) > 1, the adapter zeroes bid.Cat to []string{} (msft.go:363-366) — explicitly to force downstream policy rejection. This is a deliberate behavioral signal, not a defensive default — bidders MUST send <=1 IAB category OR a Microsoft brand-id that the table can resolve."
+    edge_case_taxon: incomplete-classification
+  - id: bid-ad-type-2-unmapped
+    file: adapters/msft/msft.go
+    summary: "getMediaTypeForBid maps bid.ext.appnexus.bid_ad_type values 0 -> banner, 1 -> video, 3 -> native. Value 2 (audio in OpenRTB 2.6 mtype) and any other unrecognized integer return an `unrecognized bid_ad_type in response: %d` error and the bid is dropped (msft.go:392-394). Audio bids cannot survive — the bidder declares no audio capability in YAML, so this is consistent."
+    edge_case_taxon: incomplete-classification
+  - id: bidder-name-rebrand-microsoft-vs-msft
+    file: openrtb_ext/bidders.go
+    summary: "The Go bidder constant is openrtb_ext.BidderMicrosoft (string value \"msft\") — the constant uses the legal entity name while the YAML directory and external API key use the abbreviation. Reviewers and porters should be aware that the constant identifier (BidderMicrosoft) does NOT share a stem with the directory (msft); the bidder constant string value is the canonical link."
+    edge_case_taxon: incomplete-classification
+  - id: appnexus-rebrand-fork
+    file: adapters/msft/msft.go
+    summary: "msft is functionally a fork of the legacy Appnexus adapter — the endpoint is http://ib.adnxs.com/openrtb2 (Appnexus's domain), the outgoing imp.ext is wrapped in an `appnexus` sub-key (impExtOutgoing.Appnexus, models.go:20), the request.ext.appnexus is computed and merged (modifyRequestExt, msft.go:224-244), and bid.ext.appnexus.bid_ad_type drives bid type resolution (msft.go:385). The Java repo retains the original adapter under bidder/appnexus/ with the same maintainer email (prebid@microsoft.com); the Go repo carries BOTH bidder/appnexus and bidder/msft as separate codebases. Cross-language port targets the Java appnexus directory's idioms but with a different bidder identity."
+    edge_case_taxon: port-fidelity-divergence
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/msft/
+    package_name: msft
+    bidder_constant: openrtb_ext.BidderMicrosoft
+  java_artifacts:
+    # NO Java port at the same name. Verified at commit
+    # 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a (prebid-server-java master, 2026-04-22):
+    # there is no src/main/java/org/prebid/server/bidder/msft/ directory and no
+    # msft.yaml config file. The legacy Appnexus adapter survives in Java at
+    # src/main/java/org/prebid/server/bidder/appnexus/ with maintainer prebid@microsoft.com.
+    # If a Java port is added later, the canonical paths are the stubs below.
+    bidder_dir: src/main/java/org/prebid/server/bidder/msft/
+    bidder_class: MsftBidder
+    config_class: MsftConfiguration
+    yaml_path: src/main/resources/bidder-config/msft.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/msft/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes: []
+    # No Java port exists. The Java repo never picked up the msft fork; it kept
+    # the legacy Appnexus adapter. A future cross-language port would need to
+    # decide whether to (a) duplicate the Java appnexus adapter and rebrand, or
+    # (b) extend the Java appnexus adapter with msft-specific behavior toggled by
+    # a new BidderConfigurationProperties subclass. The Go side chose option (a)
+    # — a wholesale fork.
+  go_specific_concerns:
+    - "Multi-file Go layout (msft.go + models.go + iab_categories.go) — a porter to Java must split the IAB lookup table into a separate resource (Java's appnexus inlines the iabCategories map directly in bidder-config/appnexus.yaml as a 120-entry block; msft Java would do similarly)."
+    - "iabCategoryMap is a package-level static-init (storage_kind: go-data-table); the Java port would inline as yaml-inlined and inject via constructor-arg per the iab_category_storage taxonomy."
+    - "Adapter struct holds url.URL by VALUE (not pointer). Builder dereferences the parsed *url.URL once and stores the value (msft.go:52); each MakeRequests call copies a.uri before potentially appending the member_id query param. Java equivalent would use String for the endpoint and URIBuilder per-request (Rule 12)."
+    - "extraAdapterInfo (HBSource, HBSourceVideo) is parsed in the Builder via parseExtraInfo and applied directly to adapter struct fields. Java port should promote both fields to a MsftConfigurationProperties subclass with @NotBlank/@PositiveOrZero annotations (Rule 35)."
+    - "ExtraAdapterInfo defaults are hardcoded constants (defaultHBSource=5, defaultHBSourceVideo=6 at msft.go:22-23) — port to YAML defaults under @Value annotations or BidderConfigurationProperties default field values."
+    - "modifyRequestExt mutates request.Ext at runtime by merging an `appnexus` sub-key into the existing ext map (msft.go:240). The Java port would use Lombok toBuilder + ObjectMapper.valueToTree for the equivalent merge (Rule 5)."
+    - "initDisplayManageVerBuilder returns a closure with `hasRun bool` capture for memoization across imps (msft.go:141-170). Java's natural rewrite is a sealed Supplier with a Holder<String> wrapper or a Memoizer.suppliers.memoize idiom — non-trivial port-fidelity concern."
+    - "msft.go uses jsonparser (third-party github.com/buger/jsonparser) for two App.Ext path walks AND for the request.ext.prebid.targeting.includebrandcategory probe. Java port would use Jackson's JsonNode.path() chain — a clean translation but the canonical Go pattern (jsonutil.Unmarshal of a typed struct) would be cleaner if the schema is stable."
+    - "buildRequests reuses the same headers http.Header value across all batched RequestData entries (buildHeaders is called once at msft.go:298). Each batch's RequestData.Headers points at the SAME map; mutations would race. The Java port via BidderUtil.defaultRequest copies the MultiMap per request — safer."
+    - "modifyImp sets imp.TagID from ext.Bidder.InvCode unconditionally when InvCode != \"\" (msft.go:173-175), overwriting any existing TagID set by upstream prebid. The supplemental fixture inv-code-overridden.json verifies this behavior. A Java port must preserve the same semantics."
+    - "modifyImp dereferences imp.Banner via shallow copy (msft.go:178), promotes Format[0].W/H to top-level W/H when both are nil (msft.go:180-184), then sets API from ext.Bidder.BannerFrameworks when banner.API is nil (msft.go:186-188). Three sequential mutations on the bannerCopy value before re-pointing imp.Banner. Java equivalent is a single banner.toBuilder().w(...).h(...).api(...).build() chain."
+    - "Member-id uniqueness check (msft.go:108-117) uses uniqueMemberID across the imp loop — the FIRST non-zero member sets it; any subsequent non-zero member that disagrees triggers errMemberIDMismatch and aborts MakeRequests with the accumulated errors and no requests. Java port must preserve the early-exit semantics."
+    - "appendMemberID uses url.URL.Query()/Set/Encode (msft.go:217-222) — the canonical net/url pattern. The function takes url.URL by VALUE (not pointer) so callers receive a fresh copy. Java port maps to URIBuilder.addParameter (Rule 12)."
+    - "MakeBids constructs adapters.NewBidderResponseWithBidsCapacity(5) — a hardcoded capacity hint of 5 (msft.go:344). Java equivalent would size the bids ArrayList to 5 explicitly or pass to BidderBid.of(...).collect(Collectors.toList())."
+    - "MakeBids reads bid.Ext via jsonutil.Unmarshal into bidExt then conditionally rewrites bid.Cat based on the IAB lookup result (msft.go:361-366). Java port would inject the iabCategoryMap as a constructor arg and apply the same conditional logic. The 'len(bid.Cat) > 1 -> empty' branch is a deliberate rejection signal."
+    - "MakeBids uses canonical adapters.IsResponseStatusCodeNoContent + adapters.CheckResponseStatusCodeForErrors (msft.go:330-336) — modern pattern, NOT legacy-raw-go. Java equivalent is the framework-default plus an empty-seatbid short-circuit (Rule 30)."
+    - "Bid loop hybrid pattern: outer SeatBid loop is range-value (`for _, sb := range`); inner Bid loop is range-index (`for i := range sb.Bid`). The bid pointer is taken from a local copy `bid := sb.Bid[i]` then `&bid` (msft.go:347, 369) — Go-1.22-safe but pre-1.22 would have aliased the loop variable."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
+    # No PR history exists yet for cross-language msft work — the Go-side msft is a
+    # fork of Appnexus that has not been mirrored in Java. Reviewer cohort is
+    # populated empty pending the first cross-language PR.

@@ -1,0 +1,330 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-adapter-code: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/claude-opus-4-7[1m]
+  warnings: []
+
+meta:
+  bidder_name: bidstack
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://server.bidstack.com/openrtb"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: true
+  maintainer:
+    email: "tech@bidstack.com"
+  capabilities:
+    app:
+      mediaTypes:
+        - video
+  geoscope: []
+  gvl_vendor_id: 462
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+# NOTE: encoded as YAML `|` literal block — the source file begins with `{` (no leading
+# blank line), has no trailing whitespace on any line, and ends with exactly one terminal
+# newline. The `|` form preserves these exact bytes (sha256 verified end-to-end).
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Bidstack Adapter Params",
+    "description": "A schema which validates params accepted by the Bidstack adapter",
+    "type": "object",
+    "properties": {
+      "publisherId": {
+        "type": "string",
+        "format": "uuid",
+        "minLength": 1,
+        "description": "An ID which identifies the publisher in Bidstack system"
+      },
+      "placementId": {
+        "type": "string",
+        "description": "An ID which identifies the placement in Bidstack system"
+      },
+      "consent": {
+        "type": "boolean",
+        "description": "User consent"
+      }
+    },
+    "required" : [ "publisherId" ]
+  }
+bidder_params_sha256: 4d5a3385be499b3bdf544c20a43e8300176d165162b5db6d0fa6b5988755bae3
+
+params:
+  schema_interpretation:
+    properties:
+      - name: publisherId
+        type: string
+        description: "An ID which identifies the publisher in Bidstack system"
+        constraints:
+          format: uuid
+          minLength: 1
+      - name: placementId
+        type: string
+        description: "An ID which identifies the placement in Bidstack system"
+      - name: consent
+        type: boolean
+        description: "User consent"
+    required_fields:
+      - publisherId
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_bidstack.go
+    type_name: ImpExtBidstack
+    fields:
+      - name: PublisherID
+        json_tag: publisherId
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/bidstack/params_test.go
+    valid_cases_count: 4
+    invalid_cases_count: 3
+    bidder_constant_referenced: openrtb_ext.BidderBidstack
+
+code:
+  package_or_class: bidstack
+  directory_name: bidstack
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: bidstack.go
+        role: implementation
+        loc: 128
+  imports:
+    has_template_engine: false
+    has_currency_helper: true
+    has_jsonutil: true
+    third_party:
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpoint
+        type: string
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place
+      go_idiom: direct-pointer-mutation
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtBidstack
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: prepareHeaders
+        signature: "func prepareHeaders(request *openrtb2.BidRequest) (headers http.Header, err error)"
+      - name: getBidderExt
+        signature: "func getBidderExt(imp openrtb2.Imp) (bidderImpExt openrtb_ext.ImpExtBidstack, err error)"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: legacy-raw-go
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: hardcoded
+          hardcoded_value: BidTypeVideo
+          fallback_action: return-default
+      default_value: video
+      multi_format_detection: none
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: bidstacktest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: simple-app-video.json
+        sha256: 0647496951f060dacbe1c8d289408be6538da27ff83b51a65461750df6a92998
+        bytes: 3127
+    supplemental:
+      - filename: currency_rate_not_found.json
+        sha256: 5959fae8f78d0e432806404de24dfbae35af391a42a91b57f868f0d485f02c0a
+        bytes: 1020
+      - filename: status-204.json
+        sha256: 4d2bf268dc22118eeb40c70afa5ba5bcd2469ab186653200edc0efbe9781453e
+        bytes: 1646
+      - filename: status-400.json
+        sha256: 91827dc442a0c9ce9f61062e6ee43a2d9709bd681b508cba0b33f9d37bdeccde
+        bytes: 1738
+      - filename: status-404.json
+        sha256: 9359e2e7c4d0b6852f6416f616de7a54ffbbefdebb4ea064dedd614a1f983227
+        bytes: 1748
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: "reqInfo.ConvertCurrency(value, from, to) (float64, error)"
+    java_signature: null
+  injection: function-arg
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: Authorization
+      value: "Bearer <publisherId>"
+  authentication_kind: bearer-token
+  authentication_input:
+    - imp[0].ext.bidder.publisherId
+
+deploy_time_tokens: []
+
+quirks:
+  - id: video-only-capability
+    file: static/bidder-info/bidstack.yaml
+    summary: "Capabilities declares ONLY app.mediaTypes: [video] — no site, no dooh, no banner/native/audio. Canonical exemplar of a video-only adapter; bid type is therefore hardcoded to BidTypeVideo in MakeBids (bidstack.go:99)."
+    edge_case_taxon: hardcoded-bid-type
+  - id: bearer-token-from-imp-ext
+    file: bidstack.go
+    summary: "Authorization header is constructed per-request as `Bearer <publisherId>` where publisherId is read from imp[0].ext.bidder.publisherId (prepareHeaders, lines 109-119). Only the FIRST imp is consulted — multi-imp callers cannot override per-imp; multiple distinct publisherIds across imps are silently ignored."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: legacy-raw-status-checks
+    file: bidstack.go
+    summary: "MakeBids uses raw status code checks (StatusNoContent, StatusBadRequest, StatusOK at lines 77-86) instead of canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors helpers. Pre-dates the canonical helpers; 400 is mapped to a literal `\"bad request from publisher\"` string error rather than a typed errortypes.BadInput."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: imp-ext-unmarshal-only-via-prepareHeaders
+    file: bidstack.go
+    summary: "getBidderExt is invoked only inside prepareHeaders (line 109) to extract the publisherId for the Authorization header — NOT to validate or transform per-imp. The framework's params_test.go validates publisherId schema-wise, but MakeRequests itself never inspects publisherId on imps beyond the first. Schema-only validation, not behavioral."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: hardcoded-bid-type-video
+    file: bidstack.go
+    summary: "MakeBids unconditionally assigns BidType: openrtb_ext.BidTypeVideo on every bid (line 99) regardless of bid.mtype, imp.video presence, or bid.ext shape. Justified by video-only capabilities, but the adapter does NOT cross-check against imp.video presence — a bidder returning a banner-shaped bid would still be tagged video."
+    edge_case_taxon: hardcoded-bid-type
+  - id: cross-language-capability-divergence
+    file: static/bidder-info/bidstack.yaml
+    summary: "Go declares only `app: video` in capabilities. Java declares BOTH `site-media-types: [video]` AND `app-media-types: [video]` plus a `cookie-family-name: bidstack` user-sync block. Cross-language port drift: the Java port broadens the surface (site-allowed) and adds usersync that Go lacks. R5 port-fidelity concern; Go bidder_params_json bytes also differ from Java's (different whitespace formatting in `required` array)."
+    edge_case_taxon: port-fidelity-divergence
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/bidstack/
+    package_name: bidstack
+    bidder_constant: openrtb_ext.BidderBidstack
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/bidstack/
+    bidder_class: BidstackBidder
+    config_class: BidstackConfiguration
+    yaml_path: src/main/resources/bidder-config/bidstack.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/bidstack/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  go_specific_concerns:
+    - "Capabilities asymmetry: Go declares only `capabilities.app.mediaTypes: [video]`. The Java port broadens to BOTH `app-media-types: [video]` and `site-media-types: [video]` in `bidder-config/bidstack.yaml`. Port-fidelity issue — a Go-source port to Java should preserve the app-only restriction, OR the Go side should be updated to match the broader Java surface (raise with maintainer)."
+    - "User-sync absent on Go (no `userSync:` block in `static/bidder-info/bidstack.yaml`) but present on Java (`usersync: { cookie-family-name: bidstack }`). Single-direction asymmetry — porting Go→Java the user-sync metadata must be ADDED; porting Java→Go it must be DROPPED."
+    - "bidder_params_json bytes are NOT byte-identical between Go and Java (sha256 mismatch: Go=4d5a3385... vs Java=00b8e327...). The schemas are semantically equivalent (same fields, same required) but Java reformats the `required` array as multi-line while Go keeps the single-line `[ \"publisherId\" ]` form. R5 port-fidelity violation — the porter should normalize one direction."
+    - "`prepareHeaders` constructs the Authorization header from `imp[0].ext.bidder.publisherId` ONLY (line 109). Multi-imp requests with diverging publisherIds across imps silently use the first; Go has no per-imp Authorization. Java port must replicate this single-publisher constraint or surface it explicitly."
+    - "MakeBids hardcodes `BidType: openrtb_ext.BidTypeVideo` (line 99) without inspecting bid.mtype or imp.video presence — relies on the YAML capabilities to enforce video-only at the framework level. A future port to Java should preserve the hardcoded-video pattern (`BidType.video`) rather than introducing a `by-imp-mediatype` lookup."
+    - "MakeBids uses legacy raw status checks (`StatusNoContent`, `StatusBadRequest`, `StatusOK`) at lines 77-86 instead of canonical `adapters.IsResponseStatusCodeNoContent` / `adapters.CheckResponseStatusCodeForErrors`. The 400 path returns a literal `errors.New(\"bad request from publisher\")` rather than a typed `errortypes.BadInput` — pre-dates the canonical helpers + typed-error registry."
+    - "Currency conversion: `MakeRequests` mutates `imp.BidFloor` and `imp.BidFloorCur` in-place via indexed pointer (lines 47-58), converting non-USD floors to USD. Imp slice mutation is direct on `request.Imp[i]` — the framework's BidRequest is not deep-copied first, so the conversion writes through to shared memory. Idiom: `direct-pointer-mutation` (rare; reviewers typically flag in favor of `shallow-copy`)."
+    - "Imp ext type is named `ImpExtBidstack` (legacy `ImpExt{Bidder}` style) rather than canonical `ExtImp{Bidder}` (which would be `ExtImpBidstack`). Same pattern Optidigital uses — surfaces as a legacy-naming carry-forward."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

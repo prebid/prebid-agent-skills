@@ -1,0 +1,959 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: cross-language-params-sha-divergence
+      file: src/main/resources/static/bidder-params/appnexus.json
+      line: 0
+      summary: "Java raw bytes SHA (5946ec7d034be6f6f4033913751d074ffe75dacd9df542b30e1a44f41333ee12) differs from Go-side spec (20a3f193c62b1b3d6d2a0daf5dfaa3935a045c52b83af236693ebe9c3459106d). Files are SEMANTICALLY identical (same JSON Schema content) but Java's copy is reformatted with extra whitespace/newlines. Cross-language R5 (byte-equality) is violated; reviewer should regenerate Java JSON from Go canonical form to restore byte parity."
+
+meta:
+  bidder_name: appnexus
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - mediafuse
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "http://ib.adnxs.com/openrtb2"
+  endpoint_construction:
+    kind: query-parameter-augmentation
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@microsoft.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 32
+  user_sync:
+    cookie-family-name: adnxs
+    redirect:
+      url: "https://ib.adnxs.com/getuid?{{redirect_url}}"
+      support-cors: false
+      uid-macro: "$UID"
+  yaml_extra_fields:
+    platform-id: 5
+    iab-categories: "<inlined-95-entry-map; see iab_category_storage and full bytes in source YAML>"
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Appnexus Adapter Params",
+    "description": "A schema which validates params accepted by the AppNexus adapter",
+    "type": "object",
+    "properties": {
+      "placement_id": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "description": "An ID which identifies this placement of the impression"
+      },
+      "placementId": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "description": "Deprecated, use placement_id instead."
+      },
+      "inv_code": {
+        "type": "string",
+        "description": "A code identifying the inventory of this placement."
+      },
+      "invCode": {
+        "type": "string",
+        "description": "Deprecated, use inv_code instead."
+      },
+      "member": {
+        "type": ["integer", "string"],
+        "description": "An ID which identifies the member selling the impression."
+      },
+      "keywords": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "description": "A key with one or more values associated with it. These are used in buy-side segment targeting.",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "key"
+              ]
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "traffic_source_code": {
+        "type": "string",
+        "description": "Specifies the third-party source of this impression."
+      },
+      "trafficSourceCode": {
+        "type": "string",
+        "description": "Deprecated, use traffic_source_code instead."
+      },
+      "reserve": {
+        "type": "number",
+        "description": "The minimium acceptable bid, in CPM, using US Dollars"
+      },
+      "position": {
+        "type": "string",
+        "enum": [
+          "above",
+          "below"
+        ],
+        "description": "Specifies the ad unit as above or below the fold"
+      },
+      "use_pmt_rule": {
+        "type": "boolean",
+        "description": "Boolean to signal AppNexus to apply the relevant payment rule"
+      },
+      "use_payment_rule": {
+        "type": "boolean",
+        "description": "Deprecated, Boolean to signal AppNexus to apply the relevant payment rule. use_pmt_rule will get precedence over usePaymentRule."
+      },
+      "generate_ad_pod_id": {
+        "type": "boolean",
+        "description": "Boolean to signal AppNexus to add ad pod id to each request"
+      },
+      "private_sizes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "w": {
+              "type": "integer"
+            },
+            "h": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "w",
+            "h"
+          ]
+        },
+        "description": "Private sizes (ex: [{\"w\": 300, \"h\": 250},{...}]), experimental, may not be supported."
+      },
+      "ext_inv_code": {
+        "type": "string",
+        "description": "Specifies predefined value passed on the query string that can be used in reporting"
+      },
+      "external_imp_id": {
+        "type": "string",
+        "description": "Unique identifier of an externally generated auction"
+      }
+    },
+    "oneOf": [
+      {
+        "oneOf": [
+          {
+            "required": [
+              "placementId"
+            ]
+          },
+          {
+            "required": [
+              "placement_id"
+            ]
+          }
+        ]
+      },
+      {
+        "oneOf": [
+          {
+            "required": [
+              "invCode",
+              "member"
+            ]
+          },
+          {
+            "required": [
+              "inv_code",
+              "member"
+            ]
+          }
+        ]
+      }
+    ],
+    "not": {
+      "required": [
+        "placementId",
+        "invCode",
+        "member"
+      ]
+    }
+  }
+bidder_params_sha256: 5946ec7d034be6f6f4033913751d074ffe75dacd9df542b30e1a44f41333ee12
+
+params:
+  schema_interpretation:
+    properties:
+      - name: placement_id
+        type: ["integer", "string"]
+        description: "An ID which identifies this placement of the impression"
+      - name: placementId
+        type: ["integer", "string"]
+        description: "Deprecated, use placement_id instead."
+      - name: inv_code
+        type: string
+        description: "A code identifying the inventory of this placement."
+      - name: invCode
+        type: string
+        description: "Deprecated, use inv_code instead."
+      - name: member
+        type: ["integer", "string"]
+        description: "An ID which identifies the member selling the impression."
+      - name: keywords
+        type: anyOf
+        description: "Keywords expressed as string ('k=v,k2=v2'), array of {key, value[]} objects, or object with array values. AppnexusBidder.readKeywords() branches at runtime via JsonNode.isObject/isArray/isTextual; ExtImpAppnexus.keywords is JsonNode (no Jackson deserializer needed)."
+      - name: traffic_source_code
+        type: string
+        description: "Specifies the third-party source of this impression."
+      - name: trafficSourceCode
+        type: string
+        description: "Deprecated, use traffic_source_code instead."
+      - name: reserve
+        type: number
+        description: "The minimium acceptable bid, in CPM, using US Dollars"
+      - name: position
+        type: string
+        description: "Specifies the ad unit as above or below the fold"
+        constraints:
+          enum: [above, below]
+      - name: use_pmt_rule
+        type: boolean
+        description: "Boolean to signal AppNexus to apply the relevant payment rule"
+      - name: use_payment_rule
+        type: boolean
+        description: "Deprecated, Boolean to signal AppNexus to apply the relevant payment rule. use_pmt_rule will get precedence over usePaymentRule."
+      - name: generate_ad_pod_id
+        type: boolean
+        description: "Boolean to signal AppNexus to add ad pod id to each request"
+      - name: private_sizes
+        type: array
+        description: "Private sizes (ex: [{\"w\": 300, \"h\": 250},{...}]), experimental, may not be supported."
+      - name: ext_inv_code
+        type: string
+        description: "Specifies predefined value passed on the query string that can be used in reporting"
+      - name: external_imp_id
+        type: string
+        description: "Unique identifier of an externally generated auction"
+    required_fields: []
+    flexible_types:
+      - placement_id
+      - placementId
+      - member
+      - keywords
+    combinators_used:
+      - oneOf
+      - oneOf-of-oneOf
+      - anyOf
+      - not
+      - json-aliases-present
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.appnexus
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/appnexus/ExtImpAppnexus.java
+    type_name: ExtImpAppnexus
+    fields:
+      - name: placementId
+        json_tag: placement_id
+        type_native: Integer
+        omitempty: false
+        notes:
+          - "@JsonAlias(\"placementId\") provides legacy camelCase compatibility"
+          - "primary tag is implicit snake_case via Jackson default; Lombok @Value field name maps to placement_id by Jackson naming strategy convention used in this codebase (verbatim Java field is placementId)"
+      - name: invCode
+        json_tag: inv_code
+        type_native: String
+        omitempty: false
+        notes:
+          - "@JsonAlias(\"invCode\") legacy alias"
+      - name: member
+        json_tag: member
+        type_native: String
+        omitempty: false
+        notes: []
+      - name: keywords
+        json_tag: keywords
+        type_native: JsonNode
+        omitempty: false
+        notes:
+          - "Raw JsonNode; runtime polymorphism handled in AppnexusBidder.readKeywords() via JsonNode.isObject()/isArray()/isTextual() branching"
+          - "Per port-translation Rule 6, this is the runtime-isobject-isarray-branching pattern (no Jackson @JsonDeserialize class)"
+      - name: trafficSourceCode
+        json_tag: traffic_source_code
+        type_native: String
+        omitempty: false
+        notes:
+          - "@JsonAlias(\"trafficSourceCode\") legacy alias"
+      - name: reserve
+        json_tag: reserve
+        type_native: BigDecimal
+        omitempty: false
+        notes:
+          - "feeds imp.bidfloor only when imp.BidFloor is invalid (non-positive); USD-only assumption"
+      - name: position
+        json_tag: position
+        type_native: String
+        omitempty: false
+        notes:
+          - 'enum {"above","below"}; mapped via switch to AD_POSITION_ABOVE_THE_FOLD (1) / AD_POSITION_BELOW_THE_FOLD (3)'
+      - name: usePaymentRule
+        json_tag: use_pmt_rule
+        type_native: Boolean
+        omitempty: false
+        notes:
+          - "@JsonProperty(\"use_pmt_rule\") + @JsonAlias(\"use_payment_rule\") — preference: use_pmt_rule takes precedence over use_payment_rule"
+      - name: privateSizes
+        json_tag: private_sizes
+        type_native: JsonNode
+        omitempty: false
+        notes:
+          - "passed through verbatim — adapter does not parse"
+      - name: generateAdPodId
+        json_tag: generate_ad_pod_id
+        type_native: boolean
+        omitempty: false
+        notes:
+          - "primitive boolean; default false; drives makePodRequests path on video endpoint"
+      - name: extInvCode
+        json_tag: ext_inv_code
+        type_native: String
+        omitempty: false
+        notes: []
+      - name: externalImpId
+        json_tag: external_imp_id
+        type_native: String
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts:
+      - string
+      - object
+      - array
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/appnexus/AppnexusBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: AppnexusBidder
+  directory_name: appnexus
+  package_directory_mismatch: false
+  file_layout:
+    kind: multi-file
+    files:
+      - name: AppnexusBidder.java
+        role: implementation
+        loc: 561
+      - name: SameValueValidator.java
+        role: utils
+        loc: 32
+      - name: proto/AppnexusBidExt.java
+        role: models
+        loc: 9
+      - name: proto/AppnexusBidExtAppnexus.java
+        role: models
+        loc: 19
+      - name: proto/AppnexusBidExtCreative.java
+        role: models
+        loc: 9
+      - name: proto/AppnexusBidExtVideo.java
+        role: models
+        loc: 9
+      - name: proto/AppnexusExtImp.java
+        role: models
+        loc: 13
+      - name: proto/AppnexusImpExt.java
+        role: models
+        loc: 12
+      - name: proto/AppnexusImpExtAppnexus.java
+        role: models
+        loc: 24
+      - name: proto/AppnexusKeyVal.java
+        role: models
+        loc: 13
+      - name: proto/AppnexusReqExtAppnexus.java
+        role: models
+        loc: 22
+      - name: ../../proto/openrtb/ext/request/appnexus/ExtImpAppnexus.java
+        role: models
+        loc: 43
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: false
+    third_party:
+      - org.apache.commons.collections4.CollectionUtils
+      - org.apache.commons.collections4.ListUtils
+      - org.apache.commons.lang3.BooleanUtils
+      - org.apache.commons.lang3.ObjectUtils
+      - org.apache.commons.lang3.StringUtils
+      - org.apache.http.client.utils.URIBuilder
+      - jakarta.validation.ValidationException
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: pod-grouping
+          key: imp.id-prefix-before-underscore
+          notes:
+            - "Only fires when extractEndpointName(bidRequest) == openrtb2_video AND every imp's ext.bidder.appnexus.generateAdPodId is true (validated uniform via SameValueValidator<Boolean>)."
+            - "groupImpsByPod splits imps by StringUtils.substringBefore(imp.id, '_'); each pod has a fresh adpod_id (Long.toUnsignedString(ThreadLocalRandom.current().nextLong())) written into ext.appnexus.adpod_id."
+            - "Each pod is then individually fed to splitHttpRequests, so size-split happens INSIDE each pod group."
+        - kind: max-imps-per-request
+          max: 10
+          notes:
+            - "MAX_IMP_PER_REQUEST = 10; ListUtils.partition(imps, 10) divides imps into chunks of 10 each."
+            - "Default path: splitHttpRequests(updatedBidRequest, updatedImps, url). Pod path: splitHttpRequests called per-pod."
+            - "Composes AFTER pod-grouping: pods are formed first, then each pod's imps are sliced into batches of <=10."
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: false
+      entity_strategies:
+        Imp: immutable-rebuild
+        Banner: immutable-rebuild
+        Source: immutable-rebuild
+        Ext: immutable-rebuild
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+      schain_mutation: null
+      fields_mutated:
+        - imp.tagid (when invCode present)
+        - imp.bidfloor (when imp.bidfloor invalid AND extImp.reserve valid)
+        - imp.banner (toBuilder rebuild with pos + w/h promotion)
+        - imp.displaymanagerver (filled from app.ext.prebid.{source}-{version} when blank)
+        - imp.ext (replaced with AppnexusImpExt(AppnexusImpExtAppnexus, gpid))
+        - bidRequest.source (toBuilder rebuild dropping ExtSource.schain field while preserving other ext properties)
+        - bidRequest.ext (re-built ExtRequest carrying schain promoted to top-level + appnexus key)
+      schain_movement:
+        from: bidRequest.source.ext.schain
+        to: bidRequest.ext.schain
+        helper: AppnexusBidder.updateBidRequest + updateSource + updateExtRequest
+        notes:
+          - "supplyChain(source) returns source.ext.schain via Optional chain; if non-null, source.toBuilder().ext(non-schain-properties-only-or-null).build() is rebuilt and the schain JsonNode is added as a property of the request-level ExtRequest via updatedExtRequest.addProperty(\"schain\", ...)."
+          - "Mirrors Go-side moveSupplyChain (Go appnexus.go:461). OpenRTB 2.4→2.6 schain location migration."
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-custom-wrapper
+      target_type: AppnexusExtImp
+      wrapper_type: AppnexusExtImp
+      notes:
+        - "AppnexusBidder.parseImpExt() uses mapper.mapper().convertValue(imp.getExt(), AppnexusExtImp.class) — single pass."
+        - "AppnexusExtImp { bidder: ExtImpAppnexus, gpid: String } combines the standard ExtImpBidder.bidder unmarshal AND a sibling 'gpid' field; structurally still standard-two-phase but mechanically single convertValue call."
+        - "Java analog of Go's adapter-local impExtIncoming wrapper."
+    endpoint_resolution:
+      kind: query-parameter-augmentation
+      mechanism_go: null
+      mechanism_java: URIBuilder
+      macro_field_set: []
+      template_params_struct_field_count: null
+      notes:
+        - "Member ID extracted from imp.ext.bidder.member (validated to be uniform via SameValueValidator<String>) is appended via new URIBuilder(endpointUrl).addParameter(\"member_id\", member).build().toString()."
+        - "All imps in a single request must share the same member_id; mismatch throws ValidationException → entire request aborts via Result.withErrors(errors)."
+    helpers:
+      - name: defaultDisplayManagerVer
+        signature: "private String defaultDisplayManagerVer(BidRequest bidRequest)"
+      - name: parseImpExt
+        signature: "private AppnexusExtImp parseImpExt(Imp imp)"
+      - name: validateExtImpAppnexus
+        signature: "private static void validateExtImpAppnexus(ExtImpAppnexus, SameValueValidator<String> memberValidator, SameValueValidator<Boolean> generateAdPodIdValidator)"
+      - name: updateImp
+        signature: "private Imp updateImp(Imp imp, ExtImpAppnexus, String gpid, String defaultDisplayManagerVer)"
+      - name: updateBanner
+        signature: "private static Banner updateBanner(Banner banner, ExtImpAppnexus extImpAppnexus)"
+      - name: resolvePosition
+        signature: "private static Integer resolvePosition(String position)"
+      - name: makeImpExt
+        signature: "private ObjectNode makeImpExt(ExtImpAppnexus extImpAppnexus, String gpid)"
+      - name: readKeywords
+        signature: "private String readKeywords(JsonNode keywords)"
+      - name: readKeywordsFromObject
+        signature: "private String readKeywordsFromObject(JsonNode keywords)"
+      - name: readKeywordsFromArray
+        signature: "private String readKeywordsFromArray(JsonNode keywords)"
+      - name: keywordsStreamFor
+        signature: "private static Stream<String> keywordsStreamFor(String key, List<String> values)"
+      - name: makeUrl
+        signature: "private String makeUrl(String member)"
+      - name: extractEndpointName
+        signature: "private static String extractEndpointName(BidRequest bidRequest)"
+      - name: updateBidRequest
+        signature: "private BidRequest updateBidRequest(BidRequest bidRequest, boolean isAmp, boolean isVideo)"
+      - name: supplyChain
+        signature: "private static SupplyChain supplyChain(Source source)"
+      - name: updateSource
+        signature: "private static UpdateResult<Source> updateSource(Source source, SupplyChain supplyChain)"
+      - name: extSourceWithProperties
+        signature: "private static ExtSource extSourceWithProperties(Map<String, JsonNode> properties)"
+      - name: updateExtRequest
+        signature: "private ExtRequest updateExtRequest(ExtRequest extRequest, SupplyChain supplyChain, boolean isAmp, boolean isVideo)"
+      - name: makeCopyOrNew
+        signature: "private ExtRequest makeCopyOrNew(ExtRequest extRequest)"
+      - name: updateReqExtAppnexus
+        signature: "private ObjectNode updateReqExtAppnexus(JsonNode appnexus, ExtRequest extRequest, boolean isAmp, boolean isVideo)"
+      - name: parseReqExtAppnexus
+        signature: "private AppnexusReqExtAppnexus parseReqExtAppnexus(JsonNode jsonNode)"
+      - name: makePodRequests
+        signature: "private List<HttpRequest<BidRequest>> makePodRequests(BidRequest bidRequest, List<Imp> imps, String url)"
+      - name: withGeneratedPodId
+        signature: "private BidRequest withGeneratedPodId(BidRequest bidRequest)"
+      - name: groupImpsByPod
+        signature: "private Map<String, List<Imp>> groupImpsByPod(List<Imp> processedImps)"
+      - name: splitHttpRequests
+        signature: "private List<HttpRequest<BidRequest>> splitHttpRequests(BidRequest bidRequest, List<Imp> imps, String url)"
+      - name: createHttpRequest
+        signature: "private HttpRequest<BidRequest> createHttpRequest(BidRequest bidRequest, List<Imp> imps, String url)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidResponse bidResponse, List<BidderError> errors)"
+      - name: toBidderBid
+        signature: "private BidderBid toBidderBid(Bid bid, String currency, List<BidderError> errors)"
+      - name: parseBidExtAppnexus
+        signature: "private AppnexusBidExtAppnexus parseBidExtAppnexus(Bid bid)"
+      - name: bidType
+        signature: "private static BidType bidType(AppnexusBidExtAppnexus appnexus)"
+      - name: bidCategories
+        signature: "private List<String> bidCategories(Bid bid, AppnexusBidExtAppnexus appnexus)"
+      - name: makeVideoInfo
+        signature: "private static ExtBidPrebidVideo makeVideoInfo(AppnexusBidExtAppnexus appnexus)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: framework-default
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.appnexus.bid_ad_type
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: none
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/appnexus/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-video-appnexus-bid-request-1.json
+        sha256: 3e2ef51fdd89598a96a0c6486d4d57169d330cf2aa1c82fb6ae13498cc22431a
+        bytes: 5494
+        role: bidder-bid-request
+      - filename: test-video-appnexus-bid-request-2.json
+        sha256: 32b0017c0aef30eb9f42a225f64de5b50d8815ea91474063634d207047e2eccb
+        bytes: 2128
+        role: bidder-bid-request
+      - filename: test-video-appnexus-bid-response-1.json
+        sha256: 113c2ebec60a0dc2339dfc8c79917b0bb201a90b65e7189edc7d3d6bc819d0bf
+        bytes: 1358
+        role: bidder-bid-response
+      - filename: test-video-appnexus-bid-response-2.json
+        sha256: f4e6058d6622ac898580cdde7a46b140e25323282aa9da9f9a23c6319cf28ef9
+        bytes: 746
+        role: bidder-bid-response
+      - filename: test-video-appnexus-request.json
+        sha256: 70c48a785f52daca23762714f517fc31db60b391a18927ff1eba720bcdde5d35
+        bytes: 1813
+        role: auction-request
+      - filename: test-video-appnexus-response.json
+        sha256: b54ecbec5ef1150dbcba23ec5889c9602cb17fd6a833e675e4792656db1ea785
+        bytes: 607
+        role: auction-response
+      - filename: test-video-cache-request.json
+        sha256: 6a17a5c3aecae7a735cc699730622311229fd79f0d902a41b98ebb16a581d69f
+        bytes: 482
+        role: cache-request
+      - filename: test-video-cache-response-matcher.json
+        sha256: 302e1392080b39b03fd2d42dd70af54a49d23d4977d6356436ec1bf136b9c8fb
+        bytes: 180
+        role: cache-response-matcher
+  uses_canonical_harness: true
+  unit_test_methods_count: 39
+  unit_test_loc: 937
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldAddErrorsOnInvalidImps
+    - makeHttpRequestsShouldReturnErrorOnInvalidMembers
+    - makeHttpRequestsShouldReturnErrorOnInvalidGenerateAdPodIds
+    - makeHttpRequestsShouldUpdateImpTagIdOnValidInvCode
+    - makeHttpRequestsShouldUpdateImpBidFloorOnValidReserve
+    - makeHttpRequestsShouldNotUpdateImpBidFloorOnValidImpBidFloor
+    - makeHttpRequestsShouldUpdateBanner
+    - makeHttpRequestsShouldUpdateBannerWithAbovePosition
+    - makeHttpRequestsShouldUpdateBannerWithBelowPosition
+    - makeHttpRequestsShouldUpdateDisplayManagerVer
+    - makeHttpRequestsShouldNotUpdateDisplayManagerVer
+    - makeHttpRequestsShouldUpdateImpExt
+    - makeHttpRequestsShouldForwardImpExtGpid
+    - makeHttpRequestsShouldUpdateImpExtWithStringKeywords
+    - makeHttpRequestsShouldUpdateImpExtWithObjectKeywords
+    - makeHttpRequestsShouldUpdateImpExtWithArrayKeywords
+    - makeHttpRequestsShouldReturnExpectedUrl
+    - makeHttpRequestsShouldReturnExpectedUrlWithMemberId
+    - makeHttpRequestsShouldMoveSupplyChain
+    - makeHttpRequestsShouldUpdateExtAppnexus
+    - makeHttpRequestsShouldUpdateExtAppnexusIfBrandCategoryPresent
+    - makeHttpRequestsShouldUpdateExtAppnexusIfAmpRequest
+    - makeHttpRequestsShouldUpdateExtAppnexusIfVideoRequest
+    - makeHttpRequestsShouldSplitImps
+    - makeHttpRequestsShouldSplitImpsByPods
+    - makeHttpRequestsShouldGenerateProperAdPodIds
+    - makeBidsShouldReturnErrorOnInvalidBody
+    - makeBidsShouldReturnEmptyResponseOnNullBody
+    - makeBidsShouldReturnEmptyResponseOnEmptyBody
+    - makeBidsShouldCollectErrors
+    - makeBidsShouldReturnExpectedBidTypes
+    - makeBidsShouldReturnExpectedCur
+    - makeBidsShouldReturnExpectedDealPriority
+    - makeBidsShouldReturnDefaultDealPriority
+    - makeBidsShouldReturnIabCategory
+    - makeBidsShouldReturnEmptyCatOnNull
+    - makeBidsShouldReturnEmptyCatIfSizeMoreThen1
+    - makeBidsShouldAddVideoInfo
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: AppnexusVideoTest
+  integration_test_pattern: 6-file-with-cache
+
+spring_config:
+  factory_class: AppnexusConfiguration
+  factory_method: appnexusBidderDeps
+  property_source_path: classpath:/bidder-config/appnexus.yaml
+  bidder_creator_lambda: |
+    config -> new AppnexusBidder(
+            config.getEndpoint(),
+            appnexusConfigurationProperties.getPlatformId(),
+            appnexusConfigurationProperties.getIabCategories(),
+            mapper)
+  configuration_properties_class:
+    name: AppnexusConfigurationProperties
+    extends: BidderConfigurationProperties
+    visibility: private-static-inner
+    declared_in: AppnexusConfiguration.java
+    extra_fields:
+      - name: platformId
+        type: Integer
+        yaml_field: platform-id
+        validations: []
+        notes:
+          - "Defaults to 5 in AppnexusBidder constructor (DEFAULT_PLATFORM_ID) when null via ObjectUtils.defaultIfNull(platformId, DEFAULT_PLATFORM_ID)."
+          - "Stored on the adapter as headerBiddingSource; emitted into ext.appnexus.hb_source as headerBiddingSource + (isVideo ? 1 : 0)."
+      - name: iabCategories
+        type: "Map<Integer, String>"
+        yaml_field: iab-categories
+        validations: []
+        notes:
+          - "Inlined map of ~95 numeric Appnexus brand-category IDs to IAB-tier strings."
+          - "Defaulted to Collections.emptyMap() in AppnexusBidder constructor when null."
+          - "Used by bidCategories(): looks up appnexus.brandCategoryId; if found, sets bid.cat = [iab]; otherwise empty list (forces bid rejection downstream)."
+    nested_classes: []
+    lombok_annotations:
+      - Data
+      - "EqualsAndHashCode(callSuper = true)"
+      - NoArgsConstructor
+  bean_dependencies:
+    - name: appnexusConfigurationProperties
+      type: AppnexusConfigurationProperties
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+      validations:
+        - "@NotBlank"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: AppnexusBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 4
+    parameters:
+      - name: endpointUrl
+        type: String
+        source: config-field
+        role: properties
+        notes:
+          - "Validated via HttpUtil.validateUrl; throws IllegalArgumentException at bean construction (covered by creationShouldFailOnInvalidEndpointUrl test)."
+      - name: platformId
+        type: Integer
+        source: config-field
+        role: properties
+        notes:
+          - "Stored as `headerBiddingSource` (renamed) with default 5; participates in ext.appnexus.hb_source computation."
+      - name: iabCategories
+        type: "Map<Integer, String>"
+        source: config-field
+        role: properties
+        notes:
+          - "Inlined ~95-entry map from bidder-config/appnexus.yaml; default Collections.emptyMap() when null."
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields:
+    - name: DEFAULT_PLATFORM_ID
+      type: int
+      value: "5"
+    - name: AD_POSITION_ABOVE_THE_FOLD
+      type: int
+      value: "1"
+    - name: AD_POSITION_BELOW_THE_FOLD
+      type: int
+      value: "3"
+    - name: POD_SEPARATOR
+      type: String
+      value: '"_"'
+    - name: MAX_IMP_PER_REQUEST
+      type: int
+      value: "10"
+    - name: KEYWORDS_OBJECT_TYPE_REFERENCE
+      type: "TypeReference<Map<String, List<String>>>"
+    - name: KEYWORDS_ARRAY_TYPE_REFERENCE
+      type: "TypeReference<List<AppnexusKeyVal>>"
+  helper_classes_co_located:
+    - SameValueValidator
+    - AppnexusBidExt
+    - AppnexusBidExtAppnexus
+    - AppnexusBidExtCreative
+    - AppnexusBidExtVideo
+    - AppnexusExtImp
+    - AppnexusImpExt
+    - AppnexusImpExtAppnexus
+    - AppnexusKeyVal
+    - AppnexusReqExtAppnexus
+  helper_classes_in_proto:
+    - ExtImpAppnexus
+
+iab_category_storage:
+  storage_kind: yaml-inlined
+  yaml_field: iab-categories
+  go_data_file: null
+  table_size: 95
+  injection: constructor-arg
+  notes:
+    - "Map<Integer, String> keys are numeric Appnexus brand-category IDs; values are IAB-tier strings (e.g., 1 -> IAB20-3)."
+    - "YAML key sequence is sparse (skips e.g. 40, 44-49, 54, 70, 72, 75-77, 79-84, 88-111, 116-117, 128-131, 134-136, 139, 144-165, 167-174, 177-181)."
+    - "Spring binds the YAML iab-categories block under adapters.appnexus.iab-categories into AppnexusConfigurationProperties.iabCategories via @ConfigurationProperties(\"adapters.appnexus\")."
+    - "Adapter receives this map by constructor injection (not static-init) — distinct from Go MSFT's go-data-table package-level var."
+    - "Cross-language note: Go side has no equivalent table for Appnexus; Go Appnexus uses a co-located iab_categories.go data table that is byte/value-equivalent to this YAML map (count parity required across languages)."
+
+ext_pojo_construction:
+  framework_choice: lombok-value-builder
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: runtime-isobject-isarray-branching
+    accepts_shapes:
+      - string
+      - object
+      - array
+    where_branched: bidder-class
+    notes:
+      - "ExtImpAppnexus.keywords is typed as raw JsonNode (no @JsonDeserialize, no separate Deserializer class)."
+      - "Branching lives in AppnexusBidder.readKeywords() which inspects keywords.isObject()/isArray()/isTextual() at runtime."
+      - "Object form: convertValue to TypeReference<Map<String, List<String>>>, joined as 'k=v1,k=v2,...' (or just 'k' when value list empty)."
+      - "Array form: convertValue to TypeReference<List<AppnexusKeyVal>>, same comma-joined format."
+      - "String form: keywords.textValue() returned verbatim."
+      - "Throws PreBidException(\"'keywords' field has the wrong type.\") when JsonNode is none of object/array/text."
+      - "This is the canonical Java pattern in the codebase that avoids a separate JsonDeserializer<ExtImpAppnexusKeywords> class — diverges from the Go canonical custom-UnmarshalJSON pattern. See cross-language port concerns."
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+  notes:
+    - "Headers populated by BidderUtil.defaultRequest(...) in AppnexusBidder.createHttpRequest — Content-Type and Accept come from framework default."
+
+deploy_time_tokens: []
+
+quirks:
+  - id: configuration-properties-subclass-with-platform-id-and-iab-categories
+    file: src/main/java/org/prebid/server/spring/config/bidder/AppnexusConfiguration.java
+    summary: "AppnexusConfiguration declares a private static inner class AppnexusConfigurationProperties extends BidderConfigurationProperties with two extra fields: Integer platformId (binds YAML 'platform-id') and Map<Integer, String> iabCategories (binds YAML 'iab-categories', ~95 entries inlined). The subclass uses @Data + @EqualsAndHashCode(callSuper=true) + @NoArgsConstructor and is referenced explicitly by bean type in the @Bean factory. Both fields are passed by config-field injection into AppnexusBidder constructor."
+    edge_case_taxon: spring-config-properties-subclass
+  - id: iab-categories-inlined-in-bidder-config-yaml
+    file: src/main/resources/bidder-config/appnexus.yaml
+    summary: "iab-categories: is a 95-entry Map<Integer, String> inlined directly in adapters/appnexus/bidder-config YAML (ids 1..183 sparse), bound into AppnexusConfigurationProperties.iabCategories. Cross-language divergence: Go-side appnexus uses a co-located iab_categories.go go-data-table at adapters/appnexus/iab_categories.go with a 95-entry package-level map literal — same data, different storage_kind."
+    edge_case_taxon: yaml-inlined-data-table
+  - id: keywords-runtime-isobject-isarray-branching
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "AppnexusBidder.readKeywords() folds keywords field (JsonNode) into a 'k=v,k2=v2' string by branching on JsonNode.isObject/isArray/isTextual. ExtImpAppnexus.keywords is plain JsonNode — there is no separate Jackson JsonDeserializer<ExtImpAppnexusKeywords> class. Diverges from the port-translation Rule 6 default (which would suggest jackson-jsondeserialize); this codebase uses runtime-isobject-isarray-branching instead, keeping branching co-located in the bidder rather than in a deserializer class."
+    edge_case_taxon: runtime-polymorphism-bidder-class
+  - id: composable-batching-pod-grouping-and-max-imps
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "Two composed batching rules: (1) when extractEndpointName == openrtb2_video AND every imp's generateAdPodId is true, groupImpsByPod groups by StringUtils.substringBefore(imp.id, '_') and writes a fresh adpod_id (Long.toUnsignedString(ThreadLocalRandom.current().nextLong())) into ext.appnexus.adpod_id per pod; (2) inside each group (or default path), splitHttpRequests via ListUtils.partition(imps, MAX_IMP_PER_REQUEST=10) slices into <=10-imp batches. Spec lists rules in apply-order: pod-grouping then max-imps-per-request."
+    edge_case_taxon: incomplete-classification
+  - id: imp-ext-wrapper-folds-gpid-into-single-pass
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "AppnexusExtImp { ExtImpAppnexus bidder; String gpid } is the adapter-local DTO unmarshalled by parseImpExt() in a single mapper.convertValue(imp.getExt(), AppnexusExtImp.class) call — combines what would normally be two phases (TypeReference<ExtPrebid<ExtImpPrebid, ExtImpAppnexus>> followed by separate gpid extraction) into one. Mechanically single-pass, semantically still standard-two-phase. Java mirror of Go's adapter-local impExtIncoming wrapper."
+    edge_case_taxon: incomplete-classification
+  - id: schain-source-to-request-ext-relocation
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "updateBidRequest + updateSource + updateExtRequest implement the OpenRTB 2.4→2.6 schain location migration: pull source.ext.schain via supplyChain(source); rebuild bidRequest.source via toBuilder() with ext rewritten to drop the schain key (set ext null when properties is empty); rebuild bidRequest.ext via makeCopyOrNew + addProperty(\"schain\", ...). Mirrors Go-side moveSupplyChain (appnexus.go:461)."
+    edge_case_taxon: port-fidelity-divergence
+  - id: bid-type-by-numeric-bid-ad-type
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "AppnexusBidder.bidType() switches on bid.ext.appnexus.bid_ad_type integer (0=banner, 1=video, 3=xNative; note 2 is skipped). Throws PreBidException(\"Unrecognized bid_ad_type in response from appnexus: <n>\") on unknown value, which is captured into BidderError.badServerResponse downstream. Uses by-bid-ext-typed-field with throw fallback — no chain, no default. Matches Go side."
+    edge_case_taxon: port-fidelity-divergence
+  - id: empty-bid-cat-on-unknown-iab-or-multi-cat
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "bidCategories(bid, appnexus) looks up iabCategories.get(appnexus.brandCategoryId); if found returns singletonList(iab). Otherwise returns the original bid.cat IF it has size <=1, otherwise emptyList() — the empty-list case is intentional to force downstream rejection (comment: 'create empty categories array to force bid to be rejected'). Cross-language port note: matches Go-side findIabCategoryForBid behavior in spirit."
+    edge_case_taxon: incomplete-classification
+  - id: pre-validation-throws-validationexception-aborts-request
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "validateExtImpAppnexus throws ValidationException for two cross-imp consistency violations: (a) member ID mismatch across imps via SameValueValidator<String>, and (b) generateAdPodId disagreement across imps via SameValueValidator<Boolean>. ValidationException is caught at the imp-loop level and triggers Result.withErrors(errors) — the ENTIRE request is aborted, NOT just the offending imp (PreBidException merely accumulates errors and skips that imp). This is a finer-grained error semantic than typical adapters."
+    edge_case_taxon: incomplete-classification
+  - id: imp-banner-pos-and-format-promotion
+    file: src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java
+    summary: "updateBanner performs Banner toBuilder rebuild: (a) maps ext.bidder.position 'above'/'below' to AD_POSITION_ABOVE_THE_FOLD (1) / AD_POSITION_BELOW_THE_FOLD (3) via switch, (b) when banner.W and banner.H are both null and banner.format is non-empty, promotes the first format's W/H to top-level. Rule 7 banner-format-dimension-promotion. The rebuild is short-circuited (returns input banner unchanged) when neither condition triggers."
+    edge_case_taxon: incomplete-classification
+  - id: alias-mediafuse-with-only-maintainer-override
+    file: src/main/resources/bidder-config/appnexus.yaml
+    summary: "appnexus.yaml declares aliases.mediafuse with only meta-info.maintainer-email overridden (support@mediafuse.com). No separate MediafuseConfiguration / MediafuseBidder classes exist — mediafuse is a YAML-only alias; the framework synthesizes the bidder via the parent appnexus configuration. parent_aliases reflects this in meta."
+    edge_case_taxon: alias-yaml-only
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/appnexus/
+    package_name: appnexus
+    bidder_constant: openrtb_ext.BidderAppnexus
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/appnexus/
+    bidder_class: AppnexusBidder
+    config_class: AppnexusConfiguration
+    yaml_path: src/main/resources/bidder-config/appnexus.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/appnexus/
+  port_concerns:
+    aliases_inverted: true
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: false
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "AppnexusConfiguration declares a private-static-inner AppnexusConfigurationProperties subclass (extends BidderConfigurationProperties) — Java-only edge case. The class adds Integer platformId and Map<Integer, String> iabCategories. Both extra fields are populated from YAML keys 'platform-id' and 'iab-categories' under adapters.appnexus."
+    - "iabCategories is a ~95-entry Map<Integer, String> inlined under adapters.appnexus.iab-categories in src/main/resources/bidder-config/appnexus.yaml. Cross-language storage_kind divergence: Java uses yaml-inlined while Go uses go-data-table (adapters/appnexus/iab_categories.go)."
+    - "ExtImpAppnexus.keywords is typed as raw JsonNode (NOT a custom-typed string with @JsonDeserialize). Branching is co-located in AppnexusBidder.readKeywords() via JsonNode.isObject/isArray/isTextual rather than a separate Jackson JsonDeserializer. This contradicts the port-translation Rule 6 default which would suggest jackson-jsondeserialize for the canonical Go ExtImpAppnexusKeywords.UnmarshalJSON (3-shape) translation."
+    - "AppnexusExtImp { bidder: ExtImpAppnexus, gpid: String } adapter-local wrapper unmarshals BOTH the standard ExtImpBidder.bidder field AND a sibling 'gpid' in a single mapper.convertValue(imp.getExt(), AppnexusExtImp.class) call — Java equivalent of Go's renamed-tag impExtIncoming trick."
+    - "schain relocation: updateBidRequest + supplyChain + updateSource + updateExtRequest implement the source.ext.schain → request.ext.schain repositioning via Lombok toBuilder() rebuilds, mirroring Go's moveSupplyChain (appnexus.go:461) but using immutable-rebuild idiom."
+    - "Validation semantics divergence: Java throws ValidationException for cross-imp consistency violations (member mismatch, generateAdPodId disagreement) which aborts the ENTIRE request via Result.withErrors(errors). PreBidException merely accumulates a per-imp error and skips the imp. Go side has equivalent logic but with different exception types."
+    - "AppnexusBidder constructor calls HttpUtil.validateUrl(endpointUrl) and Objects.requireNonNull(mapper) — invalid URL or null mapper triggers IllegalArgumentException / NullPointerException at bean construction time (covered by creationShouldFailOnInvalidEndpointUrl)."
+    - "headerBiddingSource = ObjectUtils.defaultIfNull(platformId, DEFAULT_PLATFORM_ID=5) — platformId is renamed to headerBiddingSource on the adapter and emitted as ext.appnexus.hb_source = headerBiddingSource + (isVideo ? 1 : 0). Matches Go's resolvePlatformID(platformID) + isVIDEO addition."
+    - "Bid currency overwrite: BidderBid.bidCurrency = bidResponse.getCur() — passthrough-from-response with no empty-check guard (Go side guards via `if appnexusResponse.Cur != \"\"` — Java is unguarded but yields the same result because bidResponse.getCur() returns null/empty cleanly)."
+    - "Multi-file layout: 11 Java files split as 1 implementation (AppnexusBidder.java, 561 LOC) + 1 utility (SameValueValidator.java) + 9 proto/ DTOs + 1 ExtImpAppnexus in proto/openrtb/ext/request/appnexus/. Mirrors Go's 3-file layout (appnexus.go + models.go + iab_categories.go) but with finer-grained DTO splitting."
+    - "Mediafuse alias: aliases.mediafuse declared in appnexus.yaml with only meta-info.maintainer-email override (support@mediafuse.com). No separate MediafuseConfiguration / MediafuseBidder classes — pure YAML-only alias. Cross-language inversion: Go has the relationship inverted (child declares aliasOf=parent)."
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - mutation-idiom-tobuilder
+      - keywords-runtime-vs-jsondeserialize-branching
+      - schain-source-to-request-ext-relocation
+      - iab-category-storage-divergence
+      - configuration-properties-subclass
+  reviewer_cohort:
+    go: [bsardo, SyntaxNode, hhhjort]
+    java: [CTMBNara, AntoxaAntoxic, EmilNadimanov]
+    cross_language_coordinator: bretg

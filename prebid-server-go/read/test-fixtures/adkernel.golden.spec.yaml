@@ -1,0 +1,373 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: adkernel
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - 152media
+    - rxnetwork
+    - xapads
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "http://pbs.adksrv.com/hb?zone={{.ZoneID}}"
+  endpoint_construction:
+    kind: template-macro
+    macros_used:
+      - ZoneID
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid-dev@adkernel.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+  geoscope: []
+  gvl_vendor_id: 14
+  user_sync:
+    redirect:
+      url: "https://sync.adkernel.com/user-sync?t=image&gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&gpp={{.GPP}}&gpp_sid={{.GPPSID}}&r={{.RedirectURL}}"
+      userMacro: "{UID}"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks:
+    - field: endpointCompression
+      observed_value: "GZIP"
+      canonical_value: gzip
+      summary: "Value is uppercase 'GZIP' in YAML; PBS-Go normalizes case-insensitively to gzip. Same pattern observed in rubicon, triplelift, tpmn."
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Adkernel Adapter Params",
+    "description": "A schema which validates params accepted by the Adkernel adapter",
+
+    "type": "object",
+    "properties": {
+        "zoneId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Publisher Id to use."
+        }
+    },
+    "required": ["zoneId"]
+  }
+bidder_params_sha256: 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed
+
+params:
+  schema_interpretation:
+    properties:
+      - name: zoneId
+        type: integer
+        description: "Publisher Id to use."
+        constraints:
+          minimum: 1
+    required_fields:
+      - zoneId
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_adkernel.go
+    type_name: ExtImpAdkernel
+    fields:
+      - name: ZoneId
+        json_tag: zoneId
+        type_native: int
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: null
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: adkernel
+  directory_name: adkernel
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: adkernel.go
+        role: implementation
+        loc: 321
+  imports:
+    has_template_engine: true
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party: []
+  adapter_struct:
+    type_name: adkernelAdapter
+    type_visibility: unexported
+    fields:
+      - name: EndpointTemplate
+        type: "*template.Template"
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: true
+    errors_returned:
+      - "unable to parse endpoint url template: %v"
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: grouped-by-key
+          key: imp.ext.bidder.zoneId
+          group_id_construction: "ExtImpAdkernel struct used as map key (only field is ZoneId)"
+        - kind: format-split
+          formats:
+            - banner
+            - video
+            - native
+            - audio
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Site: copy-then-mutate
+        App: copy-then-mutate
+        Imp: copy-then-mutate
+      go_idiom: shallow-copy
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImpAdkernel
+      wrapper_type: null
+    endpoint_resolution:
+      kind: single-token-substitution
+      mechanism_go: text/template
+      mechanism_java: null
+      macro_field_set:
+        - ZoneID
+      template_params_struct_field_count: 18
+    helpers:
+      - name: getImpressionsInfo
+        signature: "func getImpressionsInfo(imps []openrtb2.Imp) ([]openrtb2.Imp, []openrtb_ext.ExtImpAdkernel, []error)"
+      - name: validateImpression
+        signature: "func validateImpression(imp *openrtb2.Imp, impExt *openrtb_ext.ExtImpAdkernel) error"
+      - name: dispatchImpressions
+        signature: "func dispatchImpressions(imps []openrtb2.Imp, impsExt []openrtb_ext.ExtImpAdkernel) (map[openrtb_ext.ExtImpAdkernel][]openrtb2.Imp, []error)"
+      - name: isMultiFormatImp
+        signature: "func isMultiFormatImp(imp *openrtb2.Imp) bool"
+      - name: splitMultiFormatImp
+        signature: "func splitMultiFormatImp(imp *openrtb2.Imp) []openrtb2.Imp"
+      - name: getImpressionExt
+        signature: "func getImpressionExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImpAdkernel, error)"
+      - name: buildAdapterRequest
+        signature: "func (adapter *adkernelAdapter) buildAdapterRequest(prebidBidRequest *openrtb2.BidRequest, params *openrtb_ext.ExtImpAdkernel, imps []openrtb2.Imp) (*adapters.RequestData, error)"
+      - name: createBidRequest
+        signature: "func createBidRequest(prebidBidRequest *openrtb2.BidRequest, params *openrtb_ext.ExtImpAdkernel, imps []openrtb2.Imp) *openrtb2.BidRequest"
+      - name: buildEndpointURL
+        signature: "func (adapter *adkernelAdapter) buildEndpointURL(params *openrtb_ext.ExtImpAdkernel) (string, error)"
+      - name: getMediaTypeForBid
+        signature: "func getMediaTypeForBid(bid *openrtb2.Bid) (openrtb_ext.BidType, error)"
+      - name: newBadInputError
+        signature: "func newBadInputError(message string) error"
+      - name: newBadServerResponseError
+        signature: "func newBadServerResponseError(message string) error"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: legacy-raw-go
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-mtype
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: indexed-seatbid
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: adkerneltest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: multiformat-impression.json
+        sha256: 85fed265679ae7b264dfcfec0d70b52c43b203068cd8ebd538fc8e54cf4e3fca
+        bytes: 4598
+      - filename: single-banner-impression.json
+        sha256: a8ac22798825430a33829a138e542075cc9ace5d374df9f95ca3cc2af02e5fd1
+        bytes: 2354
+      - filename: single-video-impression.json
+        sha256: d9863776fe8f9498046555f05c75ad8f59579e8258e0f1c9571cf8f1aa9d9a83
+        bytes: 2653
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods:
+    - TestJsonSamples
+    - TestEndpointTemplateMalformed
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+    - name: x-openrtb-version
+      value: "2.5"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: text-template-endpoint-resolution
+    file: adkernel.go
+    summary: "Adapter parses endpoint URL with Go's text/template at Builder time (line 312); MakeRequests resolves via macros.ResolveMacros(template, EndpointTemplateParams{ZoneID: strconv.Itoa(params.ZoneId)}) at line 232. ZoneID is the only macro field used; full EndpointTemplateParams struct has 18 fields. TestEndpointTemplateMalformed validates Builder errors on a malformed template — distinct from runtime macro resolution failures. Edge case #10."
+    edge_case_taxon: incomplete-classification
+  - id: multi-format-imp-split-by-mediatype
+    file: adkernel.go
+    summary: "splitMultiFormatImp (lines 132-169) splits a single multi-format imp into up to 4 imps (banner, video, native, audio) by appending mediatype-specific suffixes (b__mf, v__mf, n__mf, a__mf) to imp.ID. Splits happen inside dispatchImpressions, AFTER imp grouping by ZoneId but before HTTP request construction. MakeBids strips the suffix at line 264-267 before resolving bid type. Edge case #11."
+    edge_case_taxon: incomplete-classification
+  - id: imp-grouping-by-extimpadkernel-as-map-key
+    file: adkernel.go
+    summary: "dispatchImpressions (line 95) uses ExtImpAdkernel struct value as a Go map key. Since ExtImpAdkernel has only ZoneId (int), this effectively groups by ZoneId. Each unique ZoneId becomes its own HTTP request — explains why adkernel emits N RequestData for N distinct zones. Adkernel is the canonical example of grouped-by-key batching combined with format-split."
+    edge_case_taxon: incomplete-classification
+  - id: endpoint-compression-uppercase-gzip
+    file: static/bidder-info/adkernel.yaml
+    summary: "endpointCompression: \"GZIP\" (uppercase, quoted). PBS-Go normalizes case-insensitively. Pattern shared with rubicon, triplelift, tpmn."
+    edge_case_taxon: yaml-field-name-typo
+  - id: legacy-encoding-json-marshal
+    file: adkernel.go
+    summary: "buildAdapterRequest at line 189 uses encoding/json.Marshal directly (json.Marshal(newBidRequest)) rather than jsonutil.Marshal, even though jsonutil is imported and used for unmarshaling at lines 173/179/247. Should migrate Marshal to jsonutil for consistency with the rest of the file."
+    edge_case_taxon: legacy-encoding-json-direct-usage
+  - id: legacy-raw-status-checks
+    file: adkernel.go
+    summary: "MakeBids at lines 238-245 inspects responseData.StatusCode == http.StatusNoContent / != http.StatusOK directly instead of canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors helpers. Pre-dates the helpers."
+    edge_case_taxon: legacy-encoding-json-direct-usage
+  - id: invalid-seatbid-count-rejection
+    file: adkernel.go
+    summary: "MakeBids rejects responses with len(bidResp.SeatBid) != 1 at line 253 — only single-seat responses accepted. Could fail for legitimate multi-seat upstream responses."
+    edge_case_taxon: incomplete-classification
+  - id: shallow-copy-with-publisher-strip
+    file: adkernel.go
+    summary: "createBidRequest (lines 212-228) shallow-copies the framework's BidRequest struct, then shallow-copies Site / App and explicitly nils Publisher on each. The copies prevent the framework's request from observing publisher mutations, but the slice header for Imp still aliases the original — adkernel writes a fresh Imp slice from the dispatched-imps map at line 214, which avoids that aliasing."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/adkernel/
+    package_name: adkernel
+    bidder_constant: openrtb_ext.BidderAdkernel
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/adkernel/
+    bidder_class: AdkernelBidder
+    config_class: AdkernelConfiguration
+    yaml_path: src/main/resources/bidder-config/adkernel.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/adkernel/
+  port_concerns:
+    aliases_inverted: true
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  go_specific_concerns:
+    - "Adapter struct is exported in Go (adkernelAdapter) — atypical; most modern adapters use unexported `adapter` type."
+    - "Endpoint template uses Go's text/template package — Builder parses once, MakeRequests resolves per-request via macros.ResolveMacros. Java equivalent uses string-replace on '%s' (positional) per the Java YAML which encodes endpoint as 'http://pbs.adksrv.com/hb?zone=%s' — a different placeholder syntax that the porter must reconcile."
+    - "Multi-format imp split inserts artificial suffixes (__mf etc.) into imp.id and strips them in MakeBids at lines 264-267. Java port must preserve this round-trip (request-side suffix injection + response-side suffix removal) or risk imp.id correlation breakage."
+    - "Imps grouped by ExtImpAdkernel struct used directly as a Go map key. Java cannot use a POJO-as-map-key without explicit equals/hashCode on lombok-builder POJOs — the Java port likely groups by zoneId int directly."
+    - "MakeBids rejects len(SeatBid) != 1 — Java port may differ. This is non-canonical behavior that should be flagged in the dual-spec comparator."
+    - "encoding/json.Marshal used in buildAdapterRequest at line 189 even though jsonutil is imported for the same file's Unmarshal calls. Migration recommendation: jsonutil.Marshal."
+    - "Legacy raw http.StatusNoContent / http.StatusOK status checks instead of canonical helpers."
+    - "endpointCompression value is uppercase 'GZIP' in YAML — PBS-Go normalizes, but the Java side uses kebab-case `endpoint-compression: gzip` (lowercase). Cross-language casing divergence."
+  java_specific_concerns: []
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
