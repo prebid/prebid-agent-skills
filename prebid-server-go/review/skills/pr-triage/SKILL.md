@@ -55,6 +55,10 @@ Fetch all PR data that downstream skills will need. This step replaces Step 1a i
   2. **Submission template completeness**: For `new-adapter` or `alias-only` PRs, check if the description includes the standard adapter submission template fields (contact email, test parameters, feature explanation). Record as: `template: complete | partial | missing | n/a`
   3. **Feature rationale**: Extract a 1-2 sentence summary of what the PR does and why, for context that downstream skills can reference when assessing design decisions.
   4. **Null/empty body**: If `body` is null or empty, record: `description: null — no PR description provided`
+  5. **`agent review` label**: If the PR's `labels` array includes one named `agent review` (or `agent-review` / `agent_review` / `Agent Review`), record `agent_review: yes` in the manifest AND extract any prior agent comments. Detection: PR comments authored by GitHub usernames matching `*[bot]`, `ChrisHuie`, or accounts with names containing "agent" — these are likely the prior agent's findings.
+     - Record extracted prior-agent comments in the manifest under `--- PRIOR AGENT FINDINGS ---` block (file:line + finding text + severity if stated).
+     - Activation rules unchanged regardless of label — our skills still run their full workflow. But downstream skills MUST cross-reference each of their findings against the `--- PRIOR AGENT FINDINGS ---` list and SUPPRESS exact duplicates (same file, same rule, same severity). Net-new findings are emitted normally; matches are emitted as `Previously flagged by prior agent` (analogous to the existing `Previously flagged by {reviewer}` pattern in Step 1d).
+     - Reference: PR #4698 (Apester) reviewer noted "the agent missed this" re: personal-email check — confirms prior agents do miss things; our skills should still run, just dedupe matches.
 
 **1c. Fetch commits and check CI status.**
 
@@ -97,8 +101,8 @@ curl -sS "https://api.github.com/repos/{owner}/{repo}/issues/{N}/comments"
 
 - Categorize each comment: `reviewer-feedback`, `ci-bot-report`, `author-response`, `blocking-confirmation-pending`, `other`
 - For `blocking-confirmation-pending`: detect reviewer phrases that gate merge on out-of-band confirmation, especially:
-  - "please reply 'received'" / "respond to email with 'received'" / "I'll merge once you confirm via email" — maintainer email verification gate
-  - Detect by phrase match in reviewer comment bodies (case-insensitive substring search for "received" or "confirm via email")
+  - Phrases include (case-insensitive substring match): "please reply 'received'", "respond to email with 'received'", "I'll merge once you confirm via email", "sent email for verification", "email for verification", "Confirmed" (as a reply to such a comment) — maintainer email verification gate
+  - Detect by phrase match in reviewer comment bodies. The "Confirmed" word alone is too broad; only treat it as a confirmation reply if it appears AFTER another comment in the thread containing one of the verification phrases above.
   - Mark these as `blocking-confirmation-pending` so downstream `bidder-info-pr-review` knows the maintainer-email check is in a holding state
 - For reviewer feedback: extract the file path, line number, and 1-2 sentence summary
 - For CI bot reports: extract the bot name and status (pass/fail/info)
@@ -276,6 +280,15 @@ Based on the categorized files, determine the PR type. A PR may have a primary t
    - Label: `bidder-removal`
    - Effect: All skills that have files for this bidder should be notified.
 
+5b. **Whitelabel-Redirect-Mid-Review** (sub-label, applies on top of `alias-only`)
+   - Trigger: Final state is `alias-only` AND PR comment history contains:
+     - reviewer phrase matching "is this (a )?white.?label" or "looks (very )?similar to" or "this looks like a copy of"
+     - + author confirmation containing "white label" or "white-label"
+     - + commit count > 1 (indicates code was changed mid-review, suggesting redirection)
+   - Sub-label: `whitelabel-redirect-mid-review`
+   - Effect: pr-triage records `REDIRECT: PR was originally a full adapter, redirected to alias-only after reviewer flagged white-label policy. Canonical examples: #4329, #4383, #4391, #4376, #4565.`
+   - This is INFORMATIONAL and does not change activation; it provides context for downstream skills' findings.
+
 6. **Bidder Rename / Refactor**
    - Trigger: Files are deleted from `adapters/{old_bidder}/` AND added to `adapters/{new_bidder}/` in the same PR; OR `static/bidder-info/{old_bidder}.yaml` deleted with `static/bidder-info/{new_bidder}.yaml` added; OR `openrtb_ext/bidders.go` shows a constant rename
    - Label: `bidder-rename`
@@ -308,7 +321,7 @@ Check for issues that fall between the cracks of individual skills. These are co
 
 If the PR type is `alias-only`:
 - For each new alias file, extract the `endpoint` value from the diff
-- If the endpoint contains template macros (e.g., `{{.AccountID}}`), cross-reference against the valid macro list from `macros.EndpointTemplateParams` (see [routing-rules.md](references/routing-rules.md) for the full 19-field list)
+- If the endpoint contains template macros (e.g., `{{.AccountID}}`), cross-reference against the valid macro list from `macros.EndpointTemplateParams` (see [routing-rules.md](references/routing-rules.md) for the full 18-field list)
   - Any `{{.XYZ}}` macro where `XYZ` is not a field in `EndpointTemplateParams` is invalid and will silently resolve to empty string at runtime
 - Record as: `CROSS-SKILL: Invalid endpoint macro "{{.XYZ}}" in alias {bidder} — will silently become empty string. Adapter-code skill does not activate for alias-only PRs but this macro validation is critical.`
 
@@ -320,7 +333,7 @@ If any files are in an `unowned:framework` bucket:
   - `macros/macros.go` — changes to `EndpointTemplateParams` affect all adapters using template macros
   - `config/bidderinfo.go` — changes to `BidderInfo` struct definition **trigger drift** in bidder-info field index
   - `adapters/bidder.go` — changes to the `Bidder` interface affect ALL adapters
-  - `adapters/adapterstest/adapterstest.go` — changes affect all adapter test runners, **triggers drift** in adapter-code index
+  - `adapters/adapterstest/test_json.go` — changes affect all adapter test runners, **triggers drift** in adapter-code index
   - See routing-rules.md for full list
 - For known-impact files, record: `FRAMEWORK IMPACT: {file} changed — affects {scope}. Recommend human review.`
 - For unknown framework files, record: `FRAMEWORK: {file} changed — unknown impact scope. Recommend human review.`
@@ -363,10 +376,11 @@ If `go.mod` or `go.sum` is modified:
 
 **5g. Whitelabel-Only Resemblance Heuristic**
 
-Trigger: PR is type `new-adapter` AND any of:
-- The new adapter Go code is significantly smaller than typical (e.g., < 100 lines of `{bidder}.go`) AND closely resembles an existing adapter's structure
-- The PR description, commit messages, or discussion contains the phrase "white label" / "white-label" / "whitelabel"
-- The new bidder-info YAML's `endpoint:` matches an existing adapter's endpoint domain
+Trigger: ANY of:
+- PR is type `new-adapter` AND the new adapter Go code is significantly smaller than typical (e.g., < 100 lines of `{bidder}.go`) AND closely resembles an existing adapter's structure
+- PR is type `new-adapter` AND the PR description / commit messages / discussion contains the phrase "white label" / "white-label" / "whitelabel"
+- PR is type `new-adapter` AND the new bidder-info YAML's `endpoint:` matches an existing adapter's endpoint domain
+- PR is type `alias-only` AND the secondary sub-label `whitelabel-redirect-mid-review` was set per Step 4 rule 5b (i.e., PR was historically a full adapter)
 
 Action:
 - Record: `CROSS-SKILL: New adapter {bidder} may be a white-label scenario. Reviewer may redirect to alias-only (aliasOf:) form. The bidder-info-pr-review Workflow: White-Label Policy Compliance evaluates further.`
@@ -381,6 +395,7 @@ Action:
 - Record: `FRAMEWORK IMPACT: adapter test harness modified ({file}). Expect cascading impact on existing adapter test fixtures across many other adapters in the same PR.`
 - Cross-reference the drift output from Step 2.3 — if drift was already detected, the message becomes: `FRAMEWORK IMPACT: adapter test harness modified — {specific drift name from Step 2}`
 - Reference: PR #4592 Microsoft cascaded to 35+ adapter test directories. Detailed drift output (not generic "drift detected") helps concurrent-PR reviewers attribute test failures correctly.
+- ALSO search open PRs that touch any `adapters/*/{*test,test,test-extrainfo}/**.json` file and were last updated BEFORE this PR's `head_sha` was pushed. Record any matches as: `CONCURRENT-PR RISK: PR #{N} touches {bidder} test fixtures and predates this test_json.go change — likely broken by the cascade. Recommend the PR author rebase.` Reference: PR #4592 → Clydo cascade where bsardo had to manually flag the breakage in an issue comment.
 
 **5i. Approval-to-Merge Stall Detection**
 
@@ -470,6 +485,12 @@ Unowned files ({N} files):
 
 --- CROSS-SKILL CONCERNS ---
 {concerns or "None detected"}
+
+--- PRIOR AGENT FINDINGS ---
+{Only present when `agent_review: yes` was recorded in Step 1b sub-bullet 5.}
+{For each prior-agent comment extracted:}
+- {file}:{line | "PR-level"}: {finding text} [{severity if stated}]
+{Or: "agent_review: no — section omitted"}
 
 --- BIDDER METADATA ---
 {For each bidder in the PR:}

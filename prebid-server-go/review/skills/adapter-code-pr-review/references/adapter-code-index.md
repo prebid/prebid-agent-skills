@@ -14,17 +14,17 @@ For shared framework concerns (helper function table, error types, marshaling sa
 
 **Upstream sources (canonical):**
 - Bidder interface: https://github.com/prebid/prebid-server/blob/master/adapters/bidder.go
-- Test harness: https://github.com/prebid/prebid-server/blob/master/adapters/adapterstest/adapterstest.go
+- Test harness: https://github.com/prebid/prebid-server/blob/master/adapters/adapterstest/test_json.go
 - Builder registry: https://github.com/prebid/prebid-server/blob/master/exchange/adapter_builders.go
 - Bidder constants: https://github.com/prebid/prebid-server/blob/master/openrtb_ext/bidders.go
 - Error types: https://github.com/prebid/prebid-server/blob/master/errortypes/errortypes.go
 
 **Raw URLs (for fetching):**
 - https://raw.githubusercontent.com/prebid/prebid-server/master/adapters/bidder.go
-- https://raw.githubusercontent.com/prebid/prebid-server/master/adapters/adapterstest/adapterstest.go
+- https://raw.githubusercontent.com/prebid/prebid-server/master/adapters/adapterstest/test_json.go
 - https://raw.githubusercontent.com/prebid/prebid-server/master/exchange/adapter_builders.go
 
-> **Sync policy:** This file is a local snapshot. The skill workflow (Step 1b) checks for drift against the live source on every review run.
+> **Sync policy:** This file is a local snapshot. The `pr-triage` skill's Step 2 runs centralized drift checks against the live source on every review run; this skill's Step 1b reads those drift results from the manifest. If signatures or supported test directories change upstream, update this file to match.
 
 ---
 
@@ -229,6 +229,22 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, requestData *adapters.R
 }
 ```
 
+### Currency-overwrite hazard
+
+`bidResponse.Currency = response.Cur` is unsafe — if `response.Cur` is empty (some bidders send empty currency on no-bid or error responses), this overwrites the default `"USD"` with an empty string, which downstream rejects. Always guard:
+
+```go
+// CORRECT
+if response.Cur != "" {
+    bidResponse.Currency = response.Cur
+}
+
+// WRONG (overwrites default USD with empty string)
+bidResponse.Currency = response.Cur
+```
+
+Found in PR #4287 (Optidigital) merged unfixed — skill should flag adapters that copy this pattern as **WARN**.
+
 ### Bid Type Resolution
 
 **Preferred: From bid.MType (OpenRTB 2.6)**
@@ -286,7 +302,7 @@ for _, bid := range seatBid.Bid {
 
 ## Framework Utilities
 
-The framework helper function table (`adapters.IsResponseStatusCodeNoContent`, `adapters.CheckResponseStatusCodeForErrors`, `adapters.NewBidderResponseWithBidsCapacity`, `openrtb_ext.GetImpIDs`, `jsonutil.Marshal/Unmarshal`, `errortypes.*`, `macros.NewStringIndexBasedReplacer`, `ptrutil.Clone`), the `EndpointTemplateParams` 19-field macro list, and the error-type taxonomy live in [../../shared/framework-utilities.md](../../shared/framework-utilities.md). Adapter-code-pr-review workflows reference those tables directly — do not duplicate them here.
+The framework helper function table (`adapters.IsResponseStatusCodeNoContent`, `adapters.CheckResponseStatusCodeForErrors`, `adapters.NewBidderResponseWithBidsCapacity`, `openrtb_ext.GetImpIDs`, `jsonutil.Marshal/Unmarshal`, `errortypes.*`, `macros.NewStringIndexBasedReplacer`, `ptrutil.Clone`), the `EndpointTemplateParams` 18-field macro list, and the error-type taxonomy live in [../../shared/framework-utilities.md](../../shared/framework-utilities.md). Adapter-code-pr-review workflows reference those tables directly — do not duplicate them here.
 
 ---
 

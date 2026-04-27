@@ -102,6 +102,12 @@ There are two categories of tasks:
 - **Documentation PR check**: Reference the `docs_pr` field from the triage manifest's `PR DESCRIPTION` section. If `none` and this is a new adapter, flag as WARN
 - **Duplicate PR check**: Reference the `Duplicate PRs` field from the triage manifest's `PR-LEVEL CHECKS` section. If duplicates exist, assess whether they conflict with this PR
 
+**Bulk-mode handling for multi-adapter alias bundles**: If the triage manifest indicates PR type is `alias-only` AND the multi-adapter alias bundle exception applies (5+ aliases of same parent, identical schema, ≤5 lines each — see pr-triage Step 4 rule 1), do NOT create per-bidder field-level tasks for each alias. Instead, create:
+1. One "bulk pattern consistency" task verifying: (a) all aliases reference the same parent that exists in master, (b) all aliases have identical field structure, (c) each alias's endpoint domain plausibly belongs to that alias's organization (not parent's).
+2. One shared task for parent existence verification.
+
+Total tasks for a 5-alias bulk PR: 2, not (5 × number-of-fields-per-alias). Reference: PR #4651 (5 Limelight aliases) — this skill should produce ~2 tasks under bulk-mode, not 10.
+
 **2. Field-level tasks (one per changed field):** For each changed field, look up the matching Verification Workflow. Create tasks in this priority order (but only for fields that appear in the diff):
 1. `endpoint` — use [Endpoint Changed](#workflow-endpoint-changed) workflow
 2. `aliasOf` — use [Alias Adapter Added](#workflow-alias-adapter-added) workflow
@@ -159,13 +165,26 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 1. **Parent exists**: Verify the parent bidder named in `aliasOf` has a corresponding `static/bidder-info/{parent}.yaml` file
 2. **No alias chains**: The parent must not itself be an alias (check parent file for `aliasOf`)
 3. **Capabilities subset**: If the alias declares capabilities, they must be a subset of the parent's capabilities
-4. **White-label compliance**: Confirm the alias approach is appropriate — if the adapter has its own distinct code/adapter directory, it should not be using `aliasOf`
+4. **White-label compliance**: Confirm the alias approach is appropriate.
+   - 4a: If the SAME PR also adds adapter Go code at `adapters/{alias}/`, flag as **FAIL** — alias should not have its own Go code; if it does, it's a full adapter not an alias.
+   - 4b: If this is the FINAL state of a PR that historically contained Go code (per pr-triage `whitelabel-redirect-mid-review` sub-label), record as **PASS** with note "alias-only after white-label redirect (canonical pattern)."
+   - 4c: If parent has `whiteLabelOnly: true` (e.g., teqblaze, smarthub), aliasing is the correct pattern — **PASS**. The parent's flag automatically covers white-label compliance for the alias; the alias does NOT need to also set `whiteLabelOnly: true`.
 5. **Endpoint domain**: The alias endpoint domain should belong to the alias organization, not reuse the parent's domain verbatim (unless intentionally shared infrastructure)
-6. **Alias completeness**: New alias files should include at minimum `maintainer.email` for partner contact purposes. Flag missing `maintainer.email` as WARN — without it, there is no contact info for this specific alias partner (the parent bidder's maintainer may be a different organization)
+6. **Alias completeness — maintainer.email**: Aliases MAY inherit `maintainer.email` from the parent.
+   - Flag missing `maintainer.email` as **INFO** (not WARN) when the alias clearly belongs to the parent's organizational family. Heuristics: PR is part of a bulk-mode multi-adapter alias bundle (per pr-triage Step 4), OR alias and parent share a common-stem domain (e.g., both use the same brand-suffix), OR PR description indicates internal-rename rather than third-party alias.
+   - Flag as **WARN** when the alias appears to be an independent organization from the parent. Heuristic: distinct endpoint domain that doesn't share a stem with the parent's. Reasoning: without alias-org-specific contact info, support escalation has no path.
+   - Reference: PR #4651 (5 Limelight aliases) merged without per-alias `maintainer.email` and without reviewer objection — the parent's `engineering@project-limelight.com` was implicitly accepted as the contact for all 5 aliases. PR #4727 (AppMonstaMedia) DID provide its own `media.support@appmonsta.ai` because it's a distinct organization.
 7. **Remove redundant inherited fields**: If the alias declares fields that exactly match the parent (capabilities, openrtb version, userSync), recommend removal — they will be inherited. Severity: **WARN** (not FAIL — author may intend to be explicit).
-8. **GVL ID inheritance quirk**: aliases cannot effectively override the parent's GVL vendor ID — `config/bidderinfo.go` deliberately inherits whether the alias sets `gvlVendorID: 0` or omits the field. If the alias declares `gvlVendorID: 0`, flag as **WARN** asking for removal (PR #4329 Tagoras convention). If the alias declares a non-zero `gvlVendorID`, that override is honored only if the underlying mechanism supports it — note this nuance.
+   - **Skip this check when the parent does NOT declare the field.** For example, `whiteLabelOnly: true` parents like teqblaze do not declare `endpoint:` themselves; the alias is providing the missing required value, not redundantly overriding. Same logic for any field absent on the parent.
+8. **GVL ID inheritance — severity tiering**:
+   - `gvlVendorID: 0` declared on alias → **WARN** asking for removal. The runtime ignores zero values anyway, so declaring `0` adds confusion. Reference: PR #4329 (Tagoras) reviewer convention.
+   - `gvlVendorID: N` (N > 0) declared on alias → **INFO**. Note: the runtime mechanism may inherit the parent's GVL despite the alias's explicit declaration — reviewer judgment whether to keep. Reference: PR #4727 (AppMonstaMedia / GVL 1283 = Appmonsta Ltd) — non-zero override accepted as valid alias-org GVL even though parent has no GVL declared.
+   - Field absent on alias (omitted) → **PASS**. Inherits parent's value (typically `0`/none for whitelabel parents like teqblaze).
 9. **1-line alias acceptable**: A YAML containing only `aliasOf: parent` is fully valid (everything inherited). PR #4216 (admaticde) and PR #4357 (ttd) are canonical 1-liner examples. Do not flag as "missing fields".
 10. **Bidder rename held for major version**: if the PR description or commit messages indicate a bidder rename (e.g., `progx` → `programmaticX` per PR #4456), flag as **INFO** that the rename is a breaking change and is typically deferred to the next major release.
+11. **Reviewer-hypothesis vs chosen-parent**: If the PR comments include a reviewer asking "is this similar to the {X} adapter?" or "this looks like a copy of {X}" and the final `aliasOf:` value points to a DIFFERENT bidder name `{Y}`, flag as **INFO** with note: "Reviewer suspected resemblance to {X}; author chose `aliasOf: {Y}`. Verify {Y} is the correct technical parent (e.g., a white-label parent serving multiple aliases including {X})." Reference: PR #4565 Nuba — bsardo asked about Compass resemblance, author chose `aliasOf: teqblaze`.
+
+12. **Smoke-test evidence (optional informational)**: If the reviewer or author posts a PBS bid-request/response trace in the PR comments (typical pattern: full request body + HTTP status + response body), parse the request URI and response status. A 204 response from the bidder endpoint to a debug-mode PBS request is positive evidence the alias is functional end-to-end. Severity: **INFO** (auxiliary). Reference: PR #4727 AppMonstaMedia included such a trace as final reviewer evidence.
 
 ### Workflow: White-Label Policy Compliance
 
@@ -174,6 +193,8 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 1. **`whiteLabelOnly: true` semantics**: Marks the bidder as available only as a white-label parent (aliases reference it). Does NOT preclude Go adapter code on the parent. Reference parents like TeqBlaze (PR #4480) and SmartHub have full Go code AND `whiteLabelOnly: true` — the Go code serves the aliases. **Severity: INFO** if the flag is set on a new file.
 2. **Full adapter that looks like a copy**: If a new full Go adapter is being added but the PR description / discussion / file structure resembles an existing adapter (heuristic: identical endpoint domain, comparable parameter schema, copy-paste-style code organization), flag as **WARN** with the suggestion: "this may be a white-label scenario — consider using `aliasOf:` instead of duplicating Go code." Severity stays WARN (not FAIL) because the determination requires reviewer judgment.
 3. **Reviewer-redirect quotes**: see canonical examples in [../../shared/framework-utilities.md#aliasing](../../shared/framework-utilities.md#aliasing) — patterns from PRs #4329 (Tagoras), #4383 (RocketLab), #4391 (MediaYo), #4376 (PinkLion), #4565 (Nuba) where reviewers redirected full → alias-only. Code reduction quoted by reviewer: "1k+ to ~20".
+
+   **Cross-skill de-duplication**: If pr-triage manifest's CROSS-SKILL CONCERNS section already records the 5g whitelabel-resemblance signal OR the `whitelabel-redirect-mid-review` sub-label was set per Step 4 rule 5b, do NOT re-flag the same concern. Note `Previously flagged by triage` in this skill's findings and only emit net-new findings (e.g., parent-choice verification per Workflow: Alias Adapter Added Step 11).
 4. **Alias-only directionality**: `aliasOf` is added to NEW files; reviewers do not redirect from alias-only → full. The exception is PR #4614 (TRUSTX) which migrated from alias → full because the bidder organization was establishing independent infrastructure. Treat alias→full as a special case requiring matching deletion of `aliasOf:` line PLUS introduction of full endpoint/capabilities/userSync block.
 
 ### Workflow: Endpoint Changed
@@ -182,10 +203,11 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 1. **URL format**: Verify the value is a well-formed URL (scheme + host at minimum)
 2. **Reachability check**: Use `curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s" -X POST {url}` to confirm the endpoint responds. Accept 200, 204, or 400 (bad request without proper body) as evidence of a live endpoint. Flag 404, 502, connection refused, or timeout as FAIL
-3. **SSL/TLS validation**: If HTTPS, verify the certificate is valid and not expired. Flag certificate errors (seen in PR #4607 where certs were "exterminated")
+3. **Scheme tolerance**: HTTPS is strongly preferred but HTTP is still permitted (per `bsardo` PR #4211 quote: "While https is strongly preferred, http is still permitted."). Limelight-family adapters routinely use HTTP. Flag HTTP as **INFO** with recommendation to upgrade to HTTPS — never **FAIL**.
+   - If the endpoint URL is HTTPS, also validate certificate per Workflow: SSL Certificate Validation (separate workflow below).
 4. **HTTP response behavior**: A bare POST to the endpoint should not return 404. Acceptable responses: 200, 204, 400 (invalid body expected). If the endpoint returns 404 for POST requests with bodies, flag for clarification from the bidder
 5. **Domain ownership**: Verify the endpoint domain plausibly belongs to the bidder organization (domain name should relate to bidder name)
-6. **Template macros**: If URL contains `{{...}}` patterns, cross-reference against the canonical 19-field list at [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros). Any `{{.XYZ}}` macro NOT in that list will silently resolve to empty string at runtime — flag as **FAIL**. Non-Go-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros and require `disabled: true` plus a comment block listing valid values (PR #4502 appStockSSP convention).
+6. **Template macros**: If URL contains `{{...}}` patterns, cross-reference against the canonical 18-field list at [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros). Any `{{.XYZ}}` macro NOT in that list will silently resolve to empty string at runtime — flag as **FAIL**. Non-Go-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros and require `disabled: true` plus a comment block listing valid values (PR #4502 appStockSSP convention).
 7. **No hardcoded credentials**: Ensure the URL does not contain actual API keys, passwords, or secrets in plain text
 
 ### Workflow: SSL Certificate Validation
@@ -194,7 +216,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 1. **Certificate freshness**: Use `echo | openssl s_client -connect {host}:443 -servername {host} 2>/dev/null | openssl x509 -noout -subject -dates -issuer` to confirm the certificate is not expired and the subject matches the domain. Flag expired/invalid certs as **FAIL**.
 2. **Cert recovery pattern**: Several PRs in the SmartHub family (#4607 Adastra, #4616 RadiantFusion) had reviewers flag "token is exterminated" / "endpoint not reachable" — diagnosis was expired SSL certs that the publisher refreshed mid-review. After cert refresh, re-run reachability check.
-3. **HTTP permitted**: HTTP (not HTTPS) is tolerated per `bsardo` PR #4211: "While https is strongly preferred, http is still permitted." Limelight family adapters routinely use HTTP. Do NOT flag HTTP as a hard failure; flag as **INFO** with recommendation to upgrade.
+3. **Scope**: This workflow applies only to HTTPS endpoints. HTTP scheme tolerance is documented in Workflow: Endpoint Changed step 3 — that workflow handles the HTTP/HTTPS triage; this workflow handles certificate validation when HTTPS is in use.
 
 ### Workflow: Endpoint Domain Migration
 
@@ -225,6 +247,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
    - `{{.USPrivacy}}` for US privacy
    - `{{.GPP}}`, `{{.GPPSID}}` if GPP is supported
    - `{{.RedirectURL}}` for the callback
+   - **Exception for shared sync key**: When `userSync.key` does NOT equal the bidder name (intentional cross-bidder syncer sharing — e.g., PR #4592 msft.yaml uses `userSync.key: "adnxs"` to share cookies with AppNexus), missing privacy macros are typically inherited via the shared syncer's parent and are **INFO**, not WARN. Severity escalates only if the shared key is itself missing the macros at the parent.
 4. **Both types declared**: If the file declares both `iframe` and `redirect` sync, verify both URLs are functional. It is common for only one type to work — flag if a declared type is unreachable (seen in PR #4597)
 5. **Domain ownership**: Sync URL domain should belong to the bidder organization
 6. **userMacro consistency**: If `userMacro` is declared alongside the URL, verify it follows the bidder's expected format (e.g., `$UID`, `[USER_ID]`, `{UID}`)
@@ -249,7 +272,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 **Triggers when:** `endpointCompression` is added or modified.
 
-1. **Valid value**: Accepted: `"gzip"` (canonical) and `"GZIP"` (uppercase, observed in master `adkernel.yaml`). The YAML loader is case-insensitive at parse time. Recommend lowercase `gzip` for new files for consistency. Flag uppercase as **INFO** (cosmetic, not functional).
+1. **Valid value**: **`"GZIP"` (uppercase, case-sensitive)**. The compression check in `exchange/bidder.go` declares the constant `Gzip string = "GZIP"` and compares directly — lowercase `"gzip"` will NOT match and compression will silently NOT be applied. All current master examples (`adkernel.yaml`, etc.) use `"GZIP"`. Flag any other casing (`gzip`, `Gzip`) as **FAIL** — silent runtime no-op.
 2. **Server support verification**: Confirm the bidder's endpoint actually accepts `Content-Encoding: gzip` requests. If possible, test with a gzip-compressed request
 
 ### Workflow: Capabilities Changed
@@ -262,6 +285,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 4. **DOOH scrutiny**: DOOH (Digital Out Of Home) is uncommon — if declared, verify the bidder genuinely supports DOOH inventory
 5. **Alias impact**: If this bidder has aliases, verify the alias capabilities remain a valid subset
 6. **Cross-check vs Go code**: When `static/bidder-info/{bidder}.yaml` capabilities are modified AND `adapters/{bidder}/{bidder}.go` is also in the PR, the adapter-code-pr-review skill will run a YAML-capabilities ↔ Go MType drift check. This skill records the YAML-declared media types in the BIDDER METADATA block of its findings so the adapter-code skill can cross-reference. See [../../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift](../../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift).
+   - **DOOH-specific cross-check**: If `capabilities.dooh` is declared, the adapter MUST include at least one exemplary test fixture exercising `dooh` context (`mockBidRequest.dooh` present). If absent, flag as **WARN** — reviewer may ask the contributor to remove DOOH from capabilities since they have no DOOH supply. Reference: PR #4287 (Optidigital) declared dooh but had no DOOH fixture; the new rule would have caught this.
 
 ### Workflow: Bidder Disabled
 
@@ -312,7 +336,7 @@ Complete mapping of every BidderInfo field to its review criteria. Source: `conf
 
 ### `endpointCompression` (string)
 
-- Only valid value: `"gzip"`
+- **Only valid value: `"GZIP"` (uppercase, case-sensitive)**. The check in `exchange/bidder.go:100` declares `Gzip string = "GZIP"` and compares directly — lowercase `"gzip"` silently fails to enable compression.
 - Omit entirely if bidder does not support compression
 - Verify bidder server actually accepts gzip-compressed bid requests
 - **Workflow**: [Endpoint Compression Changed](#workflow-endpoint-compression-changed)
@@ -469,11 +493,6 @@ Complex object — review each sub-field individually.
 - Syncer-level external URL, available as macro to endpoint redirectUrl templates
 - Falls back to host configuration if not specified
 
-### `userSync.supportCors` (*bool)
-
-- Identifies if CORS is supported for user syncing endpoints
-- Relevant for cross-origin iframe sync scenarios
-
 ### `userSync.formatOverride` (string)
 
 - Valid values: `""` (empty), `"b"` (iframe/blank), `"i"` (redirect/image)
@@ -544,6 +563,7 @@ Complex object — review each sub-field individually.
 - Alias capabilities must be a subset of parent capabilities
 - Verify the alias makes sense for the bidder relationship
 - **Workflow**: [Alias Adapter Added](#workflow-alias-adapter-added)
+- Minimum form: `aliasOf: parent` alone is valid (1-line file). 2-line form (`endpoint:` + `aliasOf:`) is the SmartHub/Limelight family convention. See `bidder-info-pr-review/SKILL.md` Workflow: Alias Adapter Added step 9 for canonical examples (PR #4216 admaticde, PR #4357 ttd).
 
 ### `whiteLabelOnly` (bool)
 

@@ -11,7 +11,7 @@ Mapping of JSON Schema types to Go struct conventions for `static/bidder-params/
 - https://raw.githubusercontent.com/prebid/prebid-server/master/openrtb_ext/bidders.go
 - https://raw.githubusercontent.com/prebid/prebid-server/master/static/bidder-params/{bidder}.json
 
-> **Sync policy:** This file is a local snapshot. The skill workflow (Step 1b) checks for drift against the live source on every review run.
+> **Sync policy:** This file is a local snapshot. The `pr-triage` skill's Step 2 runs centralized drift checks against the live source on every review run; this skill's Step 1b reads those drift results from the manifest. If new fields/types are found upstream, update this file to match.
 
 ---
 
@@ -46,7 +46,7 @@ For framework-wide concerns (helper functions, marshaling safety, error types, e
 
 ### Naming
 - Package: `openrtb_ext`
-- **Canonical type name: `ExtImp{Bidder}`** (e.g., `ExtImpAax`, `ExtImpAdkernel`, `ExtImp33across`). This is the convention in current master across ~260 adapters.
+- **Canonical type name: `ExtImp{Bidder}`** (e.g., `ExtImpAax`, `ExtImpAdkernel`, `ExtImp33across`). Dominant pattern in current master: ~160 of ~235 imp ext structs use `ExtImp{Bidder}`. ~75 still use the legacy `ImpExt{Bidder}` form (e.g., `ImpExtMsft`).
 - The legacy `ImpExt{Bidder}` pattern exists in some older files but is NOT recommended for new adapters. When reviewing a NEW adapter that uses `ImpExt{Bidder}`, flag as INFO — recommend converting for consistency. When reviewing modifications to existing files, do not require renames.
 - Bidder name in type is CamelCase: `ExtImpAax`, `ExtImpAJA`, `ExtImp33across`. Helper types (e.g., `ExtImpGumGumBanner`) are acceptable when they support the main imp ext struct.
 - Go field-name capitalization fixes (e.g., `ApiKey` → `APIKey` per Go acronym conventions) are non-functional if `json:"..."` tags are unchanged. Accept without follow-up.

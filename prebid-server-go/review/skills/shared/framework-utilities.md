@@ -9,6 +9,89 @@ Canonical framework-level reference shared by all four prebid-server-go review s
 
 ---
 
+## Builder inputs and call signatures
+
+The framework passes these struct values into adapter implementations. Adapters can rely on every field listed here being present in v4 master. Verified at v4.1.0.
+
+### `config.Adapter` (passed into `Builder`)
+
+```go
+type Adapter struct {
+    Endpoint            string  // From static/bidder-info/{bidder}.yaml `endpoint:`
+    ExtraAdapterInfo    string  // From static/bidder-info/{bidder}.yaml `extra_info:` — opaque JSON / config string for runtime-tunable adapter config (avoid hardcoding)
+    XAPI                AdapterXAPI  // Rubicon-specific (Username/Password/Tracker)
+    PlatformID          string  // AppNexus / Facebook
+    AppSecret           string  // Facebook
+}
+```
+
+**Adapters SHOULD use `ExtraAdapterInfo` for runtime-tunable config** (e.g., currency conversion endpoint, region routing tables) instead of hardcoding values inline. PR #4076 (AdUp Tech) reviewer convention.
+
+### `config.Server` (passed into `Builder`)
+
+```go
+type Server struct {
+    ExternalUrl  string  // PBS deployment's external URL — used for {{.ExternalURL}} macro substitution in user-sync URLs
+    GvlID        int     // PBS deployment's GVL ID (host-level, not bidder)
+    DataCenter   string  // Region/datacenter identifier
+}
+```
+
+Used in test runners as `config.Server{ExternalUrl: "http://hosturl.com", GvlID: 1, DataCenter: "2"}`.
+
+### `adapters.ExtraRequestInfo` (passed into `MakeRequests`)
+
+```go
+type ExtraRequestInfo struct {
+    PbsEntryPoint              metrics.RequestType   // Auction / AMP / video / etc.
+    GlobalPrivacyControlHeader string                // GPC header value (privacy)
+    CurrencyConversions        currency.Conversions  // Currency rates source
+    PreferredMediaType         openrtb_ext.BidType   // Reverses on the auction request — adapters MAY use this to filter media types when ambiguous
+}
+```
+
+Method: `func (r ExtraRequestInfo) ConvertCurrency(value float64, from, to string) (float64, error)`. Use this when converting bid floors between currencies — do NOT call `currency.Conversions` directly.
+
+> **Important**: `ConvertCurrency` is available ONLY in `MakeRequests` (which receives `*ExtraRequestInfo`). The `MakeBids` signature does NOT include `reqInfo` — there is no PBS-provided way to convert currencies inside `MakeBids`. If you need request-currency-to-bidder-currency conversion of bid floors, do it in `MakeRequests`. If a bid response has a different currency than expected, set `bidResponse.Currency` to the actual currency and let `exchange/bidder_validate_bids.go:79` (`validateCurrency`) handle the mismatch.
+
+### `adapters.RequestData` (returned from `MakeRequests`)
+
+```go
+type RequestData struct {
+    Method   string       // http.MethodPost (constant) — not literal "POST"
+    Uri      string       // Endpoint URL — from adapter struct, not hardcoded
+    Body     []byte       // Marshaled request JSON
+    Headers  http.Header  // At minimum Content-Type: application/json
+    ImpIDs   []string     // openrtb_ext.GetImpIDs(request.Imp) — REQUIRED for impression tracking
+}
+```
+
+### `adapters.ResponseData` (passed into `MakeBids`)
+
+```go
+type ResponseData struct {
+    StatusCode int          // HTTP status from upstream
+    Body       []byte       // Response body
+    Headers    http.Header  // Response headers
+}
+```
+
+Use the framework helpers to inspect status (`adapters.IsResponseStatusCodeNoContent`, `adapters.CheckResponseStatusCodeForErrors`) before unmarshaling `Body`.
+
+### `adapters.ExtImpBidder` (used inside `MakeRequests`)
+
+```go
+type ExtImpBidder struct {
+    Prebid             *openrtb_ext.ExtImpPrebid           `json:"prebid"`
+    Bidder             json.RawMessage                     `json:"bidder"`
+    AuctionEnvironment openrtb_ext.AuctionEnvironmentType  `json:"ae,omitempty"`  // PAAPI / Protected Audience API
+}
+```
+
+Standard two-phase imp.ext unmarshaling: first unmarshal `imp.Ext` to `adapters.ExtImpBidder`, then unmarshal `bidderExt.Bidder` to the bidder-specific `openrtb_ext.ExtImp{Bidder}` struct.
+
+---
+
 ## Bidder Interface
 
 Every adapter implements:
@@ -70,10 +153,10 @@ type RequestData struct {
 | `jsonutil.Marshal(v)` | `github.com/prebid/prebid-server/v4/util/jsonutil` | JSON marshal — recommended over `encoding/json.Marshal` |
 | `jsonutil.Unmarshal(data, v)` | `github.com/prebid/prebid-server/v4/util/jsonutil` | JSON unmarshal — recommended over `encoding/json.Unmarshal` |
 | `jsonutil.StringInt` | `github.com/prebid/prebid-server/v4/util/jsonutil` | Type for schema fields that accept `["integer", "string"]` |
-| `errortypes.BadInput{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Client request invalid (publisher's fault) |
-| `errortypes.BadServerResponse{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Upstream bidder returned invalid data |
-| `errortypes.FailedToMarshal{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Adapter-side marshaling failed |
-| `errortypes.FailedToUnmarshal{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Adapter-side unmarshaling failed |
+| `&errortypes.BadInput{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Client request invalid (publisher's fault). MUST use pointer form (`&`) — receivers are pointer receivers; value form does not satisfy `error` interface and won't compile. |
+| `&errortypes.BadServerResponse{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Upstream bidder returned invalid data. Pointer form required. |
+| `&errortypes.FailedToMarshal{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Adapter-side marshaling failed. Pointer form required. |
+| `&errortypes.FailedToUnmarshal{Message: ...}` | `github.com/prebid/prebid-server/v4/errortypes` | Adapter-side unmarshaling failed. Pointer form required. |
 | `errortypes.Timeout` / `errortypes.TmaxTimeout` | `github.com/prebid/prebid-server/v4/errortypes` | Network/budget timeouts |
 | `errortypes.BidderTemporarilyDisabled` / `errortypes.BidderThrottled` | `github.com/prebid/prebid-server/v4/errortypes` | Operational state |
 | `macros.NewStringIndexBasedReplacer()` | `github.com/prebid/prebid-server/v4/macros` | Resolve endpoint URL template macros |
@@ -82,6 +165,26 @@ type RequestData struct {
 | `adapterstest.RunJSONBidderTest(t, dir, bidder)` | `github.com/prebid/prebid-server/v4/adapters/adapterstest` | The JSON test harness |
 
 `encoding/json` direct usage is discouraged for `Marshal`/`Unmarshal` calls but acceptable for `json.RawMessage` type alone.
+
+### `util/jsonutil` extras beyond Marshal/Unmarshal
+
+The package provides additional helpers for JSON manipulation:
+
+| Function/Type | Purpose |
+|---|---|
+| `jsonutil.UnmarshalValid(data, v)` | Unmarshal that ALSO validates JSON structure — stricter than `Unmarshal` |
+| `jsonutil.MergeClone(v, data)` | Merge a `json.RawMessage` into an existing struct value, cloning slices/maps/pointers (avoids shared-state mutation) — useful for layering optional ext on top of base config |
+| `jsonutil.FindElement(extension, names...)` | Locate a JSON element by path without full unmarshal — returns offset/length |
+| `jsonutil.DropElement(extension, names...)` | Remove a JSON element by path; returns modified bytes — useful for stripping `prebid` / `bidder` keys from `imp.Ext` before forwarding |
+| `jsonutil.ParseIntoString(b, **string)` | Coerce a JSON value (string/int/etc.) into `*string` — for fields that arrive as multiple types |
+| `jsonutil.StringInt` (type) | Type for fields declared `["integer", "string"]` in schema — accepts both forms |
+| `jsonutil.IntString` (type) | Type for fields declared as integer but the upstream sends as a string — useful for legacy bidder responses |
+
+`StringInt` and `IntString` are NOT interchangeable: `StringInt` accepts `42` or `"42"` and stores as int; `IntString` is for the inverse (forces a JSON int into a string for serialization). Match the type to the schema.
+
+**Use `MergeClone` over `Unmarshal` into pre-populated struct** when applying optional bidder ext on top of a base structure — direct unmarshal can mutate shared slice/map references.
+
+**Use `FindElement` / `DropElement`** instead of full unmarshal-modify-marshal cycles when only inspecting or stripping a small subset of a larger ext object — significantly faster on large extensions.
 
 ---
 
@@ -112,9 +215,55 @@ type RequestData struct {
 
 Source: `macros/macros.go` `EndpointTemplateParams` struct on `prebid/prebid-server` master.
 
-> **Note**: `{{.ExternalURL}}` is NOT an endpoint template macro — it belongs to user-sync URL templates (separate macro set used by `userSync.iframe.url` / `userSync.redirect.url`). User-sync URL templates support privacy macros (`{{.GDPR}}`, `{{.GDPRConsent}}`, `{{.USPrivacy}}`, `{{.GPP}}`, `{{.GPPSID}}`) and substitution macros (`{{.RedirectURL}}`, `{{.ExternalURL}}`, `{{.BidderName}}`, `{{.SyncType}}`, `{{.UserMacro}}`). Older skill files conflated these — they are distinct.
+> **Note**: `{{.ExternalURL}}` is NOT an endpoint template macro — it belongs to user-sync URL templates (separate macro set used by `userSync.iframe.url` / `userSync.redirect.url`). See "## User-sync URL macros" below for the verified canonical list. Older skill files conflated endpoint and user-sync macros — they are distinct.
 
 **Non-Go-template placeholders** (e.g., `#{REGION}#`, `${X}`, `<X>`) are NOT runtime macros — they are deployment-time substitution placeholders. An endpoint that contains an unresolved non-template placeholder requires `disabled: true` in YAML plus a comment block enumerating valid values. Reviewers reject endpoints with unresolved non-template placeholders unless paired with `disabled: true` (canonical: PR #4502 appStockSSP `#{REGION}#`).
+
+---
+
+## User-sync URL macros
+
+User-sync URLs in `static/bidder-info/{bidder}.yaml` (`userSync.iframe.url`, `userSync.redirect.url`) use TWO distinct macro mechanisms — Go template substitution AND regex-based string replacement.
+
+### Privacy macros (Go template, fields of `macros.UserSyncPrivacy`)
+
+| Macro | Field | Source |
+|---|---|---|
+| `{{.GDPR}}` | `GDPR` | "1" if GDPR applies, "0" otherwise |
+| `{{.GDPRConsent}}` | `GDPRConsent` | TCF v2 consent string |
+| `{{.USPrivacy}}` | `USPrivacy` | CCPA / IAB US Privacy String |
+| `{{.GPP}}` | `GPP` | Global Privacy Platform consent string |
+| `{{.GPPSID}}` | `GPPSID` | GPP Section ID list |
+
+Source: `macros/macros.go` `UserSyncPrivacy` struct.
+
+### Substitution macros (regex-based, in `usersync/syncer.go`)
+
+These are NOT Go template fields — they're substituted via `regexp.MustCompile(...).ReplaceAllLiteralString(...)` calls in `buildTemplate`:
+
+| Macro | Substituted with |
+|---|---|
+| `{{.SyncerKey}}` | The bidder's syncer key (defaults to bidder name; can be shared cross-bidder per `userSync.key`) |
+| `{{.BidderName}}` | The actual bidder name (alias resolution applied) |
+| `{{.SyncType}}` | `"iframe"` or `"redirect"` (or `formatOverride` value) |
+| `{{.UserMacro}}` | The bidder's `userMacro` value (e.g., `$UID`, `[USER_ID]`, `{UID}`) |
+| `{{.ExternalURL}}` | The PBS host's external URL (chosen from `userSync.endpoint.externalUrl` → `userSync.externalUrl` → host-level config) |
+| `{{.RedirectURL}}` | The fully-resolved redirect-back URL after sync (built from the redirect template) |
+
+Source: `usersync/syncer.go` (regex patterns: `macroRegexSyncerKey`, `macroRegexBidderName`, `macroRegexSyncType`, `macroRegexUserMacro`, `macroRegexExternalHost`, `macroRegexRedirect`).
+
+> **Note on naming**: the Go regex variable in `usersync/syncer.go:105` is named `macroRegexExternalHost`, but the regex pattern it compiles is `{{\s*\.ExternalURL\s*}}` — so the canonical macro form to write in YAML is `{{.ExternalURL}}`, NOT `{{.ExternalHost}}`. Older docs sometimes invert this based on the Go variable name.
+
+### Macro applicability per URL field
+
+| YAML field | Privacy macros | Substitution macros |
+|---|---|---|
+| `userSync.iframe.url` | All 5 | All 6 |
+| `userSync.redirect.url` | All 5 | All 6 |
+| `userSync.iframe.redirectUrl` | None | `{{.ExternalURL}}`, `{{.BidderName}}`, `{{.SyncType}}`, `{{.UserMacro}}` |
+| `userSync.redirect.redirectUrl` | None | `{{.ExternalURL}}`, `{{.BidderName}}`, `{{.SyncType}}`, `{{.UserMacro}}` |
+
+Endpoint URL templates (`endpoint:` field) use the SEPARATE `EndpointTemplateParams` 18-field set documented above. Do NOT mix the two sets.
 
 ---
 
@@ -181,6 +330,26 @@ As of PR #4592, multi-request fixtures must have each `httpCalls` entry match a 
 
 `expectedMakeRequestsErrors[*].comparison` accepts `"literal"` (default), `"regex"`, or `"startswith"`. An empty `comparison` field falls through to `"literal"`.
 
+### `adapter_test_util.go` (auxiliary helpers)
+
+The directory `adapters/adapterstest/` also contains a non-canonical helpers file `adapter_test_util.go` exposing:
+
+- `OrtbMockService` — scaffolded `httptest.Server` + last request capture
+- `BidOnTags(tags string) map[string]bool` — comma-separated tag list to set
+- `SampleBid(width, height *int64, impId string, index int) openrtb2.Bid` — minimal bid factory
+- `VerifyStringValue(value, expected string, t *testing.T)` — assertion helper
+
+These are NOT used by `RunJSONBidderTest` (the canonical JSON harness). Some legacy adapters (e.g., older `cadent_aperture_mx`) used these helpers in custom Go unit tests. New adapters should NOT use these — write JSON fixtures instead. If a new adapter's `_test.go` imports `adapterstest.OrtbMockService` etc., flag as **WARN** and recommend converting to the JSON harness.
+
+### MakeBids invocation gating
+
+`MakeBids` is invoked ONLY when the upstream HTTP call succeeded with a status in `[200, 400)`. Verified at `exchange/bidder.go:304-306` (`if httpInfo.err == nil { ... bidder.Bidder.MakeBids(...) }`) and `exchange/bidder.go:651-658` (any 4xx/5xx triggers `BadServerResponse` and `MakeBids` is skipped).
+
+- **204 is NOT skipped**: HTTP 204 is in `[200, 400)`, so `MakeBids` IS called with `responseData.StatusCode == 204` and an empty body. Adapters MUST explicitly handle 204 (canonical idiom: `if adapters.IsResponseStatusCodeNoContent(responseData) { return nil, nil }`).
+- **4xx / 5xx**: `MakeBids` is NOT called for these. PBS surfaces `BadServerResponse` automatically.
+- **Network/timeout errors**: `MakeBids` is NOT called.
+- **`responseData.StatusCode`** is the actual HTTP status from the upstream — direct copy of `httpResp.StatusCode`, never normalized or mapped.
+
 ---
 
 ## Anti-pattern: PBS core already does this
@@ -191,13 +360,42 @@ Adapters MUST NOT re-implement validation that PBS core enforces upstream. Frequ
 |---------------------------------|------------------------|
 | `if len(request.Imp) == 0 { return error }` | PBS core rejects empty-imp requests before calling adapters |
 | `if config.Endpoint == "" { return error }` in `Builder` | YAML loader validates endpoint at startup |
-| `if banner == nil && video == nil && audio == nil && native == nil { skip }` | PBS core filters by `static/bidder-info/{bidder}.yaml` capabilities |
-| `if site == nil && app == nil { error }` | Same — capabilities-based filtering |
+| `if banner == nil && video == nil && audio == nil && native == nil { skip }` | PBS strips media-type fields your YAML doesn't declare and drops imps with no remaining media types BEFORE `MakeRequests` is invoked, via `adapters/infoawarebidder.go:78-105` (`pruneImps`). Filtering is **per-imp + per-media-type**, NOT per-bidder — by the time you see an imp, at least one media type is set. Single-format adapters that cannot handle multi-format must set `openrtb.multiformat-supported: false` in YAML for the additional narrowing. |
+| `if site == nil && app == nil && dooh == nil { error }` | PBS enforces `validateExactlyOneInventoryType` (`endpoints/openrtb2/auction.go:1430`) — exactly one of `Site`/`App`/`DOOH` is non-nil. **However**: PBS does NOT enforce that `Site.ID` is non-empty (only requires `Site.ID || Site.Page`), does NOT enforce `App.ID`, does NOT enforce `Publisher.ID`. **KEEP defensive checks** for those specific fields if your endpoint requires them. Severity: WARN if reviewer flags `if site == nil && app == nil` as redundant (the OUTER check IS redundant); DO NOT flag specific-ID checks. |
 | Re-validating bidder-params with `minLength`/regex in Go | `static/bidder-params/{bidder}.json` schema validation runs upstream |
 | Re-checking required imp.ext fields | Same — schema does it |
 | `hasSiteOrAppID` style functions | Capability filtering already guarantees this |
 
 Reviewers consistently say "delete this — PBS core does it upstream." Flag re-implementations as **WARN**.
+
+### Additional PBS-enforced validation (verified at v4.1.0)
+
+These are checks PBS performs that adapter authors sometimes redundantly re-implement. Flag re-implementations as **WARN**.
+
+| Anti-pattern in adapter Go code | What PBS core handles |
+|---|---|
+| `if bid.ID == "" \|\| bid.ImpID == "" \|\| bid.Price < 0 \|\| bid.CrID == "" { skip }` | `exchange/bidder_validate_bids.go:115` (`validateBid`) drops bids missing these fields after `MakeBids` returns. Adapters can return malformed bids; PBS will drop them and surface the error. |
+| `if bid.Price <= 0 { skip }` | Same — `validateBid` drops `Price < 0` always, and `Price == 0 && DealID == ""` always. |
+| Currency-mismatch filtering in adapter | `exchange/bidder_validate_bids.go:79` (`validateCurrency`) rejects bids whose currency doesn't match `request.Cur`. Just set `bidResponse.Currency` correctly. |
+| Imp.ID uniqueness / non-empty checks | `endpoints/openrtb2/auction.go:925` enforces uniqueness; `ortb/request_validator.go:36` enforces non-empty. |
+| Request.ID, TMax >= 0 checks | `endpoints/openrtb2/auction.go:776, 780` |
+| Banner/Video/Audio/Native structural validation (e.g., banner w/h consistency, video mimes non-empty, native asset uniqueness) | `ortb/request_validator_banner.go`, `request_validator_video.go`, `request_validator_audio.go`, `request_validator_native.go` |
+| GPP/CCPA/GDPR consent-string parsing | `endpoints/openrtb2/auction.go:866-921` parses + scrubs invalid strings before adapter sees them. |
+| App blocklist enforcement | `endpoints/openrtb2/auction.go:1224` rejects requests for any `App.ID` in `BlockedAppsLookup` config. |
+| Unknown-bidder rejection | `ortb/request_validator.go:147` returns "unknown bidder" error for misspelled `imp.ext.prebid.bidder.{name}`. |
+
+### Site / App ID — nuanced enforcement
+
+Adapter authors sometimes write defensive checks like `if request.Site.ID == "" { error }`. The truth depends on the field:
+
+| Field | Enforced by PBS? | Adapter defensive check? |
+|---|---|---|
+| `request.Site != nil \|\| request.App != nil \|\| request.DOOH != nil` (exactly one) | Yes (`validateExactlyOneInventoryType`) | Delete — redundant |
+| `request.Site.ID != "" \|\| request.Site.Page != ""` (at least one) | Yes (`validateSite`) | Delete — redundant |
+| `request.Site.ID != ""` (specifically the ID) | **No** — only `ID || Page` enforced | **Keep** if your endpoint specifically needs `Site.ID` |
+| `request.App.ID != ""` | **No** | **Keep** if your endpoint specifically needs `App.ID` |
+| `request.DOOH.ID != "" \|\| len(request.DOOH.VenueType) != 0` | Yes (`validateDOOH`) | Delete — redundant |
+| `request.Site.Publisher.ID != ""` (or `App.Publisher`/`DOOH.Publisher`) | **No** | **Keep** if your endpoint specifically needs Publisher.ID |
 
 ---
 
@@ -232,6 +430,11 @@ Unacceptable: full URL from `imp.ext` or other publisher-controlled input. **Sev
 - Personal-domain emails (gmail, yahoo, hotmail, outlook, proton.me, icloud) are tolerated for small bidders but flagged as **INFO** — reviewer historically requests change.
 
 For aliases, `maintainer.email` MAY be inherited from the parent (omit the field). If declared on the alias, it should be the alias organization's email — not a copy of the parent's, unless they share infrastructure.
+
+**Aliases — clarification:**
+- Aliases MAY inherit `maintainer.email` from the parent (omit the field) when the alias is part of the parent's organizational family. Heuristics: bulk-mode multi-adapter alias bundle (e.g., PR #4651 5 Limelight aliases — none declared their own email, all merged), OR alias and parent share a common-stem domain.
+- Aliases SHOULD declare their own `maintainer.email` when the alias is an independent organization. Heuristic: distinct endpoint domain that doesn't share a stem with parent's. Reference: PR #4727 (AppMonstaMedia) declared its own `media.support@appmonsta.ai` because Appmonsta Ltd is distinct from teqblaze.
+- The skill SHOULD downgrade missing `maintainer.email` to **INFO** in the bulk-mode case and **WARN** in the independent-organization case — see `bidder-info-pr-review/SKILL.md` Workflow: Alias Adapter Added step 6.
 
 ---
 

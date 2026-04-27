@@ -115,7 +115,7 @@ Files not matching any skill's activation patterns. Grouped by sub-category.
 | `openrtb_ext/request.go` | Request processing for all bidders | Verify request wrapper compatibility |
 | `openrtb_ext/request_wrapper.go` | Request wrapper used by all adapters | Verify interface unchanged |
 | `adapters/bidder.go` | Bidder interface definition | **If interface changes, ALL adapters affected** |
-| `adapters/adapterstest/adapterstest.go` | All adapter test runners | **Triggers drift in adapter-code index** |
+| `adapters/adapterstest/test_json.go` | All adapter test runners | **Triggers drift in adapter-code index** |
 | `errortypes/errortypes.go` | Error types used by all adapters | Verify no breaking changes |
 | `util/jsonutil/*.go` | JSON marshal/unmarshal for all adapters | Verify backward compatibility |
 | `privacy/*.go` | Privacy (GDPR, CCPA, GPP) handling | Affects all bidders with privacy concerns |
@@ -245,7 +245,7 @@ When detected:
 
 ## Valid Endpoint Template Macros
 
-The canonical 19-field list of `macros.EndpointTemplateParams` is at [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros). The pr-triage Step 5a (cross-skill concern: invalid macros in alias PRs) reads from that list.
+The canonical 18-field list of `macros.EndpointTemplateParams` is at [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros). The pr-triage Step 5a (cross-skill concern: invalid macros in alias PRs) reads from that list.
 
 **Non-Go-template placeholders** (e.g., `#{REGION}#`, `${X}`, `<X>`) are NOT runtime macros — they are deployment-time substitutions and require `disabled: true` in the YAML. See the canonical rule at the linked file.
 
@@ -277,4 +277,4 @@ For NEW PRs: when a full adapter is being added that resembles an existing adapt
 
 Severity: **WARN** with note suggesting alias-only conversion. The white-label workflow lives in `bidder-info-pr-review` skill; this is the cross-skill detection trigger.
 
-Reference quotes (verbatim) from PRs #4329, #4383, #4391, #4565 are catalogued at [../../shared/framework-utilities.md#aliasing](../../shared/framework-utilities.md#aliasing) and [../../bidder-info-pr-review/SKILL.md](../../bidder-info-pr-review/SKILL.md) Workflow: White-Label Policy Compliance.
+Reference quotes (verbatim) from PRs #4329, #4383, #4391, #4376, #4565 are catalogued at [../../shared/framework-utilities.md#aliasing](../../shared/framework-utilities.md#aliasing) and [../../bidder-info-pr-review/SKILL.md](../../bidder-info-pr-review/SKILL.md) Workflow: White-Label Policy Compliance.

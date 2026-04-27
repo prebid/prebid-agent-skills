@@ -5,7 +5,7 @@ Complete Go struct mapping from `config/bidderinfo.go`. Use this to trace any YA
 **Upstream source (canonical):** https://github.com/prebid/prebid-server/blob/master/config/bidderinfo.go
 **Raw URL (for fetching):** https://raw.githubusercontent.com/prebid/prebid-server/master/config/bidderinfo.go
 
-> **Sync policy:** This file is a local snapshot. The skill workflow (Step 1b) checks for drift against the live source on every review run. If new fields are found upstream, update this file to match.
+> **Sync policy:** This file is a local snapshot. The `pr-triage` skill's Step 2 runs centralized drift checks against the live source on every review run; this skill's Step 1b reads those drift results from the manifest. If new fields are found upstream, update this file to match.
 
 ---
 
@@ -44,7 +44,7 @@ type BidderInfo struct {
 
 | YAML Path | Go Field | Go Type | Required | Validation |
 |-----------|----------|---------|----------|------------|
-| `aliasOf` | AliasOf | string | No | Parent must exist, no alias chains |
+| `aliasOf` | AliasOf | string | No | Parent must exist, no alias chains. Minimum valid alias YAML is `aliasOf: parent` (1 line — full inheritance). The 2-line form (`endpoint:` + `aliasOf:`) is the SmartHub/Limelight family pattern. See SKILL.md Workflow: Alias Adapter Added step 9. |
 | `whiteLabelOnly` | WhiteLabelOnly | bool | No | Marks the bidder as available only as a white-label parent (aliases will reference it). Does NOT preclude Go adapter code on the parent (e.g., TeqBlaze parent has Go code AND `whiteLabelOnly: true` to enable aliases). See ../../shared/framework-utilities.md#aliasing. |
 | `disabled` | Disabled | bool | No | Default: false |
 | `endpoint` | Endpoint | string | Yes | `validateAdapterEndpoint()` — valid URL, template macro resolution |
@@ -61,7 +61,7 @@ type BidderInfo struct {
 | `xapi` | XAPI | AdapterXAPI | No | — |
 | `platform_id` | PlatformID | string | No | — |
 | `app_secret` | AppSecret | string | No | SECURITY: no real secrets |
-| `endpointCompression` | EndpointCompression | string | No | Accepted: `"gzip"` (canonical) and `"GZIP"` (uppercase, observed in master `adkernel.yaml`). YAML loader is case-insensitive at parse time. Recommend lowercase `gzip` for new files for consistency. Omit entirely if not supporting compression. |
+| `endpointCompression` | EndpointCompression | string | No | **`"GZIP"` (uppercase, case-sensitive)**. The check is direct string comparison against the `Gzip = "GZIP"` constant in `exchange/bidder.go:100`; lowercase `"gzip"` silently fails to enable compression. Omit entirely if not supporting compression. |
 
 ---
 
@@ -148,7 +148,6 @@ type Syncer struct {
     IFrame          *SyncerEndpoint  `yaml:"iframe"`
     Redirect        *SyncerEndpoint  `yaml:"redirect"`
     ExternalURL     string           `yaml:"externalUrl"`
-    SupportCORS     *bool            `yaml:"supportCors"`
     FormatOverride  string           `yaml:"formatOverride"`
     Enabled         *bool            `yaml:"enabled"`
     SkipWhen        *SkipWhen        `yaml:"skipwhen"`
@@ -162,7 +161,6 @@ type Syncer struct {
 | `userSync.iframe` | IFrame | *SyncerEndpoint | — |
 | `userSync.redirect` | Redirect | *SyncerEndpoint | — |
 | `userSync.externalUrl` | ExternalURL | string | — |
-| `userSync.supportCors` | SupportCORS | *bool | — |
 | `userSync.formatOverride` | FormatOverride | string | `""`, `"b"`, or `"i"` only |
 | `userSync.enabled` | Enabled | *bool | nil = default |
 | `userSync.skipwhen` | SkipWhen | *SkipWhen | — |
@@ -256,7 +254,7 @@ Patterns surfaced from review of the 89 reference adapter PRs (`prebid-server-go
 - **GVL inheritance quirk**: aliases cannot effectively override the parent's GVL vendor ID — `config/bidderinfo.go` deliberately inherits whether the alias sets `gvlVendorID: 0` or omits the field. Setting `gvlVendorID: 0` adds confusion; reviewers ask to remove it (PR #4329).
 - **GVL name tolerance**: GVL ID 377 = "AddApptr GmbH" but PR #4547 (Gravite) was accepted because privacy URL is gravite.net — corporate restructure case. GVL name mismatches are tolerated when there's a credible relationship.
 - **modifyingVastXmlAllowed**: rare; only seen in #4522 alliance_gravity. Set deliberately when video adapter wants to opt-in/opt-out of VAST modification tracking.
-- **endpointCompression: gzip** is increasingly common (4+ PRs in 2025–2026). Suggest as INFO when adapter handles large requests.
+- **endpointCompression: GZIP** is increasingly common (4+ PRs in 2025–2026). Suggest as INFO when adapter handles large requests. Value MUST be uppercase `"GZIP"` — case-sensitive comparison against the `Gzip = "GZIP"` constant.
 - **userSync.supports list**: declares which sync types (`iframe`, `redirect`) the bidder supports without providing default URLs (host configures URLs). Common when bidder requires onboarding before sync activation.
 - **Bidder rename for major version**: rename PRs (e.g., `progx` → `programmaticX` PR #4456) are deferred to the next major release (v3 → v4) due to breaking-change semantics. Flag rename intent as INFO.
 
@@ -266,7 +264,7 @@ Patterns surfaced from review of the 89 reference adapter PRs (`prebid-server-go
 
 | Function | What It Validates |
 |----------|-------------------|
-| `validateBidderInfos()` | Orchestrates all validation for all bidders |
+| `(BidderInfos).validate()` | Method (NOT a top-level function) on `BidderInfos` map. Orchestrates all validation for all enabled bidders. Doc-comment misleadingly references it as `validateBidderInfos` but the actual symbol is `(BidderInfos).validate`. Called from `config.New` at startup. |
 | `validateAdapterEndpoint()` | Endpoint URL validity, template macro resolution |
 | `validateInfo()` | Maintainer, geoscope, capabilities |
 | `validateMaintainer()` | `maintainer.email` must exist |
@@ -314,7 +312,6 @@ userSync.redirect.redirectUrl
 userSync.redirect.externalUrl
 userSync.redirect.userMacro
 userSync.externalUrl
-userSync.supportCors
 userSync.formatOverride
 userSync.enabled
 userSync.skipwhen.gdpr

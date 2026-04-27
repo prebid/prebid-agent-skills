@@ -54,7 +54,7 @@ This skill receives pre-fetched PR data from the **pr-triage** skill. Do NOT re-
 The pr-triage skill provides:
 - The complete file list filtered to files owned by this skill (adapter Go files, test fixtures, registration files)
 - Each file's `filename`, `status`, and `patch` (diff hunks)
-- Drift check results for `adapters/adapterstest/adapterstest.go` test harness
+- Drift check results for `adapters/adapterstest/test_json.go` test harness
 - CI status summary
 - PR type classification
 - Bulk change flag (if applicable)
@@ -66,7 +66,7 @@ The pr-triage skill provides:
 
 **1b. Handle drift warnings.**
 
-If the triage manifest reports drift for adapter-code, include the drift warning in the review output. Do not re-fetch `adapterstest.go`.
+If the triage manifest reports drift for adapter-code, include the drift warning in the review output. Do not re-fetch `test_json.go`.
 
 **1c. Handle CI status.**
 
@@ -199,7 +199,7 @@ After all tasks are complete, produce a review summary:
 2. **Endpoint from config**: The adapter struct should store `config.Endpoint`, not a hardcoded URL
 3. **No hardcoded credentials**: Builder must not embed API keys, passwords, or secrets. Configuration should come from `config.Adapter` or `server` parameters
 4. **Error handling**: If the builder performs validation (e.g., URL template parsing), errors should be returned, not panicked
-5. **Template macros**: If the endpoint URL uses template macros (e.g., `{{.AccountID}}`), verify the builder resolves them using `macros.NewStringIndexBasedReplacer()` or similar. Supported `EndpointTemplateParams` fields: `Host`, `PublisherID`, `ZoneID`, `SourceId`, `AccountID`, `AdUnit`, `MediaType`, `GvlID`, `PageID`, `SupplyId`, `ImpID`, `SspId`, `SspID`, `SeatID`, `TokenID`, `PartnerId`, `Region`, `PlacementID`, `ExternalURL`. Flag any unsupported macro names as FAIL
+5. **Template macros**: If the endpoint URL uses template macros (e.g., `{{.AccountID}}`), verify the builder resolves them using `macros.NewStringIndexBasedReplacer()` or similar. Supported `EndpointTemplateParams` fields (18 total — see [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros) for canonical list): `Host`, `PublisherID`, `ZoneID`, `SourceId`, `AccountID`, `AdUnit`, `MediaType`, `GvlID`, `PageID`, `SupplyId`, `ImpID`, `SspId`, `SspID`, `SeatID`, `TokenID`, `PartnerId`, `Region`, `PlacementID`. **`ExternalURL` is NOT an endpoint macro** — it belongs only to user-sync URL templates. Flag any unsupported macro names as FAIL
 
 ### Workflow: MakeRequests Changed
 
@@ -216,7 +216,7 @@ After all tasks are complete, produce a review summary:
    - `Uri`: The endpoint URL (from adapter struct, not hardcoded)
    - `Body`: Marshaled request JSON
    - `ImpIDs`: Must call `openrtb_ext.GetImpIDs(request.Imp)` — this is required for impression tracking
-   - `Headers`: Should include `Content-Type: application/json` at minimum
+   - `Headers`: Should include `Content-Type: application/json` at minimum. Adapters that omit `Headers` entirely from `RequestData` should be flagged as **WARN** — some upstream servers reject the request body without an explicit Content-Type header. Severity escalates to FAIL only if the upstream is known to require it.
 4. **Copy semantics**: Must NOT mutate the shared `*openrtb2.BidRequest` or its nested objects directly. Create copies before modification:
    - Copy `request.Site`, `request.App` before modifying publisher
    - Copy `imp.Banner`, `imp.Video` before modifying fields
@@ -227,7 +227,7 @@ After all tasks are complete, produce a review summary:
 5. **Error types**: Use `errortypes.BadInput` for invalid request data (client's fault), not generic errors. Errors generated within an impression loop should include the impression ID or index for log context
 6. **Marshal vs unmarshal error safety**: **Marshaling errors must NEVER be silently swallowed** — they can indicate shared memory corruption in production and will cause adapter panics if not surfaced. Unmarshaling errors for optional extension data MAY be swallowed if the data is truly optional and the request is valid without it. Flag any `json.Marshal` / `jsonutil.Marshal` call whose error is ignored or discarded as **FAIL**
 7. **Use framework JSON utilities**: Adapters should use `jsonutil.Marshal`/`jsonutil.Unmarshal` from `github.com/prebid/prebid-server/v4/util/jsonutil`, not `encoding/json.Marshal`/`json.Unmarshal`. The framework versions provide consistent error handling and format. Flag use of `encoding/json` for marshal/unmarshal operations as **WARN**
-8. **Currency conversion**: If converting bid floors, use `requestInfo.ConvertCurrency()` with proper error handling
+8. **Currency conversion**: If converting bid floors, use `requestInfo.ConvertCurrency()` with proper error handling. **Available ONLY in `MakeRequests`** — the `MakeBids` signature does not include `reqInfo`. If you need to convert currencies based on the bid response, set `bidResponse.Currency` to the bidder's currency and let PBS `exchange/bidder_validate_bids.go:79` (`validateCurrency`) handle the mismatch reconciliation.
 9. **Multi-impression handling**: If the adapter sends one request per impression, verify each request has the correct single-impression slice. If batching all impressions, verify the full slice is included
 10. **No redundant PBS core checks**: PBS core handles validation that adapters frequently re-implement defensively. Flag re-implementations as **WARN**:
     - `if len(request.Imp) == 0 { return error }` — PBS core rejects empty-imp requests
@@ -236,6 +236,7 @@ After all tasks are complete, produce a review summary:
     - `if site == nil && app == nil { error }` — same capability filtering
     - Re-validating bidder-params with `minLength`/regex/required — schema validation runs upstream
     - `hasSiteOrAppID` style helpers — capability filtering already guarantees this
+    - **Specific-field defensive checks ARE valid**: PBS only enforces `Site.ID || Site.Page` (not `Site.ID` alone), does NOT enforce `App.ID`, does NOT enforce `Publisher.ID`. If your endpoint specifically needs one of these fields, KEEP the defensive check — see [../../shared/framework-utilities.md#site--app-id--nuanced-enforcement](../../shared/framework-utilities.md#site--app-id--nuanced-enforcement) for the full table.
     
     See [../../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this](../../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this) for the canonical list.
 
@@ -245,9 +246,9 @@ After all tasks are complete, produce a review summary:
 
 1. **Correct signature**: Must be `func (a *adapter) MakeBids(request *openrtb2.BidRequest, requestData *adapters.RequestData, responseData *adapters.ResponseData) (*adapters.BidderResponse, []error)`
 2. **HTTP status handling**: Must handle standard response codes:
-   - 204 (No Content): Return `nil, nil` — use `adapters.IsResponseStatusCodeNoContent(responseData)`
-   - Non-2xx errors: Return error — use `adapters.CheckResponseStatusCodeForErrors(responseData)`
-   - These checks must come BEFORE attempting to unmarshal the response body
+   - 204 (No Content): Return `nil, nil` — use `adapters.IsResponseStatusCodeNoContent(responseData)`. **`MakeBids` IS invoked for 204** — PBS does NOT skip 204 responses (verified at `exchange/bidder.go:304`); adapters that don't handle it will attempt to unmarshal an empty body and may produce confusing errors.
+   - Non-2xx errors (4xx/5xx): `MakeBids` is NOT called for these (PBS surfaces `BadServerResponse` automatically). Defensive checks for non-2xx in `MakeBids` are redundant unless the adapter specifically handles a 3xx redirect path.
+   - Both checks must come BEFORE attempting to unmarshal the response body.
 3. **Response unmarshaling**: Use `jsonutil.Unmarshal` (not `json.Unmarshal`) to unmarshal `responseData.Body` into `openrtb2.BidResponse`
 4. **Bid type resolution**: Must determine bid type for each bid. Preferred approach (in order):
    - From `bid.MType` (OpenRTB 2.6 markup type): `openrtb2.MarkupBanner` (1), `openrtb2.MarkupVideo` (2), `openrtb2.MarkupAudio` (3), `openrtb2.MarkupNative` (4)
@@ -271,6 +272,7 @@ After all tasks are complete, produce a review summary:
 4. **Error handling**: Helpers that can fail should return errors, not panic
 5. **No side effects**: Helpers should not modify global state
 6. **Unexported**: Helper functions in the adapter package should be unexported (lowercase) unless needed externally
+7. **No function-parameter shadowing**: Closures or inner blocks in helpers must not shadow the enclosing function's parameters (declaring an inner variable with the same name as a parameter). Severity: **INFO** with recommendation to rename. Reviewer-flagged in PR #4592 (Microsoft) on `displayManagerVerBuilder` and `getMediaTypeForBid` helpers.
 
 ### Workflow: Adapter Type Changed
 
@@ -304,7 +306,7 @@ After all tasks are complete, produce a review summary:
 
 **Triggers when:** `openrtb_ext/bidders.go` is modified.
 
-1. **Const declaration**: `Bidder{Name} BidderName = "{bidder}"` — the string value must be all-lowercase and match the directory name under `adapters/`
+1. **Const declaration**: `Bidder{Name} BidderName = "{bidder}"` — the string value (right-hand side) must be all-lowercase and match the directory name under `adapters/`. The constant identifier (left-hand side) usually matches the slug (e.g., `BidderMsft = "msft"`) but a marketing-name identifier is acceptable when the bidder organization markets under a name distinct from its slug (e.g., `BidderMicrosoft = "msft"` per PR #4592). Both forms are tolerated.
 2. **CoreBidderNames entry**: The constant must be added to the `coreBidderNames` slice
 3. **Alphabetical order**: Both the const and slice entry should be in alphabetical order
 4. **No extra changes**: Registration should only add the const + slice entry. Flag any other modifications to this file (unless adding alias constants, which is acceptable)
@@ -319,7 +321,10 @@ After all tasks are complete, produce a review summary:
    - Correct bidder constant: `openrtb_ext.Bidder{Name}`
    - A config with a fake endpoint: `config.Adapter{Endpoint: "https://..."}`
    - A server config: `config.Server{ExternalUrl: "http://hosturl.com", GvlID: 1, DataCenter: "2"}`
-4. **Test directory reference**: Must call `adapterstest.RunJSONBidderTest(t, "{bidder}test", bidder)` — the directory name must be `{bidder}test` (no separator)
+4. **Test directory reference**: Calls `adapterstest.RunJSONBidderTest(t, "{dir}", bidder)`.
+   - Canonical: `{dir}` = `{bidder}test` (no separator). Required for new adapters.
+   - Legacy alternates tolerated: `adapters/msft/test/`, `adapters/msft/test-extrainfo/`. Severity: **INFO** (not FAIL) when reviewing such an adapter — the canonical naming was not in convention when these were added.
+   - Multiple `RunJSONBidderTest` calls in a single test runner (one per directory) are tolerated when an adapter genuinely needs distinct test scenarios (e.g., different ExtraAdapterInfo configurations, as in msft).
 5. **Build error check**: Should check and `t.Fatalf` if `Builder` returns an error
 6. **Minimal test runner**: The test runner should be a thin wrapper (~20 lines) that delegates to `adapterstest.RunJSONBidderTest`. Extensive custom unit test logic (>100 lines) in the test runner is non-standard — reviewers expect custom test scenarios to be covered via JSON test fixtures, not Go unit tests. Flag as WARN if the test runner contains substantial test logic beyond the standard pattern
 
@@ -340,7 +345,7 @@ After all tasks are complete, produce a review summary:
    - `body` — the mock OpenRTB bid response
 4. **Bid type present**: Each bid in `expectedBidResponses` should have a `type` field (`banner`, `video`, `native`, `audio`)
 5. **Media type coverage**: For new adapters, the set of exemplary tests should collectively cover each media type declared in `capabilities` (cross-read `static/bidder-info/{bidder}.yaml`). Flag missing media types as WARN
-6. **Context coverage**: For new adapters declaring both `app` and `site` capabilities, exemplary tests should include at least one test per context. Flag if missing as WARN
+6. **Context coverage**: For new adapters, exemplary tests should include at least one fixture per declared `capabilities` platform (one with `mockBidRequest.app` for app, one with `mockBidRequest.site` for site, one with `mockBidRequest.dooh` for DOOH). Flag missing platform coverage as **WARN**. Sample-PR evidence: PR #4287 (Optidigital) declared all three platforms but only had a single fixture without site/app/dooh in the request — this rule would have caught it.
 7. **Realistic data**: Test fixtures should use realistic bid request data (not obviously placeholder values). Check for `test-request-id` style IDs (acceptable in tests) vs obviously invalid data
 
 ### Workflow: Supplemental Test Data Changed
