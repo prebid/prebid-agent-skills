@@ -542,6 +542,46 @@ After producing the routing manifest, output a human-readable summary:
 
 ---
 
+## Optional: Prior-Spec Comparison (read/ integration)
+
+If a prior Adapter Specification exists at `prebid-server-go/read/specs/{bidder}/latest.yaml` (typically because the user has previously read the adapter via `read-adapter-orchestrator --persist`), pr-triage can load it as `prior_spec` and detect behavioral regressions on the PR diff. Reviewer skills receive the loaded spec via the routing manifest's `--- PRIOR SPEC COMPARISON ---` block and flag deviations.
+
+This is OPT-IN: pr-triage continues to work without `prior_spec`. The hook is automatic when the file is present.
+
+**Detection workflow** (runs after Step 4 PR-type detection, before Step 5 cross-skill concerns):
+
+1. For each bidder identified in `Bidders affected:` (Step 4), check whether `prebid-server-go/read/specs/{bidder}/latest.yaml` exists locally. The `read/specs/` directory is `.gitignore`'d by default; users opt into checking specs in for diff-comparison workflows.
+2. If present, load the YAML; record `prior_spec.provenance.source.resolved_commit` and `prior_spec.adapter_spec_version`.
+3. For each non-removed file in the PR routed to a downstream skill, run targeted regression checks against `prior_spec`. Examples:
+   - PR adds `import "text/template"` to `adapters/{xyz}/{xyz}.go` → if `prior_spec.code.imports.has_template_engine: false` AND `prior_spec.code.make_requests.endpoint_resolution.kind: static`, flag: `PRIOR-SPEC: Endpoint kind changing from static to template-macro. Was this intentional? If yes, the spec should be re-read on the post-merge commit.`
+   - PR adds custom `func (e *ExtImpXyz) UnmarshalJSON(data []byte) error` method → if `prior_spec.params.ext_struct.custom_unmarshal: false`, flag: `PRIOR-SPEC: Custom UnmarshalJSON added. Verify ext.accepts_shapes captures the new flexibility (see ext_pojo_construction.custom_unmarshal taxonomy).`
+   - PR removes a quirk's source line (e.g., the `kobler.go:23` const referenced by `prior_spec.quirks[id=hardcoded-dev-endpoint]`) → flag: `PRIOR-SPEC: Quirk hardcoded-dev-endpoint at kobler.go:23 is no longer load-bearing — orchestrator should remove from spec on next read.`
+   - PR adds a new alias YAML at `static/bidder-info/connektai.yaml` → if `prior_spec.meta.parent_aliases` does not contain `connektai`, flag: `PRIOR-SPEC: New alias detected. Java port (if any) needs aliases: { connektai: ~ } entry under the parent's bidder-config YAML (port translation Rule 33).`
+   - PR adds `disabled: true` to YAML → if `prior_spec.meta.disabled: false` AND PR also touches the endpoint field with a `#{TOKEN}#`-style placeholder, flag: `PRIOR-SPEC: Bidder being disabled with deploy-time token introduction. Reference: PR #4502 appStockSSP REGION token. Confirm with reviewer.`
+   - PR changes adapter struct field from `endpoint string` to `endpointTemplate *template.Template` → if `prior_spec.code.builder.template_parsed_at_build: false`, flag: `PRIOR-SPEC: Builder now parses template at build time. endpoint_resolution.mechanism_go should change to text/template on next read.`
+4. Append all `PRIOR-SPEC:` flags to the routing manifest under a new `--- PRIOR SPEC COMPARISON ---` block (between `--- CROSS-SKILL CONCERNS ---` and `--- PRIOR AGENT FINDINGS ---`).
+5. If `read/specs/{bidder}/latest.yaml` is missing, omit the block silently. Do NOT recompute the spec — that's the user's opt-in via `read-adapter-orchestrator --persist`. Do NOT block the review on absence.
+
+**Manifest block format**:
+
+```
+--- PRIOR SPEC COMPARISON ---
+prior_spec: read/specs/{bidder}/latest.yaml
+prior_spec.resolved_commit: {sha}
+prior_spec.adapter_spec_version: 1
+Regressions detected ({N}):
+  - PRIOR-SPEC: {flag text} (file:{path}:{line if applicable})
+  ...
+(or: "No regressions detected" if N=0)
+(or: "prior_spec not present — section omitted" if no file at read/specs/{bidder}/latest.yaml)
+```
+
+The `--- PRIOR SPEC COMPARISON ---` block is consumed by downstream reviewer skills exactly like the existing `--- PRIOR AGENT FINDINGS ---` block: skills cross-reference findings against the prior-spec flags and surface only NET-NEW concerns from the PR diff. Matches dedup as "Previously captured in prior_spec — confirm with reviewer if intentional."
+
+For more on the read/ → review/ composition contract, the spec lifecycle, and worked detection examples, see [`../../../read/skills/shared/cross-skill-integration.md`](../../../read/skills/shared/cross-skill-integration.md) §5 (Read ↔ Review opt-in hook).
+
+---
+
 ## Cross-Skill References (Read-Only)
 
 This skill reads files from downstream skills for drift comparison:
@@ -549,6 +589,7 @@ This skill reads files from downstream skills for drift comparison:
 - `bidder-info-pr-review/references/field-index.md` — to compare against live `BidderInfo` struct
 - `bidder-params-pr-review/references/params-type-index.md` — for context on schema validation mechanism
 - `adapter-code-pr-review/references/adapter-code-index.md` — for context on test harness structure
+- `../../../read/skills/shared/cross-skill-integration.md` — read/ → review/ integration contract (opt-in prior-spec comparison hook; spec lifecycle; detection examples). Loaded only when the user has the read/ skill suite installed and `read/specs/{bidder}/latest.yaml` exists locally.
 
 ---
 

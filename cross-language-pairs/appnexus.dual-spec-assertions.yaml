@@ -1,0 +1,172 @@
+dual_spec_assertion_version: 1
+bidder_name: appnexus
+go_spec: prebid-server-go/read/test-fixtures/appnexus.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml
+go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+
+assertions:
+  bidder_params_sha256:
+    go: 20a3f193c62b1b3d6d2a0daf5dfaa3935a045c52b83af236693ebe9c3459106d
+    java: 5946ec7d034be6f6f4033913751d074ffe75dacd9df542b30e1a44f41333ee12
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only
+    divergence_summary: |
+      Byte-only whitespace divergence in static/bidder-params/appnexus.json. The
+      file is a complex 200+ line JSON Schema with 16 properties, a oneOf-of-oneOf
+      combinator, an anyOf for keywords, and a not-clause. Java has been fully
+      reformatted with extra newlines and per-element line breaks throughout —
+      e.g., type arrays like ["integer", "string"] become multi-line blocks
+      [\n  "integer",\n  "string"\n] in many places, all `required` arrays use
+      multi-line block form, etc. The Go file uses denser inline arrays and more
+      compact formatting. Parsing both as JSON yields semantically identical ASTs:
+      same 16 properties, same flexible-types (placement_id/placementId/member +
+      keywords), same combinators (oneOf, oneOf-of-oneOf, anyOf, not), same
+      enum constraints (position: above/below), same all 4 deprecated camelCase
+      aliases (placementId, invCode, trafficSourceCode, use_payment_rule). This
+      is a pure whitespace/formatting divergence; semantic equivalence verified.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    java:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 32
+    java: 32
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: prebid@microsoft.com
+    java: prebid@microsoft.com
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_endpoint_compression:
+    go: null
+    java: null
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: []
+    java_required_fields: []
+    go_combinators_used: [oneOf, oneOf-of-oneOf, anyOf, not]
+    java_combinators_used: [oneOf, oneOf-of-oneOf, anyOf, not, json-aliases-present]
+    go_flexible_types: [placement_id, placementId, member, keywords]
+    java_flexible_types: [placement_id, placementId, member, keywords]
+    go_properties:
+      - placement_id
+      - placementId
+      - inv_code
+      - invCode
+      - member
+      - keywords
+      - traffic_source_code
+      - trafficSourceCode
+      - reserve
+      - position
+      - use_pmt_rule
+      - use_payment_rule
+      - generate_ad_pod_id
+      - private_sizes
+      - ext_inv_code
+      - external_imp_id
+    java_properties:
+      - placement_id
+      - placementId
+      - inv_code
+      - invCode
+      - member
+      - keywords
+      - traffic_source_code
+      - trafficSourceCode
+      - reserve
+      - position
+      - use_pmt_rule
+      - use_payment_rule
+      - generate_ad_pod_id
+      - private_sizes
+      - ext_inv_code
+      - external_imp_id
+    equivalent: true
+    notes: |
+      Java spec adds `json-aliases-present` to combinators_used to capture the
+      @JsonAlias annotation pattern (placement_id/@JsonAlias("placementId"),
+      inv_code/@JsonAlias("invCode"), etc.) — this is a Java reader-skill
+      enrichment, not a schema content divergence. Both schemas list 16
+      identical properties with identical types and the same 4 flexible-typed
+      ones (placement_id/placementId/member/keywords).
+    severity: pass
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - mutation-idiom-tobuilder
+      - keywords-runtime-vs-jsondeserialize-branching
+      - schain-source-to-request-ext-relocation
+      - iab-category-storage-divergence
+      - configuration-properties-subclass
+
+  reviewer_cohort:
+    go_reviewers: [bsardo, SyntaxNode, hhhjort]
+    java_reviewers: [CTMBNara, AntoxaAntoxic, EmilNadimanov]
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: divergent-byte-only
+  blocker_count: 0
+  warning_count: 1
+  notes: |
+    Appnexus is byte-divergent on bidder_params_json (Java is fully reformatted from
+    the Go canonical form with extra whitespace/newlines throughout) but semantically
+    equivalent: same 16 properties, same combinators (oneOf-of-oneOf + anyOf + not),
+    same 4 flexible-types, same enum constraint on position, same legacy/new param
+    coexistence (4 camelCase aliases). Capabilities, GVL ID 32, maintainer, geoscope
+    all match. The implementation diverges substantially in idiom but preserves the
+    cross-language behavioral contract: both sides emit the same composed batching
+    rules ([pod-grouping, max-imps-per-request:10] in apply-order), the same
+    schain-source-to-request-ext relocation, the same numeric bid_ad_type chain
+    (0=banner, 1=video, 3=native — note 2 is skipped on both sides). The KEYWORDS
+    field deserialization is a port-translation Rule 6 asymmetry worth highlighting:
+    Go uses `func (ks *ExtImpAppnexusKeywords) UnmarshalJSON` typed-method polymorphism
+    branching on first byte; Java uses runtime branching INSIDE AppnexusBidder via
+    JsonNode.isObject/isArray/isTextual rather than a separate Jackson
+    JsonDeserializer<ExtImpAppnexusKeywords> class. Both yield the same comma-joined
+    string output; this is a Java-specific implementation choice (runtime-isobject-
+    isarray-branching pattern, taxon `runtime-polymorphism-bidder-class`) that
+    diverges from the Rule 6 default expectation of jackson-jsondeserialize. The
+    iabCategories storage diverges: Go uses go-data-table (95-entry package-level
+    var in adapters/appnexus/iab_categories.go); Java uses yaml-inlined (95 entries
+    under adapters.appnexus.iab-categories in bidder-config/appnexus.yaml). Same
+    data, different storage_kind — both reach the bidder via different injection.
+    Porter advice: (a) reformat the Java bidder-params JSON to the Go-side canonical
+    style for byte parity (this is mechanical), (b) when porting future bidders with
+    multi-shape custom unmarshal, decide between the two Java patterns (runtime-
+    branching in the bidder class vs separate JsonDeserializer) per the local
+    conventions; appnexus chose the former. Also, the Java side declares the
+    `mediafuse` parent_alias; Go has no equivalent alias declaration (Java carries
+    aliases.mediafuse with maintainer override). Port pair has wide reviewer cohort
+    on both languages (bsardo/SyntaxNode/hhhjort + CTMBNara/AntoxaAntoxic/EmilNadimanov).

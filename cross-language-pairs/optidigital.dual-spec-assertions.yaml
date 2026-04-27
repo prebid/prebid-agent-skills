@@ -1,0 +1,119 @@
+dual_spec_assertion_version: 1
+bidder_name: optidigital
+go_spec: prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml
+go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+
+assertions:
+  bidder_params_sha256:
+    go: 6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31
+    java: 93bad2a9790ba8dd6e38d2c88206910e10a9c682af7be2b726b5d64318bc6832
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only
+    divergence_summary: |
+      Byte-only whitespace divergence in static/bidder-params/optidigital.json.
+      Go-side file (29 lines, ~700 bytes): 4-space indent, contains a stray blank
+      line with two trailing spaces ("  \n") inside the properties block, and ends
+      with a closing `}` WITHOUT a terminal newline.
+      Java-side file (28 lines, ~600 bytes): 2-space indent throughout, no stray
+      blank lines, and ends with a terminal newline after the closing `}`.
+      Parsing both as JSON yields semantically identical ASTs: same 4 properties
+      (publisherId, placementId, divId, pageTemplate), same minLength constraints
+      (publisherId>=2, placementId>=1), same `required: [publisherId, placementId]`,
+      same descriptions. This is a pure whitespace/formatting divergence —
+      classified as Phase D R5 byte-only failure with semantic equivalence.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner]
+      app: [banner]
+      dooh: [banner]
+    java:
+      site: [banner]
+      app: [banner]
+      dooh: [banner]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 915
+    java: 915
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_default_enabled:
+    go: true
+    java: false
+    equivalent: false
+    divergence_summary: |
+      Go YAML omits `enabled:` (defaults to true). Java YAML declares `enabled: false`,
+      flipping the default-enabled bit. This is the canonical Java edge case #30
+      (enabled-false-default opt-in pattern). It's a configuration-level divergence,
+      NOT a port-fidelity violation in the strict R5 sense; operators must opt-in
+      to the Java optidigital bidder by setting adapters.optidigital.enabled=true.
+      Captured here to surface the asymmetry without blocking.
+    severity: warn
+
+  bidder_info_maintainer:
+    go: prebid@optidigital.com
+    java: prebid@optidigital.com
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [publisherId, placementId]
+    java_required_fields: [publisherId, placementId]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [publisherId, placementId, divId, pageTemplate]
+    java_properties: [publisherId, placementId, divId, pageTemplate]
+    equivalent: true
+    severity: pass
+
+  port_lineage:
+    direction: go-to-java
+    source_pr: null
+    destination_pr: prebid/prebid-server-java#4054
+    fidelity_review_themes:
+      - port-from-go
+      - dooh-platform-declared
+      - enabled-false-default
+      - ortb-version-quoted
+
+  reviewer_cohort:
+    go_reviewers: [bsardo, ccorbo, przemkaczmarek]
+    java_reviewers: [CTMBNara]
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: divergent-byte-only
+  blocker_count: 0
+  warning_count: 2
+  notes: |
+    Optidigital is byte-divergent on bidder_params_json but semantically equivalent —
+    the only fix needed to restore R5 byte-equality is to reformat one side to match
+    the other. Recommend reformatting the Go-side file to the Java's 2-space-with-
+    terminal-newline style (or vice versa); a one-line change in either repo restores
+    parity. Capabilities, GVL ID, geoscope, schema content all match. Two side-points
+    captured as warnings: (1) the byte divergence itself, and (2) Java's enabled:false
+    opt-in pattern (canonical Java edge case #30) which is intentional Java-side config
+    hygiene, not a port bug. The Java port is the canonical Go-to-Java translation
+    (PR #4054); reviewer CTMBNara handled the parity verification on the Java side.
+    Porter advice: when porting a new bidder Go->Java, mimic the Go bidder-params bytes
+    exactly to avoid this byte-divergence; consider promoting the parity-restoration
+    fix into a separate housekeeping PR on either side.
