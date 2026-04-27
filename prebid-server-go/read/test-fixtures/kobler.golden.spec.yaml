@@ -1,0 +1,350 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: gh-cli
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: bidder-constant-mismatch
+      file: adapters/kobler/kobler_test.go
+      line: 12
+      summary: "Builder called with openrtb_ext.BidderKargo (copy-paste artifact); should be openrtb_ext.BidderKobler. RunJSONBidderTest does not cross-check the constant, so the test passes despite the wrong identifier."
+    - type: bidder-constant-mismatch
+      file: adapters/kobler/params_test.go
+      line: 47
+      summary: "validator.Validate called with openrtb_ext.BidderKrushmedia (copy-paste artifact) inside TestInvalidParams; should be openrtb_ext.BidderKobler. The Validate call still rejects all 8 invalid params under the wrong bidder name, so the test passes."
+
+meta:
+  bidder_name: kobler
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://bid.essrtb.com/bid/prebid_server_rtb_call"
+  endpoint_construction:
+    kind: dev-prod-toggle
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "bidding-support@kobler.no"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+    app:
+      mediaTypes:
+        - banner
+  geoscope:
+    - NOR
+    - SWE
+    - DNK
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Kobler Adapter Params",
+    "description": "A schema which validates params accepted by the Kobler adapter",
+    "type": "object",
+
+    "properties": {
+      "test": {
+        "type": "boolean",
+        "description": "Whether the request is for testing only. When multiple ad units are submitted together, it is enough to set this parameter on the first one."
+      }
+    }
+  }
+bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+
+params:
+  schema_interpretation:
+    properties:
+      - name: test
+        type: boolean
+        description: "Whether the request is for testing only. When multiple ad units are submitted together, it is enough to set this parameter on the first one."
+    required_fields: []
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_kobler.go
+    type_name: ExtImpKobler
+    fields:
+      - name: Test
+        json_tag: test
+        type_native: bool
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/kobler/params_test.go
+    valid_cases_count: 3
+    invalid_cases_count: 8
+    bidder_constant_referenced: openrtb_ext.BidderKrushmedia
+
+code:
+  package_or_class: kobler
+  directory_name: kobler
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: kobler.go
+        role: implementation
+        loc: 177
+  imports:
+    has_template_engine: false
+    has_currency_helper: true
+    has_jsonutil: true
+    third_party: []
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpoint
+        type: string
+      - name: devEndpoint
+        type: string
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Device: in-place
+        User: in-place
+        Cur: append-if-missing
+        Imp: in-place
+      go_idiom: shallow-copy
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImpKobler
+      wrapper_type: null
+    endpoint_resolution:
+      kind: dev-prod-toggle
+      mechanism_go: string-concat
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: sanitizeRequest
+        signature: "func sanitizeRequest(request openrtb2.BidRequest) *openrtb2.BidRequest"
+      - name: sanitizeDevice
+        signature: "func sanitizeDevice(device openrtb2.Device) *openrtb2.Device"
+      - name: convertImpCurrency
+        signature: "func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) error"
+      - name: getMediaTypeForBid
+        signature: "func getMediaTypeForBid(bid openrtb2.Bid) openrtb_ext.BidType"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: legacy-raw-go
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.prebid.type
+          fallback_action: next
+        - method: hardcoded
+          hardcoded_value: BidTypeBanner
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: none
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: koblertest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: app-simple_banner.json
+        sha256: 9ba8df43d8a56c36f61bc428723c08de78f334b535492eff22bab8684c4d4d7a
+        bytes: 3260
+      - filename: site-simple_banner.json
+        sha256: 71ad02968126ecdd634d1bc2642885f2b63135db5bb034882e0ecacb922bec55
+        bytes: 2898
+    supplemental:
+      - filename: convert-currency-invalid-currency.json
+        sha256: 2dc0496d4a71688613d0ee7a0aa71e5680638348d92e6ac6507a98fa4450dca3
+        bytes: 920
+      - filename: convert-currency.json
+        sha256: 8d823eaf168122e0766e5a87e61030cafac2609a0673fab3c1e50496cd9001f2
+        bytes: 3499
+      - filename: correct-endpoint-when-testing.json
+        sha256: 4d8e6320d7f071af68b67ff904a99eb3606b6e1960d3dadacbd7cc6069c83d89
+        bytes: 3143
+      - filename: no-bid-media-type.json
+        sha256: 5ec481edaed96565ac3043d1d50362848c9c7f0360b51d4a0ee74115d5477a23
+        bytes: 2646
+      - filename: no-response-body.json
+        sha256: 774887676a1e4be5db08a7519ae5fb5cc54b47e08f05101a48a68085290e2b73
+        bytes: 1330
+      - filename: status-204.json
+        sha256: 329f1006ce936f5b4716cef28829f789f7a7cf0de4129b5096d99986b5c2d75f
+        bytes: 1350
+      - filename: status-404.json
+        sha256: 5ddb5c07b45aa4bbe139dde73a6a7705f2725a135e8d92d30f2ad939ce4e8a37
+        bytes: 1486
+      - filename: user-data-is-removed.json
+        sha256: 13b4d9b0ad91a608d3e1dc05a8acadac3d0226b5abe0677b7bed4d54d814af85
+        bytes: 1617
+      - filename: user-ip-is-removed.json
+        sha256: 6937e45424a709bc8bd40308a629984122db5e6d841021c1c5bc4c7ef6577cc3
+        bytes: 1397
+      - filename: wrong-response-body-type.json
+        sha256: e0eefaa24efa8ef60bd9a087129d1785d4c4cc759899ec056845a73fe2d8a9e5
+        bytes: 1443
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: "reqInfo.ConvertCurrency(value, from, to) (float64, error)"
+    java_signature: null
+  injection: function-arg
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: bidder-constant-mismatch-test
+    file: adapters/kobler/kobler_test.go
+    summary: "kobler_test.go calls Builder with openrtb_ext.BidderKargo (copy-paste from another adapter)"
+    edge_case_taxon: bidder-constant-mismatch
+  - id: bidder-constant-mismatch-params-test
+    file: adapters/kobler/params_test.go
+    summary: "params_test.go TestInvalidParams calls validator.Validate with openrtb_ext.BidderKrushmedia (copy-paste from another adapter); TestValidParams uses BidderKobler correctly"
+    edge_case_taxon: bidder-constant-mismatch
+  - id: hardcoded-dev-endpoint
+    file: kobler.go
+    summary: "devBidderEndpoint is a const literal in source rather than ExtraAdapterInfo or YAML field. Anti-pattern."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: dev-prod-toggle-via-imp-ext-test-flag
+    file: kobler.go
+    summary: "testMode flag pulled from imp.ext.bidder.test of the FIRST imp only (line 55, i==0); other imps' test flags are ignored."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/kobler/
+    package_name: kobler
+    bidder_constant: openrtb_ext.BidderKobler
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/kobler/
+    bidder_class: KoblerBidder
+    config_class: KoblerConfiguration
+    yaml_path: src/main/resources/bidder-config/kobler.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/kobler/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: prebid/prebid-server#3904
+    destination_language: java
+    destination_pr: prebid/prebid-server-java#3684
+    fidelity_review_themes:
+      - port-fidelity
+      - currency-conversion-bidrequest-context
+      - mutation-idiom-tobuilder
+      - dev-endpoint-config-promotion
+  go_specific_concerns:
+    - "Adapter struct unexported (type adapter); Builder returns adapters.Bidder interface."
+    - "MakeRequests/MakeBids use value receivers (a adapter) rather than pointer receivers — uncommon but valid."
+    - "sanitizeRequest takes BidRequest by value (line 163), making the function-local mutation a defacto shallow copy of the framework's request struct. Slice/pointer fields (Imp, Device, User) still alias the framework's underlying memory until reassigned."
+    - "convertImpCurrency mutates request.Imp[i] in place via &sanitizedRequest.Imp[i] indexed pointer (kobler.go:48-49); the slice header is shallow-copied by sanitizeRequest so the underlying backing array is shared with the framework's request — bid floor mutations write through to the framework."
+    - "testMode flag is read only from the FIRST imp (i==0 branch at line 55), not all imps; multi-imp callers cannot toggle dev endpoint per-imp."
+    - "devBidderEndpoint is a package-level const (line 23) — should live in static/bidder-info/kobler.yaml as extra_info or be promoted to YAML config field."
+    - "MakeBids uses legacy raw status checks (StatusCode == http.StatusNoContent / != http.StatusOK at lines 104-112) instead of canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors helpers."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java:
+      - AntoxaAntoxic
+      - osulzhenko
+    cross_language_coordinator: bretg

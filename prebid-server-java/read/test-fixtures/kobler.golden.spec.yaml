@@ -1,0 +1,418 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: gh-cli
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: kobler
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://bid.essrtb.com/bid/prebid_server_rtb_call"
+  endpoint_construction:
+    kind: dev-prod-toggle
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "bidding-support@kobler.no"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+    app:
+      mediaTypes:
+        - banner
+  geoscope:
+    - NOR
+    - SWE
+    - DNK
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields:
+    dev-endpoint: "https://bid-service.dev.essrtb.com/bid/prebid_server_rtb_call"
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Kobler Adapter Params",
+    "description": "A schema which validates params accepted by the Kobler adapter",
+    "type": "object",
+
+    "properties": {
+      "test": {
+        "type": "boolean",
+        "description": "Whether the request is for testing only. When multiple ad units are submitted together, it is enough to set this parameter on the first one."
+      }
+    }
+  }
+bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+
+params:
+  schema_interpretation:
+    properties:
+      - name: test
+        type: boolean
+        description: "Whether the request is for testing only. When multiple ad units are submitted together, it is enough to set this parameter on the first one."
+    required_fields: []
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.kobler
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/kobler/ExtImpKobler.java
+    type_name: ExtImpKobler
+    fields:
+      - name: test
+        json_tag: test
+        type_native: Boolean
+        omitempty: false
+        notes:
+          - "@Value(staticConstructor=of)"
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/kobler/KoblerBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: KoblerBidder
+  directory_name: kobler
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: KoblerBidder.java
+        role: implementation
+        loc: 195
+  imports:
+    has_template_engine: false
+    has_currency_helper: true
+    has_jsonutil: false
+    third_party:
+      - BooleanUtils
+      - CollectionUtils
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Device: immutable-rebuild
+        User: immutable-rebuild
+        Cur: append-if-missing
+        Imp: immutable-rebuild
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpKobler
+      wrapper_type: null
+    endpoint_resolution:
+      kind: dev-prod-toggle
+      mechanism_go: null
+      mechanism_java: string-replace
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: modifyImp
+        signature: "private Imp modifyImp(BidRequest bidRequest, Imp imp)"
+      - name: resolveBidFloor
+        signature: "private Price resolveBidFloor(Imp imp, BidRequest bidRequest)"
+      - name: convertBidFloor
+        signature: "private Price convertBidFloor(Price bidFloorPrice, BidRequest bidRequest)"
+      - name: normalizeCurrencies
+        signature: "private List<String> normalizeCurrencies(BidRequest bidRequest)"
+      - name: isTest
+        signature: "private boolean isTest(Imp imp, List<BidderError> errors)"
+      - name: parseImpExt
+        signature: "private ExtImpKobler parseImpExt(Imp imp)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidResponse bidResponse)"
+      - name: bidsFromResponse
+        signature: "private List<BidderBid> bidsFromResponse(BidResponse bidResponse)"
+      - name: getBidType
+        signature: "private BidType getBidType(Bid bid)"
+      - name: parseExtBidPrebid
+        signature: "private ExtBidPrebid parseExtBidPrebid(ObjectNode prebid)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.prebid.type
+          fallback_action: next
+        - method: hardcoded
+          hardcoded_value: BidTypeBanner
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: none
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/kobler/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-kobler-bid-request.json
+        sha256: 3a0362a7779539d2d9a3eddf7956e69a4d6a496f7d907b7bec723194a4f05dcb
+        bytes: 879
+        role: bidder-bid-request
+      - filename: test-kobler-bid-response.json
+        sha256: 9508a94e9a2286f4f11577436b9c4c28271670a87965a2dd034ab44f20463155
+        bytes: 353
+        role: bidder-bid-response
+      - filename: test-auction-kobler-request.json
+        sha256: ac6aadb9500f6e6b05d70dc1217c20c818d2ec5cebd8d644e4990833e4028fcf
+        bytes: 282
+        role: auction-request
+      - filename: test-auction-kobler-response.json
+        sha256: e55ff8dbde6b5d60a137b28c9b958ccfc280b6c469c724cc9f99835f56bc4e4f
+        bytes: 821
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 14
+  unit_test_loc: 320
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldReturnErrorIfNoValidImps
+    - makeHttpRequestsShouldConvertBidFloorCurrency
+    - makeHttpRequestsShouldUseDevEndpointWhenTestModeEnabled
+    - makeHttpRequestsShouldUseDefaultEndpointWhenTestModeDisabled
+    - makeHttpRequestsShouldUseDefaultEndpointWhenTestModeAbsent
+    - makeHttpRequestsShouldAddUsdToCurrenciesIfMissing
+    - makeHttpRequestsShouldSanitizeDeviceAndUserData
+    - makeBidsShouldReturnErrorIfResponseBodyIsInvalid
+    - makeBidsShouldReturnEmptyListWhenBidResponseIsNull
+    - makeBidsShouldReturnEmptyListWhenSeatbidIsEmpty
+    - makeBidsShouldReturnBidWithBannerType
+    - makeBidsShouldReturnBannerWhenTypeIsNullOrMissing
+    - makeBidsShouldDefaultToBannerWhenPrebidTypeIsMissing
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: KoblerTest
+  integration_test_pattern: 4-file-split
+
+spring_config:
+  factory_class: KoblerConfiguration
+  factory_method: koblerBidderDeps
+  property_source_path: classpath:/bidder-config/kobler.yaml
+  bidder_creator_lambda: |
+    cfg -> new KoblerBidder(
+            cfg.getEndpoint(),
+            cfg.getDevEndpoint(),
+            currencyConversionService,
+            mapper)
+  configuration_properties_class:
+    name: KoblerConfigurationProperties
+    extends: BidderConfigurationProperties
+    extra_fields:
+      - name: devEndpoint
+        type: String
+        validations:
+          - "@NotBlank"
+    nested_classes: []
+    lombok_annotations:
+      - Data
+      - EqualsAndHashCode
+      - NoArgsConstructor
+  bean_dependencies:
+    - name: currencyConversionService
+      type: CurrencyConversionService
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: KoblerBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 4
+    parameters:
+      - name: endpointUrl
+        type: String
+        source: config.endpoint
+        role: properties
+      - name: devEndpoint
+        type: String
+        source: config.devEndpoint
+        role: properties
+      - name: currencyConversionService
+        type: CurrencyConversionService
+        source: framework-injected
+        role: framework-injected
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: framework-injected
+  static_fields:
+    - name: KOBLER_EXT_TYPE_REFERENCE
+      type: TypeReference
+    - name: DEFAULT_BID_CURRENCY
+      type: String
+      value: "USD"
+    - name: EXT_PREBID
+      type: String
+      value: "prebid"
+  helper_classes_co_located: []
+  helper_classes_in_proto:
+    - ExtImpKobler
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: null
+    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
+  injection: dependency
+  bid_request_passed_for_context: true
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: bidder-constant-mismatch-test
+    file: adapters/kobler/kobler_test.go
+    summary: "kobler_test.go calls Builder with openrtb_ext.BidderKargo (copy-paste from another adapter). This is a Go-side bug; recorded here in the Java spec for cross-language port awareness only."
+    edge_case_taxon: bidder-constant-mismatch
+  - id: bidder-constant-mismatch-params-test
+    file: adapters/kobler/params_test.go
+    summary: "params_test.go TestInvalidParams calls validator.Validate with openrtb_ext.BidderKrushmedia (copy-paste from another adapter). This is a Go-side bug; recorded here for cross-language port awareness only."
+    edge_case_taxon: bidder-constant-mismatch
+  - id: dev-endpoint-config-subclass
+    file: src/main/java/org/prebid/server/spring/config/bidder/KoblerConfiguration.java
+    summary: "Java port correctly externalizes dev endpoint into config subclass with @NotBlank validation, fixing the Go-side anti-pattern."
+    edge_case_taxon: port-fidelity-divergence
+  - id: currency-conversion-bidrequest-context
+    file: src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java
+    summary: "convertBidFloor passes bidRequest as 2nd arg to currencyConversionService.convertCurrency for time-context (line 112-116). Go side does not pass bidRequest — intentional cross-language asymmetry."
+    edge_case_taxon: port-fidelity-divergence
+  - id: mutation-idiom-tobuilder
+    file: src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java
+    summary: "Mutation uses Lombok toBuilder().build() for Imp, Device, and root BidRequest (lines 82-87, 98-101) — Java idiom mirrors Go's pointer mutation semantics with immutable-rebuild."
+    edge_case_taxon: port-fidelity-divergence
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/kobler/
+    package_name: kobler
+    bidder_constant: openrtb_ext.BidderKobler
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/kobler/
+    bidder_class: KoblerBidder
+    config_class: KoblerConfiguration
+    yaml_path: src/main/resources/bidder-config/kobler.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/kobler/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: prebid/prebid-server#3904
+    destination_language: java
+    destination_pr: prebid/prebid-server-java#3684
+    fidelity_review_themes:
+      - port-fidelity
+      - currency-conversion-bidrequest-context
+      - mutation-idiom-tobuilder
+      - dev-endpoint-config-promotion
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "KoblerBidder constructor calls HttpUtil.validateUrl(endpointUrl) at line 60 — invalid URL triggers IllegalArgumentException at bean construction (covered by creationShouldFailOnInvalidEndpointUrl test)."
+    - "KOBLER_EXT_TYPE_REFERENCE static TypeReference<ExtPrebid<?, ExtImpKobler>> is constructed once at class init; mapper.convertValue(imp.getExt(), KOBLER_EXT_TYPE_REFERENCE).getBidder() yields the params POJO (line 143)."
+    - "isTest reads imp.ext.bidder.test from imps.getFirst() ONLY (line 89) — multi-imp callers cannot toggle dev endpoint per-imp; mirrors Go's i==0 branch behaviour."
+    - "BidderUtil.defaultRequest(modifiedRequest, endpoint, mapper) at line 91 collapses what Go expands inline — JSON marshal + Content-Type header + ImpIDs population happens in the helper."
+    - "getBidType uses Optional chain with double JsonNode::isObject filter (lines 178-186) — second filter is redundant after ObjectNode::class cast but does not affect behaviour."
+    - "parseExtBidPrebid catches JsonProcessingException and returns null silently (lines 188-194), causing the Optional chain to fall through to BidType.banner default — fidelity-equivalent to Go's err == nil chain in getMediaTypeForBid."
+    - "ExtImpKobler uses @Value(staticConstructor=of) yielding ExtImpKobler.of(true) factory (rare for params POJOs which more commonly use @Value @Builder)."
+    - "Empty-seatbid shortcircuit at line 160-162 returns Collections.emptyList() before bidsFromResponse stream pipeline runs — paired with framework-default HTTP status handling."
+    - "stream pipeline in bidsFromResponse uses three Objects::nonNull filters across SeatBid, SeatBid.Bid, and Bid (lines 167-174) — defensive against null entries; Go side does not need equivalent because Go ranges never iterate over nil-element slots."
+  reviewer_cohort:
+    go: []
+    java:
+      - AntoxaAntoxic
+      - osulzhenko
+    cross_language_coordinator: bretg
