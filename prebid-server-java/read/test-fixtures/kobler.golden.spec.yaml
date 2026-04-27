@@ -297,11 +297,11 @@ bidder_class:
       - name: currencyConversionService
         type: CurrencyConversionService
         source: framework-injected
-        role: framework-injected
+        role: helper-collaborator
       - name: mapper
         type: JacksonMapper
         source: framework-injected
-        role: framework-injected
+        role: helper-collaborator
   static_fields:
     - name: KOBLER_EXT_TYPE_REFERENCE
       type: TypeReference
