@@ -310,6 +310,18 @@ def r1_check(spec: Spec, network_check: bool, gh_cache: Dict[Tuple[str, str], bo
                 )
             )
             continue
+        # Reject path traversal — `..` as any segment AND absolute paths are hard fails.
+        path_parts = path.split("/")
+        if any(p == ".." for p in path_parts) or path.startswith("/"):
+            findings.append(
+                Finding(
+                    "R1",
+                    spec.label,
+                    SEV_FAIL,
+                    f"path traversal/absolute path forbidden at {dotted}: {path}",
+                )
+            )
+            continue
         # Structural plausibility: the path either starts with one of the per-language
         # prefixes, OR is a bare basename inside the adapter directory (e.g., `kobler.go`),
         # OR is a relative path with one of the file extensions we recognise.
@@ -408,7 +420,7 @@ def r2_check(spec: Spec) -> List[Finding]:
                 "R2",
                 spec.label,
                 SEV_FAIL,
-                f"sha mismatch: computed={actual[:12]} declared={declared[:12]}",
+                f"sha mismatch: computed={actual} declared={declared}",
             )
         ]
     return [Finding("R2", spec.label, SEV_PASS, f"sha={actual[:12]}")]
@@ -598,25 +610,33 @@ def normalize_for_determinism(spec_raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def r4_check(spec: Spec) -> List[Finding]:
-    """
-    Round-trip determinism cannot be exercised at CI time without re-invoking the
-    read skill. We approximate it by verifying:
+    """Round-trip determinism: load → normalize → dump three times; assert
+    dump2 == dump3 (idempotent under round-trip).
 
-      (a) the spec parses successfully (already done at load time);
-      (b) the spec re-serializes deterministically when ignored fields are stripped
-          — i.e., the YAML is structurally valid and idempotent under sort-key
-          serialization. This catches goldens that contain non-serialisable values
-          (binary, datetime objects, anchors) which would defeat round-tripping.
-
-    A true R4 will wrap the read skill execution in CI; this check is the
-    structural pre-condition.
+    This catches goldens whose structure shifts under re-serialization
+    (sets-as-lists, datetime objects, anchor reuse, non-stable map orderings).
+    Compare passes 2 and 3 (not 1 and 2) — pass 1 may differ from passes 2+
+    because the original raw spec carries comments / formatting that the YAML
+    dumper drops.
     """
     try:
-        norm = normalize_for_determinism(spec.raw)
-        json.dumps(norm, sort_keys=True, default=str)
-    except (TypeError, ValueError) as exc:
+        # Pass 1: spec.raw → normalize → dump.
+        norm1 = normalize_for_determinism(spec.raw)
+        dump1 = yaml.safe_dump(norm1, sort_keys=True, default_flow_style=False)
+        # Pass 2: load dump1 → normalize → dump.
+        loaded2 = yaml.safe_load(dump1)
+        norm2 = normalize_for_determinism(loaded2)
+        dump2 = yaml.safe_dump(norm2, sort_keys=True, default_flow_style=False)
+        # Pass 3: load dump2 → normalize → dump.
+        loaded3 = yaml.safe_load(dump2)
+        norm3 = normalize_for_determinism(loaded3)
+        dump3 = yaml.safe_dump(norm3, sort_keys=True, default_flow_style=False)
+    except (TypeError, ValueError, yaml.YAMLError) as exc:
         return [Finding("R4", spec.label, SEV_FAIL, f"non-deterministic serialization: {exc}")]
-    return [Finding("R4", spec.label, SEV_PASS, "structurally serialisable")]
+    if dump2 != dump3:
+        return [Finding("R4", spec.label, SEV_FAIL,
+            "round-trip not idempotent (dump2 != dump3)")]
+    return [Finding("R4", spec.label, SEV_PASS, "round-trip idempotent")]
 
 
 # ---------------------------------------------------------------------------
@@ -629,129 +649,167 @@ def deep_eq(a: Any, b: Any) -> bool:
     return json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 
-def r5_check(go_spec: Spec, java_spec: Spec, dual_specs: Dict[str, Dict[str, Any]]) -> List[Finding]:
-    bidder = go_spec.bidder
+# R5-strict keys: runtime divergence is FAIL (semantic equivalence required across
+# languages). When the dual-spec assertion says severity:warn, downgrade to WARN.
+# When dual-spec says severity:pass but runtime disagrees → FAIL (stale-pass).
+R5_STRICT_KEYS = (
+    ("bidder_info.capabilities",                "bidder_info_capabilities"),
+    ("params.schema_interpretation",            "params_schema_interpretation"),
+    ("bidder_info.gvl_vendor_id",               "bidder_info_gvl_vendor_id"),
+    ("bidder_info.endpoint",                    "bidder_info_endpoint"),
+    ("bidder_info.endpoint_compression",        "bidder_info_endpoint_compression"),
+    ("bidder_info.endpoint_construction",       "bidder_info_endpoint_construction"),
+    ("bidder_info.geoscope",                    "bidder_info_geoscope"),
+    ("bidder_info.maintainer",                  "bidder_info_maintainer"),
+    ("bidder_info.modifying_vast_xml_allowed",  "bidder_info_modifying_vast_xml_allowed"),
+)
+# R5-divergent keys: legitimate language-idiom divergence. Honor only the
+# assertion's severity (no runtime FAIL on divergence).
+R5_DIVERGENT_KEYS = (
+    ("bidder_info.default_enabled", "bidder_info_default_enabled"),
+    ("meta.alias_metadata",         "alias_metadata"),
+    (None,                          "lifecycle_rename"),
+    (None,                          "port_lineage"),
+    (None,                          "reviewer_cohort"),
+    (None,                          "test_fixture_cost"),
+)
+
+
+def r5_check(go_spec: Optional[Spec], java_spec: Optional[Spec],
+             dual_specs: Dict[str, Dict[str, Any]]) -> List[Finding]:
+    """Cross-language structural parity. Runtime values are the source of truth;
+    the dual-spec assertion is an EXPECTATION verified against runtime, not a
+    free pass.
+
+    Polarity contract: runtime takes precedence. When dual-spec says severity:pass
+    but runtime values disagree, FAIL — the assertion is stale. Always run
+    deep_eq; never short-circuit on the assertion's own claim.
+    """
+    # Determine bidder name from whichever side has a spec.
+    primary = go_spec or java_spec
+    if primary is None:
+        return []
+    bidder = primary.bidder
     findings: List[Finding] = []
 
-    go_sha = go_spec.raw.get("bidder_params_sha256")
-    java_sha = java_spec.raw.get("bidder_params_sha256")
-
-    # Look up dual-spec assertion (if available) for severity guidance.
-    # Dual-spec format (cross-language-pairs/{bidder}.dual-spec-assertions.yaml):
-    #   assertions:
-    #     bidder_params_sha256:
-    #       go: <sha>
-    #       java: <sha>
-    #       byte_equal: bool
-    #       semantically_equal: bool
-    #       severity: pass|warn|fail
     dual = dual_specs.get(bidder) or {}
-    assertions = dual.get("assertions") or {}
+    raw_assertions = dual.get("assertions") if isinstance(dual.get("assertions"), dict) else {}
+    assertions: Dict[str, Any] = raw_assertions if isinstance(raw_assertions, dict) else {}
+    overall = dual.get("overall") or {}
+
+    # Honor overall.cross_language_state + blocker_count.
+    cls_state = (overall.get("cross_language_state") or "").lower()
+    blocker_count = overall.get("blocker_count") or 0
+    if cls_state == "divergent-semantic" and isinstance(blocker_count, int) and blocker_count > 0:
+        findings.append(Finding(
+            "R5", f"pair/{bidder}", SEV_FAIL,
+            f"overall.cross_language_state=divergent-semantic with {blocker_count} blocker(s)",
+        ))
+    elif cls_state.startswith("divergent") and isinstance(blocker_count, int) and blocker_count > 0:
+        findings.append(Finding(
+            "R5", f"pair/{bidder}", SEV_WARN,
+            f"overall.cross_language_state={cls_state} with {blocker_count} blocker(s)",
+        ))
+
+    # bidder_params_sha256 — load-bearing R5 contract.
+    go_sha = go_spec.raw.get("bidder_params_sha256") if go_spec else None
+    java_sha = java_spec.raw.get("bidder_params_sha256") if java_spec else None
     sha_assert = assertions.get("bidder_params_sha256") if isinstance(assertions, dict) else None
 
-    if go_sha == java_sha and go_sha is not None:
-        findings.append(
-            Finding(
-                "R5",
-                f"pair/{bidder}",
-                SEV_PASS,
-                f"bidder_params_sha256 equal ({go_sha[:12]})",
-            )
-        )
-    else:
-        # Determine severity from the dual-spec assertion if available; otherwise
-        # default to warn (whitespace-divergence) unless the goldens themselves
-        # tag the divergence as semantic via a quirk.
-        severity = SEV_WARN
-        explanation = "differs"
-        if isinstance(sha_assert, dict):
-            sev = (sha_assert.get("severity") or "").lower()
-            if sev in ("fail", "error"):
-                severity = SEV_FAIL
-            elif sev in ("warn", "warning"):
-                severity = SEV_WARN
-            elif sev == "pass":
-                severity = SEV_PASS
-            kind = sha_assert.get("divergence_kind") or ""
-            if sha_assert.get("semantically_equal") is True:
-                explanation = f"byte-only divergence ({kind})" if kind else "byte-only divergence"
-            elif sha_assert.get("semantically_equal") is False:
-                explanation = f"semantic divergence ({kind})" if kind else "semantic divergence"
-            else:
-                explanation = kind or explanation
+    if go_spec is not None and java_spec is not None:
+        if go_sha == java_sha and go_sha is not None:
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_PASS,
+                f"bidder_params_sha256 equal ({go_sha[:12]})"))
         else:
-            # Heuristic fallback: scan quirks for explicit byte-vs-semantic signals.
-            blobs = [
-                " ".join(str(q.get(k, "")) for k in ("id", "summary", "edge_case_taxon")).lower()
-                for q in (go_spec.raw.get("quirks") or []) + (java_spec.raw.get("quirks") or [])
-                if isinstance(q, dict)
-            ]
-            byte_divergence = any("byte" in b and "divergen" in b for b in blobs)
-            semantic_divergence = any(
-                "semantic" in b and "divergen" in b
-                and "semantically identical" not in b
-                and "semantic match" not in b
-                for b in blobs
-            )
-            if semantic_divergence:
-                severity = SEV_FAIL
-                explanation = "semantic divergence (per quirk)"
-            elif byte_divergence:
-                severity = SEV_WARN
-                explanation = "whitespace/byte divergence (per quirk)"
-        findings.append(
-            Finding(
-                "R5",
-                f"pair/{bidder}",
-                severity,
-                f"bidder_params_sha256 {explanation}: go={go_sha[:12] if go_sha else 'none'} java={java_sha[:12] if java_sha else 'none'}",
-            )
-        )
+            # Runtime SHAs disagree. Determine severity from the dual-spec
+            # assertion if present.
+            severity = SEV_WARN
+            explanation = "differs"
+            if isinstance(sha_assert, dict):
+                sev = (sha_assert.get("severity") or "").lower()
+                if sev in ("fail", "error"):
+                    severity = SEV_FAIL
+                elif sev == "pass":
+                    # POLARITY INVERSION: runtime says different but dual-spec
+                    # claims byte_equal — the assertion is stale. FAIL.
+                    severity = SEV_FAIL
+                    explanation = "stale-pass-assertion (dual-spec claims byte_equal but runtime SHAs differ)"
+                elif sev in ("warn", "warning"):
+                    severity = SEV_WARN
+                if explanation == "differs":
+                    kind = sha_assert.get("divergence_kind") or ""
+                    if sha_assert.get("semantically_equal") is True:
+                        explanation = f"byte-only divergence ({kind})" if kind else "byte-only divergence"
+                    elif sha_assert.get("semantically_equal") is False:
+                        explanation = f"semantic divergence ({kind})" if kind else "semantic divergence"
+                    else:
+                        explanation = kind or explanation
+            else:
+                # Heuristic fallback: scan quirks for byte-vs-semantic signals.
+                blobs = [
+                    " ".join(str(q.get(k, "")) for k in ("id", "summary", "edge_case_taxon")).lower()
+                    for q in (go_spec.raw.get("quirks") or []) + (java_spec.raw.get("quirks") or [])
+                    if isinstance(q, dict)
+                ]
+                byte_divergence = any("byte" in b and "divergen" in b for b in blobs)
+                semantic_divergence = any(
+                    "semantic" in b and "divergen" in b
+                    and "semantically identical" not in b
+                    and "semantic match" not in b
+                    for b in blobs
+                )
+                if semantic_divergence:
+                    severity = SEV_FAIL
+                    explanation = "semantic divergence (per quirk)"
+                elif byte_divergence:
+                    severity = SEV_WARN
+                    explanation = "whitespace/byte divergence (per quirk)"
+            findings.append(Finding("R5", f"pair/{bidder}", severity,
+                f"bidder_params_sha256 {explanation}: go={go_sha or 'none'} java={java_sha or 'none'}"))
+    elif sha_assert is not None:
+        # One side missing a fixture; surface the asymmetry (PASS — informational).
+        findings.append(Finding("R5", f"pair/{bidder}", SEV_PASS,
+            f"only-one-side fixture; dual-spec sha-assertion noted (severity={sha_assert.get('severity', '?') if isinstance(sha_assert, dict) else '?'})"))
 
-    # Additional structural-parity checks per schema R5.
-    # When a dual-spec assertion exists, defer to its `severity` and `equivalent`
-    # verdict (the assertion authors compared semantics, not raw bytes). Otherwise
-    # fall back to a naive deep_eq.
-    parity_check_specs = (
-        ("bidder_info.capabilities", "bidder_info_capabilities"),
-        ("params.schema_interpretation", "params_schema_interpretation"),
-        ("bidder_info.gvl_vendor_id", "bidder_info_gvl_vendor_id"),
-    )
-    for spec_field, dual_key in parity_check_specs:
+    # R5-strict keys: runtime divergence FAILs unless dual-spec downgrades to WARN.
+    for spec_field, dual_key in R5_STRICT_KEYS:
+        if go_spec is None or java_spec is None:
+            continue
         a = go_spec.get(spec_field)
         b = java_spec.get(spec_field)
-        if a is None or b is None:
+        if a is None and b is None:
             continue
-        dual_assert = (
-            assertions.get(dual_key) if isinstance(assertions, dict) else None
-        )
-        if isinstance(dual_assert, dict):
-            equivalent = dual_assert.get("equivalent")
-            sev = (dual_assert.get("severity") or "").lower()
-            if equivalent is True or sev == "pass":
-                # Authoritative pass — skip the naive deep_eq.
-                continue
-            severity = SEV_WARN
-            if sev in ("fail", "error"):
-                severity = SEV_FAIL
-            findings.append(
-                Finding(
-                    "R5",
-                    f"pair/{bidder}",
-                    severity,
-                    f"{spec_field} differs (per dual-spec assertion)",
-                )
-            )
-            continue
+        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
         if not deep_eq(a, b):
-            findings.append(
-                Finding(
-                    "R5",
-                    f"pair/{bidder}",
-                    SEV_WARN,
-                    f"{spec_field} differs across languages",
-                )
-            )
+            severity = SEV_FAIL
+            stale = False
+            if isinstance(dual_assert, dict):
+                sev = (dual_assert.get("severity") or "").lower()
+                if sev in ("warn", "warning"):
+                    severity = SEV_WARN
+                elif sev == "pass":
+                    stale = True
+            if stale:
+                findings.append(Finding(
+                    "R5", f"pair/{bidder}", SEV_FAIL,
+                    f"{spec_field} runtime divergence but dual-spec claims pass — stale",
+                ))
+            else:
+                findings.append(Finding("R5", f"pair/{bidder}", severity,
+                    f"{spec_field} differs across languages"))
+
+    # R5-divergent keys: honor only the assertion severity. No runtime FAIL.
+    for spec_field, dual_key in R5_DIVERGENT_KEYS:
+        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
+        if not isinstance(dual_assert, dict):
+            continue
+        sev = (dual_assert.get("severity") or "").lower()
+        summary = dual_assert.get("divergence_summary") or "divergent per dual-spec"
+        if sev in ("fail", "error"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_FAIL, f"{dual_key}: {summary}"))
+        elif sev in ("warn", "warning"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_WARN, f"{dual_key}: {summary}"))
+
     return findings
 
 
@@ -771,6 +829,13 @@ def r6_check(spec: Spec) -> List[Finding]:
     java_dir = java_arts.get("bidder_dir") or ""
     java_dir_basename = java_dir.rstrip("/").rsplit("/", 1)[-1]
     findings: List[Finding] = []
+    # Detect rebrand acknowledgment once — used by both package_name and
+    # bidder_constant checks to suppress false-positive findings.
+    warnings = spec.get("provenance.warnings") or []
+    rebrand = any(
+        (w.get("type") or "").startswith("bidder-name-rebrand")
+        for w in warnings if isinstance(w, dict)
+    )
     if pkg and pkg != bidder_name:
         # Real-world divergence: msft uses BidderMicrosoft constant but bidder dir is msft.
         # The test is package_name == bidder_name (not bidder_constant); package_name
@@ -792,6 +857,16 @@ def r6_check(spec: Spec) -> List[Finding]:
                 f"meta.bidder_name={bidder_name} != java_artifacts.bidder_dir basename={java_dir_basename}",
             )
         )
+    # Validate cross_language.go_artifacts.bidder_constant on Go-source specs.
+    bidder_constant = go_arts.get("bidder_constant") or ""
+    expected_constant = f"openrtb_ext.Bidder{bidder_name.capitalize()}"
+    if bidder_constant and bidder_constant.lower() != expected_constant.lower() and not rebrand:
+        findings.append(
+            Finding(
+                "R6", spec.label, SEV_WARN,
+                f"go_artifacts.bidder_constant={bidder_constant} != expected {expected_constant}",
+            )
+        )
     if not findings:
         findings.append(Finding("R6", spec.label, SEV_PASS, f"bidder_name={bidder_name}"))
     return findings
@@ -803,47 +878,57 @@ def r6_check(spec: Spec) -> List[Finding]:
 
 
 def r7_check(spec: Spec) -> List[Finding]:
+    """Surface bidder-constant-mismatch on three surfaces:
+    (1) params.params_test.bidder_constant_referenced ≠ canonical (Go-only);
+    (2) provenance.warnings[].type == bidder-constant-mismatch;
+    (3) quirks[].edge_case_taxon == bidder-constant-mismatch.
+
+    Each occurrence becomes a separate WARN finding. Kobler's two copy-paste
+    bugs (kobler_test.go:12 BidderKargo + params_test.go:47 BidderKrushmedia)
+    surface as two findings — surfaces 2 and 1 respectively.
     """
-    Flag every spec whose params_test.bidder_constant_referenced does not match the
-    canonical Bidder<Capitalised> constant for its meta.bidder_name. This is a WARN
-    by design — the kobler goldens deliberately encode two real copy-paste artifacts.
-    """
-    if spec.language != "go":
-        # The Java specs use null for bidder_constant_referenced.
-        return [Finding("R7", spec.label, SEV_PASS, "skip — Java spec")]
-    bidder = (spec.get("meta.bidder_name") or "").strip()
-    referenced = spec.get("params.params_test.bidder_constant_referenced")
-    if not bidder or not referenced:
-        return [Finding("R7", spec.label, SEV_PASS, "no params_test.bidder_constant_referenced to check")]
-    expected_a = f"openrtb_ext.Bidder{bidder.capitalize()}"
-    # MSFT special case: Bidder constant is BidderMicrosoft (rebrand-fork). Only the
-    # bidder_name doesn't share a stem with the constant; treat any constant of the
-    # form openrtb_ext.Bidder<X> where the YAML separately documents the rebrand as
-    # acceptable. We stop short of hardcoding bidder names — the warning surface is
-    # the bidder-constant-mismatch quirk, which the read skill emits.
-    if not referenced.startswith("openrtb_ext.Bidder"):
-        return [Finding("R7", spec.label, SEV_WARN, f"unexpected constant: {referenced}")]
-    if referenced.lower() != expected_a.lower():
-        # Surface as WARN unless the spec already has a bidder-name-rebrand warning.
-        warnings = spec.get("provenance.warnings") or []
-        rebrand = any(
-            (w.get("type") or "").startswith("bidder-name-rebrand")
-            for w in warnings
-            if isinstance(w, dict)
-        )
-        if rebrand:
-            return [
-                Finding("R7", spec.label, SEV_PASS, f"constant rebrand acknowledged: {referenced}")
-            ]
-        return [
-            Finding(
-                "R7",
-                spec.label,
-                SEV_WARN,
-                f"bidder-constant-mismatch: referenced={referenced} expected≈{expected_a}",
-            )
-        ]
-    return [Finding("R7", spec.label, SEV_PASS, f"constant match: {referenced}")]
+    findings: List[Finding] = []
+    warnings = spec.get("provenance.warnings") or []
+    rebrand = any(
+        (w.get("type") or "").startswith("bidder-name-rebrand")
+        for w in warnings if isinstance(w, dict)
+    )
+
+    # Surfaces 2 & 3 apply regardless of language — Java specs can carry
+    # bidder-constant-mismatch quirks (kobler-java has 2 such quirks
+    # documenting the Go-side bugs).
+    for w in warnings:
+        if isinstance(w, dict) and (w.get("type") or "") == "bidder-constant-mismatch":
+            location = f"{w.get('file', '?')}:{w.get('line', '?')}"
+            findings.append(Finding(
+                "R7", spec.label, SEV_WARN,
+                f"bidder-constant-mismatch warning at {location}: {w.get('summary', '')}",
+            ))
+    for q in (spec.raw.get("quirks") or []):
+        if isinstance(q, dict) and q.get("edge_case_taxon") == "bidder-constant-mismatch":
+            findings.append(Finding(
+                "R7", spec.label, SEV_WARN,
+                f"bidder-constant-mismatch quirk: {q.get('id', '?')} — {q.get('summary', '')}",
+            ))
+
+    # Surface 1: params_test.bidder_constant_referenced (Go-only — Java has no constant).
+    if spec.language == "go":
+        bidder = (spec.get("meta.bidder_name") or "").strip()
+        referenced = spec.get("params.params_test.bidder_constant_referenced")
+        if bidder and referenced:
+            expected_a = f"openrtb_ext.Bidder{bidder.capitalize()}"
+            if not referenced.startswith("openrtb_ext.Bidder"):
+                findings.append(Finding("R7", spec.label, SEV_WARN,
+                    f"unexpected constant: {referenced}"))
+            elif referenced.lower() != expected_a.lower() and not rebrand:
+                findings.append(Finding(
+                    "R7", spec.label, SEV_WARN,
+                    f"bidder-constant-mismatch (params_test): referenced={referenced} expected≈{expected_a}",
+                ))
+
+    if not findings:
+        findings.append(Finding("R7", spec.label, SEV_PASS, "no bidder-constant-mismatch surfaces"))
+    return findings
 
 
 # ---------------------------------------------------------------------------
@@ -938,41 +1023,87 @@ def r8_check(spec: Spec) -> List[Finding]:
 
 
 # ---------------------------------------------------------------------------
-# R9: quirk taxa registry
+# R3b: quirk taxa registry (renamed from R9 — see CHANGELOG of Wave 4)
 # ---------------------------------------------------------------------------
 
 
-def r9_check(spec: Spec, registered: List[str], lenient: bool = False) -> List[Finding]:
+def r_taxa_check(spec: Spec, registered: List[str], lenient: bool = False) -> List[Finding]:
+    """R3b: every quirks[].edge_case_taxon must be in the closed registry.
+
+    Each violation becomes a separate Finding (split per-spec — was previously
+    joined into a single ;-delimited detail string >1000 chars). Empty quirks
+    list → PASS.
+    """
     quirks = spec.raw.get("quirks") or []
     if not isinstance(quirks, list):
-        return [Finding("R9", spec.label, SEV_FAIL, "quirks is not a list")]
+        return [Finding("R3b", spec.label, SEV_FAIL, "quirks is not a list")]
     if not quirks:
-        return [Finding("R9", spec.label, SEV_PASS, "no quirks")]
+        return [Finding("R3b", spec.label, SEV_PASS, "no quirks")]
     if not registered:
-        # If we couldn't parse the registry, downgrade to warn rather than fail.
-        return [
-            Finding(
-                "R9",
-                spec.label,
-                SEV_WARN,
-                "could not load taxa registry from behavior-taxonomy.md — skipped",
-            )
-        ]
-    bad: List[str] = []
+        return [Finding("R3b", spec.label, SEV_WARN,
+            "could not load taxa registry from behavior-taxonomy.md — skipped")]
+    findings: List[Finding] = []
     bad_severity = SEV_WARN if lenient else SEV_FAIL
     for i, q in enumerate(quirks):
         if not isinstance(q, dict):
-            bad.append(f"#{i}: not a mapping")
+            findings.append(Finding("R3b", spec.label, bad_severity,
+                f"quirk #{i}: not a mapping"))
             continue
         taxon = q.get("edge_case_taxon")
+        qid = q.get("id", "?")
         if taxon is None or taxon == "":
-            bad.append(f"#{i} ({q.get('id', '?')}): missing edge_case_taxon")
+            findings.append(Finding("R3b", spec.label, bad_severity,
+                f"quirk #{i} ({qid}): missing edge_case_taxon"))
             continue
         if taxon not in registered:
-            bad.append(f"#{i} ({q.get('id', '?')}): unregistered taxon `{taxon}`")
-    if bad:
-        return [Finding("R9", spec.label, bad_severity, "; ".join(bad))]
-    return [Finding("R9", spec.label, SEV_PASS, f"{len(quirks)} quirks, all taxa registered")]
+            findings.append(Finding("R3b", spec.label, bad_severity,
+                f"quirk #{i} ({qid}): unregistered taxon `{taxon}`"))
+    if not findings:
+        findings.append(Finding("R3b", spec.label, SEV_PASS,
+            f"{len(quirks)} quirks, all taxa registered"))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R9: legacy encoding/json direct-usage detection
+# ---------------------------------------------------------------------------
+
+
+def r9_check(spec: Spec) -> List[Finding]:
+    """R9: detect Go specs that use encoding/json directly (no jsonutil) without
+    a paired quirk/warning surfacing the legacy pattern.
+
+    Walks code.imports.has_jsonutil + code.file_layout.files[].uses_marshal.
+    When direct json.Marshal usage is detected without a paired
+    legacy-encoding-json-direct-usage quirk OR warning, surface a finding so
+    reviewers know to flag.
+    """
+    if spec.language != "go":
+        return [Finding("R9", spec.label, SEV_PASS, "skip — Java spec")]
+    findings: List[Finding] = []
+    has_jsonutil = spec.get("code.imports.has_jsonutil")
+    files = spec.get("code.file_layout.files") or []
+    uses_marshal = [
+        f.get("name") or f.get("path", "?") for f in files
+        if isinstance(f, dict) and f.get("uses_marshal") is True
+    ]
+    has_quirk = any(
+        (q.get("edge_case_taxon") or "") == "legacy-encoding-json-direct-usage"
+        for q in (spec.raw.get("quirks") or []) if isinstance(q, dict)
+    )
+    has_warning = any(
+        (w.get("type") or "") == "legacy-encoding-json-direct-usage"
+        for w in (spec.get("provenance.warnings") or []) if isinstance(w, dict)
+    )
+    if has_jsonutil is False and uses_marshal and not (has_quirk or has_warning):
+        for path in uses_marshal:
+            findings.append(Finding(
+                "R9", spec.label, SEV_WARN,
+                f"legacy encoding/json usage at {path} but no quirk/warning surfaced",
+            ))
+    if not findings:
+        findings.append(Finding("R9", spec.label, SEV_PASS, "no legacy encoding/json drift"))
+    return findings
 
 
 # ---------------------------------------------------------------------------
@@ -1049,7 +1180,7 @@ def load_dual_specs() -> Dict[str, Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-RULE_ORDER = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
+RULE_ORDER = ["R1", "R2", "R3", "R3b", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
 
 
 def aggregate(findings: List[Finding]) -> Dict[str, Dict[str, int]]:
@@ -1079,12 +1210,13 @@ def render_text(
         "R1": "file-reachability",
         "R2": "sha integrity",
         "R3": "custom-quirk pairing",
+        "R3b": "quirk taxa registered",
         "R4": "round-trip determinism",
-        "R5": "cross-language sha equality",
-        "R6": "bidder_name == package_name",
-        "R7": "bidder-constant-mismatch",
+        "R5": "cross-language structural parity",
+        "R6": "bidder_name / package / constant",
+        "R7": "bidder-constant-mismatch surfaces",
         "R8": "endpoint placeholder unresolved",
-        "R9": "quirk taxa registered",
+        "R9": "legacy encoding/json direct usage",
         "R10": "canonical-harness flag",
     }
     for rule in RULE_ORDER:
@@ -1222,25 +1354,43 @@ def main(argv: Optional[List[str]] = None) -> int:
     findings: List[Finding] = []
     gh_cache: Dict[Tuple[str, str], bool] = {}
 
+    # Per-spec rules — wrap each call in try/except so a crash on one rule
+    # doesn't void the others, and a crash on one spec doesn't void the run.
+    per_spec_rules = [
+        ("R1",  lambda s: r1_check(s, args.check_network, gh_cache)),
+        ("R2",  r2_check),
+        ("R3",  lambda s: r3_check(s, strict=args.strict_r3)),
+        ("R3b", lambda s: r_taxa_check(s, registered_taxa, lenient=args.lenient_r9)),
+        ("R4",  r4_check),
+        ("R6",  r6_check),
+        ("R7",  r7_check),
+        ("R8",  r8_check),
+        ("R9",  r9_check),
+        ("R10", r10_check),
+    ]
     for spec in specs:
-        findings.extend(r1_check(spec, args.check_network, gh_cache))
-        findings.extend(r2_check(spec))
-        findings.extend(r3_check(spec, strict=args.strict_r3))
-        findings.extend(r4_check(spec))
-        findings.extend(r6_check(spec))
-        findings.extend(r7_check(spec))
-        findings.extend(r8_check(spec))
-        findings.extend(r9_check(spec, registered_taxa, lenient=args.lenient_r9))
-        findings.extend(r10_check(spec))
+        for rule_name, fn in per_spec_rules:
+            try:
+                findings.extend(fn(spec))
+            except Exception as exc:  # noqa: BLE001
+                findings.append(Finding(
+                    rule_name, spec.label, SEV_FAIL,
+                    f"rule crashed: {type(exc).__name__}: {exc}",
+                ))
 
-    # R5: per port pair.
-    for bidder in pair_bidders:
+    # R5: per port pair OR per dual-spec entry (run even when one side is missing).
+    all_r5_bidders = sorted(set(pair_bidders) | set(dual_specs.keys()))
+    for bidder in all_r5_bidders:
         go_spec = by_lang_bidder.get(("go", bidder))
         java_spec = by_lang_bidder.get(("java", bidder))
-        if go_spec is None or java_spec is None:
-            continue
-        findings.extend(r5_check(go_spec, java_spec, dual_specs))
-    if not pair_bidders:
+        try:
+            findings.extend(r5_check(go_spec, java_spec, dual_specs))
+        except Exception as exc:  # noqa: BLE001
+            findings.append(Finding(
+                "R5", f"pair/{bidder}", SEV_FAIL,
+                f"rule crashed: {type(exc).__name__}: {exc}",
+            ))
+    if not all_r5_bidders:
         findings.append(Finding("R5", "n/a", SEV_PASS, "no port pairs to compare"))
 
     counts = aggregate(findings)

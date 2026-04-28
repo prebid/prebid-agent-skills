@@ -12,6 +12,54 @@ A reader skill MUST emit the version it produced. A consumer (write, port) MUST 
 
 ---
 
+## Schema fork policy (when to introduce `adapter-spec-java.md`)
+
+This shared schema serves Go and Java readers via per-language sibling fields (`mechanism_go` / `mechanism_java`, `go_idiom` / `java_idiom`, etc.) and conditionally-present blocks (`spring_config`, `bidder_class`, `aliases[]`, `lifecycle`, `code_naming` — Java-only; `code.adapter_struct`, `code.builder` — Go-only). The shared form is preferred — it lets cross-language consumers (`port-go2java/`, `port-java2go/`, dual-spec assertions) work against a single canonical contract. A Java-side fork at `prebid-server-java/read/skills/shared/adapter-spec-java.md` is justified ONLY when ALL of the following gates trip together.
+
+### Quantitative gates (necessary)
+
+1. **Top-level field count.** The Java-specific top-level field count exceeds `N = 6` (currently 5: `spring_config`, `bidder_class`, `aliases[]`, `lifecycle`, `code_naming`). Adding a sixth Java-only top-level field without a Go peer trips the count, but ONLY counts toward the gate when gate 2 also fails.
+2. **Per-field null-marker density.** A single shared schema requires more than `M = 3` `null when source_language=java` (or `go`) markers on any one top-level field. The current schema has 0–2 such markers per field. Crossing 3 means the field's shape is no longer cross-language; sibling-key naming has been exhausted.
+3. **Behavioral-field divergence count.** More than `K = 4` enumerated behavioral fields in `behavior-taxonomy.md` need a per-language enum subset (e.g., `mechanism_go` values that have no Java counterpart and would never appear on a Java spec). The current count is 3 (`endpoint_resolution.mechanism_go|java`, `mutation.go_idiom|java_idiom`, `bid_pointer_go_sibling`).
+
+### Qualitative gates (necessary)
+
+4. **Conceptual mismatch unresolvable by sibling naming.** The mismatch is structural — not just nomenclature. If the Go spec's `code.builder.signature_canonical: bool` could be expressed as a Java sibling (e.g., `code.factory_method.signature_canonical: bool`) by renaming, sibling naming wins. Fork only when the field's *meaning* differs across languages, not its name.
+5. **Downstream consumer loss is acceptable.** Forking breaks two contracts: (a) the dual-spec assertion suite at `cross-language-pairs/*` can no longer compare across schemas without a mapping shim; (b) the port-translation rules in `port-translation-rules.md` reference fields by canonical paths that must now disambiguate Go vs. Java. The fork author MUST accept these costs and propose a mitigation (e.g., a shim in `cross-language-pairs/README.md` documenting the bridged field names).
+
+### Anti-criteria (DON'T fork for)
+
+- **Cosmetic differences.** YAML kebab-case vs. camelCase keys (Java `endpoint-compression`; Go `endpointCompression`) — handled by `bidder_info.yaml_field_name_quirks[]`. Field-name style is a rendering concern, not a schema concern.
+- **Per-language idiom values.** Adding a new `mechanism_java` value (e.g., `vertx-webclient`) is an enum extension, not a fork — update `behavior-taxonomy.md` instead.
+- **Single-bidder edge cases.** A new top-level field needed by exactly one Java adapter (e.g., huaweiads's HMAC nonce formatting) belongs in `quirks[]` paired with an `edge_case_taxon`, not a fork.
+
+### What changes hands when the fork lands
+
+If gates 1–5 all trip, forking is a coordinated change-set:
+
+| Artifact | Action |
+|---|---|
+| `prebid-server-java/read/skills/shared/adapter-spec-java.md` | NEW file. Diverges from this schema only on the gated fields; everything else is a verbatim copy with a header note pointing back here as the historical ancestor. |
+| `prebid-server-java/read/test-fixtures/*.golden.spec.yaml` | All Java goldens regenerate against the forked schema (use the regeneration procedure in `prebid-server-java/read/test-fixtures/README.md`). |
+| `cross-language-pairs/*.dual-spec-assertions.yaml` | Each entry gains a `schema_bridge:` block declaring how forked-Java fields map to shared-Go fields for comparison. |
+| `scripts/round-trip-ci.py` | R3, R5, R9 grow per-language code paths; rule descriptions in `RULE_ORDER` are amended (e.g., `R5-strict` becomes "STRICT fields, post-bridge"). |
+| `scripts/tests/test_schema_contract.py` | Loads BOTH schemas; phantom-path detection runs per-language with the appropriate schema as ground truth. |
+| `prebid-server-go/read/skills/shared/cross-skill-integration.md` | Section 1 overview diagram updates (two canonical schemas, not one). |
+| `prebid-server-go/read/skills/shared/port-translation-rules.md` | Each rule that references a forked field gains a `Go field → Java field` resolution table. |
+| `prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md` and Java sub-skills | "Source of truth" pointers swap from `prebid-server-go/.../adapter-spec.md` to the new fork. |
+
+The fork PR MUST update every artifact above atomically. Stragglers (e.g., a SKILL.md still pointing at the Go schema for a now-Java-only field) defeat the fork's purpose: making the Java contract independent.
+
+### Review checklist (use when the fork PR lands)
+
+- [ ] Gates 1–5 each cited with current counts.
+- [ ] Sibling-key naming explicitly ruled out, with the proposed sibling and the reason it doesn't work.
+- [ ] Bridge mapping in `cross-language-pairs/README.md` for every affected dual-spec assertion.
+- [ ] No SKILL.md continues to reference the Go schema for a field now defined only in the Java fork.
+- [ ] CI rules R1–R10 still pass on both shapes.
+
+---
+
 ## Top-level structure
 
 ```yaml
