@@ -289,7 +289,7 @@ Set `cross_language.go_specific_concerns: []` (this skill does not read Go).
 Populate `cross_language.port_concerns`:
 
 - `multi_file_layout` — from Step 1.
-- `package_directory_mismatch` — `code.directory_name` should equal lowercase(`bidder_class.name` minus `Bidder` suffix); deviation flags this. Java edge cases #26 (digit-leading) and #27 (acronym-case) are NOT mismatches per se — they're typed under `code.naming` instead.
+- `package_directory_mismatch` — `code.directory_name` should equal lowercase(`bidder_class.name` minus `Bidder` suffix); deviation flags this. Java edge cases #26 (digit-leading) and #27 (acronym-case) are NOT mismatches per se — they're typed under `code_naming` (top-level) instead.
 - `custom_unmarshaljson_present` — true when any class in `proto/openrtb/ext/request/{xyz}/` declares `@JsonDeserialize(using = ...)` or extends `JsonDeserializer<T>`. Triggers a quirk with the appropriate taxon.
 - `mutation_idiom_divergence` — `true` whenever Java mutates request entities at all using `lombok-tobuilder` (matches Kobler precedent — divergence is the rule, not the exception).
 - `yaml_unification: true` — Java always unifies what Go splits; set unconditionally for Java-source specs.

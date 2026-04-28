@@ -16,7 +16,7 @@ Five downstream surfaces consume the spec:
 |---|---|---|---|---|
 | `prebid-server-go/write/` | spec → Go adapter | Future (Phase E) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server` |
 | `prebid-server-java/write/` | spec → Java adapter | Future (Phase E) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server-java` |
-| `prebid-server-java/port-go2java/` | Go-source spec → Java adapter | Future (Phase D) | `cross_language.*`, [`port-translation-rules.md`](port-translation-rules.md) Rules 1–37 | New Java adapter port PR |
+| `prebid-server-java/port-go2java/` | Go-source spec → Java adapter | Future (Phase D) | `cross_language.*`, [`port-translation-rules.md`](port-translation-rules.md) Rules 1–43 | New Java adapter port PR |
 | `prebid-server-go/port-java2go/` | Java-source spec → Go adapter | Future (Phase D) | Symmetric inverse of the above | New Go adapter port PR |
 | `prebid-server-go/review/skills/pr-triage/` | spec as `prior_spec` | Existing (opt-in hook) | Whole spec read as comparator; behavioral regression detection | PR-triage manifest with `prior-spec-comparison` block |
 
@@ -109,7 +109,7 @@ Worked example — Kobler. The spec at [`/Users/quantum/Documents/GitHub/prebid-
 
 ## 3. `read` (Go) → `port-go2java`
 
-Translate a Go-source spec into Java adapter artifacts. The skill consumes the spec's `cross_language.*` block (path hints, port concerns, lineage) plus the [`port-translation-rules.md`](port-translation-rules.md) Rules 1–37 indexed by the spec field that drives them.
+Translate a Go-source spec into Java adapter artifacts. The skill consumes the spec's `cross_language.*` block (path hints, port concerns, lineage) plus the [`port-translation-rules.md`](port-translation-rules.md) Rules 1–43 indexed by the spec field that drives them.
 
 ### 3.1 Trigger fields
 
@@ -134,7 +134,7 @@ Translate a Go-source spec into Java adapter artifacts. The skill consumes the s
 | `code.make_requests.imp_ext_unmarshal.kind: standard-two-phase` + `mechanism_go: jsonutil-two-phase` | Java emits a `static final TypeReference<ExtPrebid<?, ExtImpXyz>> XYZ_EXT_TYPE_REFERENCE` + `mapper.mapper().convertValue(imp.getExt(), XYZ_EXT_TYPE_REFERENCE).getBidder()` per Rule 1. |
 | `code.make_requests.imp_ext_unmarshal.kind: direct` + `wrapper_type: <X>` | Java emits a `TypeReference<X>` directly; no `getBidder()` call (Appnexus-style). Rule 2. |
 | `code.make_requests.endpoint_resolution.kind: dev-prod-toggle` + Go uses hardcoded `const devBidderEndpoint` | Java port SHOULD promote to YAML `dev-endpoint:` field + `BidderConfigurationProperties` subclass with `@NotBlank private String devEndpoint`. Apply Rule 35 (cross-language win — fixes the Go-side anti-pattern). |
-| `iab_category_storage.storage_kind: go-data-table` + `go_data_file: adapters/{xyz}/iab_categories.go` + `table_size: N` | Java port SHOULD inline the table as a YAML `iab-categories:` block under `adapters.{xyz}.iab-categories` and inject via constructor-arg. (Appnexus did this in Java with 95 entries — see [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml) line 70 + 812.) IAB-categories storage translation is a Phase D rule addition — port-translation-rules.md Rule 21 is HMAC, not IAB-categories. |
+| `iab_category_storage.storage_kind: go-data-table` + `go_data_file: adapters/{xyz}/iab_categories.go` + `table_size: N` | Java port SHOULD inline the table as a YAML `iab-categories:` block under `adapters.{xyz}.iab-categories` and inject via constructor-arg. (Appnexus did this in Java with 95 entries — see [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml) line 70 + 812.) Apply Rule 42 (IAB-categories storage cross-language translation) in `port-translation-rules.md`. |
 | `tests.fixture_inventory.exemplary[]` (Go single-file) | Java port emits 4 separate files per case: `test-{xyz}-bid-request.json`, `test-{xyz}-bid-response.json`, `test-auction-{xyz}-request.json`, `test-auction-{xyz}-response.json`. Apply Rule 36. |
 | `tests.go_directory_naming: legacy-test` (msft) | Java target uses canonical layout regardless — `src/test/resources/org/prebid/server/it/openrtb2/{xyz}/`. The legacy Go pattern is Go-only. |
 
@@ -167,7 +167,7 @@ Symmetric inverse of §3. The skill consumes a Java-source spec and emits Go ada
 | `bidder_class.helper_classes_co_located[]` | EMIT each helper as a Go file in `adapters/{xyz}/` — co-location is preserved. Java's helper class becomes a Go function or struct in a co-located `.go` file. |
 | `bidder_class.helper_classes_in_proto[]` | EMIT each proto class as a Go file in `openrtb_ext/imp_{xyz}.go` (or sibling `openrtb_ext/imp_{xyz}_<helper>.go` if multiple). |
 | `spring_config.configuration_properties_class.extra_fields[]` | TRANSLATE custom YAML fields into Go's `extra_info: '{"...":"..."}'` opaque JSON OR into Go's adapter struct fields parsed via `parseExtraInfo` in the Builder. Inverse of Rule 35. |
-| `iab_category_storage.storage_kind: yaml-inlined` | TRANSLATE the inlined YAML map into a Go data file `adapters/{xyz}/iab_categories.go` with package-level `var iabCategoryMap = map[string]string{...}`. Inverse of the IAB-categories Phase D rule (to be authored — see note above; port-translation-rules.md Rule 21 is HMAC, not IAB-categories). |
+| `iab_category_storage.storage_kind: yaml-inlined` | TRANSLATE the inlined YAML map into a Go data file `adapters/{xyz}/iab_categories.go` with package-level `var iabCategoryMap = map[string]string{...}`. Apply Rule 42 (inverse direction — Java YAML-inlined → Go data table). |
 
 ### 4.2 Spec field → Go artifact map
 
@@ -327,6 +327,63 @@ The Adapter Specification is the unidirectional contract between `read/` and fou
 The 37 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 12 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
 
 The opt-in `pr-triage` hook is the only reverse-direction integration: review/ reads a spec to detect regressions on PR diffs. It is purely additive — review/ continues to function without read/.
+
+---
+
+## 10. Testing model — goldens vs. `evals.json`
+
+### What this repo uses
+
+The read-skill suite tests via THREE complementary mechanisms:
+
+1. **Golden Adapter Specifications** at `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml`. Hand-authored YAML emissions pinned to specific upstream commits. Each is the byte-deterministic ground truth for one bidder-at-one-commit.
+2. **Dual-spec assertions** at `cross-language-pairs/*.dual-spec-assertions.yaml`. Per-bidder cross-language equivalence/divergence declarations consumed by R5-strict and R5-divergent.
+3. **R1–R10 CI rules** at `scripts/round-trip-ci.py`. Schema-driven invariants (file-reachability, sha integrity, custom-quirk pairing, round-trip determinism, cross-language parity, naming consistency, taxa registry, harness flag).
+
+A future addition (Bundle 7c, `scripts/tests/test_schema_contract.py`) augments this with phantom-path detection — verifying every dotted reference in a SKILL.md resolves to a path defined in `adapter-spec.md` or `behavior-taxonomy.md`.
+
+### What standard skill-creator uses
+
+Anthropic's skill-creator framework standardizes testing through `evals/evals.json` files alongside each skill. An entry there has the shape:
+
+```json
+{
+  "skill": "<name>",
+  "tests": [
+    { "id": "...", "input": "...", "script_eval": "<bash assertion>" },
+    { "id": "...", "input": "...", "model_eval": "<assertion prompt>" }
+  ]
+}
+```
+
+`script_eval` runs a deterministic bash check; `model_eval` invokes a secondary model to score the primary skill's output against an assertion. Both are oriented at runnable skills (e.g., a Python helper that returns a value) — the test harness invokes the skill, captures its output, and applies the assertion.
+
+### Why we diverge
+
+Read skills are NOT directly executable. They are LLM workflows: a SKILL.md instructs the operator (a Claude instance) to read source files, classify behavior against the taxonomy, and emit a YAML spec. There is no Python function to call, no return value to inspect. Three concrete consequences:
+
+- **Determinism is the whole game.** R4 is the load-bearing rule: the same skill on the same commit must produce a byte-identical spec. Goldens give byte-deterministic regression coverage that `script_eval` would have to reconstruct from scratch — and `model_eval` would inject judgment-noise on every check.
+- **Cross-language coupling.** R5 fails on the dual-spec-assertion level when Go and Java specs diverge on contract fields. This is a per-pair invariant — `evals.json`'s per-skill model can't natively express "the output of skill A and the output of skill B must agree."
+- **Schema-anchored invariants.** R1–R10 are properties of the spec schema, not of any one skill's output. Any read skill that contributes to an emission shares the same rules — there's no per-skill `script_eval` that captures, say, R3's `custom`-quirk pairing without re-encoding the schema in the eval file.
+
+Goldens + R-rules give us byte-stable artifacts AND schema-anchored invariants in one place. `evals.json` would partially duplicate this across each of the 8 (4 Go + 4 Java) skills' evals files.
+
+### When to use which
+
+- **Goldens (this repo's approach).** Use when the skill is an LLM-following-the-skill workflow whose output is a text artifact (YAML, JSON, Markdown report). Determinism is testable by comparing artifacts; correctness is testable by R-rules over the artifact. The 4 read-skill suites (per-language) all fit.
+- **`evals.json` (skill-creator standard).** Use when the skill is, or embeds, a runnable script. Examples for the future:
+  - A Python helper for fixture validation that exposes a CLI surface (`fixture-lint --fixture path/to/golden.yaml`). `script_eval` confirms exit codes; `model_eval` confirms the diagnostic text quality.
+  - A future schema-migration helper that takes an old spec and a target `adapter_spec_version` and emits a migrated spec.
+  - Any wrapper around `round-trip-ci.py` that re-runs it under matrix conditions (different upstream commits).
+  In each case, the skill IS a function with a return value; `evals.json` covers it idiomatically.
+
+### How they interoperate
+
+They don't overlap, so they don't need to. Read skills stay on the goldens model; runnable helpers (when they appear) use `evals.json`. The two coexist in the same repo with disjoint test inputs (read skills test against goldens; runnable helpers test against scripted inputs). A SKILL.md that grows BOTH a workflow component AND a runnable component (rare; not expected for any current read skill) would land in both — its workflow side checked by goldens, its runnable side checked by `evals.json`.
+
+### Migration anti-pattern (what NOT to do)
+
+Don't translate the R-rules into per-skill `script_eval` entries. The result would be 8 SKILLs each shipping a copy of the same 10 bash assertions, drifting independently as the schema evolves. The single authoritative `round-trip-ci.py` + the schema-contract test (`test_schema_contract.py`) cover the same ground in one place, versioned alongside the schema documents they enforce.
 
 ---
 

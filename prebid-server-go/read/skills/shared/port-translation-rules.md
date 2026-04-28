@@ -1,6 +1,6 @@
 # Port Translation Rules (Go ↔ Java)
 
-37 explicit translation rules between Go and Java prebid-server adapter patterns, each anchored to an Adapter Specification field driver. Used by the future `port-go2java` and `port-java2go` skills as their translation contract. Two specs for the same bidder produced from each language MUST be consistent with these rules — a port that violates a rule surfaces as a port-fidelity warning.
+43 explicit translation rules between Go and Java prebid-server adapter patterns, each anchored to an Adapter Specification field driver. Used by the future `port-go2java` and `port-java2go` skills as their translation contract. Two specs for the same bidder produced from each language MUST be consistent with these rules — a port that violates a rule surfaces as a port-fidelity warning.
 
 ---
 
@@ -8,18 +8,22 @@
 
 | Section | Rules | Topic |
 |---|---|---|
+| [Bidder-params byte-fidelity](#bidder-params-byte-fidelity-rules-2) | 38–39 | byte-fidelity / derived-view |
 | [Imp.ext unmarshaling](#impext-unmarshaling-rules-3) | 1–3 | TypeReference / two-phase / free-form |
 | [Mutation](#mutation-rules-4) | 4–7 | toBuilder / shallow-copy / schain / banner |
 | [HTTP request construction](#http-request-construction-rules-3) | 8–10 | defaultRequest / Bidder<T> / per-imp |
 | [Endpoint resolution](#endpoint-resolution-rules-5) | 11–15 | tokens / query / dev-prod / region / deploy-time |
 | [Multi-imp grouping](#multi-imp-grouping-rules-3) | 16–18 | max-imps / pod / format-split |
-| [Header construction](#header-construction-rules-3) | 19–21 | HttpUtil / basic-auth / HMAC |
-| [Bid type resolution](#bid-type-resolution-rules-5) | 22–26 | by-mediatype / by-mtype / chain / by-shape / hardcoded |
+| [Header construction](#header-construction-rules-4) | 19–21, 41 | HttpUtil / basic-auth / HMAC / bearer-token |
+| [Bid type resolution](#bid-type-resolution-rules-6) | 22–26, 40 | by-mediatype / by-mtype / chain / by-shape / hardcoded / id-suffix-or-prefix |
 | [Error emission](#error-emission-rules-3) | 27–29 | BadInput / BadServerResponse / FailedToMarshal |
 | [Status code handling](#status-code-handling-rules-2) | 30–31 | canonical helpers / retcode-field |
 | [Currency conversion](#currency-conversion-rules-1) | 32 | reqInfo vs CurrencyConversionService |
 | [YAML and config](#yaml-and-config-rules-3) | 33–35 | aliases / unification / config-subclass |
+| [IAB-category storage](#iab-category-storage-rules-1) | 42 | Go data table ↔ Java YAML-inlined |
+| [Lifecycle](#lifecycle-rules-1) | 43 | bidder-rename three-step |
 | [Test fixture](#test-fixture-rules-2) | 36–37 | httpCalls vs 4-file split / per-alias IT |
+| [Round-Trip Safety](#round-trip-safety) | — | lossy-direction asymmetries |
 
 ---
 
@@ -27,7 +31,49 @@
 
 Each rule names a Pattern, identifies the Adapter Specification field that drives the translation, shows a concrete master Go and Java code snippet pair, and notes edge cases. Rules are grouped by spec section. A porter consumes the spec, looks up each rule by its field driver, and applies the corresponding translation.
 
-The rule numbers (1-37) are stable identifiers — port skills cite them by number in their output (e.g., "applied Rule 7: Multi-imp grouping per pod prefix").
+The rule numbers (1-43) are stable identifiers — port skills cite them by number in their output (e.g., "applied Rule 7: Multi-imp grouping per pod prefix").
+
+---
+
+## Bidder-params byte-fidelity rules (2)
+
+Driven by `bidder_params_json` + `bidder_params_sha256` and the read-vs-port boundary.
+
+### Rule 38: bidder_params_json byte-fidelity contract
+
+**Pattern**: The porter copies `static/bidder-params/{bidder}.json` bytes verbatim. Whitespace, indent style, trailing-newline presence, and BOM marks are preserved exactly. The porter NEVER reformats the JSON.
+**Spec field driver**: `bidder_params_json` (verbatim string) + `bidder_params_sha256`
+
+**Go file** (`static/bidder-params/{xyz}.json` — bytes copied as-is):
+```json
+{"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params","type":"object","properties":{"placementId":{"type":"string"}},"required":["placementId"]}
+```
+
+**Java file** (`src/main/resources/static/bidder-params/{xyz}.json` — same bytes):
+```json
+{"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params","type":"object","properties":{"placementId":{"type":"string"}},"required":["placementId"]}
+```
+
+**Translation rule**: A port that produces a JSON file with different bytes (different whitespace, different indent, different newline style) violates R5 cross-language byte-equality. Both Go-side `bidder_params_sha256` and Java-side `bidder_params_sha256` MUST match for the same bidder. The `cross-language-byte-divergence` warning surfaces in the lossy direction.
+
+**Round-trip considerations**: Round-trip-safe IFF the porter is the only writer and reads the file in binary mode (preserve trailing newlines, encoding). Optidigital and Appnexus port pairs in the wild fail this rule due to historical reformatting on the Java side; reviewers SHOULD reformat one side to restore byte parity rather than accept divergence. See `cross-skill-integration.md` §8.3 for canonical worked examples.
+
+**Notes**: This is the strongest cross-language contract — even stronger than R2 (semantic schema equivalence). The porter MUST NOT pretty-print, MUST NOT add trailing newlines, MUST NOT collapse `\r\n` → `\n`. Use `cat` / `cp` / `Files.copy` (binary mode), never `json.Marshal(json.Unmarshal(bytes))`.
+
+### Rule 39: params.schema_interpretation is a derived view, not translated
+
+**Pattern**: `params.schema_interpretation.{properties, combinators_used, required, ...}` is a NORMALIZED view of the JSON Schema computed independently by each language's reader from the verbatim `bidder_params_json` bytes. The porter never re-parses or re-translates the schema interpretation across languages.
+**Spec field driver**: `params.schema_interpretation` (derived) + meta-rule about read-vs-port boundary
+
+**Go side**: N/A — `schema_interpretation` is computed at read time by `read-bidder-params/` skill from the verbatim bytes; not emitted as code.
+
+**Java side**: N/A — same. The Java `read-bidder-params/` skill computes its own `schema_interpretation` from the same verbatim bytes.
+
+**Translation rule**: When porting Go→Java, the porter copies bytes per Rule 38 and STOPS — does NOT regenerate the Java spec's `schema_interpretation` block. The Java reader will compute it independently when the post-port spec is re-read. Two specs of the same bidder produced from each language MUST agree on `schema_interpretation` because the input bytes are byte-equal (Rule 38). Disagreement signals a Rule 38 violation upstream.
+
+**Round-trip considerations**: Round-trip-safe iff Rule 38 holds. If `bidder_params_json` bytes diverge, `schema_interpretation` may also diverge but the divergence is downstream — a porter who corrects Rule 38 violations will see `schema_interpretation` agreement restore automatically.
+
+**Notes**: This is a meta-rule clarifying that the read pipeline and the port pipeline have disjoint responsibilities. Read computes derived views from bytes; port copies bytes. A porter that re-derives `schema_interpretation` violates the boundary and risks introducing divergence (e.g., re-ordering `properties[]` keys, collapsing `oneOf` arms, normalizing `description` whitespace). The reader is the single source of truth for derived views; the porter is the single source of truth for byte-fidelity.
 
 ---
 
@@ -587,7 +633,7 @@ private List<HttpRequest<BidRequest>> splitByMediaType(BidRequest bidRequest) {
 
 ---
 
-## Header construction rules (3)
+## Header construction rules (4)
 
 Driven by `headers_constructed`.
 
@@ -667,9 +713,60 @@ headers.set("Authorization", "Digest " + digest);
 
 **Notes**: Per-request HMAC requires `pre_built_in_constructor: false` (the body changes per request). The secret comes from YAML config; the spec emits `authentication_input: [<secret-field>]`.
 
+### Rule 41: Bearer-token authentication header
+
+**Pattern**: Authorization header carries a static bearer token (`Authorization: Bearer <token>`). Token is sourced from YAML config (`extra_info` on Go; `BidderConfigurationProperties` subclass on Java). Pre-built in the constructor — does NOT depend on per-request data.
+**Spec field driver**: `headers_constructed.pre_built_in_constructor: true` + `authentication_kind: bearer-token` + `authentication_input: [<token-field>]`
+
+**Go code**:
+```go
+type adapter struct {
+    endpoint    string
+    authHeader  string  // Pre-computed at Builder time.
+}
+
+func Builder(name openrtb_ext.BidderName, cfg config.Adapter, server config.Server) (adapters.Bidder, error) {
+    var extra struct {
+        ApiToken string `json:"api_token"`
+    }
+    if cfg.ExtraAdapterInfo != "" {
+        if err := jsonutil.Unmarshal([]byte(cfg.ExtraAdapterInfo), &extra); err != nil {
+            return nil, fmt.Errorf("invalid extra_info: %w", err)
+        }
+    }
+    return &adapter{endpoint: cfg.Endpoint, authHeader: "Bearer " + extra.ApiToken}, nil
+}
+```
+
+**Java code**:
+```java
+@Validated
+@Data
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+private static class XyzConfigurationProperties extends BidderConfigurationProperties {
+    @NotBlank
+    private String apiToken;
+}
+
+public class XyzBidder implements Bidder<BidRequest> {
+    private final String authHeader;
+
+    public XyzBidder(String endpoint, String apiToken, ...) {
+        this.authHeader = "Bearer " + apiToken;
+    }
+}
+```
+
+**Translation rule**: The token field name uses Go's `extra_info` JSON convention (snake_case) and Java's typed `BidderConfigurationProperties` field (camelCase). A porter Go→Java promotes `extra_info.api_token` to a typed `@NotBlank private String apiToken` field on a `XyzConfigurationProperties` subclass (per Rule 35). A porter Java→Go demotes the typed field back to `extra_info` opaque JSON. The bearer prefix `"Bearer "` (with trailing space) is byte-identical on both sides; the token value flows through unchanged.
+
+**Round-trip considerations**: Round-trip-safe iff Rule 35 (custom property subclass) round-trips correctly. A porter that drops the token from `extra_info` on Java→Go loses the auth — operational failure. Surfaces as `authentication_input` field divergence on the dual-spec assertion.
+
+**Notes**: Bearer-token sits between basic-auth (Rule 20) and HMAC (Rule 21) on the per-request-dynamism axis: like basic-auth it's pre-built; unlike basic-auth the input is a single token (not user:pass). The behavior-taxonomy registry already lists `bearer-token` as an `authentication_kind` enum value but currently has no master sample — this rule is the contract for when one appears. Rule 41 also serves as the template for any future static-credential auth shapes (API-key headers, signed JWT, etc.) that follow the same constructor-time-precompute pattern.
+
 ---
 
-## Bid type resolution rules (5)
+## Bid type resolution rules (6)
 
 Driven by `code.make_bids.bid_type_resolution.method_chain[]`.
 
@@ -827,6 +924,65 @@ return BidType.banner;
 ```
 
 **Notes**: Even single-mediatype adapters typically lookup by-imp-mediatype for safety. Hardcoded resolution surfaces as quirk `hardcoded-config-as-anti-pattern` because it skips imp validation.
+
+### Rule 40: by-imp-id-suffix and imp-prefix-lookup
+
+**Pattern**: Resolve bid type from a marker embedded IN the `imp.id` string itself — either a trailing suffix (e.g., `_b` for banner, `_v` for video) or a leading prefix that maps back to the original imp pre-split. Used by adapters that split a single multi-format imp into multiple single-format imps before dispatch (Adkernel) or that group video adpod imps under a shared prefix (Appnexus).
+**Spec field driver**: `bid_type_resolution.method_chain: [{ method: by-imp-id-suffix | imp-prefix-lookup, fallback_action: ... }]`
+
+**Go code** (Adkernel multi-format split — `by-imp-id-suffix`):
+```go
+func mediaTypeFromImpIDSuffix(impID string) (openrtb_ext.BidType, error) {
+    switch {
+    case strings.HasSuffix(impID, "_b"): return openrtb_ext.BidTypeBanner, nil
+    case strings.HasSuffix(impID, "_v"): return openrtb_ext.BidTypeVideo, nil
+    case strings.HasSuffix(impID, "_n"): return openrtb_ext.BidTypeNative, nil
+    case strings.HasSuffix(impID, "_a"): return openrtb_ext.BidTypeAudio, nil
+    }
+    return "", &errortypes.BadServerResponse{Message: "Unable to resolve bid type for imp " + impID}
+}
+```
+
+**Go code** (Appnexus video adpod — `imp-prefix-lookup`):
+```go
+func resolveImpFromPrefix(bidImpID string, originalImps []openrtb2.Imp) (*openrtb2.Imp, error) {
+    prefix := strings.SplitN(bidImpID, "_", 2)[0]
+    for i := range originalImps {
+        if strings.HasPrefix(originalImps[i].ID, prefix) {
+            return &originalImps[i], nil
+        }
+    }
+    return nil, &errortypes.BadServerResponse{Message: "No imp matching prefix " + prefix}
+}
+```
+
+**Java code** (Adkernel — `by-imp-id-suffix`):
+```java
+private BidType mediaTypeFromImpIdSuffix(String impId) {
+    if (impId.endsWith("_b")) return BidType.banner;
+    if (impId.endsWith("_v")) return BidType.video;
+    if (impId.endsWith("_n")) return BidType.xNative;
+    if (impId.endsWith("_a")) return BidType.audio;
+    throw new PreBidException("Unable to resolve bid type for imp " + impId);
+}
+```
+
+**Java code** (Appnexus video adpod — `imp-prefix-lookup`):
+```java
+private Imp resolveImpFromPrefix(String bidImpId, List<Imp> originalImps) {
+    final String prefix = bidImpId.split("_", 2)[0];
+    return originalImps.stream()
+            .filter(imp -> imp.getId().startsWith(prefix))
+            .findFirst()
+            .orElseThrow(() -> new PreBidException("No imp matching prefix " + prefix));
+}
+```
+
+**Translation rule**: Both methods preserve the suffix/prefix marker convention across languages — the marker characters MUST be byte-identical (a `_b` suffix on Go MUST stay `_b` on Java; renaming to `-b` breaks fixture parity). When `by-imp-id-suffix` composes with `format-split` batching (Rule 18), the porter MUST emit the suffix in `make_requests` AND consume it in `make_bids` symmetrically. When `imp-prefix-lookup` composes with `pod-grouping` batching (Rule 17), the prefix delimiter (typically `_`) MUST match between batching and resolution.
+
+**Round-trip considerations**: Round-trip-safe — the suffix/prefix marker is structural data carried in the imp.id field, recovered identically on both sides.
+
+**Notes**: These two methods fill the gap between Rules 22-26 (which cover canonical mediatype resolution) and the bidder-side string-marker conventions used by adapters that synthesize imp IDs. Adkernel's multi-format split adds the suffix during request build; Appnexus's adpod uses naturally-prefixed pod IDs. The porter MUST verify that the corresponding `batching.rules[]` entry produces matching markers — a `format-split` rule that emits no suffix paired with a `by-imp-id-suffix` resolution method is internally inconsistent and surfaces as a quirk.
 
 ---
 
@@ -1085,6 +1241,140 @@ extra_info: '{"dev_endpoint": "https://bid-service.dev.essrtb.com/bid/prebid_ser
 
 ---
 
+## IAB-category storage rules (1)
+
+Driven by `iab_category_storage`.
+
+### Rule 42: IAB-categories storage cross-language translation
+
+**Pattern**: Adapters that map vendor-specific category codes to IAB taxonomy codes store the lookup table in two non-equivalent forms. Go uses a co-located generated data file (`adapters/{xyz}/iab_categories.go`); Java inlines the table directly in YAML config (`bidder-config/{xyz}.yaml: adapters.{xyz}.iab-categories: { ... }`). The translation between the two forms is non-trivial — table representation, injection mechanism, and cardinality all differ.
+**Spec field driver**: `iab_category_storage.storage_kind: go-data-table | yaml-inlined` + `injection: static-init | constructor-arg` + `table_size`
+
+**Go code** (msft — `adapters/msft/iab_categories.go`):
+```go
+package msft
+
+// Generated table — 95 entries mapping Microsoft category codes to IAB codes.
+var iabCategoryMap = map[string]string{
+    "Auto":         "IAB2",
+    "Tech":         "IAB19",
+    "Sports":       "IAB17",
+    // ... 92 more entries
+}
+```
+
+**Java code** (Appnexus — `bidder-config/appnexus.yaml`):
+```yaml
+adapters:
+  appnexus:
+    endpoint: "https://..."
+    iab-categories:
+      "1": "IAB20-3"
+      "2": "IAB18-3"
+      "3": "IAB10-1"
+      # ... 117 more entries (120 total)
+```
+
+**Java configuration class**:
+```java
+@Validated
+@Data
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+private static class AppnexusConfigurationProperties extends BidderConfigurationProperties {
+    private Map<String, String> iabCategories;
+}
+```
+
+**Translation rule**: Going Go→Java, the porter EXTRACTS the Go map literal entries and INLINES them as a YAML map under `adapters.{bidder}.iab-categories` AND emits a `BidderConfigurationProperties` subclass with `private Map<String, String> iabCategories` field per Rule 35. Going Java→Go, the porter EXTRACTS the YAML map entries and EMITS a Go data file with `package-level var iabCategoryMap = map[string]string{...}` AND adds a `static-init` injection (the table is referenced directly from the bidder code, not constructor-injected). Cardinality (`table_size`) MUST be preserved across the translation — entry count is a fidelity invariant.
+
+**Round-trip considerations**: Round-trip-LOSSY by default. The Go table is typed `map[string]string`; the Java YAML loads into a `Map<String, String>` of identical shape, so semantic equivalence holds. But the Go file may carry curation metadata (file-level comments, `// Generated by ...` header, source-of-truth annotations) that has no YAML equivalent. A porter Go→Java→Go round-trip loses the curation metadata. Surfaces as a per-port quirk. Conversely, YAML key ordering is non-deterministic; Go map literals preserve source order. Round-trip Java→Go→Java may reorder entries — semantic-equal but byte-divergent.
+
+**Notes**: Cardinality examples in master: Appnexus 120 entries (Java YAML), msft 95 entries (Go data table). When porting Appnexus from Java→Go, the resulting Go file is `adapters/appnexus/iab_categories.go`. Injection mechanism translates as: `constructor-arg` (Java — passed via `XyzConfigurationProperties`) ↔ `static-init` (Go — package-level var). The injection asymmetry surfaces in `iab_category_storage.injection` field; a porter MUST update this field on the destination spec.
+
+---
+
+## Lifecycle rules (1)
+
+Driven by `lifecycle.rename`.
+
+### Rule 43: Bidder-rename three-step lifecycle
+
+**Pattern**: Renaming a bidder is a three-step refactor: (1) DELETE the old YAML + old code + old tests; (2) CREATE the new YAML + new code + new tests under the new name; (3) handle backward-compatibility for operators with the old name in their configs. Java does this via `aliases: { <old_name>: ~ }` tilde-inherit alias-back on the new YAML. Go does this via `exchange/adapter_util.go` removed-bidder warning map (clean-delete pattern) — the canonical Adoppler→ElementalTV case used PR `prebid/prebid-server-java#4326` (Java, alias-back) and PR `prebid/prebid-server#4639` (Go, clean-delete) two months apart.
+**Spec field driver**: `lifecycle.rename.{old_name, new_name, alias_back, alias_back_form, yaml_deletes[], yaml_adds[], package_moves[], fixture_dir_moves[]}`
+
+**Go YAML** (post-rename — file `static/bidder-info/elementaltv.yaml`):
+```yaml
+endpoint: "https://..."
+maintainer: { email: ... }
+geoscope: [USA]
+capabilities: { site: { mediaTypes: [video] }, app: { mediaTypes: [video] } }
+```
+
+**Go backward-compat** (`exchange/adapter_util.go`):
+```go
+// Removed-bidder warning map — operators with adoppler in their config get
+// a runtime warning pointing them at the new name.
+"adoppler": `Bidder "adoppler" is no longer available in Prebid Server. ` +
+            `If you're looking to use the Adoppler adapter, please rename ` +
+            `it to "elementaltv" in your configuration.`,
+```
+
+**Java YAML** (post-rename — file `src/main/resources/bidder-config/elementaltv.yaml`):
+```yaml
+adapters:
+  elementaltv:
+    endpoint: "https://..."
+    aliases:
+      adoppler: ~                        # alias-back via tilde — Rule 33 form.
+    meta-info:
+      maintainer-email: ...
+      site-media-types: [video]
+      app-media-types: [video]
+```
+
+**Translation rule**: The rename is atomic across BOTH languages but the backward-compat mechanism diverges. Java retains `adoppler: ~` as an alias; Go forces operator action via the removed-bidder map. A porter detecting `lifecycle.rename` on either side applies the matching three-step refactor on the destination side, choosing the destination's canonical backward-compat mechanism. Steps: (1) DELETE `yaml_deletes[]` paths; (2) CREATE `yaml_adds[]` paths; (3) ADD the alias-back declaration in the destination's appropriate form (`aliasOf: <old>` child YAML on Go's old form, OR removed-bidder warning entry on Go's new form; `aliases: { <old>: ~ }` parent map on Java per Rule 33). Package directory moves (`package_moves[]`) and fixture directory moves (`fixture_dir_moves[]`) are tracked separately — Java has both Java-package and test-resources moves; Go has only the YAML rename.
+
+**Round-trip considerations**: Round-trip-safe iff both languages adopt the rename in lockstep AND use a consistent backward-compat mechanism. If only one language renames OR the languages choose divergent backward-compat strategies (Java alias-back vs Go clean-delete), the cross-language port becomes asymmetric — the port skill detects mismatched `meta.bidder_name` (Go: `adoppler`, Java: `elementaltv`) and surfaces a `bidder-rename-divergent-handling` warning. The `rename.merged_at` and `rename.release` fields anchor the lifecycle event; consumers compare these timestamps to detect lag. A porter that does the rename on the destination side MUST preserve operator-facing migration guidance.
+
+**Notes**: Adoppler→ElementalTV is the canonical example. Java edge case #33; PR `prebid/prebid-server-java#4326`; release v3.38.0; merged 2026-01-12. Go-side rename PR `prebid/prebid-server#4639`; merged 2026-03-04 (two months later). The two PRs were independent — neither auto-propagated. The `lifecycle.rename` block is populated only on the post-rename spec (the new-name spec); the alias-back entry on the same spec carries `rename_origin: true` to signal the backward-compat origin. Reference: `adapter-spec.md` lines 410-430 for the `lifecycle.rename` schema; `behavior-taxonomy.md` `bidder-rename-three-step` taxon for the quirk pairing.
+
+---
+
+## Round-Trip Safety
+
+Not every spec field round-trips losslessly across Go→Java→Go (or Java→Go→Java). Some fields are language-specific: a porter cannot reconstruct what is not in the source language. This section enumerates the known asymmetries with a recommended action per direction.
+
+### Round-trip verdict per field path
+
+| Field path | Source-of-truth side | Lossy direction | Verdict | Recommendation |
+|---|---|---|---|---|
+| `code.builder.errors_returned[]` | Go-only | Java→Go→Java | Lossy | Java has no `Builder()` function — Spring DI creates the bidder; constructor-time errors are silent. Java→Go can synthesize a default `errors_returned: []` but cannot recover bidder-specific Builder errors. |
+| `tests.unit_test_methods_count` | Java-only | Go→Java→Go | Lossy | Go uses JSON-fixture harness with no `@Test` method count concept. Round-trip can't recover the original count. |
+| `tests.unit_test_loc` | Java-only | Go→Java→Go | Lossy | Same reasoning. |
+| `mutation.go_idiom` | Go-only sibling | Java→Go→Java | Partially-lossy | Idiom selected at port time. Round-trip can rechoose; not necessarily original choice. |
+| `mutation.java_idiom` | Java-only sibling | Go→Java→Go | Partially-lossy | Mirror of the above — `flexible-extension-fillExtension` is Java-only. |
+| `code.adapter_struct.*` | Go-only | Java→Go→Java | Asymmetric | Translates via Rule 8/Rule 35 mappings; field ORDER may rearrange on round-trip. |
+| `code.builder.template_parsed_at_build` | Go-only | Java→Go→Java | Lossy | No Java equivalent of the build-vs-runtime template-parse phase distinction. |
+| `spring_config.*` | Java-only | Go→Java→Go | Lossy | Spring DI is wholly Java-specific — factory class, `@PropertySource`, `bean_dependencies` all dropped. |
+| `bidder_class.*` | Java-only | Go→Java→Go | Lossy | Java class hierarchy + override methods + helper-class co-location dropped. Helper structure CAN be reconstructed from `code.file_layout.files[].role` but not always faithfully. |
+| `bidder_info.ortb_version` | Java-only | Go→Java→Go | Lossy | Go specs always emit null. Round-trip drops the value. |
+| `provenance.warnings[]` (language-specific subset) | Per-language | Cross-language | Partially-lossy | Go-only types (`legacy-encoding-json-direct-usage`, `legacy-test-helpers-imported`, `bidder-name-rebrand`) and Java-only types (`pom-version-mismatch`, `class-yaml-name-mismatch`, `test-application-properties-missing-entries`, `ref-resolution-failure`, `missing-expected-file`) drop on round-trip. |
+| `aliases[].test_assets.*` | Java-only | Go→Java→Go | Lossy | Go aliases have no IT class or fixture set; Java aliases require both (Rule 37). Round-trip drops the synthesized IT class metadata. |
+| `aliases[].test_application_properties_entries[]` | Java-only | Go→Java→Go | Lossy | Go has no `test-application.properties` registry. |
+| `cross_language.go_specific_concerns[]` | Go-source spec | Java→Go→Java | Lossy | Closure memoization, Go-specific helpers, Go-only library imports — all dropped on Go→Java. |
+| `cross_language.java_specific_concerns[]` | Java-source spec | Go→Java→Go | Lossy | FlexibleExtension subclasses, Spring `@Autowired` quirks, Lombok choices — language-specific. |
+| `iab_category_storage.injection` | Per-language | Cross-language | Lossless-with-translation | `constructor-arg` (Java) ↔ `static-init` (Go) is a deterministic mapping (Rule 42). |
+| `bidder_params_json` (verbatim bytes) | Cross-language | None | Lossless | Per Rule 38 — bytes copied verbatim. Round-trip-safe IFF Rule 38 is enforced. |
+
+### Implications for porters
+
+A porter MUST surface lossy-direction asymmetries as `cross_language.<source>_specific_concerns[]` entries on the SOURCE spec, AND emit a TODO on the destination side noting the dropped field. A round-trip-validation harness comparing round-tripped specs to originals MUST exempt the lossy fields from byte-equality assertions — see `cross-skill-integration.md` §6.3 for R4 round-trip determinism semantics, and §8 for the bounded-fidelity caveats that survive the contract.
+
+The dual-spec assertion harness at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` codifies which fields MUST be byte-equal, semantically-equivalent, or per-language-divergent — Rule 38 (bidder_params_json) and Rule 39 (schema_interpretation) drive the must-match set; lossy-direction fields are explicitly exempted via the R5-divergent key list.
+
+---
+
 ## Test fixture rules (2)
 
 Driven by `tests`.
@@ -1145,7 +1435,7 @@ src/test/resources/test-application.properties          # MODIFIED: append 2-4 l
 
 ## Summary
 
-37 unique port-translation rules total (Rules 1-37, with Rules 5, 8, 9, 19, 29, 32, 33, 34, 35, 36, 37 being the cross-language asymmetry rules that surface as quirks in either direction). Each rule is keyed by an Adapter Specification field; a porter consumes the spec and applies rules in the order the spec emits them.
+43 unique port-translation rules total (Rules 1-43, with Rules 5, 8, 9, 19, 29, 32, 33, 34, 35, 36, 37, 38, 39, 42, 43 being the cross-language asymmetry rules that surface as quirks in either direction). Each rule is keyed by an Adapter Specification field; a porter consumes the spec and applies rules in the order the spec emits them. The Round-Trip Safety section documents per-field lossy-direction asymmetries that survive the contract.
 
 Cross-skill consumers:
 

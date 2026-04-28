@@ -1,0 +1,376 @@
+adapter_spec_version: 1
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: gh-cli
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: 2026-04-27T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: aax
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://prebid.aaxads.com/rtb/pb/aax-prebid"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: true
+  maintainer:
+    email: "product@aax.media"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 720
+  user_sync:
+    supports:
+      - redirect
+    redirect:
+      url: "https://c.aaxads.com/aacxc.php?fv=1&wbsh=psa&ryvlg=setstatuscode&bidder=aax&gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&redirect={{.RedirectURL}}"
+      userMacro: "<vsid>"
+  yaml_extra_fields:
+    extra_info: "https://aax.golang.pbs.com"
+  yaml_field_name_quirks: []
+
+bidder_params_json: |-
+  {
+      "$schema": "http://json-schema.org/draft-04/schema#",
+      "title": "Aax Adapter Params",
+      "description": "A schema which validates params accepted by the Aax adapter",
+      "type": "object",
+      "properties": {
+          "cid": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The customer id provided by AAX."
+          },
+          "crid": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The placement id provided by AAX."
+          }
+      },
+      "required": [
+          "cid",
+          "crid"
+      ]
+  }
+bidder_params_sha256: 543bb3ef8a6e7fe06b0d73f43f90548a4040f8f67f765c8552ce3de5b3a83525
+
+params:
+  schema_interpretation:
+    properties:
+      - name: cid
+        type: string
+        description: "The customer id provided by AAX."
+        constraints:
+          minLength: 1
+      - name: crid
+        type: string
+        description: "The placement id provided by AAX."
+        constraints:
+          minLength: 1
+    required_fields:
+      - cid
+      - crid
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_aax.go
+    type_name: ExtImpAax
+    fields:
+      - name: Cid
+        json_tag: cid
+        type_native: string
+        omitempty: false
+        notes:
+          - "Declared but never unmarshaled by aax.go — the adapter passes the request through verbatim and the upstream bidder reads imp.ext.bidder.cid directly."
+      - name: Crid
+        json_tag: crid
+        type_native: string
+        omitempty: false
+        notes:
+          - "Declared but never unmarshaled by aax.go — the adapter passes the request through verbatim and the upstream bidder reads imp.ext.bidder.crid directly."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/aax/params_test.go
+    valid_cases_count: 1
+    invalid_cases_count: 12
+    bidder_constant_referenced: openrtb_ext.BidderAax
+
+code:
+  package_or_class: aax
+  directory_name: aax
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: aax.go
+        role: implementation
+        loc: 149
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party: []
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpoint
+        type: string
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: true
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-passthrough
+      custom_body_type: null
+    mutation:
+      mutates_request: false
+      entity_strategies: {}
+      go_idiom: none
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: none
+      mechanism_go: null
+      mechanism_java: null
+      target_type: null
+      wrapper_type: null
+    endpoint_resolution:
+      kind: query-parameter-augmentation
+      mechanism_go: net/url
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: getMediaTypeForImp
+        signature: "func getMediaTypeForImp(bid openrtb2.Bid, imps []openrtb2.Imp) (openrtb_ext.BidType, error)"
+      - name: buildEndpoint
+        signature: "func buildEndpoint(aaxUrl, hostUrl string) string"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: legacy-raw-go
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.adCodeType
+          fallback_action: next
+        - method: by-imp-mediatype
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    bid_pointer_pattern: pointer-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: none
+
+tests:
+  test_root_directory: aaxtest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: multi-format.json
+        sha256: 6ed9dfc99925ad86bcfdb5fee0ebf2f7d7f8f04dce89c850e462c61ea5d4265c
+        bytes: 2466
+      - filename: multi-imps.json
+        sha256: df8f2f81e29f458226f7ab56f08df4e90a636903738e2b6b41fda098ef1e86f5
+        bytes: 4088
+      - filename: no-bid.json
+        sha256: 2e7cdf8f5d51765d0fd7add985cab9b947df332bf125387afdb25f7fb08b8ec2
+        bytes: 1724
+      - filename: optional-params.json
+        sha256: 01cf157e600d5bcb401bee75de63e4c80fca9cdcd8c1dde85fed60b042c3875e
+        bytes: 1824
+      - filename: simple-banner.json
+        sha256: e51176a5ceef54775eacb366134fbb372d24033deaca8a88ecea152fd59804d1
+        bytes: 2964
+      - filename: simple-video.json
+        sha256: 47c13934ef7c70777d05b58dd5f3cd8f32fc9506f33f1902b241199fbc5d253f
+        bytes: 3159
+    supplemental:
+      - filename: invalid-req-400-status-code-bad-request.json
+        sha256: c41b41b86ffb91ba1e8b84b0af1e4a465f5e8726a5d103fab900cc4f0b832d3d
+        bytes: 3048
+      - filename: invalid-resp-diff-imp-id.json
+        sha256: 0f5045bcb6bfb4640f1968fef62a276ce299d1b102310809c9c1f973426531ac
+        bytes: 3877
+      - filename: invalid-resp-multi-imp-type.json
+        sha256: 7ac260dd6ab55854d1ece2b9a380e6a2277f516650682eaf40bde9bd8e4b9cbc
+        bytes: 5645
+      - filename: valid-req-200-bid-response-from-aax.json
+        sha256: 31f18460b3423a92c25fd94ff8ed1de0fbf197ffe20ef46afd5272ed10c217cb
+        bytes: 4252
+      - filename: valid-req-204-response-from-aax.json
+        sha256: fbf2ce5efbab8939d81782f495b7517d8c8ba4cb1be0d8d5c788d67082238906
+        bytes: 2211
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods:
+    - TestJsonSamples
+    - TestEndpointTemplateMalformed
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  injection: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: passthrough-request-body
+    file: adapters/aax/aax.go
+    summary: "MakeRequests (lines 24-45) is a json.Marshal passthrough — no per-imp split, no mutation, no imp.ext unmarshal. The single RequestData carries the whole request verbatim with ImpIDs derived via openrtb_ext.GetImpIDs. Mirrors Java's BidderUtil.defaultRequest passthrough."
+    edge_case_taxon: incomplete-classification
+  - id: imp-ext-unmarshal-skipped-despite-required-params
+    file: adapters/aax/aax.go
+    summary: "Schema requires cid+crid (with minLength: 1) but the adapter never unmarshals imp.ext. The ExtImpAax struct in openrtb_ext/imp_aax.go is declared but unused by aax.go; params are validated by JSON Schema only and the upstream bidder reads imp.ext.bidder.{cid,crid} verbatim from the passthrough request."
+    edge_case_taxon: incomplete-classification
+  - id: bid-type-multi-format-strict-throw
+    file: adapters/aax/aax.go
+    summary: "getMediaTypeForImp (lines 99-130) accumulates typeCnt across non-nil imp.banner/imp.video/imp.native; when typeCnt != 1 it returns an error 'unable to fetch mediaType in multi-format: <impID>' — same message regardless of typeCnt==0 (no media types) or typeCnt>=2 (multi-format). Surfaces as bid_type_resolution.multi_format_detection: strict and method_chain step 2 fallback_action: throw."
+    edge_case_taxon: incomplete-classification
+  - id: legacy-raw-status-checks
+    file: adapters/aax/aax.go
+    summary: "MakeBids (lines 49-62) uses raw response.StatusCode == http.StatusNoContent / == http.StatusBadRequest / != http.StatusOK checks instead of canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors helpers. http_status_handling: legacy-raw-go."
+    edge_case_taxon: incomplete-classification
+  - id: legacy-encoding-json-on-marshal-path
+    file: adapters/aax/aax.go
+    summary: "MakeRequests calls encoding/json json.Marshal(request) at line 28 instead of jsonutil.Marshal. The unmarshal paths (response body, bid.Ext) DO use jsonutil correctly. Cosmetic — flagged by reviewers in modern PRs but not load-bearing for behavior."
+    edge_case_taxon: legacy-encoding-json-direct-usage
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/aax/
+    package_name: aax
+    bidder_constant: openrtb_ext.BidderAax
+    impl_file: adapters/aax/aax.go
+    test_file: adapters/aax/aax_test.go
+    params_test_file: adapters/aax/params_test.go
+    ext_struct_file: openrtb_ext/imp_aax.go
+    ext_struct_type: ExtImpAax
+    bidder_info_yaml: static/bidder-info/aax.yaml
+    bidder_params_json: static/bidder-params/aax.json
+    test_fixtures_dir: adapters/aax/aaxtest/
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/aax/
+    bidder_class: AaxBidder
+    config_class: AaxConfiguration
+    yaml_path: src/main/resources/bidder-config/aax.yaml
+    proto_dir: null
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes:
+      - bidder-params-schema-drift
+      - endpoint-mechanism-divergence
+      - currency-overwrite-divergence
+  go_specific_concerns:
+    - "Endpoint URL is constructed at request time via buildEndpoint (lines 132-149) using net/url Query/RawQuery — Go appends ?src=<ExtraAdapterInfo> ONLY when ExtraAdapterInfo is non-empty. Java's AaxConfiguration.resolveEndpoint substitutes {{PREBID_SERVER_ENDPOINT}} into a fixed endpoint URL once at bean wiring time. Same observable URL, different mechanism: Go endpoint_resolution.kind=query-parameter-augmentation; Java=single-token-substitution."
+    - "ExtraAdapterInfo (config field) is consumed at request time by buildEndpoint, NOT by Builder (Builder just passes config.Endpoint + config.ExtraAdapterInfo through). The Go builder.signature_canonical: true but extra_adapter_info_used: true — uncommon combination."
+    - "static/bidder-info/aax.yaml carries 'extra_info: \"https://aax.golang.pbs.com\"' which is the default value for ExtraAdapterInfo; this surfaces as bidder_info.yaml_extra_fields.extra_info and feeds buildEndpoint's hostUrl arg."
+    - "Go bidder-params/aax.json applies minLength: 1 to both cid and crid; Java side does NOT. SHAs differ: Go=543bb3ef..., Java=c71febfe.... Cross-language R5 fidelity divergence — the dual-spec bidder_params_sha256 byte-equality assertion is expected to fire as severity: fail."
+    - "currency_overwrite_safety: none on Go side (adapter never sets bidResponse.Currency, framework defaults handle it). Java side hardcodes USD via BidderBid.of(bid, bidType, USD_CURRENCY) — currency_overwrite_safety: unguarded-hardcoded. Cross-language behavioral divergence: Go responses inherit the framework default, Java responses are forced to USD."
+    - "MakeBids' getMediaTypeForImp returns mediaType (still set to last detected non-nil imp media type) AND an error when typeCnt != 1 — caller treats the err as terminal and discards the bid; the value-side is unused. Subtle Go idiom that doesn't translate cleanly: Java equivalent throws PreBidException directly."
+    - "ExtImpAax struct is declared in openrtb_ext/imp_aax.go but is dead code from the adapter's perspective — it's referenced by neither aax.go nor params_test.go (which validates JSON schema only). Java side similarly has no proto_dir POJO; the symmetry holds for the unmarshal-skipped pattern but the Go side still pays the cost of the struct file."
+    - "params_test.go validParams has only ONE entry ({\"cid\":\"123\", \"crid\":\"1234\"}) and invalidParams has 12 entries — much smaller test surface than Java's AaxBidderTest (14 hand-written test methods)."
+    - "TestEndpointTemplateMalformed (aax_test.go lines 25-30) is a no-op assertion: it builds the bidder with Endpoint='{{Malformed}}' and asserts buildErr is nil — proves Builder doesn't validate the endpoint URL (no template parsing happens at build time, since aax doesn't use text/template). Mirrors java_specific_concern that Java's AaxBidder constructor validates the URL at bean construction."
+  reviewer_cohort:
+    go: []
+    java:
+      - CTMBNara
+      - AntoxaAntoxic
+    cross_language_coordinator: bretg
