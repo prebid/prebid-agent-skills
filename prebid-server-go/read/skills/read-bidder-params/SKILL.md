@@ -213,7 +213,7 @@ Both `TestValidParams` and `TestInvalidParams` typically reference the SAME cons
 - `TestValidParams` line 24: `validator.Validate(openrtb_ext.BidderKobler, ...)` — correct
 - `TestInvalidParams` line 47: `validator.Validate(openrtb_ext.BidderKrushmedia, ...)` — WRONG (copy-paste artifact)
 
-Validation rule R7 (canonicalized in `shared/adapter-spec.md` "Validation rules R1-R10"): if the constant on either line ≠ `openrtb_ext.Bidder<TitleCase(bidder)>`, emit:
+Validation rule R7 (canonicalized in `shared/adapter-spec.md` "Validation rules R1-R10"): if the constant on either line ≠ the constant declared as `Bidder<X> BidderName = "<name>"` in `openrtb_ext/bidders.go` at the resolved commit, emit:
 
 ```yaml
 provenance:
@@ -221,10 +221,10 @@ provenance:
     - type: bidder-constant-mismatch
       file: adapters/{bidder}/params_test.go
       line: <line number where the wrong constant appears>
-      summary: "validator.Validate called with openrtb_ext.<Wrong> (copy-paste artifact); should be openrtb_ext.Bidder<TitleCase(bidder)>. The Validate call still functions because the validator looks up the schema by name and rejects on schema mismatch — the test passes despite the wrong identifier."
+      summary: "validator.Validate called with openrtb_ext.<Wrong> (copy-paste artifact); should be openrtb_ext.<expected, looked up in bidders.go>. The Validate call still functions because the validator looks up the schema by name and rejects on schema mismatch — the test passes despite the wrong identifier."
 ```
 
-The TitleCase rule for the expected constant: lowercase bidder name → CamelCase per `openrtb_ext/bidders.go` constant generation (e.g., `kobler` → `BidderKobler`, `33across` → `Bidder33across`, `cadent_aperture_mx` → `BidderCadentApertureMx`). Edge case: when the bidder name has a leading digit (e.g., `33across`) the constant retains it as `Bidder33across` — that's a valid Go identifier because of the `Bidder` prefix.
+The expected constant for any bidder is whatever appears as `Bidder<X> BidderName = "<name>"` in `openrtb_ext/bidders.go` at the resolved commit. Look it up directly — do NOT try to derive it via flat TitleCase on the bidder name. The constant generation rules are not deterministically derivable from the YAML name: brand acronyms are preserved (`AJA`, `MX`, `TV`, `BWX`, `AMX`, `CWire`), camelHumps are explicit (`AdTonos`, `HuaweiAds`, `BeyondMedia`, `BidsCube`, `BigoAd`, `ConnectAd`), and leading-digit names capitalize the first letter after the digit (`33across` → `Bidder33Across`, not `Bidder33across`). The `Bidder` prefix makes any bidder name a valid Go identifier; the precise capitalization is whatever the upstream maintainers chose. Treat the `bidders.go` declaration as ground truth.
 
 The kobler canonical bug is the load-bearing test for this detection (see `shared/adapter-spec.md` "Worked example: Kobler" and the kobler golden spec at `read/test-fixtures/kobler.golden.spec.yaml` lines 23-25, 106). A successful run of this skill on kobler MUST emit BOTH the warning AND a `quirks[]` entry of type `bidder-constant-mismatch` (the quirks entry is added by the orchestrator on assembly, not by this skill — but the skill MUST emit the warning so the orchestrator can pair them).
 

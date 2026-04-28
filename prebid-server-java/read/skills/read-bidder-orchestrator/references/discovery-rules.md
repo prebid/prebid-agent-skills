@@ -41,7 +41,7 @@ Some bidders preserve original-brand TitleCase capitalization rather than apply 
 | `bidscube` | `BidsCube` | `BidsCubeBidder.java`, etc. |
 | `boldwinrapid` | `BoldwinRapid` | preserves the camelCase `Boldwin` + `Rapid` split |
 
-Spec field: `code.naming.preserves_acronym_case: true` is set when the discovered class root differs from the naive PascalCase. The R6 (`package-directory-mismatch`) warning is suppressed for these cases — the heuristic checks against this allow-list before warning.
+Spec field: `code_naming.preserves_acronym_case: true` (top-level) is set when the discovered class root differs from the naive PascalCase. The R6 (`package-directory-mismatch`) warning is suppressed for these cases — the heuristic checks against this allow-list before warning.
 
 The allow-list is maintained in this file; new entries require a Phase 2 sample (a real prebid-server-java PR demonstrating the preservation). The current allow-list reflects state at v3.41.0 (resolved_commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a`).
 
@@ -54,7 +54,7 @@ Java identifiers cannot start with a digit. Some bidders have digit-leading YAML
 | `152media` | `OneFiveTwoMedia` | Class root is the spelled-out digits in PascalCase. Files: `OneFiveTwoMediaBidder.java`, `OneFiveTwoMediaConfiguration.java`, `OneFiveTwoMediaTest.java`, `ExtImpOneFiveTwoMedia.java`. |
 | `33across` | `Thirtythree` | (Note: 33across is an alias-only on Java side; the Go side has `ttx` — see Go-side cross-language stub.) |
 
-Spec field: `code.naming.{yaml_name, class_name_root, identifier_workaround: true}` is set. The R6 warning is suppressed for these cases. Quirk taxon: `identifier-rule-workaround` (per `behavior-taxonomy.md`).
+Spec field: `code_naming.{yaml_name, class_name_root, identifier_workaround: digit-leading-rename}` (top-level) is set. The R6 warning is suppressed for these cases. Quirk taxon: `identifier-rule-workaround` (per `behavior-taxonomy.md`).
 
 ### Snake-case bidder names
 
@@ -102,7 +102,7 @@ After file gathering, the orchestrator runs these checks (Step 6 R-rules cite th
 ## Sources
 
 - Master plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` (Edge cases #18–#34, Discovery rules narrative).
-- Canonical schema: `../../../../../prebid-server-go/read/skills/shared/adapter-spec.md` (Per-section field reference: `code.naming.*`).
+- Canonical schema: `../../../../../prebid-server-go/read/skills/shared/adapter-spec.md` (Per-section field reference: `code_naming.*`, top-level).
 - Behavior taxonomy: `../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md` (`identifier-rule-workaround`, `acronym-case-preservation`, `bidder-rename-three-step` taxa).
 - Java reference list: `../../../references/new-bid-adapter-prs.md` (49 PRs with `Patterns Demonstrated` tags — source for the TitleCase + identifier-workaround allow-lists).
 - Sibling Go discovery rules: `../../../../../prebid-server-go/read/skills/read-adapter-orchestrator/references/discovery-rules.md` (when authored — Go has different file hierarchy).

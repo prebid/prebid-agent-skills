@@ -63,7 +63,7 @@ Record the inventory as `code.file_layout.files[]`. Set `code.file_layout.kind: 
 
 ### Step 2 — Classify each file by role
 
-Use [references/file-role-heuristics.md](references/file-role-heuristics.md) for the deterministic rule order. Roles in the spec enum: `implementation, types, parsers, utils, models, data-table, tests, params-tests, usersync`. The orchestrator has already filtered out `params-tests`; this skill ranges over the other eight.
+Use [references/file-role-heuristics.md](references/file-role-heuristics.md) for the deterministic rule order. Roles in the spec enum (closed 6-value set): `implementation, types, parsers, utils, models, data-table`. Test files (`_test.go`) are filtered out earlier by the orchestrator and do NOT appear in `code.file_layout.files[]`; the test-fixture inventory lives under `tests.fixture_inventory.*` instead. There is no `tests`, `params-tests`, or `usersync` role — those file kinds are accounted for in the test inventory and `bidder_info.user_sync` blocks respectively.
 
 Multi-file detection is rare (mediasquare, msft, appnexus). When detected, set `cross_language.port_concerns.multi_file_layout: true`.
 

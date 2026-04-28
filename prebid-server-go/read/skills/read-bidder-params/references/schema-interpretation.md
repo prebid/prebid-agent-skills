@@ -388,18 +388,29 @@ The kobler golden spec at `read/test-fixtures/kobler.golden.spec.yaml` lines 18-
 
 #### TitleCase rule
 
-The expected bidder constant for bidder `<name>` is `openrtb_ext.Bidder<TitleCase(name)>` per `openrtb_ext/bidders.go` constant generation:
+The expected bidder constant for bidder `<name>` is whatever appears as `Bidder<X> BidderName = "<name>"` in `openrtb_ext/bidders.go` at the resolved commit. Look it up directly — do NOT try to derive it from `<name>` via TitleCase. The constant generation rules are not deterministically derivable from the YAML name; treat `bidders.go` as ground truth.
+
+Examples (verified at master commit `d7f8515b`):
 
 | Bidder name | Constant |
 |---|---|
 | `kobler` | `BidderKobler` |
 | `optidigital` | `BidderOptidigital` |
-| `33across` | `Bidder33across` |
-| `cadent_aperture_mx` | `BidderCadentApertureMx` |
+| `33across` | `Bidder33Across` (capital A after the digit) |
+| `cadent_aperture_mx` | `BidderCadentApertureMX` (acronym MX preserved) |
 | `appnexus` | `BidderAppnexus` |
-| `aja` | `BidderAJA` |
+| `aja` | `BidderAJA` (acronym preserved) |
+| `e_volution` | `BidderEVolution` (camelHump after underscore drop) |
+| `huaweiads` | `BidderHuaweiAds` (explicit camelHump) |
+| `adtonos` | `BidderAdTonos` (explicit camelHump) |
 
-Note the exceptions: `33across` keeps the leading digit (the constant is a valid Go identifier because of the `Bidder` prefix); `aja` becomes `BidderAJA` not `BidderAja` (acronym preservation, `openrtb_ext/bidders.go` source-of-truth).
+The categories that diverge from a flat `TitleCase(name)`:
+
+- **Acronym preservation** (`AJA`, `MX`, `TV`, `BWX`, `AMX`, `CWire`, etc.) — upstream maintainers chose to keep the brand's all-caps form in the identifier.
+- **Explicit camelHumps** for multi-word brands (`AdTonos`, `BeyondMedia`, `BidsCube`, `BigoAd`, `ConnectAd`, `HuaweiAds`, etc.) — the YAML name is lowercase but the constant carries the brand's intended capitalization.
+- **Leading-digit names** (`33across` → `Bidder33Across`) capitalize the first letter after the digit. The `Bidder` prefix makes any name a valid Go identifier; the precise capitalization is upstream's choice.
+
+When in doubt, grep `openrtb_ext/bidders.go` at the pinned commit. The list is small (~270 entries) and authoritative.
 
 When the actual bidder constant in `params_test.go` ≠ the expected constant, emit:
 

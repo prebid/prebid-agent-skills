@@ -18,7 +18,7 @@ provenance:
     - type: package-directory-mismatch
       file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
       line: 39
-      summary: "Class root is ElementalTV (TitleCase preserves the TV brand acronym in uppercase) while the package directory and yaml_name are 'elementaltv' (all lowercase). Conventional cases (Kobler/KoblerBidder) preserve a 1:1 case fold between class root and yaml_name; ElementalTV deliberately does not. Surfaced for cross-language port awareness — fields code.naming.preserves_acronym_case=true and the acronym-case-preservation taxon classify this as canonical and intentional, not a bug."
+      summary: "Class root is ElementalTV (TitleCase preserves the TV brand acronym in uppercase) while the package directory and yaml_name are 'elementaltv' (all lowercase). Conventional cases (Kobler/KoblerBidder) preserve a 1:1 case fold between class root and yaml_name; ElementalTV deliberately does not. Surfaced for cross-language port awareness — fields code_naming.preserves_acronym_case=true and the acronym-case-preservation taxon classify this as canonical and intentional, not a bug."
     - type: cross-language-bidder-params-byte-divergence
       file: src/main/resources/static/bidder-params/elementaltv.json
       line: 1

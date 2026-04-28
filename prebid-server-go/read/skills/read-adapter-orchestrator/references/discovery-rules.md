@@ -215,7 +215,7 @@ discovery:
     parent_aliases: [<other bidder names>]    # if THIS is a parent
 ```
 
-This manifest is the input to Step 5 dispatch. Each per-domain reader receives only the slice of the manifest relevant to its domain. The manifest itself is NOT serialized into the final spec — it is internal accounting; the spec records only `provenance.source.discovered_files[]` (a flat path list) for R1 validation.
+This manifest is the input to Step 5 dispatch. Each per-domain reader receives only the slice of the manifest relevant to its domain. The manifest itself is NOT serialized into the final spec — it is internal accounting. R1 validation re-walks the YAML against `provenance.source.resolved_commit` rather than checking against a captured file list.
 
 ---
 
