@@ -309,19 +309,19 @@ For aliases with digit-leading or dot-containing names, the IT class name uses a
 | `360playvid` | `ThreeSixtyPlayvidTest` (if a Java class were needed; in practice 360playvid is YAML-only — see Pattern Index `digit-leading-bidder-name-as-yaml-only`) | Same. |
 | `AdTarget.org` | `AdTargetOrgTest` (dot stripped) | Java identifiers cannot contain dots; strip them. |
 
-Detection: when `aliases[].test_assets.it_class` does NOT match TitleCase(yaml_name), set:
+Detection: when `aliases[].test_assets.it_class` does NOT match TitleCase(yaml_name), set (under top-level `code_naming:`):
 
-- `code.naming.yaml_name: <verbatim>`
-- `code.naming.class_name_root: <derived>`
-- `code.naming.identifier_workaround: true`
+- `code_naming.yaml_name: <verbatim>`
+- `code_naming.class_name_root: <derived>`
+- `code_naming.identifier_workaround: digit-leading-rename`
 
 Plus a quirk with `edge_case_taxon: identifier-rule-workaround`.
 
 ### TitleCase brand-acronym preservation (edge case #27)
 
-When the bidder's class name preserves brand acronym casing, set:
+When the bidder's class name preserves brand acronym casing, set (under top-level `code_naming:`):
 
-- `code.naming.preserves_acronym_case: true`
+- `code_naming.preserves_acronym_case: true`
 
 Examples:
 
@@ -375,13 +375,9 @@ adapters.{xyz}.aliases.{name}.endpoint=http://localhost:8090/{name}-exchange
 ```yaml
 tests:
   test_application_properties_entries_added: <count>
-
-registry:
-  test_application_properties:
-    entries_added: <count>
 ```
 
-The `tests.test_application_properties_entries_added` form is the spec field used by downstream consumers; the top-level `registry.test_application_properties.entries_added` is a summary the orchestrator merges.
+The `tests.test_application_properties_entries_added` form is the canonical spec field used by downstream consumers. Per-alias detail (each appended line as `{ key, value, line }`) lives under `aliases[].test_application_properties_entries[]` and the orchestrator merges from the read-bidder-class fragment.
 
 When the count is zero (gap — bidder added but no IT class), emit a quirk with `edge_case_taxon: incomplete-classification`.
 

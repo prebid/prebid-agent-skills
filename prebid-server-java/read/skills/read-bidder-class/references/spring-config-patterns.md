@@ -116,7 +116,7 @@ Bean Validation annotations recognized:
 - `@Pattern(regexp)` — regex constraint.
 - `@Email` — email format.
 
-Record each annotation as a string in the `validations[]` list (e.g., `["NotBlank"]` or `["Size(min=1, max=10)"]`).
+Record each annotation as a string in the `validations[]` list including the leading `@` (e.g., `["@NotBlank"]` or `["@Size(min=1, max=10)"]`).
 
 ### Worked examples
 

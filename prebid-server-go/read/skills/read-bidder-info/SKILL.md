@@ -73,12 +73,16 @@ The decision tree's primary inputs are:
 
 Note: this skill only reads the YAML. Detection of patterns that require adapter-Go code (e.g., `dev-prod-toggle` toggling between `endpoint` and a hardcoded `devEndpoint` constant) is INFERRED from YAML signals (presence of a paired `dev-endpoint:` field, presence of `extra_info` carrying a second URL). When YAML alone is insufficient, the kind defaults to `static` and this skill emits an `endpoint_construction_inference_incomplete` warning so the orchestrator can re-classify after `read-adapter-code` runs. The orchestrator owns the final reconciliation under spec Validation Rule R3 (no invented fields).
 
-### Step 4: Detect macros (`endpoint_construction.macros_used[]`)
+### Step 4: Detect macros (`endpoint_construction.macros_used[]` + `macro_syntax`)
 
 - Regex-extract every `{{.<Identifier>}}` substring from the `endpoint:` string.
 - For each captured identifier, check membership against the canonical 18-field set documented at [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section — fields: `Host`, `PublisherID`, `ZoneID`, `SourceId`, `AccountID`, `AdUnit`, `MediaType`, `GvlID`, `PageID`, `SupplyId`, `ImpID`, `SspId`, `SspID`, `SeatID`, `TokenID`, `PartnerId`, `Region`, `PlacementID`).
-- Identifiers in the canonical 18-field list -> append to `endpoint_construction.macros_used[]`.
-- Identifiers NOT in the canonical 18-field list -> append to `endpoint_construction.placeholders_unresolved[]` AND emit warning of type `endpoint-placeholder-unresolved` (Validation Rule R8). These will silently resolve to empty string at runtime.
+- Identifiers in the canonical 18-field list -> append the BARE identifier (no `{{.X}}` wrapper) to `endpoint_construction.macros_used[]`. The delimiter convention is captured separately via `endpoint_construction.macro_syntax`.
+- Identifiers NOT in the canonical 18-field list -> append the bare identifier to `endpoint_construction.placeholders_unresolved[]` AND emit warning of type `endpoint-placeholder-unresolved` (Validation Rule R8). These will silently resolve to empty string at runtime.
+- Set `endpoint_construction.macro_syntax`:
+  - `go-template` when the source endpoint uses `{{.Identifier}}` form (Go canonical) — applies to all Go-source specs.
+  - `null` when `macros_used` is empty.
+  - (Java-source specs additionally use `java-string-replace` for `{{Identifier}}` form, `printf` for `%s`-style positional, `custom` paired with a `quirks` entry; these only surface in `read-bidder-config`.)
 
 Note: `{{.ExternalURL}}` and other user-sync template fields are NOT endpoint macros — if found in `endpoint:`, they are unresolved (R8).
 

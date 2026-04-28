@@ -65,7 +65,7 @@ For each domain, locate the canonical paths AND any aliases. Discovery uses the 
 - **Adapter test runner**: `adapters/{bidder}/{bidder}_test.go` (typically a thin `RunJSONBidderTest` wrapper).
 - **Registration files**: `exchange/adapter_builders.go` and `openrtb_ext/bidders.go` (read-only — used to verify the bidder constant exists; not parsed in full).
 
-Discovery records every found path on `provenance.source.discovered_files[]` (internal accounting). Missing required files trigger hard errors per R1.
+Discovery records every found path in an internal manifest used by Step 5 dispatch. Missing required files trigger hard errors per R1. The manifest is NOT serialized into the final spec; R1 verification re-walks the YAML against `provenance.source.resolved_commit` rather than against a captured file list.
 
 ### Step 3 — Drift check the module path major
 
@@ -108,7 +108,7 @@ The orchestrator merges fragments into the canonical schema and computes derived
    - R8: Endpoint placeholder validation against `macros.EndpointTemplateParams` (the canonical 18-field list at [`../../../review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md) Endpoint Template Macros section). Unrecognized `{{.XYZ}}` = `endpoint-placeholder-unresolved` warning.
    - R9: If `code.imports.has_jsonutil == false` AND any `Marshal`/`Unmarshal` import from `encoding/json` is used in adapter code, emit `legacy-encoding-json-direct-usage` warning.
    - R10: If `tests.uses_canonical_harness == false` (no `RunJSONBidderTest`), emit `legacy-test-helpers-imported` warning.
-4. **Schema validation R1–R3**: Reject hard if any spec field references a path NOT in `provenance.source.discovered_files[]`. Reject hard if any enumerated field has value `custom` without a paired `quirks[]` entry referencing the same field.
+4. **Schema validation R1–R3**: Reject hard if any spec field references a path that does NOT exist at `provenance.source.resolved_commit`. Reject hard if any enumerated field has value `custom` without a paired `quirks[]` entry referencing the same field.
 5. **Disabled bidder check**: If `bidder_info.disabled: true`, set `meta.disabled: true`, emit a `provenance.warnings[]` of type `disabled-bidder-read` ("bidder is currently disabled in master; spec captures last known shape"), and continue. The spec is still valid; downstream consumers decide what to do.
 
 The complete validation rule list R1–R10 is canonical at [`../shared/adapter-spec.md`](../shared/adapter-spec.md) (Validation rules section). Warning types and schema are canonical at [`references/provenance-warnings.md`](references/provenance-warnings.md).

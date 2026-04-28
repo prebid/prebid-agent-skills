@@ -173,15 +173,15 @@ The 17 Java-specific edge cases (numbered #18–#34 in the master plan) all map 
 | # | Edge case | Handling |
 |---|---|---|
 | 18 | Spring `@Configuration` class with `@PropertySource` | `read-bidder-class` populates `spring_config.{factory_class, factory_method, property_source_path}`. Orchestrator validates `property_source_path` matches expected path. |
-| 19 | Configuration-class naming variance (`KoblerConfiguration` vs `AdverxoBidderConfiguration`) | `code.config_class_name_pattern` set by reader; orchestrator records both observed forms without warning. |
+| 19 | Configuration-class naming variance (`KoblerConfiguration` vs `AdverxoBidderConfiguration`) | `spring_config.factory_class` (verbatim) records the observed name. The orchestrator records both shapes (`<Name>Configuration` and `<Name>BidderConfiguration`) without warning. |
 | 20 | `BidderConfigurationProperties` subclass for custom YAML fields (Kobler `devEndpoint`, Appnexus `platformId`+`iabCategories`, Huaweiads/NextMillennium `ExtraInfo`) | `spring_config.configuration_properties_class.{name, extends, extra_fields[], nested_classes[]}` populated by reader. |
 | 21 | IAB categories inlined in YAML (Appnexus 120 entries) vs Go data file | `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: 120, injection: constructor-arg}` populated by `read-bidder-class`. |
 | 22 | Hand-written N `@Test` methods (no JSON harness) | `tests.{unit_test_methods_count, unit_test_loc, hand_written_test_methods[]}` populated by reader. |
 | 23 | Wiremock + 4-file IT fixture pattern | `tests.integration_test_pattern: 4-file-split` and `fixture_inventory.integration[]` carry the 4 files per case. |
 | 24 | Per-alias IT class + 4-file fixture set required | Aliases discovered in Step 4 carry `test_assets.{it_class, fixture_dir, fixture_file_count}`. |
 | 25 | Central `test-application.properties` registry append | Step 6 emits `tests.test_application_properties_entries_added: N` and warns if zero (likely missing). |
-| 26 | Class names break Java identifier rules (`152media` → `OneFiveTwoMediaTest`) | `code.naming.{yaml_name, class_name_root, identifier_workaround: true}`. Orchestrator recognizes the digit-leading pattern in Step 2. |
-| 27 | TitleCase brand-acronym preservation (`ElementalTV`, `FeedAd`, `BidTheatre`) | `code.naming.preserves_acronym_case: true`. R6 doesn't warn for these — the heuristic checks against an allow-list of known acronyms. |
+| 26 | Class names break Java identifier rules (`152media` → `OneFiveTwoMediaTest`) | `code_naming.{yaml_name, class_name_root, identifier_workaround: digit-leading-rename}` (top-level). Orchestrator recognizes the digit-leading pattern in Step 2. |
+| 27 | TitleCase brand-acronym preservation (`ElementalTV`, `FeedAd`, `BidTheatre`) | `code_naming.preserves_acronym_case: true` (top-level). R6 doesn't warn for these — the heuristic checks against an allow-list of known acronyms. |
 | 28 | `Bidder<T>` generic for custom payloads (Mediasquare `Bidder<MediasquareRequest>`) | `bidder_class.parameterized_request_type` populated by reader. Triggers `imp-flatten-aggregate` rule in `batching.rules[]`. |
 | 29 | `ortb-version: "2.6"` quoted-string field | `bidder_info.ortb_version` populated. |
 | 30 | `enabled: false` opt-in default (Optidigital, Adverxo aliases) | `bidder_info.default_enabled: false`. Orchestrator emits `disabled-bidder-read` warning unless `--allow-disabled` was passed. |

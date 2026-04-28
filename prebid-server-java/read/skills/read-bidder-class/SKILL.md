@@ -28,9 +28,8 @@ It owns these top-level spec keys (all dense on Java-source specs):
 - `cross_language.go_specific_concerns[]` — empty list on Java-source specs.
 - `cross_language.port_concerns.{multi_file_layout, package_directory_mismatch, custom_unmarshaljson_present, mutation_idiom_divergence, yaml_unification}` — booleans this skill computes (always sets `yaml_unification: true` since Java unifies what Go splits).
 - `quirks[]` — entries whose evidence lives in adapter Java code or test fixtures.
-- `code.naming.*` — `yaml_name`, `class_name_root`, `identifier_workaround`, `preserves_acronym_case` (Java edge cases #26, #27).
+- `code_naming.*` (top-level) — `yaml_name`, `class_name_root`, `identifier_workaround` (enum: `null | digit-leading-rename | acronym-collision | custom`), `preserves_acronym_case` (bool), `notes[]` (Java edge cases #26, #27). The block is null on Go-source specs.
 - `aliases[].test_assets.*` — populated when the parent's YAML `aliases:` map declares children that ship per-alias IT classes (edge case #24).
-- `registry.test_application_properties.entries_added` — count of lines this bidder adds to the central registry (edge case #25).
 
 It does **not** own (defer to sibling skills): `bidder_info.*` (read-bidder-config), `bidder_params_json` / `params.*` (read-bidder-params-java), `meta.*` and `provenance.*` (read-bidder-orchestrator).
 
@@ -85,8 +84,8 @@ From the file with role=`bidder`:
 2. `override_methods[]` — locate every method annotated `@Override`. Typically `[makeHttpRequests, makeBids]`. Adapters that delegate via `BidderUtil.defaultRequest` may collapse `makeHttpRequests` to a thin wrapper but still list it here.
 3. `constructor.arity` — count of parameters in the public constructor.
 4. `constructor.parameters[]` — for each parameter, record `{ name, type, source, role }`:
-   - `source ∈ {config-field, framework-injected}`. `config-field` when the value is read from `BidderConfigurationProperties` getters in the lambda (e.g., `cfg.getEndpoint()`, `cfg.getDevEndpoint()`); `framework-injected` when it is an autowired Spring bean in the factory method (`currencyConversionService`, `mapper`).
-   - `role ∈ {properties, helper-collaborator, framework-injected}`. `properties` when the parameter is a config-derived String/primitive; `helper-collaborator` when it is a domain helper (`CurrencyConversionService`, `JacksonMapper`, `IdGenerator`, `Clock`, `BidderUtil`); `framework-injected` for everything else autowired but neither config nor a known helper.
+   - `source` is FREE-TEXT carrying the lambda-binding expression verbatim. Common shapes observed in goldens: `"config.endpoint"`, `"config.xapi.username"`, `"config.devEndpoint"` (dotted path into a `BidderConfigurationProperties` getter), `"framework-injected"` (autowired Spring bean — `currencyConversionService`, `mapper`, `idGenerator`), `"@Value(${external-url})"` (Spring property injection), `"factory-constant"` (Rubicon `bidderName`), `"factory-instantiated (new UUIDIdGenerator())"` (factory creates fresh instance), `"config.generateBidId (defaults true)"` (annotated-with-default narrative). Round-trip preserves the verbatim string.
+   - `role ∈ {properties, helper-collaborator, framework-injected, authentication-input}`. `properties` when the parameter is a config-derived String/primitive; `helper-collaborator` when it is a domain helper (`CurrencyConversionService`, `JacksonMapper`, `IdGenerator`, `Clock`, `BidderUtil`); `framework-injected` for everything else autowired but neither config nor a known helper; `authentication-input` for parameters whose sole purpose is to feed a pre-built basic-auth or HMAC-digest header (canonical: Rubicon `xapiUsername`, `xapiPassword`).
    - The standard collaborator catalog (`JacksonMapper`, `CurrencyConversionService`, `IdGenerator`, `Clock`, `BidderUtil`) lives in [references/spring-config-patterns.md](references/spring-config-patterns.md#standard-collaborators).
 5. `static_fields[]` — class-level constants: TypeReferences (`KOBLER_EXT_TYPE_REFERENCE`), default-currency strings (`DEFAULT_BID_CURRENCY`), ext-key strings (`EXT_PREBID`). Record `{ name, type, value? }`.
 6. `helper_classes_co_located[]` — non-bidder classes co-located in `bidder/{xyz}/` (e.g., `MediasquareUtil`, `KueezExtractor`).
@@ -103,7 +102,7 @@ From the file with role=`configuration`:
 5. `configuration_properties_class.*` — populated when the adapter declares a subclass of `BidderConfigurationProperties` (typically as an inner static class on the factory class):
    - `name` — the subclass identifier (e.g., `KoblerConfigurationProperties`).
    - `extends` — typically `BidderConfigurationProperties`.
-   - `extra_fields[]` — each declared field with `{ name, type, validations[] }`. Validations are Bean Validation annotations: `@NotBlank`, `@NotNull`, `@Size`, etc. Edge case #20 examples: Kobler's `@NotBlank private String devEndpoint`; Appnexus's `platformId` + `iabCategories` (Map<String, Long>).
+   - `extra_fields[]` — each declared field with `{ name, type, validations[] }`. `validations[]` is a list of strings carrying the verbatim Bean Validation annotation including the leading `@`: `["@NotBlank"]`, `["@NotNull"]`, `["@Valid", "@NotNull"]`, `["@Size(min=1, max=10)"]`. Empty list permitted. Edge case #20 examples: Kobler's `@NotBlank private String devEndpoint`; Appnexus's `platformId` + `iabCategories` (Map<String, Long>).
    - `nested_classes[]` — additional inner static classes (e.g., Huaweiads/NextMillennium `ExtraInfo`).
    - `lombok_annotations[]` — class-level Lombok annotations: `[Data, EqualsAndHashCode, NoArgsConstructor]` for the canonical case; record verbatim.
    - When the factory class declares NO subclass (default `BidderConfigurationProperties` is enough), set `configuration_properties_class: null`.
@@ -240,17 +239,17 @@ When `inputs.parent_aliases` is non-empty (the bidder is a parent declaring `ali
 
 When an alias does NOT ship an IT class (a gap that reviewers flag), emit a quirk with `edge_case_taxon: incomplete-classification`.
 
-Identifier-rule workaround (edge case #26): for digit-leading bidders (`152media` → `OneFiveTwoMediaTest`), record:
+Identifier-rule workaround (edge case #26): for digit-leading bidders (`152media` → `OneFiveTwoMediaTest`), record (under top-level `code_naming:`):
 
-- `code.naming.yaml_name: 152media`
-- `code.naming.class_name_root: OneFiveTwoMedia`
-- `code.naming.identifier_workaround: true`
+- `code_naming.yaml_name: 152media`
+- `code_naming.class_name_root: OneFiveTwoMedia`
+- `code_naming.identifier_workaround: digit-leading-rename`
 
 Plus a quirk with `edge_case_taxon: identifier-rule-workaround`.
 
-TitleCase brand-acronym preservation (edge case #27): when the class name preserves acronym casing (`ElementalTV` not `ElementalTv`, `FeedAd` not `FeedAd` lowercase d, `BidTheatre`), record:
+TitleCase brand-acronym preservation (edge case #27): when the class name preserves acronym casing (`ElementalTV` not `ElementalTv`, `FeedAd` not `FeedAd` lowercase d, `BidTheatre`), record (under top-level `code_naming:`):
 
-- `code.naming.preserves_acronym_case: true`
+- `code_naming.preserves_acronym_case: true`
 
 Plus a quirk with `edge_case_taxon: acronym-case-preservation` only when the casing diverges from a strict TitleCase normalization (i.e., `TV`, `Ad` are preserved as-is).
 
@@ -266,7 +265,7 @@ adapters.{xyz}.aliases.{name}.enabled=true
 adapters.{xyz}.aliases.{name}.endpoint=http://localhost:8090/{name}-exchange
 ```
 
-Emit `tests.test_application_properties_entries_added: <count>` and `registry.test_application_properties.entries_added: <count>` (both fields are populated for downstream consumers — the `tests.*` form is the spec field; the `registry.*` form is a top-level summary the orchestrator merges).
+Emit `tests.test_application_properties_entries_added: <count>` (the canonical spec field). Per-alias detail lives under `aliases[].test_application_properties_entries[]` (each entry: `{ key, value, line }`).
 
 When the count is zero (the bidder is added BUT no IT class exists, a gap that reviewers flag), emit a quirk with `edge_case_taxon: incomplete-classification`.
 
@@ -308,7 +307,7 @@ Stub `cross_language.go_artifacts` with path hints only:
 
 - `bidder_dir: adapters/{xyz}/`
 - `package_name: {xyz}` (lowercase)
-- `bidder_constant: openrtb_ext.Bidder<TitleCase>` (best-guess; orchestrator may overwrite when round-tripping from Go)
+- `bidder_constant: openrtb_ext.Bidder<X>` where `<X>` is looked up directly in the Go-side `openrtb_ext/bidders.go` if available (do NOT derive via flat TitleCase — see Go-side `read-bidder-params` for the lookup rule). When the Go side is unavailable, leave as a best-guess stub; the orchestrator overwrites when round-tripping from Go.
 
 Populate `cross_language.reviewer_cohort.java[]` from the actual review history in [../../../references/new-bid-adapter-prs.md](../../../references/new-bid-adapter-prs.md) (cohort is wholly disjoint from Go — see Cross-language note below). `reviewer_cohort.go: []` on Java-source specs. `cross_language_coordinator: bretg` always.
 
@@ -322,12 +321,12 @@ Each Java edge case maps to specific spec fields owned by this skill. Quirks are
 | 19 | Configuration-class naming variance (`KoblerConfiguration` vs `AdverxoBidderConfiguration`) | `spring_config.factory_class` (verbatim) |
 | 20 | `BidderConfigurationProperties` subclass (Kobler `devEndpoint`, Appnexus `platformId`+`iabCategories`, Huaweiads `ExtraInfo`) | `spring_config.configuration_properties_class.{name, extends, extra_fields[], nested_classes[], lombok_annotations[]}` |
 | 21 | IAB categories inlined in YAML (Appnexus 120 entries) | `iab_category_storage.{storage_kind: yaml-inlined, yaml_field, table_size, injection}` |
-| 22 | Hand-written N `@Test` methods (no JSON harness) | `tests.{unit_test_methods_count, unit_test_loc, uses_vertx_test, hand_written_test_methods[]}` |
+| 22 | Hand-written N `@Test` methods (no JSON harness) | `tests.{unit_test_methods_count, unit_test_loc, uses_canonical_harness, hand_written_test_methods[]}` |
 | 23 | Wiremock 4-file IT fixture pattern | `tests.integration_test_pattern: 4-file-split`, `tests.fixture_inventory.integration[]` |
 | 24 | Per-alias IT class + 4-file fixture set required | `aliases[].test_assets.{it_class, fixture_dir, fixture_file_count}` |
-| 25 | Central `test-application.properties` registry append | `registry.test_application_properties.entries_added: N` (also `tests.test_application_properties_entries_added`) |
-| 26 | Class names break Java identifier rules for digit-leading bidders | `code.naming.{yaml_name, class_name_root, identifier_workaround: true}` + quirk `identifier-rule-workaround` |
-| 27 | TitleCase brand-acronym preservation | `code.naming.preserves_acronym_case: true` + quirk `acronym-case-preservation` |
+| 25 | Central `test-application.properties` registry append | `tests.test_application_properties_entries_added: N` (canonical) + per-alias detail in `aliases[].test_application_properties_entries[]` |
+| 26 | Class names break Java identifier rules for digit-leading bidders | `code_naming.{yaml_name, class_name_root, identifier_workaround: digit-leading-rename}` (top-level) + quirk `identifier-rule-workaround` |
+| 27 | TitleCase brand-acronym preservation | `code_naming.preserves_acronym_case: true` (top-level) + quirk `acronym-case-preservation` |
 | 28 | `Bidder<T>` generic for custom payloads (Mediasquare, Huaweiads) | `bidder_class.parameterized_request_type` + `code.make_requests.request_body.{kind: custom, custom_body_type}` |
 | 29 | `ortb-version: "2.6"` quoted-string field | `bidder_info.ortb_version` (owned by `read-bidder-config`; this skill does not own) |
 | 30 | `enabled: false` opt-in default | `bidder_info.default_enabled: false` (owned by `read-bidder-config`) |

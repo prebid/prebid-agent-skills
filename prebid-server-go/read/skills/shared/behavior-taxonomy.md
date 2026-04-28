@@ -409,8 +409,8 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `yaml-field-name-typo` | YAML field uses a near-canonical name PBS silently ignores. | quirks + bidder_info.yaml_field_name_quirks |
 | `multi-file-layout-justified` | Multi-file layout that the heuristic flags but reviewer accepted. Canonical: Mediasquare non-OpenRTB body justified split. | quirks |
 | `legacy-go-pattern-pre-1.22` | Go code uses pattern that pre-dates Go 1.22 (e.g., capture-by-reference loop). | quirks |
-| `identifier-rule-workaround` | Class name modified to satisfy Java identifier rules. Canonical: `152media` → `OneFiveTwoMediaTest`. | quirks + code.naming |
-| `acronym-case-preservation` | TitleCase preserves brand acronym. Canonical: `ElementalTV`, `FeedAd`, `BidTheatre`. | quirks + code.naming.preserves_acronym_case |
+| `identifier-rule-workaround` | Class name modified to satisfy Java identifier rules. Canonical: `152media` → `OneFiveTwoMediaTest`. | quirks + code_naming (top-level) |
+| `acronym-case-preservation` | TitleCase preserves brand acronym. Canonical: `ElementalTV`, `FeedAd`, `BidTheatre`. | quirks + code_naming.preserves_acronym_case (top-level) |
 | `tilde-alias-syntax` | YAML alias declared as `oldname: ~` rather than full block. | quirks + aliases[].config_form |
 | `bidder-rename-three-step` | Bidder rename via DELETE old YAML + CREATE new YAML + alias-back via tilde. Canonical: Adoppler → ElementalTV. | quirks + lifecycle.rename |
 | `endpoint-compression-typo` | Specific case of `yaml-field-name-typo` for the gzip-compression field. Canonical: Ogury `endpointCompression` vs `endpoint-compression`. | quirks + bidder_info.yaml_field_name_quirks |
