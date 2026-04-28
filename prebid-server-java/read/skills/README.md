@@ -15,7 +15,7 @@ In scope on the Java side: discovery, fetch, parse, dispatch, assembly. Out of s
 ```
 prebid-server-java/read/skills/
 ├── README.md                                  ← you are here
-├── shared/                                    Empty — references Go-side canonical files
+├── shared/                                    Empty by design — links Go-side canonical files
 ├── read-bidder-orchestrator/                  Entry-point skill: discovery, fetch, dispatch, assembly
 │   └── references/
 ├── read-bidder-class/                         Parses src/main/java/org/prebid/server/bidder/{xyz}/*.java + JUnit tests
@@ -25,8 +25,6 @@ prebid-server-java/read/skills/
 └── read-bidder-params-java/                   Parses src/main/resources/static/bidder-params/{xyz}.json + ExtImp{Xyz}.java
     └── references/
 ```
-
-(`references/` subdirs currently empty pending Phase 3 SKILL.md authoring.)
 
 > **Shared references**: The canonical schema lives on the Go side at [`prebid-server-go/read/skills/shared/adapter-spec.md`](../../../prebid-server-go/read/skills/shared/adapter-spec.md). Java-side readers consume the same schema; if a future divergence requires a Java-specific schema, that lives here as `shared/adapter-spec-java.md`. Likewise for [`behavior-taxonomy.md`](../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md) and [`port-translation-rules.md`](../../../prebid-server-go/read/skills/shared/port-translation-rules.md) — single source of truth on the Go side.
 
@@ -48,7 +46,7 @@ Top-to-bottom guidance for a reviewer reading a Java-source adapter spec YAML. U
 
 ## Test fixtures
 
-Golden spec at `read/test-fixtures/kobler.golden.spec.yaml` (cross-language port pair — its Go sibling lives at `prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`). Round-trip determinism (R4) is enforced — re-running the orchestrator on the same `provenance.source.resolved_commit` MUST produce a byte-identical spec modulo `provenance.read.timestamp_utc` and `provenance.read.operator`.
+Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. 10 fixtures pinned to commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a`: `152media, aax, appnexus, elementaltv, generic, huaweiads, kobler, mediasquare, optidigital, rubicon`. The Phase A acceptance-gate fixture is `kobler` (cross-language port pair — its Go sibling lives at `prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`). Round-trip determinism (R4) is enforced — re-running the orchestrator on the same `provenance.source.resolved_commit` MUST produce a byte-identical spec modulo `provenance.read.timestamp_utc` and `provenance.read.operator`. See `read/test-fixtures/README.md` for per-fixture edge cases.
 
 ## What's NOT in scope
 
@@ -60,10 +58,11 @@ Golden spec at `read/test-fixtures/kobler.golden.spec.yaml` (cross-language port
 ## Cross-references
 
 - The Go parallel suite at `prebid-server-go/read/skills/` is the source of truth for `adapter-spec.md`, `behavior-taxonomy.md`, and `port-translation-rules.md`.
-- [`prebid-server-java/references/new-bid-adapter-prs.md`](../../references/new-bid-adapter-prs.md) — 49 Java reference PRs with `Patterns Demonstrated` tags, used as ground truth for Java behavioral taxonomy and port-translation rule discovery.
+- [`prebid-server-java/references/new-bid-adapter-prs.md`](../../references/new-bid-adapter-prs.md) — 49 Java reference PRs (39 currently tagged with `Patterns Demonstrated`), used as ground truth for Java behavioral taxonomy and port-translation rule discovery.
 
 ## Status
 
-- test-fixtures/kobler.golden.spec.yaml — Phase A acceptance gate golden (cross-language port pair), completed
-- shared/ — empty by design (links to Go-side canonical schema); divergence-trigger files would land here
-- Per-skill SKILL.md files (4 to author) — Phase 3 work, pending
+- 10 goldens at `read/test-fixtures/` (Phase A `kobler` plus 9 corpus fixtures)
+- `shared/` empty by design (links to Go-side canonical schema); divergence-trigger files would land at `shared/adapter-spec-java.md` if Java-specific schema becomes necessary
+- All 4 per-skill SKILL.md files authored (`read-bidder-orchestrator`, `read-bidder-class`, `read-bidder-config`, `read-bidder-params-java`) with `references/` populated
+- Phase C Java read suite complete; see [`ROADMAP.md`](../../../ROADMAP.md) for next milestones

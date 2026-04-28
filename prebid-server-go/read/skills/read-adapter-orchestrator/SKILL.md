@@ -17,7 +17,7 @@ For a single bidder pinned to a single commit, the skill produces:
 
 The YAML is the contract; the Markdown is the dashboard. Both are emitted at the same `provenance.source.resolved_commit`. Re-running the skill on the same commit MUST produce a byte-identical YAML modulo `provenance.read.timestamp_utc` and `provenance.read.operator` (R4 round-trip determinism).
 
-The output is the input contract for the future `write/` skill (regenerate adapter from spec) and the existing scaffolded `port-go2java/` skill (translate Go-source spec into Java artifacts; consumes [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md)).
+The output is the input contract for the future `write/` skill (regenerate adapter from spec) and the future `port-go2java/` skill (translate Go-source spec into Java artifacts; will consume [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md)). Both are Phase D/E milestones — see [`../../../ROADMAP.md`](../../../ROADMAP.md).
 
 ## Inputs
 
@@ -174,7 +174,7 @@ See [`references/source-modes.md`](references/source-modes.md) for:
 The orchestrator's output feeds three downstream surfaces:
 
 1. **`write/` (Go) — future**: Generates a new Go adapter from a spec. Consumes the verbatim `bidder_params_json` byte-for-byte, the `params.ext_struct.fields[]` to scaffold `openrtb_ext/imp_{bidder}.go`, and the behavioral fields (`make_requests.batching.rules[]`, `make_bids.bid_type_resolution.method_chain[]`) to drive code-generation templates. `quirks[]` entries surface as TODO comments where they cannot be auto-applied.
-2. **`port-go2java/` — existing scaffolded skill**: Translates a Go-source spec into Java artifacts. Consumes `cross_language.java_artifacts` path hints + `port_concerns` flags + the verbatim `bidder_params_json` (which copies byte-identical to `src/main/resources/static/bidder-params/{bidder}.json`). The 37 cross-language translation rules at [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md) are the contract.
+2. **`port-go2java/` — Phase D, future**: Translates a Go-source spec into Java artifacts. Will consume `cross_language.java_artifacts` path hints + `port_concerns` flags + the verbatim `bidder_params_json` (which copies byte-identical to `src/main/resources/static/bidder-params/{bidder}.json`). The 37 cross-language translation rules at [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md) will be the contract.
 3. **`review/` skills — opt-in composition**: `pr-triage` (at [`../../../review/skills/pr-triage/SKILL.md`](../../../review/skills/pr-triage/SKILL.md)) can detect a `read/specs/{bidder}/latest.yaml` and load it as `prior_spec`, allowing reviewer skills to flag behavioral regressions on PR diffs (e.g., "PR adds `text/template` import — `endpoint_resolution.kind` moves from `static` to `template-macro`. Was this intentional?"). This composition is opt-in; review/ continues to work without read/.
 
 The orchestrator does NOT call write/ or port-go2java/; it ONLY produces the spec they read.

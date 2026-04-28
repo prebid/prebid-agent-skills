@@ -27,7 +27,7 @@
 
 Each rule names a Pattern, identifies the Adapter Specification field that drives the translation, shows a concrete master Go and Java code snippet pair, and notes edge cases. Rules are grouped by spec section. A porter consumes the spec, looks up each rule by its field driver, and applies the corresponding translation.
 
-The rule numbers (1-31) are stable identifiers — port skills cite them by number in their output (e.g., "applied Rule 7: Multi-imp grouping per pod prefix").
+The rule numbers (1-37) are stable identifiers — port skills cite them by number in their output (e.g., "applied Rule 7: Multi-imp grouping per pod prefix").
 
 ---
 

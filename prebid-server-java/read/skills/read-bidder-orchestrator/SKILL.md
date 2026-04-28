@@ -15,7 +15,7 @@ Extracts a structured Adapter Specification from a single Java bidder in `prebid
 
 The spec carries `source_language: java`. Cross-language fields (`bidder_params_json`, `bidder_params_sha256`, `bidder_info.capabilities`, `params.schema_interpretation`, `bidder_info.gvl_vendor_id`) are byte-comparable to the Go-side spec for the same bidder. Language-specific fields populate `cross_language.java_specific_concerns[]` (dense) and `cross_language.go_specific_concerns[]` / `cross_language.go_artifacts.*` as path-stub hints only.
 
-Downstream consumers: the future `port-java2go/` skill suite (already scaffolded), `diff-spec` (deferred), and any review skill that wants prior-spec comparison.
+Downstream consumers: the future `port-java2go/` skill suite (Phase D), `diff-spec` (deferred), and any review skill that wants prior-spec comparison.
 
 ## Inputs
 
@@ -157,7 +157,7 @@ YAML output follows the canonical schema. Markdown summary uses the structure do
 
 ## Cross-skill integration
 
-The output spec feeds the future `port-java2go/` skill (already scaffolded at `prebid-server-java/port-go2java/`). That skill consumes a Java-source spec and emits Go artifacts using the 37 port-translation rules at `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`. Specifically:
+The output spec feeds the future `port-java2go/` skill (Phase D; will live under `prebid-server-go/port-java2go/` since it produces Go artifacts). That skill will consume a Java-source spec and emit Go artifacts using the 37 port-translation rules at `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`. Specifically:
 
 - `port-java2go` reverses Rules 33 (alias inversion), 34 (YAML unification), 36 (4-file split → httpCalls), 37 (per-alias IT class deletion — Go aliases need no test files).
 - `port-java2go` consumes `cross_language.java_specific_concerns[]` to flag fidelity issues that don't translate cleanly to Go.

@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Read-skill spec workspace (recomputed per-machine; see read-adapter-orchestrator SKILL.md)
+prebid-server-go/read/specs/
+prebid-server-java/read/specs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

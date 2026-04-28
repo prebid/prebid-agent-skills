@@ -58,7 +58,7 @@ When `--persist` is set:
    - If `--format` includes `yaml`: remove existing `latest.yaml` (if any), then create `latest.yaml -> {shortsha}.yaml` as a relative symlink (`ln -sf {shortsha}.yaml prebid-server-go/read/specs/{bidder}/latest.yaml`).
    - If `--format` includes `md`: same for `latest.md`.
 4. **Idempotency**: if a file already exists at `{shortsha}.yaml` AND its bytes are identical to what would be written, do NOT rewrite (preserves mtime; helpful for diff-comparison workflows). If bytes differ, rewrite — this indicates an R4 round-trip determinism violation and should be investigated. Emit a `provenance.warnings[]` entry of type `persist-byte-mismatch` and continue.
-5. **Gitignore policy**: the `prebid-server-go/read/specs/` directory is `.gitignore`d by default (`prebid-server-go/.gitignore` adds `read/specs/`). Users opt into checking specs in by removing the line or adding individual files with `git add -f`. The orchestrator does NOT modify `.gitignore`.
+5. **Gitignore policy**: the `prebid-server-go/read/specs/` directory is `.gitignore`d by default (top-level `/.gitignore` includes `prebid-server-go/read/specs/` and `prebid-server-java/read/specs/`). Users opt into checking specs in by removing the line or adding individual files with `git add -f`. The orchestrator does NOT modify `.gitignore`.
 
 The `latest.yaml` symlink is a convenience for the opt-in pr-triage composition: pr-triage can detect `read/specs/{bidder}/latest.yaml` and load it as `prior_spec` for behavioral regression checks. The symlink ALWAYS points at the most recently persisted spec for that bidder, regardless of which commit it captured. To explicitly compare against a known commit, point at `{shortsha}.yaml` directly.
 
