@@ -1,7 +1,5 @@
 # prebid-agent-skills
 
-[![round-trip-ci](https://github.com/prebid/prebid-agent-skills/actions/workflows/round-trip-ci.yml/badge.svg)](https://github.com/prebid/prebid-agent-skills/actions/workflows/round-trip-ci.yml)
-
 Agent skills, reference documentation, golden test fixtures, and a CI harness for analyzing and porting [prebid-server](https://github.com/prebid/prebid-server) bidder adapters across language implementations.
 
 ## What's here
