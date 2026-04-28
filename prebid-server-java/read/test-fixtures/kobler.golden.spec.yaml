@@ -238,7 +238,7 @@ tests:
     - makeBidsShouldReturnBannerWhenTypeIsNullOrMissing
     - makeBidsShouldDefaultToBannerWhenPrebidTypeIsMissing
   fixture_handling: count-only
-  test_application_properties_entries_added: 0
+  test_application_properties_entries_added: 2
   integration_test_class: KoblerTest
   integration_test_pattern: 4-file-split
 
@@ -266,6 +266,9 @@ spring_config:
       - EqualsAndHashCode
       - NoArgsConstructor
   bean_dependencies:
+    - name: config
+      type: KoblerConfigurationProperties
+      source: framework-injected
     - name: currencyConversionService
       type: CurrencyConversionService
       source: framework-injected

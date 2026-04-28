@@ -71,7 +71,7 @@ Discovery records every found path in an internal manifest used by Step 5 dispat
 
 Read `go.mod` at the resolved commit and parse the `module` declaration. Expected form: `module github.com/prebid/prebid-server/v4`. The current major is canonicalized at [`../../../review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md) — currently `v4`.
 
-If the major differs (e.g., `v5`), emit a `provenance.warnings[]` entry of type `module-major-mismatch` with `summary: module path major version changed (v4 → vN); reader heuristics may be stale`. The orchestrator continues but this signals downstream readers may misinterpret framework helpers. See [`references/provenance-warnings.md`](references/provenance-warnings.md) for the warning schema.
+If the major differs (e.g., `v5`), emit a `provenance.warnings[]` entry of type `module-major-drift` with `summary: module path major version changed (v4 → vN); reader heuristics may be stale`. The orchestrator continues but this signals downstream readers may misinterpret framework helpers. See [`references/provenance-warnings.md`](references/provenance-warnings.md) for the warning schema.
 
 ### Step 4 — Detect alias short-circuit
 
@@ -145,7 +145,7 @@ See [`references/output-format.md`](references/output-format.md) for:
 
 The `provenance.warnings[]` block carries non-blocking read-time anomalies. See [`references/provenance-warnings.md`](references/provenance-warnings.md) for:
 
-- Full warning type registry (`bidder-constant-mismatch`, `module-major-mismatch`, `disabled-bidder-read`, `alias-resolution-circular`, `bidder-params-sha-conflict`, `endpoint-yaml-typo`, `package-directory-mismatch`, `endpoint-placeholder-unresolved`, `legacy-encoding-json-direct-usage`, `legacy-test-helpers-imported`)
+- Full warning type registry (`bidder-constant-mismatch`, `module-major-drift`, `disabled-bidder-read`, `alias-resolution-circular`, `bidder-params-sha-conflict`, `yaml-field-name-typo`, `package-directory-mismatch`, `endpoint-placeholder-unresolved`, `legacy-encoding-json-direct-usage`, `legacy-test-helpers-imported`, `cross-language-byte-divergence`)
 - Per-warning schema (`{ type, file, line, summary }`)
 - The two real Kobler bugs that drove the warning schema design
 
@@ -185,10 +185,10 @@ The orchestrator does NOT call write/ or port-go2java/; it ONLY produces the spe
 |---|---|
 | **Alias short-circuit** | Step 4 detects `aliasOf:` in YAML; emits minimal alias spec; skips code/params readers. |
 | **Disabled bidder** | `bidder_info.disabled: true` → `meta.disabled: true` + `disabled-bidder-read` warning; spec still valid. |
-| **Module major drift** | `go.mod` declares non-`v4` module path → `module-major-mismatch` warning; readers proceed but heuristics may be stale. |
+| **Module major drift** | `go.mod` declares non-`v4` module path → `module-major-drift` warning; readers proceed but heuristics may be stale. |
 | **Missing files** | Required file missing → hard R1 error. Optional file missing → field nulled + `incomplete-classification` quirk. |
 | **Bidder constant mismatch** | `params_test.go` references wrong bidder constant (kobler `BidderKargo`/`BidderKrushmedia` real bug) → `bidder-constant-mismatch` warning. |
-| **YAML field-name typo** | `endpointCompression` (camelCase) vs canonical `endpoint-compression` (kebab-case) → `endpoint-yaml-typo` warning + `bidder_info.yaml_field_name_quirks[]` entry. |
+| **YAML field-name typo** | `endpointCompression` (camelCase) vs canonical `endpoint-compression` (kebab-case) → `yaml-field-name-typo` warning + `bidder_info.yaml_field_name_quirks[]` entry. |
 | **Package/directory mismatch** | `33across` package mismatch (directory `33across`, package `ttx`) → `code.package_directory_mismatch: true` + `package-directory-mismatch` warning. |
 | **Multi-file layout** | msft (5+ files), mediasquare (3 files), appnexus (4 files) → `code.file_layout.kind: multi-file` + `code.file_layout.files[].role` per file. |
 | **Legacy test-directory naming** | msft uses `test/` + `test-extrainfo/` (NOT canonical `msfttest/`) → `tests.go_directory_naming: legacy-test` (or `custom` for the dual-directory case + paired quirk). |
@@ -198,7 +198,7 @@ The orchestrator does NOT call write/ or port-go2java/; it ONLY produces the spe
 | **Endpoint placeholder unresolved** | `{{.XYZ}}` not in canonical macro list → `endpoint-placeholder-unresolved` warning. |
 | **Reader fragment partial failure** | Reader produces null field + paired `incomplete-classification` quirk + warning; orchestrator never aborts the whole read. |
 | **PR ref against deleted bidder** | PR removes `adapters/{bidder}/`; orchestrator detects status=removed in tree and emits `bidder-removal-detected` (informational); no spec is produced. |
-| **Concurrent v3 → v4 sweep aftermath** | Adapter file imports `prebid-server/v3/...` while master is v4 → reader records the import as-is; the `module-major-mismatch` warning fires only if `go.mod` itself is non-v4. |
+| **Concurrent v3 → v4 sweep aftermath** | Adapter file imports `prebid-server/v3/...` while master is v4 → reader records the import as-is; the `module-major-drift` warning fires only if `go.mod` itself is non-v4. |
 
 ## Verification
 

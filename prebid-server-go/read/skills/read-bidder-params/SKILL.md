@@ -208,10 +208,12 @@ validator.Validate(openrtb_ext.Bidder{Name}, json.RawMessage(<param>))
 
 The literal `openrtb_ext.Bidder<Name>` is the **bidder constant referenced**. Emit it verbatim as the `bidder_constant_referenced` value.
 
-Both `TestValidParams` and `TestInvalidParams` typically reference the SAME constant. If they differ (or if only one references the wrong constant), use the value from `TestValidParams` for the `bidder_constant_referenced` field, and emit a `provenance.warnings[]` entry of type `bidder-constant-mismatch` for `TestInvalidParams`. This is the kobler real bug:
+Both `TestValidParams` and `TestInvalidParams` typically reference the SAME constant. When they differ (e.g., copy-paste artifact in one test), record what the test actually surfaced — emit `bidder_constant_referenced` as the constant from the **last-observed** `validator.Validate(openrtb_ext.Bidder<Name>, ...)` call in source order. Both calls' mismatches with the canonical constant from `bidders.go` emit paired `bidder-constant-mismatch` warnings. This is the kobler real bug:
 
 - `TestValidParams` line 24: `validator.Validate(openrtb_ext.BidderKobler, ...)` — correct
 - `TestInvalidParams` line 47: `validator.Validate(openrtb_ext.BidderKrushmedia, ...)` — WRONG (copy-paste artifact)
+- Emitted `bidder_constant_referenced`: `openrtb_ext.BidderKrushmedia` (last-observed wins)
+- Emitted warnings: a `bidder-constant-mismatch` entry for line 47 (and one for line 24 if the canonical lookup also flags it — but typically `BidderKobler` is canonical so only line 47 surfaces)
 
 Validation rule R7 (canonicalized in `shared/adapter-spec.md` "Validation rules R1-R10"): if the constant on either line ≠ the constant declared as `Bidder<X> BidderName = "<name>"` in `openrtb_ext/bidders.go` at the resolved commit, emit:
 

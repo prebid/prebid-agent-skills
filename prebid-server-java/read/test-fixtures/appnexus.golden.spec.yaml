@@ -18,7 +18,7 @@ provenance:
     timestamp_utc: 2026-04-27T00:00:00Z
     operator: claude-code/opus-4-7
   warnings:
-    - type: cross-language-params-sha-divergence
+    - type: cross-language-byte-divergence
       file: src/main/resources/static/bidder-params/appnexus.json
       line: 0
       summary: "Java raw bytes SHA (5946ec7d034be6f6f4033913751d074ffe75dacd9df542b30e1a44f41333ee12) differs from Go-side spec (20a3f193c62b1b3d6d2a0daf5dfaa3935a045c52b83af236693ebe9c3459106d). Files are SEMANTICALLY identical (same JSON Schema content) but Java's copy is reformatted with extra whitespace/newlines. Cross-language R5 (byte-equality) is violated; reviewer should regenerate Java JSON from Go canonical form to restore byte parity."
@@ -690,7 +690,7 @@ tests:
     - makeBidsShouldReturnEmptyCatIfSizeMoreThen1
     - makeBidsShouldAddVideoInfo
   fixture_handling: count-only
-  test_application_properties_entries_added: 0
+  test_application_properties_entries_added: 7
   integration_test_class: AppnexusVideoTest
   integration_test_pattern: 6-file-with-cache
 

@@ -79,7 +79,7 @@ Read `pom.xml` at the repository root; extract the project version:
 </project>
 ```
 
-Record `meta.java_artifact_version` as the parsed version (e.g., `3.41.0`; SNAPSHOT suffix stripped). If the major version differs from the orchestrator's tested baseline (`3.x`), emit a `module-major-mismatch` warning. See [references/provenance-warnings.md](references/provenance-warnings.md) for warning schema.
+Record `meta.java_artifact_version` as the parsed version (e.g., `3.41.0`; SNAPSHOT suffix stripped). If the major version differs from the orchestrator's tested baseline (`3.x`), emit a `module-major-drift` warning. See [references/provenance-warnings.md](references/provenance-warnings.md) for warning schema.
 
 ### Step 4: Detect alias short-circuit
 
@@ -147,7 +147,7 @@ Assembly steps, in order:
     - `pom-version-mismatch` (Step 3 result).
     - `disabled-bidder-read` if `bidder_info.default_enabled == false` AND the read was not explicitly opted-in via `--allow-disabled` (default off; defensive against misuse on disabled bidders).
     - `class-yaml-name-mismatch` if `KoblerConfiguration.java`'s `@PropertySource` path does not point at `classpath:/bidder-config/kobler.yaml`.
-    - `endpoint-yaml-typo` if YAML uses `endpointCompression` (camelCase — Go style) instead of `endpoint-compression` (kebab-case — Java style). Canonical: Ogury PR #3788 regression.
+    - `yaml-field-name-typo` if YAML uses `endpointCompression` (camelCase — Go style) instead of `endpoint-compression` (kebab-case — Java style). Canonical: Ogury PR #3788 regression.
     - `bidder-constant-mismatch` analog: Java has no constant; instead check that `KoblerConfiguration.koblerBidderDeps()` factory method name matches the YAML bidder name. Misalignment is a copy-paste artifact.
     - `test-application-properties-missing-entries` if `test-application.properties` does not contain any of `adapters.{xyz}.enabled=true`, `adapters.{xyz}.endpoint=...`, `adapters.{xyz}.modifying-vast-xml-allowed=true` (modify-vast adapters only). Every Java adapter PR appends 2–4 lines.
 
@@ -188,7 +188,7 @@ The 17 Java-specific edge cases (numbered #18–#34 in the master plan) all map 
 | 31 | `modifying-vast-xml-allowed: true` (FeedAd, Mediasquare) | `bidder_info.modifying_vast_xml_allowed: true`. |
 | 32 | Tilde-syntax empty alias `oldname: ~` | `aliases[].config_form: tilde_inherit` set by Step 4. |
 | 33 | Bidder rename three-step refactor (DELETE old YAML + CREATE new YAML + alias-back via tilde) | Step 4 detects the old-name-as-alias-of-new pattern and emits both specs (old: alias-only; new: full read). |
-| 34 | `endpoint-compression` vs `endpointCompression` typo | `endpoint-yaml-typo` warning emitted by Step 6. The YAML field IS still parsed but PBS silently ignores it; reviewers reject the typo. |
+| 34 | `endpoint-compression` vs `endpointCompression` typo | `yaml-field-name-typo` warning emitted by Step 6. The YAML field IS still parsed but PBS silently ignores it; reviewers reject the typo. |
 
 ## Differences from Go orchestrator
 

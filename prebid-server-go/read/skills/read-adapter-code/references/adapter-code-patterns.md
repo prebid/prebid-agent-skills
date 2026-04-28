@@ -151,7 +151,7 @@ Note the spec field for currency conversion in MakeRequests is captured under `c
 | Value | Detection cue |
 |---|---|
 | `openrtb2.BidResponse` | `var response openrtb2.BidResponse; jsonutil.Unmarshal(responseData.Body, &response)`. Default. |
-| `custom` | A bidder-specific response type is unmarshaled instead. REQUIRES a quirk and `custom_response_type: <type-name>` (canonical: mediasquare `mediasquareResponse`). |
+| `custom` | A bidder-specific response type is unmarshaled instead. REQUIRES a quirk and `custom_response_type: <type-name>` (canonical: mediasquare `msqResponse`). |
 
 ### `http_status_handling.kind`
 
@@ -258,7 +258,7 @@ If no lookup is performed: `storage_kind: none` and all other fields null (defau
   - `adapters/kobler/kobler.go:104-112` — direct `responseData.StatusCode == http.StatusNoContent` checks (legacy-raw-go).
   - `adapters/optidigital/optidigital.go` — `bidResponse.Currency = response.Cur` unguarded; `BidTypeBanner` hardcoded; range-value-pointer.
   - `adapters/33across/` — package `ttx` (package-directory mismatch, exported struct `TtxAdapter`).
-  - `adapters/mediasquare/` — multi-file layout, custom request body type `mediasquareRequest`.
+  - `adapters/mediasquare/` — multi-file layout, custom request body type `msqParameters`.
   - `adapters/msft/` — multi-file with `iab_categories.go` data table, `test/` and `test-extrainfo/` legacy directory naming.
   - `adapters/appnexus/` — custom UnmarshalJSON on keywords field, max-imps-per-request + pod-grouping composed batching.
 - Sibling shared file: [../../shared/adapter-spec.md](../../shared/adapter-spec.md).

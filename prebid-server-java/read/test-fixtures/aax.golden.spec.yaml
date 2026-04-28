@@ -251,7 +251,7 @@ tests:
     - makeBidsShouldReturnErrorIfBidExtContainUnsupportedMediaType
     - makeBidsShouldReturnErrorIfRequestContainUnsupportedMediaType
   fixture_handling: count-only
-  test_application_properties_entries_added: 0
+  test_application_properties_entries_added: 2
   integration_test_class: AaxTest
   integration_test_pattern: 4-file-split
 

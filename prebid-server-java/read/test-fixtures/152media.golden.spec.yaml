@@ -280,7 +280,7 @@ quirks:
     file: src/test/java/org/prebid/server/it/OneFiveTwoMediaTest.java
     summary: "Java aliases REQUIRE their own IT class + 4-file fixture set + 2-line test-application.properties append even when the alias is a pure tilde-inherit (zero behavioral divergence from parent). Per-alias IT class is canonical Java pattern (Rule 37). The Go counterpart has no such requirement — Go aliases ship just a 2-line static/bidder-info YAML."
     edge_case_taxon: port-fidelity-divergence
-  - id: cross-language-bidder-params-byte-divergence
+  - id: cross-language-byte-divergence
     file: src/main/resources/static/bidder-params/adkernel.json
     summary: "Java's adkernel.json has different whitespace formatting than Go's adkernel.json (Java sha256 e814426953d0dea7abac9ef9618600fa48a72c934381465a238863384228649c vs Go sha256 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed). Schema interpretation is identical (zoneId required integer >= 1) but byte-equality fails Rule R5. This is a parent-level concern, surfaced here for cross-language port awareness on the alias."
     edge_case_taxon: port-fidelity-divergence

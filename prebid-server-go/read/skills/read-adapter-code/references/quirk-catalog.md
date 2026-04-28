@@ -116,13 +116,13 @@ The companion `provenance.warnings` entry has `type: bidder-constant-mismatch` w
 **When to emit**: When `code.file_layout.kind: multi-file` AND the additional non-test files exist for a structural reason (a custom `*Request`/`*Response` type, an IAB category data table, a bidder-keywords parser).
 **What spec field cannot capture it**: `code.file_layout.kind: multi-file` records the existence; the quirk records the justification (which downstream porters need).
 **Real-adapter examples**:
-- `adapters/mediasquare/` — `mediasquare.go` + `models.go`. `models.go` defines `mediasquareRequest` and `mediasquareResponse` (non-OpenRTB shape). Justified by `code.make_requests.request_body.kind: custom`.
+- `adapters/mediasquare/` — `mediasquare.go` + `models.go`. `models.go` defines `msqParameters` and `msqResponse` (non-OpenRTB shape). Justified by `code.make_requests.request_body.kind: custom`.
 - `adapters/msft/iab_categories.go` — generated lookup table (large). Justified by `code.iab_category_storage.storage_kind: go-data-table`.
-- `adapters/appnexus/appnexus_keywords.go` — keywords parser with custom UnmarshalJSON. Justified by `cross_language.port_concerns.custom_unmarshaljson_present: true`.
+- `adapters/appnexus/models.go` — keywords parser with custom UnmarshalJSON. Justified by `cross_language.port_concerns.custom_unmarshaljson_present: true`.
 
 ```yaml
 - id: mediasquare-models-split
-  file: adapters/mediasquare/models.go
+  file: adapters/mediasquare/structs.go
   summary: "Custom request/response types live in models.go because mediasquare uses a non-OpenRTB request body (codes[] array)."
   edge_case_taxon: multi-file-layout-justified
 ```
@@ -133,12 +133,12 @@ The companion `provenance.warnings` entry has `type: bidder-constant-mismatch` w
 **When to emit**: When this skill observes specific legacy idioms.
 **What spec field cannot capture it**: The structural fields (`code.adapter_struct.type_visibility: exported`) record the shape; the quirk explains why this is legacy.
 **Real-adapter examples**:
-- `adapters/33across/ttx.go` — `type TtxAdapter struct` (exported struct identifier; pre-canonical).
+- `adapters/33across/33across.go` — `type TtxAdapter struct` (exported struct identifier; pre-canonical).
 - `adapters/<old>/usersync.go` — the legacy user-sync file (most modern adapters do not have this; user-sync URL is in YAML).
 
 ```yaml
 - id: ttx-exported-adapter-struct
-  file: adapters/33across/ttx.go
+  file: adapters/33across/33across.go
   summary: "TtxAdapter is exported (capital T) — pre-canonical pattern. New adapters use unexported `adapter`."
   edge_case_taxon: legacy-go-pattern-pre-1.22
 ```
@@ -286,12 +286,12 @@ A quirk's `file` SHOULD be the path relative to the repository root (e.g., `adap
   - `adapters/kobler/params_test.go:47` — Validate called with `BidderKrushmedia`.
   - `adapters/optidigital/optidigital.go` — unguarded `bidResponse.Currency = response.Cur`; hardcoded `BidTypeBanner`.
   - `openrtb_ext/imp_optidigital.go` — `ImpExtOptidigital` legacy naming.
-  - `adapters/33across/ttx.go` — exported `TtxAdapter` struct.
-  - `adapters/mediasquare/models.go` — custom `mediasquareRequest`/`mediasquareResponse` types.
+  - `adapters/33across/33across.go` — exported `TtxAdapter` struct.
+  - `adapters/mediasquare/structs.go` — custom `msqParameters`/`msqResponse` types.
   - `adapters/msft/iab_categories.go` — generated lookup table.
   - `adapters/msft/msft.go` — `pubclick` outgoing JSON tag.
   - `openrtb_ext/imp_msft.go` — `pub_click` ext-struct JSON tag.
-  - `adapters/appnexus/appnexus_keywords.go` — custom UnmarshalJSON.
+  - `adapters/appnexus/models.go` — custom UnmarshalJSON.
 - Validation rules R3, R7, R9, R10: [../../shared/adapter-spec.md#validation-rules-r1-r10](../../shared/adapter-spec.md#validation-rules-r1-r10).
 - Default emission rule: [../../shared/behavior-taxonomy.md#how-to-read-this-taxonomy](../../shared/behavior-taxonomy.md#how-to-read-this-taxonomy).
 - Currency overwrite hazard cross-reference: [../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md#currency-overwrite-hazard](../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md#currency-overwrite-hazard).

@@ -96,7 +96,7 @@ At Step 3, the orchestrator reads `go.mod` at the resolved commit and parses the
    - no version suffix → major version is 1 (Go module convention: v0 and v1 omit the suffix)
 4. Compare against the canonical major (currently 4).
 5. If different, emit provenance.warnings[] entry:
-     type: module-major-mismatch
+     type: module-major-drift
      file: go.mod
      line: <line of module declaration>
      summary: "module path major version changed (canonical=v4 → upstream=v<N>); reader heuristics may be stale and downstream framework-utilities.md must be updated"
@@ -124,9 +124,9 @@ Most adapters are single-file (`adapters/<xyz>/<xyz>.go`). Some have multi-file 
 
 | Bidder | Files | Role pattern |
 |---|---|---|
-| `msft` (Microsoft) | `msft.go`, `models.go`, `iab_categories.go`, `usersync.go` | implementation + models + data-table + utils |
-| `mediasquare` | `mediasquare.go`, `parsers.go`, `structs.go` | implementation + parsers + types |
-| `appnexus` | `appnexus.go`, `models.go`, `appnexus_keywords.go`, `parser.go` | implementation + models + parsers + utils |
+| `msft` (Microsoft) | `msft.go`, `models.go`, `iab_categories.go` | implementation + types + data-table |
+| `mediasquare` | `mediasquare.go`, `structs.go`, `parsers.go`, `utils.go` | implementation + types + parsers + utils |
+| `appnexus` | `appnexus.go`, `models.go`, `iab_categories.go` | implementation + types + data-table |
 | `adkernel` | `adkernel.go` (single-file) | implementation only — listed for clarity (NOT multi-file) |
 
 ### Role classification heuristics

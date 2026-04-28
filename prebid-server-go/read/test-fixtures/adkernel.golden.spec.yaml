@@ -312,10 +312,6 @@ quirks:
     file: adkernel.go
     summary: "dispatchImpressions (line 95) uses ExtImpAdkernel struct value as a Go map key. Since ExtImpAdkernel has only ZoneId (int), this effectively groups by ZoneId. Each unique ZoneId becomes its own HTTP request — explains why adkernel emits N RequestData for N distinct zones. Adkernel is the canonical example of grouped-by-key batching combined with format-split."
     edge_case_taxon: incomplete-classification
-  - id: endpoint-compression-uppercase-gzip
-    file: static/bidder-info/adkernel.yaml
-    summary: "endpointCompression: \"GZIP\" (uppercase, quoted). PBS-Go normalizes case-insensitively. Pattern shared with rubicon, triplelift, tpmn."
-    edge_case_taxon: yaml-field-name-typo
   - id: legacy-encoding-json-marshal
     file: adkernel.go
     summary: "buildAdapterRequest at line 189 uses encoding/json.Marshal directly (json.Marshal(newBidRequest)) rather than jsonutil.Marshal, even though jsonutil is imported and used for unmarshaling at lines 173/179/247. Should migrate Marshal to jsonutil for consistency with the rest of the file."

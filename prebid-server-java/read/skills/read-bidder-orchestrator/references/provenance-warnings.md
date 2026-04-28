@@ -21,12 +21,13 @@ These warnings are language-neutral and emitted by both orchestrators:
 
 | Type | When emitted | Example |
 |---|---|---|
-| `module-major-mismatch` | Step 3 detects the project version major doesn't match the orchestrator's tested baseline. For Go this checks `go.mod`'s `module github.com/prebid/prebid-server/v4` major. For Java this checks `pom.xml`'s `<version>` major (3.x at v3.41.0). | `pom.xml: <version>4.0.0-SNAPSHOT</version>` against tested baseline `3.x` |
+| `module-major-drift` | Step 3 detects the project version major doesn't match the orchestrator's tested baseline. For Go this checks `go.mod`'s `module github.com/prebid/prebid-server/v4` major. For Java this checks `pom.xml`'s `<version>` major (3.x at v3.41.0). | `pom.xml: <version>4.0.0-SNAPSHOT</version>` against tested baseline `3.x` |
 | `alias-resolution-circular` | Step 4 detects an inconsistency: the bidder has its own `bidder/{xyz}/` directory AND a parent declares it as an alias. The standalone implementation wins; the alias entry is dead config. | `kobler` exists at `bidder/kobler/` AND `bidder-config/foo.yaml` declares `aliases: { kobler: ~ }` |
 | `bidder-params-sha-conflict` | Step 6 detects that the orchestrator-computed sha256 doesn't match what the reader produced. Indicates a reader bug. | `reader produced 125fef34...; orchestrator computed abc123...` |
 | `ref-resolution-failure` | Step 1 cannot resolve `--ref` to a SHA. The read aborts. | `pr=99999 returned 404` |
 | `missing-expected-file` | Step 2 cannot find a required file. Severity depends on file: `Bidder.java` missing aborts; `BidderTest.java` missing is just a warning. | `src/test/java/org/prebid/server/it/KoblerTest.java not found` |
 | `incomplete-classification` | A reader could not classify a behavioral field with affirmative evidence. Surfaces also as a `quirks` entry. | `make_requests.batching.rules[]` left empty because the reader saw bespoke logic it couldn't categorize |
+| `cross-language-byte-divergence` | Step 6 R5 cross-check detects `bidder_params_sha256` mismatch with the sibling Go-side spec. Bytes must be byte-identical to satisfy Rule 1 of `port-translation-rules.md`. Paired with quirks taxon of the same name. | `bidder-params/{bidder}.json` differs by whitespace ordering between Go and Java |
 
 ## Java-specific warnings
 
@@ -89,7 +90,7 @@ These warnings are specific to the Java suite. They have no Go-side analogs (or 
 
 This is the Java-side analog of Go's `bidder-constant-mismatch` warning. Phase 2 found two real Go-side instances (kobler_test.go BidderKargo, params_test.go BidderKrushmedia); the Java analog catches similar copy-paste artifacts in `@PropertySource` paths and factory method names.
 
-### `endpoint-yaml-typo`
+### `yaml-field-name-typo`
 
 **When emitted**: Step 6 detects YAML field names that should follow Java's kebab-case style but use Go's camelCase style instead. The canonical example is the Ogury PR #3788 regression where `endpointCompression` (camelCase, the Go style) was used instead of `endpoint-compression` (kebab-case, the Java style). PBS silently ignores the typo'd field — the gzip compression is NOT applied at runtime, but tests pass.
 
@@ -106,7 +107,7 @@ This is the Java-side analog of Go's `bidder-constant-mismatch` warning. Phase 2
 
 **Example**:
 ```yaml
-- type: endpoint-yaml-typo
+- type: yaml-field-name-typo
   file: src/main/resources/bidder-config/ogury.yaml
   line: 9
   summary: "YAML field 'endpointCompression' is camelCase (Go style); Java expects kebab-case 'endpoint-compression'. Field is silently ignored by Spring binding — gzip compression NOT applied at runtime. Reference: PR #3788 regression."
@@ -155,7 +156,7 @@ Warnings are emitted in the order Step 6 encounters them:
 2. `missing-expected-file` (Step 2 detections)
 3. `disabled-bidder-read` (Step 6, before validation rules)
 4. `class-yaml-name-mismatch` (Step 6, R6 + Java extras)
-5. `endpoint-yaml-typo` (Step 6, R6 extension)
+5. `yaml-field-name-typo` (Step 6, R6 extension)
 6. `endpoint-placeholder-unresolved` (R8)
 7. `legacy-encoding-json-direct-usage` (R9 Java analog — rare)
 8. `legacy-test-helpers-imported` (R10 Java analog — when test class doesn't extend `VertxTest`)

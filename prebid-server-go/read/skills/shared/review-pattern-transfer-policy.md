@@ -154,7 +154,7 @@ The completed Go review skills under `prebid-server-go/review/skills/` are the r
 
 The cross-language R5 rule (cross-language structural parity for port pairs) is the spec-level enforcement of port-fidelity. It is independent of human reviewers — a `bidder_params_sha256` mismatch is a port-fidelity violation regardless of which reviewer flagged it.
 
-Worked example — Optidigital, Appnexus. Both port pairs FAIL R5 due to whitespace divergence in the bidder-params JSON. The spec records the failure as a `cross-language-params-sha-divergence` warning. A reviewer (typically a Java reviewer, sometimes @bretg) is expected to flag this and request reformatting.
+Worked example — Optidigital, Appnexus. Both port pairs FAIL R5 due to whitespace divergence in the bidder-params JSON. The spec records the failure as a `cross-language-byte-divergence` warning. A reviewer (typically a Java reviewer, sometimes @bretg) is expected to flag this and request reformatting.
 
 But human reviewers don't always catch byte-level divergence. The `read/` orchestrator's R5 check is automatic and deterministic. This complements the human review process — it does NOT replace reviewer fingerprint matching.
 
