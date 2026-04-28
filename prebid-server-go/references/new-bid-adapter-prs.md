@@ -4,7 +4,7 @@ Reference list of new-bidder PRs in [prebid/prebid-server](https://github.com/pr
 
 - **Source:** prebid/prebid-server
 - **Period:** 2025-01-08 → 2026-04-16
-- **Totals:** 42 new bid adapters + 47 alias-only adapters
+- **Totals:** 42 new bid adapters + 48 alias-only adapters (90 total; 42 currently tagged with `Patterns Demonstrated`)
 - **Last refreshed:** 2026-04-27
 
 **Classification (by heading):**

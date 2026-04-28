@@ -18,7 +18,9 @@ prebid-server-go/read/skills/
 ├── shared/                                    Cross-skill canonical references
 │   ├── adapter-spec.md                        Schema for the Adapter Specification format
 │   ├── behavior-taxonomy.md                   Enumerated values for behavioral fields
-│   └── port-translation-rules.md              37 cross-language Go↔Java translation rules
+│   ├── port-translation-rules.md              37 cross-language Go↔Java translation rules
+│   ├── cross-skill-integration.md             How read/, review/, write/, port-* compose
+│   └── review-pattern-transfer-policy.md      Why review-skill findings do NOT cross languages
 ├── read-adapter-orchestrator/                 Entry-point skill: discovery, fetch, dispatch, assembly
 │   └── references/
 ├── read-adapter-code/                         Parses adapters/{bidder}/*.go + test fixtures
@@ -28,8 +30,6 @@ prebid-server-go/read/skills/
 └── read-bidder-params/                        Parses static/bidder-params/{bidder}.json + openrtb_ext/imp_{bidder}.go + params_test.go
     └── references/
 ```
-
-(`references/` subdirs currently empty pending Phase 3 SKILL.md authoring.)
 
 ## How to read a spec (for human reviewers)
 
@@ -47,7 +47,7 @@ Top-to-bottom guidance for a reviewer reading an adapter spec YAML. Use the Opti
 
 ## Test fixtures
 
-Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. Currently 2: `optidigital.golden.spec.yaml` (clean baseline) and `kobler.golden.spec.yaml` (cross-language port pair — its sibling lives at `prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`). Round-trip determinism (R4) is enforced via these — re-running the orchestrator on the same `provenance.source.resolved_commit` MUST produce a byte-identical spec modulo `provenance.read.timestamp_utc` and `provenance.read.operator`.
+Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. 10 fixtures pinned to commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`: `152media, 33across, adkernel, adtonos, appnexus, bidstack, kobler, mediasquare, msft, optidigital`. The Phase A acceptance-gate fixtures are `optidigital` (clean baseline) and `kobler` (cross-language port pair — its sibling lives at `prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`). Round-trip determinism (R4) is enforced via these — re-running the orchestrator on the same `provenance.source.resolved_commit` MUST produce a byte-identical spec modulo `provenance.read.timestamp_utc` and `provenance.read.operator`. See `read/test-fixtures/README.md` for per-fixture edge cases.
 
 ## What's NOT in scope
 
@@ -60,12 +60,15 @@ Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. Currently 2: `op
 
 - The 4 review skills at `prebid-server-go/review/skills/` consume the same `framework-utilities.md` reference and produce review findings; the read suite produces the structured spec they could compare against.
 - The Java parallel suite at `prebid-server-java/read/skills/` shares the canonical `adapter-spec.md` and `port-translation-rules.md` (single source of truth on the Go side; Java side links to the Go-side files until divergence requires a Java-specific schema).
-- `prebid-server-go/references/new-bid-adapter-prs.md` — 89 reference PRs with `Patterns Demonstrated` tags, used as ground truth for behavioral taxonomy and port-translation rule discovery.
+- `prebid-server-go/references/new-bid-adapter-prs.md` — 90 reference PRs (42 currently tagged with `Patterns Demonstrated`), used as ground truth for behavioral taxonomy and port-translation rule discovery.
 
 ## Status
 
-- shared/adapter-spec.md (~914 lines) — canonical schema with worked Kobler example, completed
-- shared/behavior-taxonomy.md (~411 lines) — enumerations, completed
-- shared/port-translation-rules.md (~1138 lines) — 37 cross-language rules, completed
-- test-fixtures/optidigital.golden.spec.yaml + kobler.golden.spec.yaml — Phase A acceptance gate goldens, completed
-- Per-skill SKILL.md files (4 to author) — Phase 3 work, pending
+- `shared/adapter-spec.md` (~920 lines) — canonical schema with worked Kobler example
+- `shared/behavior-taxonomy.md` (~440 lines) — closed enumerations
+- `shared/port-translation-rules.md` (~1170 lines) — 37 cross-language rules
+- `shared/cross-skill-integration.md` (~345 lines) — read/review/write/port composition
+- `shared/review-pattern-transfer-policy.md` (~191 lines) — review-pattern transfer ban
+- 10 goldens at `read/test-fixtures/` (Phase A `optidigital` + `kobler` plus 8 corpus fixtures)
+- All 4 per-skill SKILL.md files authored (`read-adapter-orchestrator`, `read-adapter-code`, `read-bidder-info`, `read-bidder-params`) with `references/` populated
+- Phase B Go read suite complete; see [`ROADMAP.md`](../../../ROADMAP.md) for next milestones

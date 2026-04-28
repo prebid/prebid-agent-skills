@@ -1,0 +1,22 @@
+prebid-agent-skills
+Copyright 2026 The prebid Authors
+
+This repository contains agent skills, reference documentation, golden test
+fixtures, and CI tooling for analyzing and porting prebid-server bidder
+adapters across language implementations.
+
+The skills describe and ground patterns observed in:
+  - prebid/prebid-server (https://github.com/prebid/prebid-server) — Apache License 2.0
+  - prebid/prebid-server-java (https://github.com/prebid/prebid-server-java) — Apache License 2.0
+
+The Adapter Specification format and the shared canonical references
+(adapter-spec.md, behavior-taxonomy.md, port-translation-rules.md) describe
+upstream behavior; they are derivative analytical works.
+
+Golden specifications under prebid-server-{go,java}/read/test-fixtures/ copy
+the bytes of upstream `static/bidder-params/{bidder}.json` files verbatim into
+the `bidder_params_json` field for SHA-256 byte-fidelity verification. Those
+bytes remain under Apache License 2.0 from upstream.
+
+PR numbers, reviewer GitHub handles, file paths, and behavioral observations
+quoted in this repository are taken from public upstream sources.

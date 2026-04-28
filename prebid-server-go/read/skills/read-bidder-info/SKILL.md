@@ -226,7 +226,7 @@ read-adapter-orchestrator --bidder=ogury-typo-test --source-mode=local --format=
 - Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` (Phase B — read-bidder-info).
 - Schema: [../shared/adapter-spec.md](../shared/adapter-spec.md) (`bidder_info:` section, including `endpoint_construction`, `capabilities`, `geoscope`, `gvl_vendor_id`, `user_sync`, `yaml_extra_fields`, `default_enabled`, `modifying_vast_xml_allowed`, `ortb_version`, `yaml_field_name_quirks[]`).
 - Taxonomy: [../shared/behavior-taxonomy.md](../shared/behavior-taxonomy.md) (the `quirks edge_case_taxon` registry — `yaml-field-name-typo`, `endpoint-compression-typo`).
-- Port translation rules: [../shared/port-translation-rules.md](../shared/port-translation-rules.md) (Rule 32 — YAML unification asymmetry; Rule 14 / Rule 11–15 — endpoint resolution; Rule 33 — aliases inversion).
+- Port translation rules: [../shared/port-translation-rules.md](../shared/port-translation-rules.md) (Rule 34 — YAML unification asymmetry; Rule 14 / Rule 11–15 — endpoint resolution; Rule 33 — aliases inversion).
 - Field index (master truth for `BidderInfo` Go struct): [../../../review/skills/bidder-info-pr-review/references/field-index.md](../../../review/skills/bidder-info-pr-review/references/field-index.md). REUSED — not duplicated.
 - Framework utilities (master truth for `EndpointTemplateParams` 18-field list, deploy-time-token policy, endpointCompression case-sensitivity): [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md). REUSED — not duplicated.
 - Sibling review skill: [../../../review/skills/bidder-info-pr-review/SKILL.md](../../../review/skills/bidder-info-pr-review/SKILL.md).

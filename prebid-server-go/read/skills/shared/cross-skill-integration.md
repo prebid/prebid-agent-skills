@@ -14,10 +14,10 @@ Five downstream surfaces consume the spec:
 
 | Consumer | Direction | Status | Input fields | Output |
 |---|---|---|---|---|
-| `prebid-server-go/write/` | spec → Go adapter | Future (scaffolded) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server` |
-| `prebid-server-java/write/` | spec → Java adapter | Future (implied) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server-java` |
-| `prebid-server-java/port-go2java/` | Go-source spec → Java adapter | Future (scaffolded) | `cross_language.*`, [`port-translation-rules.md`](port-translation-rules.md) Rules 1–37 | New Java adapter port PR |
-| `prebid-server-go/port-java2go/` | Java-source spec → Go adapter | Future (scaffolded) | Symmetric inverse of the above | New Go adapter port PR |
+| `prebid-server-go/write/` | spec → Go adapter | Future (Phase E) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server` |
+| `prebid-server-java/write/` | spec → Java adapter | Future (Phase E) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server-java` |
+| `prebid-server-java/port-go2java/` | Go-source spec → Java adapter | Future (Phase D) | `cross_language.*`, [`port-translation-rules.md`](port-translation-rules.md) Rules 1–37 | New Java adapter port PR |
+| `prebid-server-go/port-java2go/` | Java-source spec → Go adapter | Future (Phase D) | Symmetric inverse of the above | New Go adapter port PR |
 | `prebid-server-go/review/skills/pr-triage/` | spec as `prior_spec` | Existing (opt-in hook) | Whole spec read as comparator; behavioral regression detection | PR-triage manifest with `prior-spec-comparison` block |
 
 The orchestrator does NOT call any of these skills. It produces a spec and stops. Each consumer reads the spec independently — the contract is unidirectional.
@@ -134,7 +134,7 @@ Translate a Go-source spec into Java adapter artifacts. The skill consumes the s
 | `code.make_requests.imp_ext_unmarshal.kind: standard-two-phase` + `mechanism_go: jsonutil-two-phase` | Java emits a `static final TypeReference<ExtPrebid<?, ExtImpXyz>> XYZ_EXT_TYPE_REFERENCE` + `mapper.mapper().convertValue(imp.getExt(), XYZ_EXT_TYPE_REFERENCE).getBidder()` per Rule 1. |
 | `code.make_requests.imp_ext_unmarshal.kind: direct` + `wrapper_type: <X>` | Java emits a `TypeReference<X>` directly; no `getBidder()` call (Appnexus-style). Rule 2. |
 | `code.make_requests.endpoint_resolution.kind: dev-prod-toggle` + Go uses hardcoded `const devBidderEndpoint` | Java port SHOULD promote to YAML `dev-endpoint:` field + `BidderConfigurationProperties` subclass with `@NotBlank private String devEndpoint`. Apply Rule 35 (cross-language win — fixes the Go-side anti-pattern). |
-| `iab_category_storage.storage_kind: go-data-table` + `go_data_file: adapters/{xyz}/iab_categories.go` + `table_size: N` | Java port SHOULD inline the table as a YAML `iab-categories:` block under `adapters.{xyz}.iab-categories` and inject via constructor-arg. Apply Rule 21. (Appnexus did this in Java with 95 entries — see [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml) line 70 + 812.) |
+| `iab_category_storage.storage_kind: go-data-table` + `go_data_file: adapters/{xyz}/iab_categories.go` + `table_size: N` | Java port SHOULD inline the table as a YAML `iab-categories:` block under `adapters.{xyz}.iab-categories` and inject via constructor-arg. (Appnexus did this in Java with 95 entries — see [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml) line 70 + 812.) IAB-categories storage translation is a Phase D rule addition — port-translation-rules.md Rule 21 is HMAC, not IAB-categories. |
 | `tests.fixture_inventory.exemplary[]` (Go single-file) | Java port emits 4 separate files per case: `test-{xyz}-bid-request.json`, `test-{xyz}-bid-response.json`, `test-auction-{xyz}-request.json`, `test-auction-{xyz}-response.json`. Apply Rule 36. |
 | `tests.go_directory_naming: legacy-test` (msft) | Java target uses canonical layout regardless — `src/test/resources/org/prebid/server/it/openrtb2/{xyz}/`. The legacy Go pattern is Go-only. |
 
@@ -167,7 +167,7 @@ Symmetric inverse of §3. The skill consumes a Java-source spec and emits Go ada
 | `bidder_class.helper_classes_co_located[]` | EMIT each helper as a Go file in `adapters/{xyz}/` — co-location is preserved. Java's helper class becomes a Go function or struct in a co-located `.go` file. |
 | `bidder_class.helper_classes_in_proto[]` | EMIT each proto class as a Go file in `openrtb_ext/imp_{xyz}.go` (or sibling `openrtb_ext/imp_{xyz}_<helper>.go` if multiple). |
 | `spring_config.configuration_properties_class.extra_fields[]` | TRANSLATE custom YAML fields into Go's `extra_info: '{"...":"..."}'` opaque JSON OR into Go's adapter struct fields parsed via `parseExtraInfo` in the Builder. Inverse of Rule 35. |
-| `iab_category_storage.storage_kind: yaml-inlined` | TRANSLATE the inlined YAML map into a Go data file `adapters/{xyz}/iab_categories.go` with package-level `var iabCategoryMap = map[string]string{...}`. Inverse of Rule 21. |
+| `iab_category_storage.storage_kind: yaml-inlined` | TRANSLATE the inlined YAML map into a Go data file `adapters/{xyz}/iab_categories.go` with package-level `var iabCategoryMap = map[string]string{...}`. Inverse of the IAB-categories Phase D rule (to be authored — see note above; port-translation-rules.md Rule 21 is HMAC, not IAB-categories). |
 
 ### 4.2 Spec field → Go artifact map
 

@@ -1,0 +1,3 @@
+# Test/CI dependencies for scripts/round-trip-ci.py and scripts/tests/.
+# Install with: pip install -r requirements.txt
+PyYAML>=6.0

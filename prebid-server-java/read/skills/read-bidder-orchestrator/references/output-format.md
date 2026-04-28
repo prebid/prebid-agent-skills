@@ -48,7 +48,7 @@ prebid-server-java/read/specs/{bidder}/latest.yaml -> {shortsha}.yaml   (symlink
 prebid-server-java/read/specs/{bidder}/latest.md   -> {shortsha}.md     (symlink)
 ```
 
-The `read/specs/` directory is `.gitignore`'d by default (see `prebid-server-java/read/.gitignore`). Users opt into checking specs in if they want diff-comparison workflows or git-based regression tracking.
+The `read/specs/` directory is `.gitignore`'d by default (see top-level `/.gitignore`, which includes `prebid-server-go/read/specs/` and `prebid-server-java/read/specs/`). Users opt into checking specs in if they want diff-comparison workflows or git-based regression tracking.
 
 The `latest.{yaml,md}` symlink always points at the most recent persist for that bidder. Reading `latest.yaml` is the convention used by `pr-triage`'s prior-spec comparison hook.
 
