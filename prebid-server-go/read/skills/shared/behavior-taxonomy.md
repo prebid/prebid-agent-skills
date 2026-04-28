@@ -78,7 +78,7 @@ multi_format_detection: strict | lenient | none
 
 **Examples of multi-step chains:**
 
-- **Aax**: `[{ method: by-bid-ext-typed-field, fallback_action: next }, { method: by-imp-mediatype, fallback_action: next }, { method: throw }]` — three steps, strict multi-format detection.
+- **Aax**: `[{ method: by-bid-ext-typed-field, fallback_action: next }, { method: by-imp-mediatype, fallback_action: throw }]` — two steps, strict multi-format detection; the second step throws when neither `bid.ext.adCodeType` nor the matched imp's mediatype yields a type. The legacy 3-step form ending in `{ method: throw }` was schema-violating — `throw` is a `fallback_action`, not a `method`.
 - **Kobler**: `[{ method: by-bid-ext-typed-field, fallback_action: return-default }]` — one step with `default_value: banner`. The Go and Java specs MUST agree here.
 - **Generic openrtb**: `[{ method: by-bid-mtype, fallback_action: return-default }]` with `default_value: banner`.
 
@@ -171,6 +171,8 @@ Split into `kind` (semantic, cross-language) + `mechanism_go` / `mechanism_java`
 
 A spec emits `kind` always and the relevant `mechanism_*` for its source language; the other-language mechanism is null.
 
+> **Cross-reference**: This same `kind` enum is also used at `bidder_info.endpoint_construction.kind` (the YAML-declared endpoint classification). Per port-translation Rule 5, the two scopes share one canonical enum: `code.make_requests.endpoint_resolution.kind` describes the adapter-code mechanism (how the code constructs the URL); `bidder_info.endpoint_construction.kind` describes the YAML-declared endpoint shape. Both fields take the same 8 values (`static`, `single-token-substitution`, `multi-token-substitution`, `query-parameter-augmentation`, `runtime-region-selection`, `deploy-time-token`, `dev-prod-toggle`, `custom`).
+
 ---
 
 ## `code.make_requests.mutation`
@@ -178,7 +180,7 @@ A spec emits `kind` always and the relevant `mechanism_*` for its source languag
 ```yaml
 mutation:
   mutates_request: bool
-  entity_strategies:        # Map of entity name → strategy.
+  entity_strategies:        # Open map. Keys are any OpenRTB BidRequest field name (Site, App, Source, Imp, Banner, Device, User, Cur, Ext, Regs, Video, Geo, Id, RequestExt, etc.); values are from the closed strategy enum below.
     Site: ...
     App: ...
     Source: ...
@@ -200,6 +202,7 @@ mutation:
 | `immutable-rebuild` | Use a builder pattern to produce a new instance. | n/a — Go doesn't naturally use this. | kobler (`device.toBuilder().ipv6(null).ip(null).build()`) |
 | `in-place` | Mutate the entity directly via pointer/reference. | kobler Go (`device.IP = ""`) | n/a — Java POJOs are typically immutable. |
 | `append-if-missing` | Append a value to a list if not already present (e.g., currency list). | kobler Go (`Cur = append(Cur, "USD")` if not present) | kobler Java (`new ArrayList<>(currencies); newCurrencies.add(DEFAULT)`) |
+| `replace-with-null` | Adapter sets the entity to null to suppress passthrough (e.g., `request.toBuilder().cur(null).build()`). | n/a — Go does not naturally use this. | rubicon Java (`Cur: replace-with-null`) |
 
 ### Go idioms (`mutation.go_idiom`)
 
@@ -423,6 +426,27 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `unguarded-currency-overwrite` | Adapter sets `bidResponse.Currency = response.Cur` without guarding against empty string. Canonical: Optidigital. | quirks + code.make_bids.currency_overwrite_safety |
 | `hardcoded-bid-type` | `MakeBids` returns a fixed BidType regardless of upstream response. Canonical: Optidigital always returns BidTypeBanner. | quirks + code.make_bids.bid_type_resolution.method_chain |
 | `legacy-impext-naming` | Imp ext struct uses legacy `ImpExt{Bidder}` pattern instead of canonical `ExtImp{Bidder}`. Canonical: Optidigital `ImpExtOptidigital`. | quirks + params.ext_struct.type_name |
+| `cross-language-byte-divergence` | `bidder_params_json` bytes differ between Go and Java sides; sha256 mismatch breaks the port-fidelity contract (Rule 1). Canonical: 4 Java goldens (elementaltv, mediasquare, appnexus, huaweiads) detect divergence vs Go. | quirks + provenance.warnings |
+| `alias-yaml-only` | Java alias declared in a parent YAML's `aliases:` block but with no dedicated bidder class or IT fixtures (yet). Canonical: Appnexus parent's tilde-aliases pre-IT-class. | quirks + aliases[] |
+| `application-status-code` | Adapter checks an application-level status field in the response body (e.g., `retcode`) rather than (or in addition to) HTTP status. Pairs with `application_status_handling.kind`. Canonical: huaweiads `retcode` field. | quirks + code.make_bids.application_status_handling |
+| `country-code-resolution-fallback-chain` | Country code resolved through an ordered chain (e.g., `device.geo.country` → `user.geo.country` → MCC-MNC mapping → hardcoded default). Canonical: huaweiads `CountryCodeResolver`. | quirks |
+| `custom-request-response-shape` | Adapter sends and/or receives non-OpenRTB JSON payloads (vendor-specific request body or response shape). Canonical: huaweiads (`HuaweiAdsRequest`/`HuaweiAdsResponse`). | quirks + code.make_requests.request_body |
+| `empty-response-as-error` | Adapter treats an empty response (e.g., zero-length result list) as a protocol error rather than a no-bid. Canonical: huaweiads empty `multiad`. | quirks |
+| `high-test-method-count` | Adapter has an unusually large unit-test count (>50 `@Test` methods or >2000 LOC of tests). Canonical: huaweiads (~198 @Test methods, ~4880 LOC). | quirks + tests.unit_test_methods_count |
+| `nested-configuration-properties` | `XyzConfigurationProperties` declares a nested non-trivial inner sub-class with multiple fields. Canonical: huaweiads `ExtraInfo` (6 fields nested inside `HuaweiAdsConfigurationProperties`). | quirks + spring_config.configuration_properties_class.nested_classes |
+| `parameterized-request-type` | Java bidder class declares `Bidder<CustomType>` with a non-default request body type. Canonical: huaweiads (`Bidder<HuaweiAdsRequest>`), mediasquare (`Bidder<MediasquareRequest>`). | quirks + bidder_class.parameterized_request_type |
+| `per-request-cryptographic-auth` | Adapter computes per-request HMAC/signature for the Authorization header (not pre-built basic auth or static bearer). Canonical: huaweiads HMAC-SHA-256 Digest. | quirks + headers_constructed.authentication_kind |
+| `redundant-work` | Adapter performs duplicate work without caching (e.g., parses `imp.ext` twice per request cycle). Canonical: huaweiads `parseImpExt` called once in `makeHttpRequests` and again in `makeBids`. | quirks |
+| `runtime-polymorphism-bidder-class` | Java bidder class delegates to a runtime-selected helper based on request shape. Canonical: appnexus video adpod runtime branch. | quirks + bidder_class |
+| `runtime-region-selection` | Endpoint URL chosen at runtime based on geographic context (country code → region). Same value as `endpoint_resolution.kind: runtime-region-selection`. Canonical: huaweiads (5 region endpoints + EUROPEAN allowlist). | quirks + endpoint_resolution |
+| `schema-undocumented-runtime-field` | Runtime POJO field that is NOT declared in the `bidder-params/{bidder}.json` schema (silently accepted, undocumented). Canonical: huaweiads `ExtImpHuaweiAds.isTestAuthorization`. | quirks + params |
+| `shared-default-fan-out` | A single resolved default value fans out to multiple downstream uses. Canonical: huaweiads resolved country code reused for `App.country`, `Device.belongCountry`, `Device.localeCountry`, endpoint resolver. | quirks |
+| `spring-config-properties-subclass` | Java configuration class extends `BidderConfigurationProperties` to add custom YAML fields. Canonical: appnexus (`AppnexusConfigurationProperties` adds `platformId`, `iabCategories`), kobler (`devEndpoint`), huaweiads (`extraInfo`). | quirks + spring_config.configuration_properties_class.extends |
+| `time-formatting-quirk` | Non-standard time formatting at request build (e.g., custom epoch format, lowercased hex digest from Apache commons-codec). Canonical: huaweiads HMAC nonce (`System.currentTimeMillis()` + lowercase Hex). | quirks |
+| `vendor-specific-protocol-quirk` | Bidder protocol carries a vendor-specific encoding quirk that doesn't map to OpenRTB cleanly. Canonical: huaweiads `creativeType > 100 ? type - 100 : type` offset, `nativeVersion: "1.1"` default. | quirks |
+| `vendor-to-iab-mapping` | Adapter maps vendor-specific category codes to IAB categories at request or response time. Canonical: huaweiads + appnexus IAB lookups. | quirks + iab_category_storage |
+| `yaml-configuration-rewrite-table` | YAML config carries a list of rewriting rules consumed at runtime. Canonical: huaweiads `extra-info.pkgNameConvert` (app-bundle rewrite rules). | quirks |
+| `yaml-inlined-data-table` | YAML config inlines a large lookup data table (>50 entries) consumed at runtime. Canonical: appnexus 120-entry IAB-category inline map. Pairs with `iab_category_storage.storage_kind: yaml-inlined`. | quirks + iab_category_storage |
 
 The taxon list is closed: a reader emitting a quirk MUST pick from this list, OR add a new taxon to this file (atomic with the spec change). New taxa REQUIRE Phase 2 sample evidence — the goal is to keep the taxonomy machine-readable.
 

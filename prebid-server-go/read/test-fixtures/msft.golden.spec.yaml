@@ -460,7 +460,7 @@ code:
     # an empty Cur, fixing the optidigital-class anti-pattern.
 
 tests:
-  test_root_directory: adapters/msft/test/
+  test_root_directory: test
   go_directory_naming: legacy-test
   java_it_folder_naming: null
   fixture_inventory:

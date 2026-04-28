@@ -54,7 +54,7 @@ Why it matters: both real bugs in master compile, pass tests, and ship — becau
 
 > **Cross-reference**: `bidder-constant-mismatch` is also a `quirks[].edge_case_taxon` value — see [`../../shared/behavior-taxonomy.md`](../../shared/behavior-taxonomy.md) "quirks edge_case_taxon (full registry)". When this warning fires, the orchestrator ALSO emits a paired `quirks[]` entry of taxon `bidder-constant-mismatch`.
 
-### `module-major-mismatch`
+### `module-major-drift`
 
 **Trigger**: `go.mod` at the resolved commit declares a module path with a major-version suffix differing from the canonical major (`v4` per [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md)).
 
@@ -63,7 +63,7 @@ Why it matters: both real bugs in master compile, pass tests, and ship — becau
 **Example**:
 
 ```yaml
-- type: module-major-mismatch
+- type: module-major-drift
   file: go.mod
   line: 1
   summary: "module path major version changed (canonical=v4 → upstream=v5); reader heuristics may be stale and downstream framework-utilities.md must be updated"
@@ -124,7 +124,7 @@ Why it matters: an alias with its own bidder-params JSON is typically unintentio
 
 Why it matters: the cross-language byte-identity contract depends on this SHA being correct. A mismatch means the spec is unreliable for the downstream port-go2java skill. The hard-error abort is intentional — emit the warning AND stop.
 
-### `endpoint-yaml-typo`
+### `yaml-field-name-typo`
 
 **Trigger**: A YAML field uses a near-canonical name that PBS silently ignores. Canonical example: `endpointCompression` (camelCase) vs `endpoint-compression` (kebab-case, the form PBS actually parses).
 
@@ -133,7 +133,7 @@ Why it matters: the cross-language byte-identity contract depends on this SHA be
 **Real bug example** (Ogury):
 
 ```yaml
-- type: endpoint-yaml-typo
+- type: yaml-field-name-typo
   file: static/bidder-info/ogury.yaml
   line: <line of typo>
   summary: "yaml field 'endpointCompression' (camelCase) is silently ignored by PBS; canonical name is 'endpoint-compression' (kebab-case). The compression setting has no effect at runtime."
@@ -211,6 +211,25 @@ Note: NON-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros —
 
 > **Cross-reference**: paired with quirks taxon `legacy-test-helpers-imported`.
 
+### `cross-language-byte-divergence`
+
+**Trigger**: `bidder_params_json` byte-content (or `bidder_params_sha256`) differs between the Go-side and Java-side specs for the same bidder. The byte-identity contract is per Rule 1 of [`../../shared/port-translation-rules.md`](../../shared/port-translation-rules.md): porters copy bytes verbatim; any whitespace or ordering divergence breaks port-fidelity.
+
+**Detection**: Step 6 cross-check (R5 cross-language structural parity, when a sibling-language spec is locally available). If the orchestrator can resolve the sibling spec, it compares `bidder_params_sha256`; mismatch emits this warning AND a paired `quirks[]` entry.
+
+**Real example** (Java side detecting divergence vs Go):
+
+```yaml
+- type: cross-language-byte-divergence
+  file: src/main/resources/static/bidder-params/elementaltv.json
+  line: null
+  summary: "JSON byte-content differs from prebid-server-go static/bidder-params/elementaltv.json (whitespace ordering); sha256 mismatch breaks the port-fidelity contract."
+```
+
+Why it matters: porters expect the raw JSON to be byte-identical so a single shared `bidder-params/{bidder}.json` can drive both languages. Divergence requires either reformatting one side or accepting a known-broken pair (record in `cross_language.port_concerns`).
+
+> **Cross-reference**: paired with quirks taxon `cross-language-byte-divergence` (see [`../../shared/behavior-taxonomy.md`](../../shared/behavior-taxonomy.md)). Four legacy spellings observed in goldens (`cross-language-bidder-params-byte-divergence`, `bidder-params-byte-divergence-cross-language`, `cross-language-params-sha-divergence`, `cross-language-bytes-divergence`) are all canonicalized to this single name.
+
 ---
 
 ## Summary table
@@ -218,15 +237,16 @@ Note: NON-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros —
 | Type | File-level or line-level | Hard or soft | Paired quirks taxon |
 |---|---|---|---|
 | `bidder-constant-mismatch` | line | soft | `bidder-constant-mismatch` |
-| `module-major-mismatch` | line | soft | (none — drift signal) |
+| `module-major-drift` | line | soft | (none — drift signal) |
 | `disabled-bidder-read` | file | soft | (none — meta signal) |
 | `alias-resolution-circular` | file | soft | (none — discovery signal) |
 | `bidder-params-sha-conflict` | file | hard (R2 abort) | (none — R2 violation) |
-| `endpoint-yaml-typo` | line | soft | `yaml-field-name-typo` (or `endpoint-compression-typo` for the gzip-compression field specifically) |
+| `yaml-field-name-typo` | line | soft | `yaml-field-name-typo` (or `endpoint-compression-typo` for the gzip-compression field specifically) |
 | `package-directory-mismatch` | line | soft | (captured in `code.package_directory_mismatch`) |
 | `endpoint-placeholder-unresolved` | line | soft | (none — R8 signal) |
 | `legacy-encoding-json-direct-usage` | line | soft | `legacy-encoding-json-direct-usage` |
 | `legacy-test-helpers-imported` | line | soft | `legacy-test-helpers-imported` |
+| `cross-language-byte-divergence` | file | soft | `cross-language-byte-divergence` |
 
 Soft warnings produce a non-empty `provenance.warnings[]` but the spec emits normally. Hard warnings ALSO emit but trigger an abort after the read completes; in practice, the only hard warning is `bidder-params-sha-conflict` (R2 violation).
 
@@ -263,9 +283,9 @@ The orchestrator emits warnings using these rules:
 - The plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` — Phase 2 reconnaissance findings ("Real bugs found during validation"): `kobler_test.go:12` calls `Builder` with `openrtb_ext.BidderKargo`; `params_test.go:47` references `openrtb_ext.BidderKrushmedia` — both pass tests; the spec's `provenance.warnings` block is load-bearing for surfacing these.
 - Spec schema: [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md) — `provenance.warnings[]` schema definition (Per-section field reference → `provenance` table → "Warnings schema" subsection); validation rules R1–R10 and which warnings they emit.
 - Behavior taxonomy: [`../../shared/behavior-taxonomy.md`](../../shared/behavior-taxonomy.md) — `quirks[].edge_case_taxon` registry (closed list of ~22 taxa); cross-reference for paired warning↔quirk taxa.
-- Framework utilities (Go): [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) — `EndpointTemplateParams` 18-field list (drives `endpoint-placeholder-unresolved` warning); module-path `v4` major-version reference (drives `module-major-mismatch`); `jsonutil` package and the recommendation against direct `encoding/json` (drives `legacy-encoding-json-direct-usage`); v3-import-in-PR-diff is NOT drift rule.
+- Framework utilities (Go): [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) — `EndpointTemplateParams` 18-field list (drives `endpoint-placeholder-unresolved` warning); module-path `v4` major-version reference (drives `module-major-drift`); `jsonutil` package and the recommendation against direct `encoding/json` (drives `legacy-encoding-json-direct-usage`); v3-import-in-PR-diff is NOT drift rule.
 - pr-triage routing rules (used to compute file paths cited in warnings): [`../../../../review/skills/pr-triage/references/routing-rules.md`](../../../../review/skills/pr-triage/references/routing-rules.md).
-- BidderInfo field index (drives `endpoint-yaml-typo` near-canonical-name detection): [`../../../../review/skills/bidder-info-pr-review/references/field-index.md`](../../../../review/skills/bidder-info-pr-review/references/field-index.md).
+- BidderInfo field index (drives `yaml-field-name-typo` near-canonical-name detection): [`../../../../review/skills/bidder-info-pr-review/references/field-index.md`](../../../../review/skills/bidder-info-pr-review/references/field-index.md).
 - Kobler golden (showing both `bidder-constant-mismatch` warnings AND paired quirks): [`../../../test-fixtures/kobler.golden.spec.yaml`](../../../test-fixtures/kobler.golden.spec.yaml).
 - Optidigital golden (showing empty `warnings: []`): [`../../../test-fixtures/optidigital.golden.spec.yaml`](../../../test-fixtures/optidigital.golden.spec.yaml).
 - prebid-server master: commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` (v4.1.0, 2026-04-27).

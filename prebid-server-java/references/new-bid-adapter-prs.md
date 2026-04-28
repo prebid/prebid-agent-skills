@@ -123,7 +123,7 @@ This **excludes** alias-only adapters (PRs that add only YAML config to reuse a 
 
 | PR | Adapter | Merged |
 |---|---|---|
-| [#4326](https://github.com/prebid/prebid-server-java/pull/4326) | ElementalTV (renamed from Adoppler) — `bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, titlecase-acronym-preservation` | 2026-01-12 |
+| [#4326](https://github.com/prebid/prebid-server-java/pull/4326) | ElementalTV (renamed from Adoppler) — `bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, acronym-case-preservation` | 2026-01-12 |
 
 ### v3.39.0 — 2026-02-06
 
@@ -288,7 +288,7 @@ Cross-reference of pattern tags to canonical exemplar PRs. Each tag is a short s
 | `bidder-rename-major-version` | Bidder rename done as part of a major release (breaking change tolerated) | #4326 |
 | `alias-back-via-tilde` | Old name retained as `~aliasOf:` (tilde-prefixed) backward-compat alias | #4326 |
 | `package-rename-fixture-dir-rename` | Java package rename also requires fixture directory rename (cascading rename) | #4326 |
-| `titlecase-acronym-preservation` | Title-case class name preserves acronym casing (e.g., `ElementalTV` not `ElementalTv`) | #4326 |
+| `acronym-case-preservation` | Title-case class name preserves acronym casing (e.g., `ElementalTV` not `ElementalTv`) | #4326 |
 
 ### Aliases & White-Label Patterns
 

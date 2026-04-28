@@ -130,7 +130,7 @@ assertions:
       carries the same rename via static/bidder-info/elementaltv.yaml plus
       retained adoppler files. Pattern tags from the reference list:
       bidder-rename-major-version, alias-back-via-tilde,
-      package-rename-fixture-dir-rename, titlecase-acronym-preservation.
+      package-rename-fixture-dir-rename, acronym-case-preservation.
 
   port_lineage:
     direction: shared-genesis
@@ -140,7 +140,7 @@ assertions:
       - bidder-rename-major-version
       - alias-back-via-tilde
       - package-rename-fixture-dir-rename
-      - titlecase-acronym-preservation
+      - acronym-case-preservation
 
   reviewer_cohort:
     go_reviewers: []
@@ -182,4 +182,4 @@ overall:
     (b) when reviewing bidder rename PRs going forward, follow the
     elementaltv pattern as the reference for the four-tag combo
     (bidder-rename-major-version, alias-back-via-tilde, package-rename-
-    fixture-dir-rename, titlecase-acronym-preservation).
+    fixture-dir-rename, acronym-case-preservation).

@@ -19,7 +19,7 @@ provenance:
       file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
       line: 39
       summary: "Class root is ElementalTV (TitleCase preserves the TV brand acronym in uppercase) while the package directory and yaml_name are 'elementaltv' (all lowercase). Conventional cases (Kobler/KoblerBidder) preserve a 1:1 case fold between class root and yaml_name; ElementalTV deliberately does not. Surfaced for cross-language port awareness — fields code_naming.preserves_acronym_case=true and the acronym-case-preservation taxon classify this as canonical and intentional, not a bug."
-    - type: cross-language-bidder-params-byte-divergence
+    - type: cross-language-byte-divergence
       file: src/main/resources/static/bidder-params/elementaltv.json
       line: 1
       summary: "Java elementaltv.json sha256=2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0 differs from Go elementaltv.json sha256=efdc3ed1c641e9dbe7265e0bf8b309c565508175894d05c708cfeb84ed03e792 due to whitespace formatting (Java uses 4-space indent in properties block; Go uses 6-space indent). Schema interpretation is byte-identical (single string adunit, required). Rule R5 cross-language structural parity violation surfaces here."
@@ -245,7 +245,7 @@ tests:
     - makeBidsShouldReturnErrorIfBidIdEmpty
     - makeBidsShouldReturnErrorIfExtEmpty
   fixture_handling: count-only
-  test_application_properties_entries_added: 0   # Parent bidder; no alias-add lines at the elementaltv level (the adoppler tilde-alias is declared inside elementaltv.yaml, not in test-application.properties).
+  test_application_properties_entries_added: 2   # Two entries: adapters.elementaltv.{enabled, endpoint} in src/test/resources/org/prebid/server/it/test-application.properties. The adoppler tilde-alias is declared inside elementaltv.yaml (not in test-application.properties), so it adds no lines beyond the parent's two.
   integration_test_class: ElementalTVTest         # File: src/test/java/org/prebid/server/it/ElementalTVTest.java — class root preserves TV acronym uppercase consistent with bidder_class.
   integration_test_pattern: 4-file-split
 
@@ -390,7 +390,7 @@ lifecycle:
     notes:
       - "The pre-rename Adoppler bidder had identical bidding logic (the rename was strictly a brand change, not a behavioral change). All Java code was renamed in lockstep: package, class, configuration, test, IT class, fixture-dir, ExtImp, and model classes."
       - "Both old (adoppler) and new (elementaltv) bidder names resolve through the SAME execution path — adoppler is a tilde-inherit alias under the elementaltv parent."
-      - "Cross-language fidelity: Go side carries the same rename via static/bidder-info/elementaltv.yaml plus retained adoppler files. Pattern tags from the reference list: bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, titlecase-acronym-preservation."
+      - "Cross-language fidelity: Go side carries the same rename via static/bidder-info/elementaltv.yaml plus retained adoppler files. Pattern tags from the reference list: bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, acronym-case-preservation."
 
 # Top-level aliases block: adoppler is a tilde-inherit child of elementaltv.
 # Java-side direction is parent->child (declared inside elementaltv.yaml under
@@ -420,19 +420,19 @@ aliases:
     rename_origin: true                           # This alias is the BACKWARD-COMPAT entry for the renamed old name (vs a sibling alias).
 
 quirks:
-  - id: titlecase-acronym-preservation
+  - id: acronym-case-preservation
     file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
     summary: "Class root preserves the 'TV' brand acronym in uppercase: ElementalTVBidder, ElementalTVConfiguration, ElementalTVTest, ExtImpElementalTV, and the three model classes ElementalTVResponse{,Ads,VideoAds}Ext. The yaml_name is fully lowercase 'elementaltv' and the package directory matches. Convention rejects CamelCase fold to 'Elementaltv' or 'ElementalTv'. Edge case #27; canonical example for the acronym-case-preservation taxon. Sibling cases: FeedAd, BidTheatre, IQX."
     edge_case_taxon: acronym-case-preservation
   - id: bidder-rename-three-step-adoppler-to-elementaltv
     file: src/main/resources/bidder-config/elementaltv.yaml
-    summary: "ElementalTV is the v3.38.0 rename of the previous Adoppler bidder (PR #4326, merged 2026-01-12). The rename is a three-step refactor: DELETE all adoppler files (yaml + bidder-params + bidder/adoppler/* + spring config + proto + test classes + fixture directory); CREATE the equivalent elementaltv files with TitleCase brand-acronym preservation; alias-back via 'adoppler: ~' under elementaltv.aliases (tilde-inherit form keeps the old name resolving). All four pattern tags from the reference list apply: bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, titlecase-acronym-preservation. Edge case #33; canonical example for the bidder-rename-three-step taxon."
+    summary: "ElementalTV is the v3.38.0 rename of the previous Adoppler bidder (PR #4326, merged 2026-01-12). The rename is a three-step refactor: DELETE all adoppler files (yaml + bidder-params + bidder/adoppler/* + spring config + proto + test classes + fixture directory); CREATE the equivalent elementaltv files with TitleCase brand-acronym preservation; alias-back via 'adoppler: ~' under elementaltv.aliases (tilde-inherit form keeps the old name resolving). All four pattern tags from the reference list apply: bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, acronym-case-preservation. Edge case #33; canonical example for the bidder-rename-three-step taxon."
     edge_case_taxon: bidder-rename-three-step
   - id: tilde-alias-back-to-deprecated-name
     file: src/main/resources/bidder-config/elementaltv.yaml
     summary: "Line 6 'adoppler: ~' under elementaltv.aliases declares the pre-rename bidder name as a tilde-inherit alias. The empty-tilde form ensures the deprecated 'adoppler' bidder name continues to route through the new ElementalTVBidder code with zero behavioral divergence. This is the canonical 'alias-back-via-tilde' pattern for bidder renames where backward compatibility is required."
     edge_case_taxon: tilde-alias-syntax
-  - id: cross-language-bidder-params-byte-divergence
+  - id: cross-language-byte-divergence
     file: src/main/resources/static/bidder-params/elementaltv.json
     summary: "Java elementaltv.json sha256=2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0; Go elementaltv.json sha256=efdc3ed1c641e9dbe7265e0bf8b309c565508175894d05c708cfeb84ed03e792. Whitespace formatting differs (Java uses 4-space indent for the properties block; Go uses 6-space). Schema interpretation is byte-identical — single string adunit, required. Cross-language R5 violation; surfaces as a port-fidelity concern even though the schema itself is identical."
     edge_case_taxon: port-fidelity-divergence
@@ -480,7 +480,7 @@ cross_language:
       - bidder-rename-major-version
       - alias-back-via-tilde
       - package-rename-fixture-dir-rename
-      - titlecase-acronym-preservation
+      - acronym-case-preservation
   go_specific_concerns: []
   java_specific_concerns:
     - "ElementalTVBidder constructor (line 48) calls HttpUtil.validateUrl(endpointTemplate) — invalid URL triggers IllegalArgumentException at bean construction time (covered by creationShouldFailOnInvalidEndpointUrl test)."

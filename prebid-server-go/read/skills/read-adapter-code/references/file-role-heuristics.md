@@ -15,14 +15,14 @@ For each `.go` file under `adapters/{xyz}/` (excluding subdirectories — those 
 | 1 | `params_test.go` | `params-tests` | Excluded by orchestrator; this skill skips it silently if encountered. Owned by `read-bidder-params`. |
 | 2 | `usersync.go` | `usersync` | Legacy file from pre-v3 era. Most modern adapters do NOT have this file (user-sync URL is in YAML). When present, mark `usersync` and emit a `legacy-go-pattern-pre-1.22` INFO-level quirk. |
 | 3 | `iab_categories.go` (or `*_categories.go`) | `data-table` | Static lookup table (canonical: msft). Triggers `code.iab_category_storage.{storage_kind: go-data-table, go_data_file: <path>, table_size: <count>}`. |
-| 4 | `models.go` OR `types.go` OR `proto.go` | `types` | Type declarations for custom request/response payloads. Canonical: mediasquare `models.go` (defines `mediasquareRequest`, `mediasquareResponse`, etc.). |
+| 4 | `models.go` OR `structs.go` OR `types.go` OR `proto.go` | `types` | Type declarations for custom request/response payloads. Canonical: mediasquare `structs.go` (defines `msqParameters`, `msqResponse`, etc.). |
 | 5 | `parsers.go` OR `parse.go` | `parsers` | Bidder-specific parsing helpers (rare). |
 | 6 | `utils.go` OR `helpers.go` | `utils` | Generic helpers split out for organization (rare). |
 | 7 | `*_test.go` (any suffix, excluding `params_test.go`) | `tests` | Includes `{xyz}_test.go` (the JSON harness runner) and any non-canonical `_test.go` files (e.g., `{xyz}_relay_test.go`). |
 | 8 | `{xyz}.go` (matches the directory name) | `implementation` | The main adapter file. Always present. Holds `Builder`, `MakeRequests`, `MakeBids`, and the adapter struct. |
 | 9 | Any other `.go` file | `implementation` | Multi-file adapter splits an additional implementation file. Mark as `implementation` and increment a multi-file counter. |
 
-**Tie-breaking**: the first matching rule wins. Rules 1–8 are exclusive; rule 9 is a catch-all for adapters that split implementation across multiple files (canonical: appnexus has `appnexus.go` + `appnexus_keywords.go`).
+**Tie-breaking**: the first matching rule wins. Rules 1–8 are exclusive; rule 9 is a catch-all for adapters that introduce a new file matching no other rule (rare in current corpus — most multi-file adapters use canonical names like `iab_categories.go` or `models.go` that are caught by rules 3–6).
 
 ---
 
@@ -50,10 +50,10 @@ A multi-file adapter is one with more than one non-test `.go` file. Specifically
 |---|---|---|---|
 | kobler | `kobler.go (implementation), kobler_test.go (tests), params_test.go (params-tests)` | `single-file` | Only `kobler.go` counts toward multi-file detection. |
 | optidigital | `optidigital.go (implementation), optidigital_test.go (tests), params_test.go (params-tests)` | `single-file` | Same reasoning. |
-| msft | `msft.go (implementation), iab_categories.go (data-table), msft_test.go (tests), params_test.go (params-tests)` | `multi-file` | Two non-test files. |
-| mediasquare | `mediasquare.go (implementation), models.go (types), mediasquare_test.go (tests), params_test.go (params-tests)` | `multi-file` | Custom request body type lives in `models.go`. |
-| appnexus | `appnexus.go (implementation), appnexus_keywords.go (implementation; rule 9 catch-all), appnexus_test.go (tests), params_test.go (params-tests)` | `multi-file` | Both Go files implement adapter behavior; emit a `multi-file-layout-justified` quirk citing the keywords-field complexity. |
-| 33across | `ttx.go (implementation), ttx_test.go (tests), params_test.go (params-tests)` | `single-file` | Note the package-directory mismatch (directory `33across`, package `ttx`); see the next section. |
+| msft | `msft.go (implementation), models.go (types), iab_categories.go (data-table), msft_test.go (tests), params_test.go (params-tests)` | `multi-file` | Three non-test files. |
+| mediasquare | `mediasquare.go (implementation), structs.go (types), parsers.go (parsers), utils.go (utils), mediasquare_test.go (tests), params_test.go (params-tests)` | `multi-file` | Custom request body type (`msqParameters`) lives in `structs.go`; bidder-specific helpers split across `parsers.go` and `utils.go`. |
+| appnexus | `appnexus.go (implementation), models.go (types), iab_categories.go (data-table), appnexus_test.go (tests), params_test.go (params-tests)` | `multi-file` | Multi-file justified by the inlined IAB-category data table and custom types — emit a `multi-file-layout-justified` quirk. |
+| 33across | `33across.go (implementation), 33across_test.go (tests), params_test.go (params-tests)` | `single-file` | Note the package-directory mismatch (directory `33across`, package `ttx`); see the next section. |
 
 When `multi-file`, set `cross_language.port_concerns.multi_file_layout: true`. The Java port may or may not preserve the multi-file split; this flag tells the porter to expect it.
 
@@ -77,7 +77,7 @@ The Go `package` clause of the implementation file SHOULD match the directory na
 |---|---|---|---|
 | `adapters/kobler/` | `kobler.go` | `package kobler` | `false` |
 | `adapters/optidigital/` | `optidigital.go` | `package optidigital` | `false` |
-| `adapters/33across/` | `ttx.go` | `package ttx` | `true` (canonical mismatch — Go disallows leading digits in identifiers) |
+| `adapters/33across/` | `33across.go` | `package ttx` | `true` (canonical mismatch — Go disallows leading digits in identifiers) |
 | `adapters/adkernel/` | `adkernel.go` | `package adkernel` | `false` (the struct identifier `adkernelAdapter` is the variation, not the package; see [adapter-code-patterns.md](adapter-code-patterns.md#adapter-struct-shapes)) |
 | `adapters/cadent_aperture_mx/` | `cadent.go` | `package cadent_aperture_mx` | `false` (filename does not match dir, but package does — only the package matters for this flag) |
 
@@ -133,15 +133,15 @@ For deterministic outputs:
 
 1. `params_test.go` is ALWAYS `params-tests` regardless of any other heuristic.
 2. `*_test.go` (any other) is ALWAYS `tests`.
-3. Special filenames (`models.go, types.go, parsers.go, utils.go, helpers.go, iab_categories.go, usersync.go`) win over the generic `{xyz}.go` rule.
+3. Special filenames (`models.go, structs.go, types.go, parsers.go, utils.go, helpers.go, iab_categories.go, usersync.go`) win over the generic `{xyz}.go` rule.
 4. The `{xyz}.go` filename match wins over rule 9 (catch-all `implementation`).
 5. Any other `.go` file falls through to rule 9 (catch-all `implementation`).
 
 Examples:
 
-- `adapters/appnexus/appnexus_keywords.go` — rule 1 doesn't match (not `params_test.go`), rule 2 doesn't match (not `usersync.go`), rules 3–6 don't match (not the special filenames), rule 7 doesn't match (no `_test.go` suffix), rule 8 doesn't match (filename != `appnexus`), rule 9 wins → `implementation`.
-- `adapters/mediasquare/models.go` — rule 4 matches → `types`.
+- `adapters/mediasquare/structs.go` — rule 4 matches → `types`.
 - `adapters/msft/iab_categories.go` — rule 3 matches → `data-table`.
+- `adapters/mediasquare/parsers.go` — rule 5 matches → `parsers`.
 
 ---
 
@@ -152,9 +152,9 @@ Examples:
   - `adapters/optidigital/` — single-file canonical (`optidigital.go`).
   - `adapters/33across/` — package-directory mismatch (`package ttx` in `33across/` directory).
   - `adapters/adkernel/` — bidder-name-prefixed unexported struct identifier `adkernelAdapter`.
-  - `adapters/mediasquare/` — multi-file with `models.go` for custom request/response types.
-  - `adapters/msft/` — multi-file with `iab_categories.go` data table; legacy test directories `test/` and `test-extrainfo/`.
-  - `adapters/appnexus/` — multi-file with `appnexus_keywords.go` (rule 9 catch-all).
+  - `adapters/mediasquare/` — multi-file with `structs.go` (custom types `msqParameters`, `msqResponse`), `parsers.go`, `utils.go`.
+  - `adapters/msft/` — multi-file with `iab_categories.go` data table and `models.go` types; legacy test directories `test/` and `test-extrainfo/`.
+  - `adapters/appnexus/` — multi-file with `iab_categories.go` (data-table) and `models.go` (types).
 - Schema: [../../shared/adapter-spec.md](../../shared/adapter-spec.md).
 - Behavior taxonomy: [../../shared/behavior-taxonomy.md](../../shared/behavior-taxonomy.md).
 - Companion classification: [adapter-code-patterns.md](adapter-code-patterns.md).

@@ -368,7 +368,7 @@ cross_language:
 | `read.operator` | string | yes | E.g., `claude-code/opus-4-7`. Excluded from determinism comparison. |
 | `warnings` | array | yes | Empty array if no anomalies. See warnings schema below. |
 
-**Warnings schema** — each entry is `{ type, file, line, summary }`. Known types: `bidder-constant-mismatch`, `yaml-field-name-typo`, `package-directory-mismatch`, `endpoint-placeholder-unresolved`, `legacy-test-helpers-imported`, `module-major-drift`. The Kobler test file emits a `bidder-constant-mismatch` warning because `kobler_test.go:12` references `openrtb_ext.BidderKargo` (copy-paste artifact) — see worked example below.
+**Warnings schema** — each entry is `{ type, file, line, summary }`. Closed registry of `type` values: `bidder-constant-mismatch`, `yaml-field-name-typo`, `package-directory-mismatch`, `endpoint-placeholder-unresolved`, `legacy-test-helpers-imported`, `legacy-encoding-json-direct-usage`, `module-major-drift`, `disabled-bidder-read`, `alias-resolution-circular`, `bidder-params-sha-conflict`, `cross-language-byte-divergence`, `alias-only-no-bidder-constant`, `alias-only-spec`, `identifier-rule-workaround`, `bidder-name-rebrand`. Java-only additions: `pom-version-mismatch`, `class-yaml-name-mismatch`, `test-application-properties-missing-entries`, `ref-resolution-failure`, `missing-expected-file`, `incomplete-classification`. Per-type schema is canonical at [`../skills/read-adapter-orchestrator/references/provenance-warnings.md`](../skills/read-adapter-orchestrator/references/provenance-warnings.md) (Go) and [`../../../prebid-server-java/read/skills/read-bidder-orchestrator/references/provenance-warnings.md`](../../../prebid-server-java/read/skills/read-bidder-orchestrator/references/provenance-warnings.md) (Java). The Kobler test file emits a `bidder-constant-mismatch` warning because `kobler_test.go:12` references `openrtb_ext.BidderKargo` (copy-paste artifact) — see worked example below.
 
 ### `meta`
 
@@ -710,9 +710,14 @@ code:
       default_value: banner
       multi_format_detection: none
       method_chain:
-        - { method: by-bid-ext-typed-field, fallback_action: return-default }
+        - method: by-bid-ext-typed-field
+          field: bid.ext.prebid.type
+          fallback_action: next
+        - method: hardcoded
+          hardcoded_value: BidTypeBanner
+          fallback_action: return-default
     bid_pointer_pattern: indexed-iteration
-    bid_pointer_go_sibling: indexed-seatbid
+    bid_pointer_go_sibling: range-value-pointer
     currency_overwrite_safety: passthrough-from-response
 
 tests:
@@ -750,6 +755,14 @@ headers_constructed:
 deploy_time_tokens: []
 
 quirks:
+  - id: bidder-constant-mismatch-test
+    file: adapters/kobler/kobler_test.go
+    summary: Builder called with openrtb_ext.BidderKargo (copy-paste artifact); should be openrtb_ext.BidderKobler. Test passes because RunJSONBidderTest does not cross-check the constant.
+    edge_case_taxon: bidder-constant-mismatch
+  - id: bidder-constant-mismatch-params-test
+    file: adapters/kobler/params_test.go
+    summary: validator.Validate called with openrtb_ext.BidderKrushmedia inside TestInvalidParams; should be openrtb_ext.BidderKobler. The validator still rejects all 8 invalid params under the wrong name, so the test passes.
+    edge_case_taxon: bidder-constant-mismatch
   - id: hardcoded-dev-endpoint
     file: kobler.go
     summary: devBidderEndpoint is a const at line 23; should live in YAML config (Kobler internal-test-campaign justification noted in code comment lines 82-83).
@@ -782,10 +795,10 @@ cross_language:
     source_pr: prebid/prebid-server#3904
     destination_language: java
     destination_pr: prebid/prebid-server-java#3684
-    fidelity_review_themes: [currency-conversion-bidrequest-context, mutation-idiom-tobuilder]
+    fidelity_review_themes: [port-fidelity, currency-conversion-bidrequest-context, mutation-idiom-tobuilder, dev-endpoint-config-promotion]
   reviewer_cohort:
-    go: [bsardo, SyntaxNode]
-    java: [CTMBNara, AntoxaAntoxic]
+    go: []
+    java: [AntoxaAntoxic, osulzhenko]
     cross_language_coordinator: bretg
 ```
 

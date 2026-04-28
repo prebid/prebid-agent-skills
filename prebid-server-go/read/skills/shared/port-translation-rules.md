@@ -288,12 +288,12 @@ return Result.of(Collections.singletonList(httpRequest), errors);
 **Go code**:
 ```go
 // Mediasquare — custom request body.
-type mediasquareRequest struct {
-    Codes []mediasquareCode `json:"codes"`
+type msqParameters struct {
+    Codes []msqParametersCodes `json:"codes"`
     Gdpr  *gdprBody         `json:"gdpr,omitempty"`
 }
 
-mediasquareReq := mediasquareRequest{...}
+mediasquareReq := msqParameters{...}
 requestJSON, err := jsonutil.Marshal(mediasquareReq)
 ```
 
@@ -792,7 +792,7 @@ private BidType getBidType(Bid bid) {
 **Go code**:
 ```go
 // Mediasquare custom response.
-func mediaTypeFromMediasquareBid(bid mediasquareBid) openrtb_ext.BidType {
+func mediaTypeFromMediasquareBid(bid msqResponseBids) openrtb_ext.BidType {
     if bid.Video != nil { return openrtb_ext.BidTypeVideo }
     if bid.Native != nil { return openrtb_ext.BidTypeNative }
     return openrtb_ext.BidTypeBanner

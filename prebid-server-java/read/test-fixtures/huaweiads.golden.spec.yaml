@@ -809,10 +809,10 @@ quirks:
     file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
     summary: "Secondary per-ad status: Ad30.retcode30 (@JsonProperty(\"retcode30\")) must equal 200 to be eligible (line 281). Each ad in multiad list has its own retcode separate from the top-level response retcode."
     edge_case_taxon: application-status-code
-  - id: titlecase-acronym-preservation-in-class-names
+  - id: acronym-case-preservation-in-class-names
     file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
     summary: "Edge case #27: Java class names preserve TitleCase Ads acronym (HuaweiAds, HuaweiAdsBidder, HuaweiAdSlotBuilder, HuaweiAdmBuilder, HuaweiAdsRequest, HuaweiAdsResponse, HuaweiAdsTest); directory/YAML name remains all-lowercase huaweiads. Configuration file is HuaweiadsConfiguration.java (lowercase 'a' in filename) but class inside is HuaweiAdsConfiguration."
-    edge_case_taxon: titlecase-acronym-preservation
+    edge_case_taxon: acronym-case-preservation
   - id: parameterized-request-type-non-default
     file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
     summary: "Edge case #28: implements Bidder<HuaweiAdsRequest>, sending a vendor-specific JSON payload (multislot/app/device/network/regs/geo/consent/clientAdRequestId) instead of openrtb2.BidRequest. Mediasquare is the only sibling doing this."
@@ -824,7 +824,7 @@ quirks:
   - id: configuration-class-name-vs-filename-asymmetry
     file: src/main/java/org/prebid/server/spring/config/bidder/HuaweiadsConfiguration.java
     summary: "Filename HuaweiadsConfiguration.java (lowercase 'ads') but class declaration is `public class HuaweiAdsConfiguration` (TitleCase 'Ads'). Java compiles fine because Spring scans by class annotation, but the file/class name mismatch is unusual; reference list flags this asymmetry."
-    edge_case_taxon: titlecase-acronym-preservation
+    edge_case_taxon: acronym-case-preservation
   - id: runtime-region-selection-endpoint-fan-out
     file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiEndpointResolver.java
     summary: "HuaweiEndpointResolver.resolve(countryCode) chooses among 5 endpoint URLs (chinese/russian/european/asian + fallback) based on resolved country code via 57-country EUROPEAN allowlist + CN + RU dispatch. closeSiteSelectionByCountry config flag (=\"1\") forces use of base endpoint."
@@ -848,7 +848,7 @@ quirks:
   - id: bidder-params-json-byte-divergence-go-vs-java
     file: src/main/resources/static/bidder-params/huaweiads.json
     summary: "Java JSON file uses LF line endings + trailing newline (sha256 ce8ea453...); Go file uses CRLF line endings + no trailing newline (sha256 c2d5585c...). Schema content is semantically identical. R5 cross-language SHA equality FAILS due to whitespace divergence. This is a Go-side anomaly (CRLF endings unusual for upstream JSON files) — port-fidelity violation surfaced as a port concern."
-    edge_case_taxon: cross-language-bytes-divergence
+    edge_case_taxon: cross-language-byte-divergence
   - id: ext-imp-test-authorization-string-not-boolean
     file: src/main/java/org/prebid/server/proto/openrtb/ext/request/huaweiads/ExtImpHuaweiAds.java
     summary: "ExtImpHuaweiAds.isTestAuthorization is type String (not Boolean) and field is NOT in bidder-params/huaweiads.json schema. HuaweiAdSlotBuilder.build line 87 compares to literal string \"true\" to set test=1; any other value (including \"TRUE\" or null) yields test=0. Schema-undocumented runtime field is a tech-debt anti-pattern."
@@ -876,7 +876,7 @@ quirks:
   - id: integration-test-class-name-titlecase-preservation
     file: src/test/java/org/prebid/server/it/HuaweiAdsTest.java
     summary: "Integration test class is HuaweiAdsTest (TitleCase Ads) not HuaweiadsTest. Reference list explicitly catalogs this as Edge case #27 — class-name brand-acronym preservation in IT tests."
-    edge_case_taxon: titlecase-acronym-preservation
+    edge_case_taxon: acronym-case-preservation
   - id: country-defaulting-after-resolution-failure
     file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
     summary: "makeHttpRequests line 95: countryCodeResolver.resolve(bidRequest).orElse(DEFAULT_COUNTRY_CODE) — wraps Optional empty case with ZA default. Edge case: resolved code is later USED for {App.country, Device.belongCountry, Device.localeCountry, HuaweiEndpointResolver.resolve} — single source of truth fans out to multiple downstream uses."

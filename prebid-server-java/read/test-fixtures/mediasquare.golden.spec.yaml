@@ -19,7 +19,7 @@ provenance:
     timestamp_utc: 2026-04-27T00:00:00Z
     operator: claude-code/claude-opus-4-7[1m]
   warnings:
-    - type: bidder-params-byte-divergence-cross-language
+    - type: cross-language-byte-divergence
       file: src/main/resources/static/bidder-params/mediasquare.json
       line: 18
       summary: "Java-side mediasquare.json formats `required` array across multiple lines (4 lines, 527 bytes); Go-side same file uses single-line `[\"owner\", \"code\"]` (515 bytes). SHA differs: Java=946207d8 vs Go=798a251b. R5 cross-language byte-equality FAILS for bidder_params; surfaced as quirk port-fidelity-divergence."
