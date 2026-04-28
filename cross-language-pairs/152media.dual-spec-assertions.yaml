@@ -103,8 +103,9 @@ assertions:
     java_properties: [zoneId]
     go_constraints: { zoneId: { minimum: 1 } }
     java_constraints: { zoneId: { minimum: 1 } }
-    equivalent: true
-    severity: pass
+    equivalent: false
+    divergence_summary: "Schema content (zoneId integer >= 1, required) is identical across languages, but the rendered `params.schema_interpretation` blocks in the two goldens differ at the YAML-formatting level (alias-inheritance handling — 152media is a pure tilde-alias of adkernel on Java, vs a standalone YAML file on Go). Runtime equivalence is preserved; this is rendering drift, not a schema bug."
+    severity: warn
 
   alias_metadata:
     go_alias_form: child-to-parent

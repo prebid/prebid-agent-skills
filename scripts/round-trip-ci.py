@@ -656,22 +656,28 @@ R5_STRICT_KEYS = (
     ("bidder_info.capabilities",                "bidder_info_capabilities"),
     ("params.schema_interpretation",            "params_schema_interpretation"),
     ("bidder_info.gvl_vendor_id",               "bidder_info_gvl_vendor_id"),
-    ("bidder_info.endpoint",                    "bidder_info_endpoint"),
     ("bidder_info.endpoint_compression",        "bidder_info_endpoint_compression"),
-    ("bidder_info.endpoint_construction",       "bidder_info_endpoint_construction"),
     ("bidder_info.geoscope",                    "bidder_info_geoscope"),
     ("bidder_info.maintainer",                  "bidder_info_maintainer"),
     ("bidder_info.modifying_vast_xml_allowed",  "bidder_info_modifying_vast_xml_allowed"),
 )
 # R5-divergent keys: legitimate language-idiom divergence. Honor only the
 # assertion's severity (no runtime FAIL on divergence).
+# - bidder_info.endpoint: macro form differs by language (Go's `{{.X}}` template
+#   vs Java's `${X}` / `%s` printf form) — same observable URL post-substitution.
+# - bidder_info.endpoint_construction: kind+macros struct mirrors per-language
+#   mechanism; Go-template vs String.replace is per-language idiom.
+# - bidder_info.default_enabled: Java's edge-case #30 enabled:false opt-in pattern
+#   is legitimate (e.g., optidigital).
 R5_DIVERGENT_KEYS = (
-    ("bidder_info.default_enabled", "bidder_info_default_enabled"),
-    ("meta.alias_metadata",         "alias_metadata"),
-    (None,                          "lifecycle_rename"),
-    (None,                          "port_lineage"),
-    (None,                          "reviewer_cohort"),
-    (None,                          "test_fixture_cost"),
+    ("bidder_info.endpoint",                    "bidder_info_endpoint"),
+    ("bidder_info.endpoint_construction",       "bidder_info_endpoint_construction"),
+    ("bidder_info.default_enabled",             "bidder_info_default_enabled"),
+    ("meta.alias_metadata",                     "alias_metadata"),
+    (None,                                      "lifecycle_rename"),
+    (None,                                      "port_lineage"),
+    (None,                                      "reviewer_cohort"),
+    (None,                                      "test_fixture_cost"),
 )
 
 

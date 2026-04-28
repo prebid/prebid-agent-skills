@@ -72,6 +72,8 @@ assertions:
     java_required_fields: []
     go_combinators_used: [oneOf, oneOf-of-oneOf, anyOf, not]
     java_combinators_used: [oneOf, oneOf-of-oneOf, anyOf, not, json-aliases-present]
+    divergence_summary: "Java side adds `json-aliases-present` to combinators_used to capture the Jackson @JsonAlias annotations on ExtImpAppnexus (placementId, invCode, trafficSourceCode, use_payment_rule). Go has no @JsonAlias equivalent — single struct tag only. Schema content is otherwise identical across languages (same properties, same flexible_types, same JSON Schema combinators); the json-aliases-present marker is a Java-only Jackson POJO concern, not a schema-level divergence. Per port-translation Rule 6 (runtime-isobject-isarray-branching) and behavior-taxonomy `combinators_used: json-aliases-present` enum value."
+    severity: warn
     go_flexible_types: [placement_id, placementId, member, keywords]
     java_flexible_types: [placement_id, placementId, member, keywords]
     go_properties:
@@ -108,15 +110,16 @@ assertions:
       - private_sizes
       - ext_inv_code
       - external_imp_id
-    equivalent: true
+    equivalent: false
     notes: |
       Java spec adds `json-aliases-present` to combinators_used to capture the
       @JsonAlias annotation pattern (placement_id/@JsonAlias("placementId"),
       inv_code/@JsonAlias("invCode"), etc.) — this is a Java reader-skill
       enrichment, not a schema content divergence. Both schemas list 16
       identical properties with identical types and the same 4 flexible-typed
-      ones (placement_id/placementId/member/keywords).
-    severity: pass
+      ones (placement_id/placementId/member/keywords). Severity is `warn`
+      (declared above) to acknowledge the Jackson-only marker without
+      blocking — the schema content itself is equivalent.
 
   port_lineage:
     direction: shared-genesis

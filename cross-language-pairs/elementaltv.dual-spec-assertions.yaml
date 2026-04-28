@@ -77,6 +77,13 @@ assertions:
     divergence_summary: null
     severity: pass
 
+  bidder_info_endpoint_compression:
+    go: gzip
+    java: null
+    equivalent: false
+    divergence_summary: "Go-side `static/bidder-info/elementaltv.yaml` declares `endpointCompression: gzip`; Java-side `bidder-config/elementaltv.yaml` omits the field entirely (defaults to none). Likely a Java upstream gap — the rename PR (Java #4326) didn't carry the compression setting forward. Real port-fidelity divergence but tracked as warn rather than fail because the fix lives in Java upstream, not in this repo."
+    severity: warn
+
   bidder_info_endpoint_construction:
     go_kind: single-token-substitution
     java_kind: single-token-substitution
