@@ -324,7 +324,7 @@ Example: msft's `iab_categories.go` has a 95-entry hardcoded map with custom cur
 
 The Adapter Specification is the unidirectional contract between `read/` and four downstream consumers. Each consumer reads the spec independently; no consumer talks to another consumer through the spec. Determinism (R4) and cross-language structural parity (R5) are the two correctness guarantees that survive the contract — everything else is a hint, a TODO, or a quirk for human judgment.
 
-The 37 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 12 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
+The 43 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 12 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
 
 The opt-in `pr-triage` hook is the only reverse-direction integration: review/ reads a spec to detect regressions on PR diffs. It is purely additive — review/ continues to function without read/.
 

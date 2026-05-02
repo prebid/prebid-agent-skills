@@ -94,7 +94,7 @@ The ban is structural, not a soft preference. The reviewer cohorts are disjoint;
 
 ### 5.1 What CAN be transferred
 
-The Adapter Specification format is shared. Both languages emit the SAME schema. The 37 port-translation rules apply to both directions. The behavior taxonomy enumerates the same values. These are language-neutral and DO transfer.
+The Adapter Specification format is shared. Both languages emit the SAME schema. The 43 port-translation rules apply to both directions. The behavior taxonomy enumerates the same values. These are language-neutral and DO transfer.
 
 What does NOT transfer is the human reviewer fingerprints — the patterns that reflect a specific reviewer's recurring concerns. These are repo-specific.
 
@@ -175,7 +175,7 @@ A future port-go2java skill output must include the R5 check result in its gener
 
 The Go and Java reviewer cohorts are wholly disjoint apart from `@bretg`. Review-pattern matchers (per-reviewer fingerprints) MUST NOT be auto-transferred between languages — the patterns reflect repo-specific concerns. Port-fidelity is the dominant Java review theme and does NOT transfer to Go. Cross-language port PRs SHOULD cc `@bretg`, and the spec's `cross_language.reviewer_cohort.cross_language_coordinator` field captures this. Java review skills, when authored, MUST start from the Java cohort fingerprints, NOT from a translation of the Go review skills.
 
-The Adapter Specification format itself, the 37 port-translation rules, and the behavior taxonomy ARE shared — those are language-neutral. Reviewer fingerprints are not.
+The Adapter Specification format itself, the 43 port-translation rules, and the behavior taxonomy ARE shared — those are language-neutral. Reviewer fingerprints are not.
 
 ---
 
