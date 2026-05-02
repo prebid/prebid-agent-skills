@@ -1,0 +1,518 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/prebid/prebid-agent-skills/prebid-server-go/read/skills/shared/adapter-spec.schema.json",
+  "title": "Adapter Specification",
+  "description": "Schema for the language-neutral Adapter Specification YAML emitted by the read-skill suite. Phase 2.0 milestone: covers the kobler-Go and kobler-Java goldens. Phase 2.1 will expand to cover all 22 goldens.",
+
+  "type": "object",
+  "required": [
+    "adapter_spec_version",
+    "spec_kind",
+    "source_language",
+    "provenance",
+    "meta",
+    "bidder_info",
+    "bidder_params_json",
+    "bidder_params_sha256",
+    "params",
+    "code",
+    "tests"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "adapter_spec_version": {
+      "description": "Schema version this spec conforms to. SemVer string per ADR-001 D7.",
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        { "type": "integer", "minimum": 1, "description": "Legacy Phase 1 form; Phase 2.7 migrates to SemVer string." }
+      ]
+    },
+    "spec_kind": {
+      "type": "string",
+      "const": "prebid-server-adapter"
+    },
+    "source_language": {
+      "type": "string",
+      "enum": ["go", "java"]
+    },
+    "provenance": { "$ref": "#/$defs/Provenance" },
+    "meta": { "$ref": "#/$defs/Meta" },
+    "bidder_info": { "$ref": "#/$defs/BidderInfo" },
+    "bidder_params_json": { "type": "string" },
+    "bidder_params_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^([a-f0-9]{64})?$"
+    },
+    "params": { "$ref": "#/$defs/Params" },
+    "code": { "$ref": "#/$defs/Code" },
+    "tests": { "$ref": "#/$defs/Tests" },
+    "spring_config": { "type": ["object", "null"] },
+    "bidder_class": { "type": ["object", "null"] },
+    "code_naming": { "type": ["object", "null"], "description": "ADR-001 D1: top-level Java-only block (NOT nested under code.naming)." },
+    "lifecycle": { "type": ["object", "null"], "description": "ADR-001 D5: top-level lifecycle.rename block on post-rename specs." },
+    "iab_category_storage": { "$ref": "#/$defs/IabCategoryStorage" },
+    "ext_pojo_construction": { "$ref": "#/$defs/ExtPojoConstruction" },
+    "currency_conversion": { "$ref": "#/$defs/CurrencyConversion" },
+    "headers_constructed": { "$ref": "#/$defs/HeadersConstructed" },
+    "deploy_time_tokens": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DeployTimeToken" }
+    },
+    "quirks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Quirk" }
+    },
+    "cross_language": { "$ref": "#/$defs/CrossLanguage" },
+    "registry": { "type": "object", "description": "ADR-001 D6: present on Java goldens that record test-application.properties registry; will be moved to tests.test_application_properties.* in Phase 2.7." },
+    "taxonomy_version": {
+      "description": "ADR-001 D7: SemVer string for behavior taxonomy version goldens conform to.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    }
+  },
+
+  "$defs": {
+    "Provenance": {
+      "type": "object",
+      "required": ["source", "read"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "object",
+          "required": ["repo", "resolved_commit"],
+          "additionalProperties": false,
+          "properties": {
+            "repo": { "type": "string" },
+            "ref": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "properties": {
+                "branch": { "type": "string" },
+                "tag": { "type": "string" },
+                "commit": { "type": "string" }
+              }
+            },
+            "resolved_commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "fetch_method": {
+              "type": "string",
+              "enum": ["github-raw", "local-checkout", "gh-cli"]
+            }
+          }
+        },
+        "read": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "skill_versions": { "type": "object" },
+            "timestamp_utc": { "type": "string" },
+            "operator": { "type": "string" }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": ["integer", "null"] },
+              "summary": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "Meta": {
+      "type": "object",
+      "required": ["bidder_name"],
+      "additionalProperties": false,
+      "properties": {
+        "bidder_name": { "type": "string" },
+        "is_alias": { "type": "boolean" },
+        "alias_of": { "type": ["string", "null"] },
+        "parent_aliases": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "whitelabel_only": { "type": "boolean" },
+        "disabled": { "type": "boolean" },
+        "module_path_major": { "type": ["string", "null"] },
+        "java_artifact_version": { "type": ["string", "null"] },
+        "empire_canonical_master": {
+          "type": "boolean",
+          "description": "ADR-003 audit B6: marks parent or single representative spec as canonical Rule 44 master sample."
+        },
+        "empire_parent_flavor": {
+          "type": ["string", "null"],
+          "enum": ["endpoint-macro-substitution", "white-label-saas", "registration-only", null],
+          "description": "ADR-003 audit B6: Rule 44 sub-flavor inherited from empire parent."
+        }
+      }
+    },
+
+    "BidderInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": { "type": ["string", "null"] },
+        "endpoint_construction": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["static", "template-macro", "url-with-query", "dev-prod-toggle", "hardcoded-toggle", "runtime-region-selection", "deploy-time-token", "single-token-substitution", "custom"]
+            },
+            "macros_used": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "macro_syntax": {
+              "type": ["string", "null"],
+              "enum": ["go-template", "java-string-replace", "printf", "custom", null]
+            },
+            "placeholders_unresolved": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "endpoint_compression": { "type": ["string", "null"] },
+        "ortb_version": { "type": ["string", "null"] },
+        "default_enabled": { "type": ["boolean", "null"] },
+        "modifying_vast_xml_allowed": { "type": ["boolean", "null"] },
+        "maintainer": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "email": { "type": ["string", "null"] }
+          }
+        },
+        "capabilities": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Open map of {site|app|dooh}.mediaTypes; values vary."
+        },
+        "geoscope": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "gvl_vendor_id": { "type": ["integer", "null"] },
+        "user_sync": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Open map: verbatim user_sync subtree from upstream YAML."
+        },
+        "yaml_extra_fields": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Open map of fields not in the canonical bidder-info schema."
+        },
+        "yaml_field_name_quirks": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+
+    "Params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_interpretation": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "properties": {
+              "type": "array",
+              "items": { "type": "object", "additionalProperties": true }
+            },
+            "required_fields": { "type": "array", "items": { "type": "string" } },
+            "flexible_types": { "type": "array" },
+            "combinators_used": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "ext_struct": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "params_test": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "properties": {
+            "file": { "type": ["string", "null"] },
+            "valid_cases_count": { "type": ["integer", "null"] },
+            "invalid_cases_count": { "type": ["integer", "null"] },
+            "bidder_constant_referenced": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+
+    "Code": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Open map for Phase 2.0; Phase 2.1 will tighten with full enums and required fields per language.",
+      "properties": {
+        "package_or_class": { "type": ["string", "null"] },
+        "directory_name": { "type": ["string", "null"] },
+        "package_directory_mismatch": { "type": ["boolean", "null"] },
+        "file_layout": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["single-file", "multi-file"]
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "name": { "type": "string" },
+                  "role": { "type": "string" },
+                  "loc": { "type": ["integer", "null"] }
+                }
+              }
+            }
+          }
+        },
+        "imports": { "type": ["object", "null"] },
+        "adapter_struct": { "type": ["object", "null"] },
+        "builder": { "type": ["object", "null"] },
+        "make_requests": { "type": ["object", "null"] },
+        "make_bids": { "type": ["object", "null"] }
+      }
+    },
+
+    "Tests": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "test_root_directory": { "type": ["string", "null"] },
+        "go_directory_naming": {
+          "type": ["string", "null"],
+          "enum": ["canonical", "legacy-test", "custom", null]
+        },
+        "java_it_folder_naming": {
+          "type": ["string", "null"],
+          "enum": ["canonical", "multi-folder", "suffix-augmented", null]
+        },
+        "fixture_inventory": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Open map keyed by category (exemplary, supplemental, amp, video, videosupplemental, integration, plus extension categories like extrainfo_exemplary)."
+        },
+        "uses_canonical_harness": { "type": ["boolean", "null"] },
+        "unit_test_methods_count": { "type": ["integer", "null"] },
+        "unit_test_loc": { "type": ["integer", "null"] },
+        "hand_written_test_methods": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "fixture_handling": { "type": ["string", "null"] },
+        "test_application_properties_entries_added": { "type": ["integer", "null"] },
+        "integration_test_class": { "type": ["string", "null"] },
+        "integration_test_pattern": {
+          "type": ["string", "null"],
+          "enum": ["4-file-split", "6-file-with-cache", "multi-folder", "none", null]
+        },
+        "unit_test_breakdown": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "integer" },
+          "description": "ADR-001 D6: open map keyed by test class name, value is method count."
+        }
+      }
+    },
+
+    "IabCategoryStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "storage_kind": {
+          "type": "string",
+          "enum": ["none", "yaml-inlined", "go-data-table", "dynamic-fetched"]
+        },
+        "yaml_field": { "type": ["string", "null"] },
+        "go_data_file": { "type": ["string", "null"] },
+        "table_size": { "type": ["integer", "null"] },
+        "injection": {
+          "type": ["string", "null"],
+          "enum": ["constructor-arg", "static-init", null],
+          "description": "Phase 2.7 audit ADR-001 D2: rename to delivery_mechanism."
+        },
+        "delivery_mechanism": {
+          "type": ["string", "null"],
+          "enum": ["constructor-arg", "static-init", null],
+          "description": "ADR-001 D2: replaces injection (Phase 2.7)."
+        }
+      }
+    },
+
+    "ExtPojoConstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "framework_choice": {
+          "type": ["string", "null"],
+          "enum": ["go-struct", "lombok-value-builder", "lombok-value-staticconstructor", "lombok-data", null]
+        },
+        "flexible_extension_used": { "type": "boolean" },
+        "custom_unmarshal": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["none", "go-unmarshaljson", "jackson-jsondeserialize", "jackson-jsonalias-only", "runtime-isobject-isarray-branching"]
+            },
+            "accepts_shapes": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "where_branched": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+
+    "CurrencyConversion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "used": { "type": "boolean" },
+        "helper": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "go_signature": { "type": ["string", "null"] },
+            "java_signature": { "type": ["string", "null"] }
+          }
+        },
+        "injection": {
+          "type": ["string", "null"],
+          "enum": ["dependency", "function-arg", null]
+        },
+        "bid_request_passed_for_context": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "HeadersConstructed": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "pre_built_in_constructor": { "type": ["boolean", "null"] },
+        "per_request_dynamic": { "type": ["boolean", "null"] },
+        "custom_headers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "authentication_kind": {
+          "type": ["string", "null"],
+          "enum": ["none", "basic-auth", "hmac-digest", "bearer-token", "custom", null]
+        },
+        "authentication_input": { "type": "array" },
+        "language_stamped": {
+          "type": "boolean",
+          "description": "ADR-007 F2: true when at least one header value differs by language at request time."
+        },
+        "language_stamped_headers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "go_value": { "type": "string" },
+              "java_value": { "type": "string" },
+              "rationale": { "type": "string" }
+            }
+          },
+          "description": "ADR-007 F2: array kept in logical (declaration) order; not lex-sorted (audit C7)."
+        }
+      }
+    },
+
+    "DeployTimeToken": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "token": { "type": "string" },
+        "valid_values": { "type": "array" },
+        "documentation_link": { "type": ["string", "null"] }
+      }
+    },
+
+    "Quirk": {
+      "type": "object",
+      "required": ["id", "summary"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "file": { "type": ["string", "null"] },
+        "summary": { "type": "string" },
+        "edge_case_taxon": { "type": ["string", "null"] },
+        "rationale": { "type": ["string", "null"] }
+      }
+    },
+
+    "CrossLanguage": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "go_artifacts": { "type": ["object", "null"] },
+        "java_artifacts": { "type": ["object", "null"] },
+        "port_concerns": { "type": ["object", "null"] },
+        "port_lineage": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "source_language": {
+              "type": ["string", "null"],
+              "enum": ["go", "java", "shared-genesis", null],
+              "description": "ADR-001 D3: 'shared-genesis' for pre-Go-Java pair convention bidders (canonical: rubicon)."
+            },
+            "source_pr": { "type": ["string", "null"] },
+            "destination_language": {
+              "type": ["string", "null"],
+              "enum": ["go", "java", null]
+            },
+            "destination_pr": { "type": ["string", "null"] },
+            "fidelity_review_themes": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "go_specific_concerns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "java_specific_concerns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reviewer_cohort": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "go": { "type": "array", "items": { "type": "string" } },
+            "java": { "type": "array", "items": { "type": "string" } },
+            "cross_language_coordinator": { "type": ["string", "null"] }
+          }
+        }
+      }
+    }
+  }
+}
