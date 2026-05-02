@@ -4,18 +4,19 @@
 # live in scripts/ and scripts/tests/. The Makefile is a thin convenience
 # layer; the scripts themselves are the authoritative entry points.
 
-.PHONY: help install ci test audit-goldens audit-pr coverage render-taxonomy render-port-rules clean
+.PHONY: help install ci test audit-goldens audit-pr coverage render-taxonomy render-port-rules lint-port-rules clean
 
 help:
 	@echo "Available targets:"
 	@echo "  install            pip install -r requirements.txt"
-	@echo "  ci                 Run unit tests + schema-contract + round-trip-ci (mirrors GH Actions)"
+	@echo "  ci                 Run unit tests + schema-contract + round-trip-ci + port-rule lints"
 	@echo "  test               Run unit tests only (scripts/tests/)"
 	@echo "  audit-goldens      Phase 1.5 golden-vs-upstream audit (all 22 goldens)"
 	@echo "  audit-pr URL=…     Phase 4.2 PR audit (requires CLAUDE_API_KEY for novelty classification)"
 	@echo "  coverage           Phase 4.3 per-rule, per-empire coverage report (markdown)"
 	@echo "  render-taxonomy    Phase 2.4 regenerate behavior-taxonomy.md from .yaml source"
 	@echo "  render-port-rules  Phase 2.5 regenerate port-translation-rules.md from .yaml source"
+	@echo "  lint-port-rules    Phase 2.6 mechanizable port-rule lints (Rules 5/9/33/36/38/44/46)"
 	@echo "  clean              Remove __pycache__ and .pyc files"
 
 install:
@@ -25,6 +26,9 @@ ci: test
 	python3 scripts/tests/test_schema_contract.py
 	@PAIRS=$$(grep -vE '^\s*(#|$$)' .github/known-broken-pairs.txt | tr '\n' ',' | sed 's/,$$//'); \
 	python3 scripts/round-trip-ci.py --strict-r3 --allow-known-broken-pairs "$$PAIRS"; \
+	EXIT=$$?; \
+	if [ $$EXIT -le 2 ]; then : ; else exit $$EXIT; fi
+	@python3 scripts/lib/lint-port-rules.py; \
 	EXIT=$$?; \
 	if [ $$EXIT -le 2 ]; then exit 0; else exit $$EXIT; fi
 
@@ -49,6 +53,9 @@ render-taxonomy:
 
 render-port-rules:
 	python3 scripts/render-port-rules.py
+
+lint-port-rules:
+	python3 scripts/lib/lint-port-rules.py
 
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
