@@ -31,12 +31,12 @@ public class KoblerConfiguration {
     }
 
     @Bean
-    BidderDeps koblerBidderDeps(KoblerConfigurationProperties configurationProperties,
-                                @NotBlank @Value("${external-url}") String externalUrl,
+    BidderDeps koblerBidderDeps(KoblerConfigurationProperties config,
                                 CurrencyConversionService currencyConversionService,
+                                @NotBlank @Value("${external-url}") String externalUrl,
                                 JacksonMapper mapper) {
         return BidderDepsAssembler.<KoblerConfigurationProperties>forBidder(BIDDER_NAME)
-                .withConfig(configurationProperties)
+                .withConfig(config)
                 .usersyncerCreator(UsersyncerCreator.create(externalUrl))
                 .bidderCreator(cfg -> new KoblerBidder(
                         cfg.getEndpoint(),
@@ -245,29 +245,29 @@ When a constructor parameter on the BIDDER class (Step 2 in SKILL.md) has any of
 
 ### Worked example — Kobler bean dependencies
 
-The Kobler factory `@Bean` method:
+The Kobler factory `@Bean` method (verbatim from `prebid/prebid-server-java@69b1993c` upstream):
 
 ```java
 @Bean
-BidderDeps koblerBidderDeps(KoblerConfigurationProperties configurationProperties,
-                            @NotBlank @Value("${external-url}") String externalUrl,
+BidderDeps koblerBidderDeps(KoblerConfigurationProperties config,
                             CurrencyConversionService currencyConversionService,
+                            @NotBlank @Value("${external-url}") String externalUrl,
                             JacksonMapper mapper) {
 ```
 
-Spec emits:
+Spec emits (parameter order matches upstream — emit verbatim, do NOT reorder):
 
 ```yaml
 bean_dependencies:
-  - name: configurationProperties
+  - name: config
     type: KoblerConfigurationProperties
     source: framework-injected         # The bean is provided by the @Bean above.
-  - name: externalUrl
-    type: String
-    source: "@Value(${external-url})"
   - name: currencyConversionService
     type: CurrencyConversionService
     source: framework-injected
+  - name: externalUrl
+    type: String
+    source: "@Value(${external-url})"
   - name: mapper
     type: JacksonMapper
     source: framework-injected
