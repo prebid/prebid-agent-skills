@@ -34,6 +34,21 @@ python3 scripts/round-trip-ci.py --strict-r3
 - Use the closed taxonomy at `prebid-server-go/read/skills/shared/behavior-taxonomy.md` for enumerated values. Adding a new enum value requires updating the taxonomy in the same change.
 - Use imperative form ("emit", "parse", "verify") — prefer explanation of *why* over heavy-handed "MUSTs".
 
+## Versioning policy
+
+All `version` fields use SemVer string format `X.Y.Z`:
+
+- **SKILL frontmatter `version`**: present on all read-skill SKILL.md files. Bump policy:
+  - **Patch** (`1.0.0 → 1.0.1`): typo, prose-only fix, no behavioral change
+  - **Minor** (`1.0.0 → 1.1.0`): new field, new enum value, new reference doc, additive change that doesn't break callers
+  - **Major** (`1.0.0 → 2.0.0`): renamed field, removed field, changed enum semantics, schema-affecting change
+
+- **Golden spec `adapter_spec_version`** + **`taxonomy_version`** (added Phase 2): same SemVer policy. Changes here are coordinated with corresponding migration scripts in `scripts/migrate/`.
+
+- **Port-translation rules `port_translation_rules_version`** (added Phase 2): same. Add a CHANGELOG entry for any minor/major bump.
+
+When in doubt, prefer a higher bump — version migrations are easier to reason about than silent semantic shifts.
+
 ## Adding a port-translation rule
 
 - Edit `prebid-server-go/read/skills/shared/port-translation-rules.md`.
