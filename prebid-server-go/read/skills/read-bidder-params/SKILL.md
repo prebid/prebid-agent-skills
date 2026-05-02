@@ -71,16 +71,7 @@ Compute `sha256` of the raw bytes from Step 1 (NOT of the YAML-encoded form). Em
 bidder_params_sha256: <hex-sha256>
 ```
 
-This is the cross-language contract (R2). The Java sibling skill `read-bidder-params-java` reads `src/main/resources/static/bidder-params/{bidder}.json` from the Java repo and MUST produce the same SHA. Mismatch surfaces as a port-fidelity violation in the cross-language test harness (see `shared/port-translation-rules.md` Rule 5 — bidder_params_json byte-identical contract).
-
-For verified canonical SHAs of corpus adapters (cross-checked at v4.1.0):
-
-| Bidder | SHA |
-|---|---|
-| `kobler` | `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685` |
-| `optidigital` | `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31` |
-
-If a re-read of these files produces a different SHA on master, the orchestrator emits a `master-drift` warning — the schema bytes changed upstream.
+This is the cross-language byte-fidelity contract ([Rule 38](../shared/port-translation-rules.md)). The Java sibling skill `read-bidder-params-java` reads `src/main/resources/static/bidder-params/{bidder}.json` from the Java repo and MUST produce the same SHA. Mismatch surfaces as a port-fidelity violation in the cross-language test harness (R5). Verified canonical SHAs for corpus adapters live in the goldens at `../../test-fixtures/*.golden.spec.yaml`; if a re-read on master produces a different SHA, the orchestrator emits a `master-drift` warning.
 
 ### Step 3: Parse the JSON schema for interpretation
 
@@ -125,41 +116,20 @@ params:
 
 For each field, emit `type_native` exactly as written in source (e.g., `string`, `bool`, `int`, `int64`, `*bool`, `[]string`, `jsonutil.StringInt`, `jsonutil.IntString`, `json.RawMessage`, `map[string]any`). This is the Go-native type — not a normalized cross-language type.
 
-Special notes to add to `notes[]`:
+Special `notes[]` to append per field:
 
-- If `type_native` is `jsonutil.StringInt` AND the schema declares `"type": ["integer","string"]` for the same field: append `"uses jsonutil.StringInt for integer-or-string flexibility"`. This pairs with `flexible_types[]` in `schema_interpretation`.
-- If `type_native` is `jsonutil.IntString`: append `"uses jsonutil.IntString — schema declares integer but upstream may send string"`. Same field-by-field pairing.
-- If `type_native` is `interface{}` or `any` AND the schema uses combinators (`anyOf`/`oneOf`): append `"interface{} chosen for combinator flexibility — flag as WARN (review/bidder-params-pr-review Workflow: Flexible Type Schema Field)"`.
-- If the Go field name ≠ json tag in a non-conventional way (e.g., `pubclick` json tag where the surrounding adapter expects `pub_click`): append `"json key style mismatch — see Go edge case #7"`. The mismatch detection requires reading the adapter source for context; the bidder-params skill emits an INFO note, and `read-adapter-code` owns the actual FAIL. Cross-reference the canonical example (msft `pubclick` vs `pub_click`, PR #4592) in `references/schema-interpretation.md`.
+- `jsonutil.StringInt` + schema declares `"type": ["integer","string"]` → `"uses jsonutil.StringInt for integer-or-string flexibility"` (pairs with `flexible_types[]`).
+- `jsonutil.IntString` → `"uses jsonutil.IntString — schema declares integer but upstream may send string"`.
+- `interface{}` or `any` + combinators (`anyOf`/`oneOf`) → `"interface{} chosen for combinator flexibility — flag as WARN"`.
+- Go field name ≠ json tag style (e.g., `pubclick` vs `pub_click`) → `"json key style mismatch — see Go edge case #7"` (INFO; `read-adapter-code` owns the FAIL — canonical: msft PR #4592).
 
-Cross-references for canonical type mappings:
-- JSON Schema → Go type: `review/skills/bidder-params-pr-review/references/params-type-index.md` (master truth).
-- `jsonutil.StringInt` / `IntString` semantics: `review/skills/shared/framework-utilities.md` "util/jsonutil extras beyond Marshal/Unmarshal" section.
+Canonical JSON Schema → Go type table is REUSED from `review/skills/bidder-params-pr-review/references/params-type-index.md`; `jsonutil.StringInt`/`IntString` semantics from `review/skills/shared/framework-utilities.md`. Do NOT re-list either here.
 
 #### Custom UnmarshalJSON detection
 
-Set `custom_unmarshal: true` when the file declares ANY method:
+Set `custom_unmarshal: true` when the file declares any `UnmarshalJSON` method on `*ExtImp{Bidder}` OR on a type declared inside the file (e.g., Appnexus's `ExtImpAppnexusKeywords`). Use Go AST (`go/parser` with `parser.SkipObjectResolution`) to walk `*ast.FuncDecl` nodes; regex fallback `^func \([^)]+ \*?\w+\) UnmarshalJSON\(.*\) error` for non-AST contexts.
 
-```go
-func (<receiver>) UnmarshalJSON(data []byte) error
-```
-
-The receiver may be the parent `*ExtImp{Bidder}` or a TYPE declared inside the file (e.g., Appnexus's `ExtImpAppnexusKeywords`). Both count.
-
-Detection methods (in order of preference):
-
-1. **Go AST** (`go/parser` with `parser.SkipObjectResolution`): walk `*ast.FuncDecl` nodes, filter to those with `Recv != nil` and `Name.Name == "UnmarshalJSON"`. The receiver type identifies WHICH type in the file owns the custom unmarshal.
-2. **Regex fallback**: `^func \([^)]+ \*?\w+\) UnmarshalJSON\(.*\) error`. False-negative on multi-line method signatures is rare but possible — prefer AST when the file size is non-trivial.
-
-When `custom_unmarshal: true`, populate `custom_unmarshal_accepts[]` by inspecting the method body. The list captures which JSON shapes the method handles. Common patterns:
-
-- `switch b[0] { case '{': ...; case '[': ...; }` → accepts `["object", "array"]`.
-- `if data[0] == '"' { ... } else { ... }` → accepts `["string", <other>]`.
-- `bytes.Equal(data, []byte("null"))` early-return → adds `"null"`.
-
-The Appnexus canonical example: `ExtImpAppnexusKeywords.UnmarshalJSON` has `switch b[0] { case '{': ...; case '[': ...; }` → emit `custom_unmarshal_accepts: ["object", "array"]`. Branching point is on the type itself (the keyword field's own type), so `ext_pojo_construction.custom_unmarshal.where_branched: type-method`.
-
-If the body is too convoluted to classify, emit `custom_unmarshal_accepts: ["custom"]` and add a `quirks[]` entry with `edge_case_taxon: incomplete-classification` per the Custom-with-quirks contract (`shared/behavior-taxonomy.md` "How to read this taxonomy" item 2).
+Populate `custom_unmarshal_accepts[]` by inspecting the method body. Common patterns: `switch b[0] { case '{': ...; case '[': ... }` → `["object", "array"]`; `if data[0] == '"'` → `["string", ...]`; `bytes.Equal(data, []byte("null"))` early-return adds `"null"`. Appnexus's `ExtImpAppnexusKeywords.UnmarshalJSON` is canonical (object | array; `where_branched: type-method`). Convoluted bodies emit `custom_unmarshal_accepts: ["custom"]` paired with a `quirks[]` `incomplete-classification` entry per the Custom-with-quirks contract.
 
 ### Step 5: Read params_test.go
 
@@ -208,27 +178,9 @@ validator.Validate(openrtb_ext.Bidder{Name}, json.RawMessage(<param>))
 
 The literal `openrtb_ext.Bidder<Name>` is the **bidder constant referenced**. Emit it verbatim as the `bidder_constant_referenced` value.
 
-Both `TestValidParams` and `TestInvalidParams` typically reference the SAME constant. When they differ (e.g., copy-paste artifact in one test), record what the test actually surfaced — emit `bidder_constant_referenced` as the constant from the **last-observed** `validator.Validate(openrtb_ext.Bidder<Name>, ...)` call in source order. Both calls' mismatches with the canonical constant from `bidders.go` emit paired `bidder-constant-mismatch` warnings. This is the kobler real bug:
+When `TestValidParams` and `TestInvalidParams` reference different constants (e.g., copy-paste artifact), emit the **last-observed** constant in source order — both calls' mismatches against the canonical constant from `bidders.go` emit paired `bidder-constant-mismatch` warnings. The kobler canonical bug surfaces at `params_test.go:47` referencing `openrtb_ext.BidderKrushmedia` (correct: `BidderKobler` at line 24). A successful run on kobler emits the warning AND a `quirks[]` entry of taxon `bidder-constant-mismatch` (the orchestrator pairs them on assembly).
 
-- `TestValidParams` line 24: `validator.Validate(openrtb_ext.BidderKobler, ...)` — correct
-- `TestInvalidParams` line 47: `validator.Validate(openrtb_ext.BidderKrushmedia, ...)` — WRONG (copy-paste artifact)
-- Emitted `bidder_constant_referenced`: `openrtb_ext.BidderKrushmedia` (last-observed wins)
-- Emitted warnings: a `bidder-constant-mismatch` entry for line 47 (and one for line 24 if the canonical lookup also flags it — but typically `BidderKobler` is canonical so only line 47 surfaces)
-
-Validation rule R7 (canonicalized in `shared/adapter-spec.md` "Validation rules R1-R10"): if the constant on either line ≠ the constant declared as `Bidder<X> BidderName = "<name>"` in `openrtb_ext/bidders.go` at the resolved commit, emit:
-
-```yaml
-provenance:
-  warnings:
-    - type: bidder-constant-mismatch
-      file: adapters/{bidder}/params_test.go
-      line: <line number where the wrong constant appears>
-      summary: "validator.Validate called with openrtb_ext.<Wrong> (copy-paste artifact); should be openrtb_ext.<expected, looked up in bidders.go>. The Validate call still functions because the validator looks up the schema by name and rejects on schema mismatch — the test passes despite the wrong identifier."
-```
-
-The expected constant for any bidder is whatever appears as `Bidder<X> BidderName = "<name>"` in `openrtb_ext/bidders.go` at the resolved commit. Look it up directly — do NOT try to derive it via flat TitleCase on the bidder name. The constant generation rules are not deterministically derivable from the YAML name: brand acronyms are preserved (`AJA`, `MX`, `TV`, `BWX`, `AMX`, `CWire`), camelHumps are explicit (`AdTonos`, `HuaweiAds`, `BeyondMedia`, `BidsCube`, `BigoAd`, `ConnectAd`), and leading-digit names capitalize the first letter after the digit (`33across` → `Bidder33Across`, not `Bidder33across`). The `Bidder` prefix makes any bidder name a valid Go identifier; the precise capitalization is whatever the upstream maintainers chose. Treat the `bidders.go` declaration as ground truth.
-
-The kobler canonical bug is the load-bearing test for this detection (see `shared/adapter-spec.md` "Worked example: Kobler" and the kobler golden spec at `read/test-fixtures/kobler.golden.spec.yaml` lines 23-25, 106). A successful run of this skill on kobler MUST emit BOTH the warning AND a `quirks[]` entry of type `bidder-constant-mismatch` (the quirks entry is added by the orchestrator on assembly, not by this skill — but the skill MUST emit the warning so the orchestrator can pair them).
+Validation rule R7: if the constant on either line ≠ the constant declared as `Bidder<X> BidderName = "<name>"` in `openrtb_ext/bidders.go` at the resolved commit, emit a `bidder-constant-mismatch` warning with `{type, file, line, summary}`. The expected constant comes from the `bidders.go` declaration verbatim — do NOT derive it via TitleCase rules; constant capitalization is upstream-author-chosen (acronyms preserved, camelHumps explicit, leading-digit names capitalize after the digit). Treat `bidders.go` as ground truth.
 
 ### Step 6: Populate `ext_pojo_construction`
 
@@ -263,116 +215,34 @@ This skill does NOT populate fields owned by other skills. But the orchestrator'
 - `params.params_test.bidder_constant_referenced` — used by the orchestrator to generate validation rule R7 warnings.
 - `provenance.warnings[]` entries emitted by this skill are merged into the assembled `provenance.warnings[]` array; do NOT emit a top-level `warnings:` block, only the entries.
 
-## Edge case mapping
+## Edge cases covered
 
-This skill covers three of the 17 Go edge cases catalogued in the plan and `shared/adapter-spec.md`. For each, the skill emits structured fields that capture the case without falling into the `custom` + free-text quirks fallback.
-
-| # | Edge case | Captured by |
-|---|---|---|
-| 6 | Custom UnmarshalJSON | Step 4 sets `custom_unmarshal: true` and populates `custom_unmarshal_accepts[]`; Step 6 emits `ext_pojo_construction.custom_unmarshal.{kind: go-unmarshaljson, accepts_shapes, where_branched}`. Canonical example: Appnexus `ExtImpAppnexusKeywords` (string \| object \| array). |
-| 7 | Intentional JSON key style mismatch | Step 4 emits `params.ext_struct.fields[].notes[]` containing a `"json key style mismatch"` note when the json tag uses a different style than the surrounding adapter expects. The bidder-params skill records the INFO; `read-adapter-code` owns the actual FAIL (PR #4592 msft `pubclick` vs `pub_click`). |
-| 17 | JSON Schema combinators | Step 3 emits `combinators_used[]` with the subset of `oneOf, anyOf, not, oneOf-of-oneOf` actually present. Canonical examples: Rubicon (`oneOf` for `accountId`), AppNexus (`anyOf` on keywords field; `oneOf-of-oneOf` for legacy/new naming pairs — see `references/schema-interpretation.md`). |
-
-The skill does NOT cover: package-vs-directory mismatch (#1), adapter struct identifier (#2), test directory naming (#3), multi-file layout (#4), custom request body (#5), hardcoded constants (#8), endpoint construction (#10), batching (#11), status-code handling (#12), currency overwrite (#13), shallow-copy (#14), bid pointer pattern (#15), endpoint macros (#16). Those are owned by `read-adapter-code`, `read-bidder-info`, or the orchestrator's provenance assembly.
+This skill covers Go edge cases #6 (custom UnmarshalJSON), #7 (JSON key style mismatch), and #17 (JSON Schema combinators). Each maps to a typed field — none fall through to `custom` + quirks. The full Go edge case mapping table lives in [`../shared/adapter-spec.md`](../shared/adapter-spec.md). Edge cases owned by sibling skills (`read-adapter-code`, `read-bidder-info`) are not covered here.
 
 ## Cross-language note
 
-`bidder_params_json` is **byte-identical** between Go and Java repos for the same bidder (port-translation Rule 5 — the cross-language contract). The Java sibling skill `read-bidder-params-java` reads the same file from the Java repo's `src/main/resources/static/bidder-params/{bidder}.json` and emits the same `bidder_params_sha256`. A SHA mismatch is a port-fidelity violation:
+`bidder_params_json` is **byte-identical** between Go and Java repos for the same bidder (port-translation [Rule 38](../shared/port-translation-rules.md) — the cross-language byte-fidelity contract). The Java sibling skill `read-bidder-params-java` emits the same `bidder_params_sha256`; mismatch is a port-fidelity violation surfaced by R5 in the round-trip CI harness.
 
-| Spec field | Go side | Java side | Equality |
-|---|---|---|---|
-| `bidder_params_json` | bytes from Go repo | bytes from Java repo | byte-identical |
-| `bidder_params_sha256` | sha of Go bytes | sha of Java bytes | identical |
-| `params.schema_interpretation` | parsed Go-side | parsed Java-side | deep-equal (both languages parse the same bytes) |
-| `params.ext_struct.package` | `openrtb_ext` | `org.prebid.server.proto.openrtb.ext.request.{xyz}` | divergent (language-native) |
-| `params.ext_struct.type_name` | `ExtImp{Xyz}` or `ImpExt{Xyz}` | `ExtImp{Xyz}` (Lombok @Value @Builder) | divergent shape, same name pattern |
-| `params.ext_struct.fields[].type_native` | Go primitives + `jsonutil.StringInt`/`IntString` | Java primitives + `Long` with `@JsonAlias` | divergent (Rule 9 — flexible-type translation) |
-| `params.params_test.bidder_constant_referenced` | `openrtb_ext.Bidder{Name}` | not applicable (Java unit tests don't have a bidder constant) | Go-only |
-| `ext_pojo_construction.framework_choice` | `go-struct` always | `lombok-value-builder` / `lombok-data` / `lombok-value-staticconstructor` | divergent |
-| `ext_pojo_construction.custom_unmarshal.kind` | `none` or `go-unmarshaljson` | `none`, `jackson-jsondeserialize`, `jackson-jsonalias-only`, `runtime-isobject-isarray-branching` | divergent enum spaces, but `none` agrees |
-
-Cross-reference Rule 9 (flexible-type translation): Go `jsonutil.StringInt` ↔ Java `@JsonAlias` + `Long`. Documented in `shared/port-translation-rules.md` Section "Imp.ext unmarshaling rules" implicitly via Rule 1; the explicit flexible-type rule is captured in the `notes[]` field on each side.
-
-Verification by the cross-language CI harness: dual-spec assertions assert `bidder_params_sha256` equality and `params.schema_interpretation` deep-equality; `params.ext_struct` differs by language and is asserted only on shape (same field names + same `omitempty` values for fields that exist on both sides).
+Field-by-field cross-language equality (which fields are byte-identical, deep-equal, or per-language-divergent) is canonicalized in [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md) Rules 38, 39 (params), and 1 (imp.ext unmarshal). The dual-spec assertion files at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` codify the must-match set; this skill does not duplicate it.
 
 ## Verification
 
-The skill's correctness is anchored to two golden spec fixtures:
+Correctness is anchored to two goldens:
 
-| Fixture | Path | What it pins |
-|---|---|---|
-| Optidigital | `read/test-fixtures/optidigital.golden.spec.yaml` | Clean baseline. JSON has trailing whitespace + missing terminal newline → `bidder_params_json` MUST use double-quoted YAML scalar (lines 64-68). 4 schema properties + 2 required. Legacy `ImpExt{Bidder}` naming. SHA `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31`. |
-| Kobler | `read/test-fixtures/kobler.golden.spec.yaml` | Bidder-constant-mismatch detection. `params_test.go` line 47 uses `BidderKrushmedia` (real bug). SHA `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685`. Single-property schema (`test: boolean`). 3 valid + 8 invalid params cases. |
+- `optidigital.golden.spec.yaml` — clean baseline with the trailing-whitespace + missing-terminal-newline edge that forces `bidder_params_json` into double-quoted YAML scalar form. Legacy `ImpExtOptidigital` naming.
+- `kobler.golden.spec.yaml` — pins R7 `bidder-constant-mismatch` detection via `params_test.go:47` referencing `openrtb_ext.BidderKrushmedia`.
 
-Acceptance criteria for a clean run on either fixture:
+Acceptance criteria: (1) `bidder_params_json` round-trips byte-equal under YAML scalar decode; (2) `bidder_params_sha256` matches the golden's value; (3) `combinators_used[]` is empty for kobler/optidigital, `["anyOf", "oneOf-of-oneOf"]` for appnexus; (4) `custom_unmarshal: false` for kobler/optidigital, `true` for appnexus; (5) kobler emits a `bidder-constant-mismatch` warning at line 47; (6) `bidder_constant_referenced: openrtb_ext.BidderKrushmedia` (wrong-on-purpose; last-observed wins).
 
-1. `bidder_params_json` round-trips byte-equal: re-decoding the YAML scalar produces the same bytes as the source file (R2 test).
-2. `bidder_params_sha256` matches the value in the golden spec (constant for that commit).
-3. `params.schema_interpretation.combinators_used[]` is empty for kobler/optidigital; `["anyOf", "oneOf-of-oneOf"]` for appnexus.
-4. `params.ext_struct.custom_unmarshal: false` for kobler/optidigital; `true` for appnexus.
-5. For kobler: `provenance.warnings[]` includes a `bidder-constant-mismatch` entry pointing at line 47 of `params_test.go`.
-6. For kobler: `params.params_test.bidder_constant_referenced: openrtb_ext.BidderKrushmedia` (the WRONG value, since `TestInvalidParams` is the line that surfaced; the orchestrator's assembly handles the warning pairing).
-
-A reader skill that emits a `custom` value in any enumerated field MUST also emit a `quirks[]` entry referencing the same field — this is the Custom-with-quirks contract from `shared/behavior-taxonomy.md`. The `quirks[]` array is assembled by the orchestrator; this skill emits `quirks[]` candidates as `provenance.warnings[]` entries with appropriate `type` values, and the orchestrator promotes them into `quirks[]` per the `edge_case_taxon` registry (`shared/behavior-taxonomy.md` "quirks edge_case_taxon (full registry)").
+Custom-with-quirks contract: any `custom` value in an enumerated field MUST be paired with a `quirks[]` entry referencing the same field. This skill emits `provenance.warnings[]` candidates; the orchestrator promotes them into `quirks[]` per the registry in [`../shared/behavior-taxonomy.yaml`](../shared/behavior-taxonomy.yaml).
 
 ## Determinism
 
-Two runs of this skill on the same commit MUST produce byte-identical output (R4 — round-trip determinism). To achieve this:
-
-- Read files in binary mode (no line-ending normalization).
-- Sort `properties[]` in `schema_interpretation` in source order (the order they appear in the JSON schema), NOT alphabetically.
-- Sort `fields[]` in `ext_struct` in source order (the order they appear in the Go struct), NOT alphabetically.
-- Sort `combinators_used[]` alphabetically (`anyOf, json-aliases-present, not, oneOf, oneOf-of-oneOf`).
-- Sort `flexible_types[]` alphabetically.
-- Emit string keys in the order specified by `shared/adapter-spec.md`; do not let the YAML emitter re-order keys.
-
-The orchestrator excludes `provenance.read.timestamp_utc` and `provenance.read.operator` from determinism comparison.
-
-## How to test this skill
-
-```bash
-# Smoke test against the optidigital golden spec.
-read-bidder-params --bidder=optidigital --source-mode=local --resolved-commit=d7f8515b8625... | \
-    yq '.params, .bidder_params_sha256, (.provenance.warnings // [])'
-# Expected:
-#   bidder_params_sha256: 6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31
-#   params.schema_interpretation.required_fields: [publisherId, placementId]
-#   params.ext_struct.type_name: ImpExtOptidigital      (legacy naming — surfaces as INFO quirk in orchestrator assembly)
-#   provenance.warnings: []                              (no anomalies)
-
-# Smoke test against the kobler golden — must capture the bidder-constant-mismatch.
-read-bidder-params --bidder=kobler --source-mode=local --resolved-commit=d7f8515b8625... | \
-    yq '.params.params_test, (.provenance.warnings | map(select(.type == "bidder-constant-mismatch")))'
-# Expected:
-#   params.params_test.bidder_constant_referenced: openrtb_ext.BidderKrushmedia
-#   provenance.warnings:
-#     - type: bidder-constant-mismatch
-#       file: adapters/kobler/params_test.go
-#       line: 47
-#       summary: "validator.Validate called with openrtb_ext.BidderKrushmedia ..."
-
-# Round-trip determinism: two consecutive runs at the same commit must produce identical output
-# (modulo provenance.read.timestamp_utc and provenance.read.operator).
-diff <(read-bidder-params --bidder=kobler --resolved-commit=<sha>) \
-     <(read-bidder-params --bidder=kobler --resolved-commit=<sha>)
-# Expected: empty (no diff)
-```
+Two runs at the same commit MUST produce byte-identical output (R4). Read files in binary mode; sort `properties[]` and `ext_struct.fields[]` in source order (NOT alphabetically); sort `combinators_used[]` and `flexible_types[]` alphabetically; emit keys in the order specified by `../shared/adapter-spec.schema.json`. The orchestrator excludes `provenance.read.timestamp_utc` and `provenance.read.operator` from determinism comparison.
 
 ## Sources
 
-- Plan: `~/.claude/plans/you-are-right-lets-mighty-wombat.md` (Phase B Go suite, `read-bidder-params` skill).
-- Canonical schema: `prebid-server-go/read/skills/shared/adapter-spec.md` (sections `bidder_params_json`, `bidder_params_sha256`, `params`, `ext_pojo_construction`; validation rules R1, R2, R4, R7).
-- Behavior taxonomy: `prebid-server-go/read/skills/shared/behavior-taxonomy.md` (`params.schema_interpretation.combinators_used[]`, `ext_pojo_construction.framework_choice`, `ext_pojo_construction.custom_unmarshal.kind`, `quirks edge_case_taxon` registry — `bidder-constant-mismatch`, `legacy-impext-naming`, `json-key-style-mismatch`, `incomplete-classification`).
-- Port translation rules: `prebid-server-go/read/skills/shared/port-translation-rules.md` (Rule 1 standard ExtPrebid two-phase, Rule 2 direct-to-custom-wrapper, Rule 3 free-form; cross-language flexible-type translation noted on Rule 1).
-- Schema-to-Go type mapping (REUSED, not duplicated): `prebid-server-go/review/skills/bidder-params-pr-review/references/params-type-index.md` (master truth — JSON Schema → Go type table).
-- Framework helpers (REUSED): `prebid-server-go/review/skills/shared/framework-utilities.md` (`util/jsonutil` extras: `StringInt`, `IntString`, `MergeClone`, `FindElement`, `DropElement`, `ParseIntoString`).
-- Review skill (LINKED, NOT copied): `prebid-server-go/review/skills/bidder-params-pr-review/SKILL.md` (verification workflows for diff-based PR review; complementary scope to the read skill which extracts full-file specs).
-- Local schema-interpretation reference: [references/schema-interpretation.md](references/schema-interpretation.md).
-- Golden specs: `prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`, `prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`.
-- Live source files (verified at v4.1.0, commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`):
-  - `static/bidder-params/kobler.json` (sha `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685`)
-  - `openrtb_ext/imp_kobler.go` (5 LOC, 1 field, no custom UnmarshalJSON)
-  - `adapters/kobler/params_test.go` (line 47: `validator.Validate(openrtb_ext.BidderKrushmedia, ...)` — the canonical bidder-constant-mismatch bug)
-  - `static/bidder-params/optidigital.json` (sha `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31`, trailing whitespace + no terminal newline)
-  - `openrtb_ext/imp_optidigital.go` (legacy `ImpExtOptidigital` naming)
-  - `openrtb_ext/imp_appnexus.go` (canonical custom UnmarshalJSON on `ExtImpAppnexusKeywords` accepting string/object/array)
+- Schema (canonical): [`../shared/adapter-spec.schema.json`](../shared/adapter-spec.schema.json), [`../shared/adapter-spec.md`](../shared/adapter-spec.md).
+- Taxonomy: [`../shared/behavior-taxonomy.yaml`](../shared/behavior-taxonomy.yaml) — `combinators_used[]`, `framework_choice`, `custom_unmarshal.kind`, `bidder-constant-mismatch` + `legacy-impext-naming` taxa.
+- Port rules: [`../shared/port-translation-rules.yaml`](../shared/port-translation-rules.yaml) — Rules 1, 2, 3, 38, 39.
+- Local: [`references/schema-interpretation.md`](references/schema-interpretation.md). REUSED (NOT duplicated): `review/skills/bidder-params-pr-review/references/params-type-index.md`, `review/skills/shared/framework-utilities.md`. Goldens: `../../test-fixtures/optidigital.golden.spec.yaml`, `../../test-fixtures/kobler.golden.spec.yaml`.

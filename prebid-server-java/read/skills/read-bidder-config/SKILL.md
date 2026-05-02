@@ -227,72 +227,15 @@ Other structural divergences (Port Translation Rule 34): Java's `meta-info.{site
 
 ## Verification
 
-The skill is verified against the Java Kobler golden spec ([../../test-fixtures/kobler.golden.spec.yaml](../../test-fixtures/kobler.golden.spec.yaml)). Expected `bidder_info` block:
+Verified against the Java Kobler golden ([`../../test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml)). Kobler's expected `bidder_info`: `endpoint_construction.kind: dev-prod-toggle` + `dev-endpoint` in `yaml_extra_fields`; `endpoint_compression: gzip`; `default_enabled: true`; `modifying_vast_xml_allowed: false`; `capabilities.{site,app}.mediaTypes: [banner]`; `geoscope: [NOR, SWE, DNK]`; `gvl_vendor_id: 0`; `yaml_field_name_quirks: []`. Aliases empty (parent); `lifecycle.rename` absent. `cross_language.port_concerns.yaml_unification: true` (always for Java); `aliases_inverted: false` (no aliases).
 
-- `endpoint`: `https://bid.essrtb.com/bid/prebid_server_rtb_call`
-- `endpoint_construction.kind`: `dev-prod-toggle` (paired `dev-endpoint:` field is present)
-- `endpoint_compression`: `gzip`
-- `ortb_version`: `null` (Kobler does NOT declare `ortb-version`; Optidigital does — `"2.6"` quoted)
-- `default_enabled`: `true` (Kobler does NOT declare `enabled: false`)
-- `modifying_vast_xml_allowed`: `false` (Kobler does NOT declare it; FeedAd and Mediasquare do)
-- `maintainer.email`: `bidding-support@kobler.no`
-- `capabilities.site.mediaTypes`: `[banner]`
-- `capabilities.app.mediaTypes`: `[banner]`
-- `geoscope`: `[NOR, SWE, DNK]`
-- `gvl_vendor_id`: `0`
-- `user_sync`: `{}` (empty map, not null)
-- `yaml_extra_fields`: `{ dev-endpoint: "https://bid-service.dev.essrtb.com/bid/prebid_server_rtb_call" }`
-- `yaml_field_name_quirks`: `[]`
-
-Aliases: empty (Kobler is a parent with no aliases). `lifecycle.rename`: absent (Kobler is not a renamed bidder).
-
-`cross_language.port_concerns.yaml_unification`: `true` (this skill always emits this flag for Java-source specs).
-`cross_language.port_concerns.aliases_inverted`: `false` for Kobler.
-
-Round-trip determinism (Validation Rule R4): re-running this skill on the same YAML bytes MUST produce a byte-identical block sequence (modulo timestamp). Cross-language structural parity (Validation Rule R5): Kobler's Go-source and Java-source specs MUST agree on `bidder_info.capabilities` (`site, app -> [banner]`), `bidder_info.gvl_vendor_id` (`0`), and `bidder_info.maintainer.email`.
-
-For multi-alias parents (canonical: Limelight family with Streamvision, OrangeClickMedia, Velonium, Performist; Adkernel family with 152media, rxnetwork) the skill emits one `aliases[]` entry per child with `config_form: tilde_inherit` and an INFO-level quirk. For ElementalTV (PR #4326), the skill emits both an `aliases[].config_form: tilde_inherit` for `adoppler` (alias-back) AND a `lifecycle.rename` block AND a `quirks` entry with `edge_case_taxon: bidder-rename-three-step`.
-
-## How to test this skill
-
-```
-# Smoke-test against Kobler at a known commit.
-read-bidder-orchestrator --bidder=kobler --source-mode=local --format=yaml | yq .bidder_info
-
-# Expected: endpoint=Kobler URL, endpoint_construction.kind=dev-prod-toggle,
-# endpoint_compression=gzip, capabilities.{site,app}.mediaTypes==[banner],
-# geoscope=[NOR, SWE, DNK], yaml_extra_fields.dev-endpoint!=null.
-```
-
-```
-# Smoke-test alias detection: read a Limelight-family parent.
-read-bidder-orchestrator --bidder=limelight --source-mode=local --format=yaml | yq .aliases
-# Expected: each child entry has config_form: tilde_inherit.
-```
-
-```
-# Smoke-test rename detection: read elementaltv (PR #4326 follow-up).
-read-bidder-orchestrator --bidder=elementaltv --source-mode=local --format=yaml | yq '.lifecycle.rename'
-# Expected: { old_name: adoppler, new_name: elementaltv, alias_back: true, ... }.
-```
-
-```
-# Smoke-test endpointCompression typo: feed a YAML with `endpointCompression: gzip` (camelCase).
-read-bidder-orchestrator --bidder=ogury-typo-test --source-mode=local --format=yaml \
-  | yq .bidder_info.yaml_field_name_quirks
-# Expected: one entry with found=endpointCompression, canonical=endpoint-compression, severity=FAIL.
-```
+R4 (round-trip determinism): re-running on the same YAML bytes MUST produce byte-identical blocks (modulo timestamp). R5 (cross-language structural parity): Go-source and Java-source MUST agree on `capabilities`, `gvl_vendor_id`, `maintainer.email`. Multi-alias parents (Limelight family, Adkernel family) emit one `aliases[]` entry per child with `config_form: tilde_inherit`. ElementalTV (PR #4326) emits the `aliases[]` alias-back entry for `adoppler` AND a `lifecycle.rename` block (with `subtype: bilateral` per ADR-006) AND a `bidder-rename-three-step` quirk.
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` (Phase C — read-bidder-config; edge cases #29-#34).
-- Schema: [../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../prebid-server-go/read/skills/shared/adapter-spec.md) (`bidder_info:` section, `aliases[].config_form`, `lifecycle.rename`, `bidder_info.yaml_field_name_quirks[]`, `bidder_info.default_enabled`, `bidder_info.modifying_vast_xml_allowed`, `bidder_info.ortb_version`, `cross_language.port_concerns.yaml_unification`).
-- Taxonomy: [../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md](../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md) (the `quirks edge_case_taxon` registry — `tilde-alias-syntax`, `bidder-rename-three-step`, `endpoint-compression-typo`, `yaml-field-name-typo`, `dev-endpoint-config-promotion`).
-- Port translation rules: [../../../../prebid-server-go/read/skills/shared/port-translation-rules.md](../../../../prebid-server-go/read/skills/shared/port-translation-rules.md) (Rule 34 — YAML unification asymmetry including kebab-case vs camelCase field names + meta-info wrapper + capabilities flatten; this skill is the LOAD-BEARING side. Rule 33 — alias inversion, Java parent→children view; Rule 35 — `dev-endpoint` config promotion via `BidderConfigurationProperties` subclass; Rule 13 — dev-prod toggle; Rule 11–15 — endpoint resolution).
-- Java reference list: [../../../references/new-bid-adapter-prs.md](../../../references/new-bid-adapter-prs.md) — 35 full + 14 alias-only Java adapters with `Patterns Demonstrated` tags. Canonical exemplars: Kobler PR #3684 (`dev-prod-endpoint-toggle`, `configuration-properties-subclass`), Optidigital PR #4054 (`enabled-false-default`, `ortb-version-quoted`, `dooh-platform-declared`), FeedAd PR #3869 (`modifying-vast-xml-allowed`), Mediasquare PR #4031 (`modifying-vast-xml-allowed`, `multi-class-proto-request-response-split`), Ogury PR #3788 (`endpoint-compression-typo-camelcase`), 152media PR #3829 (`co-shipped-second-alias-rxnetwork`), ElementalTV PR #4326 (`bidder-rename-major-version`, `alias-back-via-tilde`, `package-rename-fixture-dir-rename`).
-- Field index (Go-side master truth for `BidderInfo` struct): [../../../../prebid-server-go/review/skills/bidder-info-pr-review/references/field-index.md](../../../../prebid-server-go/review/skills/bidder-info-pr-review/references/field-index.md). Java's unified YAML field set is a SUPERSET (adds `aliases:`, `dev-endpoint`, `platform-id`, `iab-categories`, `extra-info`, `meta-info` wrapper).
-- Framework utilities (Go-side master truth for `EndpointTemplateParams` 18-field list, deploy-time-token policy): [../../../../prebid-server-go/review/skills/shared/framework-utilities.md](../../../../prebid-server-go/review/skills/shared/framework-utilities.md).
-- Sibling Go skill: [../../../../prebid-server-go/read/skills/read-bidder-info/SKILL.md](../../../../prebid-server-go/read/skills/read-bidder-info/SKILL.md). The inverse round-trip pair.
-- Endpoint classification decision tree (cross-language, hosted in Go skill tree): [../../../../prebid-server-go/read/skills/read-bidder-info/references/endpoint-classification.md](../../../../prebid-server-go/read/skills/read-bidder-info/references/endpoint-classification.md).
-- Unification mapping rules: [references/yaml-unification-rules.md](references/yaml-unification-rules.md).
-- Java golden spec: [../../test-fixtures/kobler.golden.spec.yaml](../../test-fixtures/kobler.golden.spec.yaml).
+- Schema (canonical): [`../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json`](../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json), [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md). Owns: `bidder_info`, `aliases[].config_form`, `lifecycle.rename`, `yaml_field_name_quirks[]`, `cross_language.port_concerns.yaml_unification`.
+- Taxonomy: [`../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.yaml`](../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.yaml) — `tilde-alias-syntax`, `bidder-rename-three-step`, `endpoint-compression-typo`, `yaml-field-name-typo`, `dev-endpoint-config-promotion` taxa.
+- Port rules: [`../../../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`](../../../../prebid-server-go/read/skills/shared/port-translation-rules.yaml) — this skill is the LOAD-BEARING side for Rules 33 (alias inversion), 34 (YAML unification), 35 (config-subclass), plus 11–15 (endpoint resolution) and 13 (dev-prod toggle).
+- Java edge cases #29–#34: [`../../../references/java-edge-cases.md`](../../../references/java-edge-cases.md). Java reference PRs (35 full + 14 alias-only): [`../../../references/new-bid-adapter-prs.md`](../../../references/new-bid-adapter-prs.md). Canonical exemplars: Kobler PR #3684, Optidigital PR #4054, FeedAd PR #3869, Mediasquare PR #4031, Ogury PR #3788, 152media PR #3829, ElementalTV PR #4326.
+- Sibling Go skill (inverse round-trip): [`../../../../prebid-server-go/read/skills/read-bidder-info/SKILL.md`](../../../../prebid-server-go/read/skills/read-bidder-info/SKILL.md) + endpoint classification decision tree at [`../../../../prebid-server-go/read/skills/read-bidder-info/references/endpoint-classification.md`](../../../../prebid-server-go/read/skills/read-bidder-info/references/endpoint-classification.md).
+- Local: [`references/yaml-unification-rules.md`](references/yaml-unification-rules.md). Golden: [`../../test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml).
