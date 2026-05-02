@@ -1,6 +1,6 @@
 # Spring Config Patterns (Java)
 
-Detail-heavy reference for Java-side Spring DI extraction. Consumed by [SKILL.md](../SKILL.md) Step 3 (`spring_config.*`) and Step 2 (`bidder_class.constructor.parameters[]` source/role classification). Cross-language schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#spring_config-java-only-null-on-go](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#spring_config-java-only-null-on-go).
+Detail-heavy reference for Java-side Spring DI extraction. Consumed by [SKILL.md](../SKILL.md) Step 3 (`spring_config.*`) and Step 2 (`bidder_class.constructor.parameters[]` source/role classification). Cross-language schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json](../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json) (top-level `spring_config` and `bidder_class` blocks; per ADR-001 these are nullable on Go specs and required-non-null on Java non-alias specs via `if/then/else` discrimination).
 
 This file documents:
 

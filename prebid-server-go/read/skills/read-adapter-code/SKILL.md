@@ -46,7 +46,7 @@ inputs:
   fixture_mode: count-only | summary | verbatim
 ```
 
-The orchestrator excludes `params_test.go` from `go_files` per `read-bidder-params` ownership (see [shared/adapter-spec.md](../shared/adapter-spec.md#per-section-field-reference)). If `params_test.go` appears in the input, this skill skips it silently.
+The orchestrator excludes `params_test.go` from `go_files` per `read-bidder-params` ownership (see [shared/adapter-spec.schema.json](../shared/adapter-spec.schema.json) `$defs/Code` and `$defs/Params`). If `params_test.go` appears in the input, this skill skips it silently.
 
 ## Workflow
 

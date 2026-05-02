@@ -2,13 +2,21 @@
 
 The canonical YAML schema for prebid-server adapter specifications. Language-neutral at the behavioral level with explicit per-language sub-blocks for divergences. Consumed by all read skills (Go and Java), the future `write/` skill, and the future `port-go2java` / `port-java2go` skills. Two specs for the same bidder produced from each language MUST agree on cross-language fields (`bidder_params_json` byte-identical, `bidder_info.capabilities`, `params.schema_interpretation`) and MAY differ only on language-specific blocks.
 
+> **Phase 2 status (2026-05-02)**: the structural contract (every field, type, required marker, enum) lives in [`adapter-spec.schema.json`](adapter-spec.schema.json) (JSON Schema 2020-12). This Markdown file is the human-readable wrapper documenting policy, rules, and pointers — the JSON Schema is the source of truth for validation.
+
 ---
 
 ## Versioning policy
 
-`adapter_spec_version` is a single integer that follows semver-major rules: bumped only when the schema breaks downstream consumers (a field renamed, a default value changed, a required field added). Additive changes (new optional field, new enum value with a `custom` fallback already in place) do NOT bump the version. Current version: `1`.
+`adapter_spec_version` is a SemVer string `X.Y.Z` (per ADR-001 D7). Goldens declare it explicitly. Bump policy:
+
+- **Patch** (`1.0.0 → 1.0.1`): bug fix in a worked example, prose-only schema documentation change, no behavioral or shape change
+- **Minor** (`1.0.0 → 1.1.0`): additive — new optional field, new enum value with `custom` already covering the gap
+- **Major** (`1.0.0 → 2.0.0`): breaking — field renamed, default value changed, required field added, enum value removed
 
 A reader skill MUST emit the version it produced. A consumer (write, port) MUST refuse a version higher than its own and SHOULD warn on a lower version.
+
+The legacy form `adapter_spec_version: 1` (integer) is accepted by the schema during the Phase 2 migration window; Phase 2.7 migrates all goldens to the SemVer string form.
 
 ---
 
@@ -40,13 +48,13 @@ If gates 1–5 all trip, forking is a coordinated change-set:
 | Artifact | Action |
 |---|---|
 | `prebid-server-java/read/skills/shared/adapter-spec-java.md` | NEW file. Diverges from this schema only on the gated fields; everything else is a verbatim copy with a header note pointing back here as the historical ancestor. |
-| `prebid-server-java/read/test-fixtures/*.golden.spec.yaml` | All Java goldens regenerate against the forked schema (use the regeneration procedure in `prebid-server-java/read/test-fixtures/README.md`). |
+| `prebid-server-java/read/test-fixtures/*.golden.spec.yaml` | All Java goldens regenerate against the forked schema. |
 | `cross-language-pairs/*.dual-spec-assertions.yaml` | Each entry gains a `schema_bridge:` block declaring how forked-Java fields map to shared-Go fields for comparison. |
-| `scripts/round-trip-ci.py` | R3, R5, R9 grow per-language code paths; rule descriptions in `RULE_ORDER` are amended (e.g., `R5-strict` becomes "STRICT fields, post-bridge"). |
-| `scripts/tests/test_schema_contract.py` | Loads BOTH schemas; phantom-path detection runs per-language with the appropriate schema as ground truth. |
+| `scripts/round-trip-ci.py` | R3, R5, R9 grow per-language code paths. |
+| `scripts/tests/test_schema_contract.py` and `test_schema_jsonschema.py` | Load BOTH schemas; phantom-path detection runs per-language with the appropriate schema as ground truth. |
 | `prebid-server-go/read/skills/shared/cross-skill-integration.md` | Section 1 overview diagram updates (two canonical schemas, not one). |
 | `prebid-server-go/read/skills/shared/port-translation-rules.md` | Each rule that references a forked field gains a `Go field → Java field` resolution table. |
-| `prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md` and Java sub-skills | "Source of truth" pointers swap from `prebid-server-go/.../adapter-spec.md` to the new fork. |
+| `prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md` and Java sub-skills | "Source of truth" pointers swap from this file to the new fork. |
 
 The fork PR MUST update every artifact above atomically. Stragglers (e.g., a SKILL.md still pointing at the Go schema for a now-Java-only field) defeat the fork's purpose: making the Java contract independent.
 
@@ -60,1030 +68,91 @@ The fork PR MUST update every artifact above atomically. Stragglers (e.g., a SKI
 
 ---
 
-## Top-level structure
+## Schema (machine-readable)
 
-```yaml
-adapter_spec_version: 1
-spec_kind: prebid-server-adapter              # Reserved for future spec kinds.
-source_language: go | java                    # Which read-skill produced this spec.
+The structural contract is in [`adapter-spec.schema.json`](adapter-spec.schema.json) — a JSON Schema 2020-12 document with `$defs` for each top-level block (Provenance, Meta, BidderInfo, Params, Code, Tests, IabCategoryStorage, ExtPojoConstruction, CurrencyConversion, HeadersConstructed, DeployTimeToken, Alias, Quirk, CrossLanguage). Every required field, allowed enum value, and nullability marker is encoded there.
 
-provenance:                                   # Read-time identity.
-  source:
-    repo: prebid/prebid-server | prebid/prebid-server-java
-    ref: { branch: master | commit: SHA | pr: N | tag: vX.Y.Z }
-    resolved_commit: SHA                      # ALWAYS populated; spec is frozen at this commit.
-    fetch_method: github-raw | local-checkout | gh-cli
-  read:
-    skill_versions: { orchestrator: 1.0.0, ... }
-    timestamp_utc: ISO8601
-    operator: claude-code/<model-id>
-  warnings: []                                # Non-blocking read-time anomalies (see warnings schema below).
+**Validate a spec**:
 
-meta:                                         # Static identity facts.
-  bidder_name: kobler
-  is_alias: false
-  alias_of: null                              # Go: child→parent. Java's alias inversion handled in cross_language.
-  parent_aliases: []                          # If THIS bidder is a parent, list child aliases.
-  whitelabel_only: false
-  disabled: false
-  module_path_major: v4                       # Go-only.
-  java_artifact_version: null                 # Java-only.
+```python
+import json, yaml, datetime
+from jsonschema import Draft202012Validator
 
-aliases: []                                   # Java-side alias children of THIS bidder when it is a parent (Java parent->child direction). Empty list on Go-source specs and on Java leaf bidders. Each entry shape:
-  # - bidder_name: 152media                    # Lowercase YAML name of the alias.
-  #   parent: adkernel                         # Resolved parent (== meta.bidder_name on this spec when this bidder is a parent).
-  #   config_form: tilde_inherit | full_block  # `tilde_inherit` = YAML value `~`; `full_block` = override map.
-  #   parent_yaml_path: src/main/resources/bidder-config/adkernel.yaml
-  #   parent_yaml_line: 6                       # Line of the `<alias>: ~` (or full-block) entry under parent's aliases:.
-  #   inherited_fields: []                      # Parent fields flowing through unchanged.
-  #   overridden_fields: []                     # Sub-keys overridden in `full_block` form; empty for tilde_inherit.
-  #   test_assets:
-  #     it_class: OneFiveTwoMediaTest           # Per-alias IT class name (Java edge case #24); null when alias has no dedicated IT class.
-  #     it_class_file: src/test/java/org/prebid/server/it/OneFiveTwoMediaTest.java
-  #     fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/152media/
-  #     fixture_file_count: 4                   # Typically 4 (canonical 4-file split).
-  #     naming_asymmetry: { it_class_uses_workaround: true, fixture_dir_uses_yaml_name: true, rationale: "..." } | null
-  #   test_application_properties_entries: []  # Per-alias lines appended to test-application.properties.
-  #   rename_origin: false                      # True iff this alias is the back-compat entry for a renamed parent (tilde_inherit alias-back; pairs with lifecycle.rename).
+def normalize(node):
+    if isinstance(node, dict): return {k: normalize(v) for k, v in node.items()}
+    if isinstance(node, list): return [normalize(v) for v in node]
+    if isinstance(node, (datetime.datetime, datetime.date)): return node.isoformat()
+    return node
 
-lifecycle: null                               # Bidder-rename-three-step refactor metadata; default null. Populate `lifecycle.rename` when the spec subject is the rename target (Java edge case #33; canonical: PR #4326 Adoppler->ElementalTV).
-  # rename:
-  #   old_name: adoppler
-  #   new_name: elementaltv
-  #   pr: prebid/prebid-server-java#4326
-  #   release: v3.38.0
-  #   merged_at: 2025-09-15
-  #   yaml_deletes: []                          # Files deleted in the rename PR.
-  #   yaml_adds: []                             # Files added in the rename PR.
-  #   alias_back: true                          # New YAML retains `aliases: { <old_name>: ~ }` for back-compat.
-  #   alias_back_form: tilde_inherit            # Or full_block; null when alias_back: false.
-  #   alias_back_yaml_path: src/main/resources/bidder-config/elementaltv.yaml
-  #   alias_back_yaml_line: 12
-  #   package_moves: []                         # E.g., [{ from: bidder/adoppler/, to: bidder/elementaltv/ }].
-  #   fixture_dir_moves: []                     # E.g., [{ from: it/openrtb2/adoppler/, to: it/openrtb2/elementaltv/ }].
-  #   notes: []                                 # Free-text rationale entries.
-
-bidder_info:                                  # Owned by read-bidder-info / read-bidder-config.
-  endpoint: ...
-  endpoint_construction:
-    kind: static | template-macro | url-with-query | dev-prod-toggle | hardcoded-toggle | runtime-region-selection | deploy-time-token | single-token-substitution | custom
-    macros_used: []                           # Bare-identifier list (e.g., ["ZoneID", "AdUnit", "PublisherID"]). NO surrounding delimiters; the delimiter style is captured by `macro_syntax` below.
-    macro_syntax: go-template | java-string-replace | printf | custom | null  # Delimiter convention for `macros_used` rendering. `go-template` = `{{.Identifier}}` (Go canonical); `java-string-replace` = `{{Identifier}}` (Java canonical when not using Go-template form); `printf` = `%s`-style positional (e.g., 152media `endpoint: "http://pbs.adksrv.com/hb?zone=%s"`); `custom` paired with a `quirks` entry; `null` when `macros_used` is empty.
-    placeholders_unresolved: []               # Non-template tokens (e.g., #{REGION}#) — also surfaced via deploy_time_tokens.
-  endpoint_compression: gzip | null
-  ortb_version: "2.6" | null                  # Java-quoted-string; Go does not declare.
-  default_enabled: true                       # `enabled:` from YAML, default true if absent.
-  modifying_vast_xml_allowed: false
-  maintainer: { email: ... }
-  capabilities:
-    site: { mediaTypes: [...] }
-    app: { mediaTypes: [...] }
-    dooh: { mediaTypes: [...] }
-  geoscope: []
-  gvl_vendor_id: 12345
-  user_sync: { ... }                          # Verbatim subtree (Go layout).
-  yaml_extra_fields: {}                       # Anything outside the canonical field index, preserved verbatim.
-  yaml_field_name_quirks: []                  # E.g., `endpointCompression` vs `endpoint-compression` typo regression.
-
-bidder_params_json: |                         # VERBATIM BYTES of static/bidder-params/{xyz}.json.
-  {"$schema":"http://json-schema.org/draft-04/schema#",...}
-bidder_params_sha256: 125fef34...             # Cross-language contract: Go sha == Java sha for the same bidder.
-
-params:
-  schema_interpretation:
-    properties:                               # Normalized field list. Each entry:
-      # - name: <string>                      # JSON property name verbatim.
-      #   type: <string>                      # `string` | `integer` | `number` | `boolean` | `object` | `array` | a sorted JSON array (e.g., `["integer","string"]`) | `null`.
-      #   description: <string>               # Verbatim JSON Schema description, or `null`.
-      #   constraints:                        # OPTIONAL nested object. Emitted ONLY when at least one key is present; an empty `constraints: {}` is OMITTED.
-      #     minimum: <number>                 # JSON Schema `minimum`.
-      #     maximum: <number>                 # JSON Schema `maximum`.
-      #     minLength: <integer>              # JSON Schema `minLength`.
-      #     maxLength: <integer>              # JSON Schema `maxLength`.
-      #     pattern: <string>                 # JSON Schema `pattern` (regex source verbatim).
-      #     enum: [<values>]                  # JSON Schema `enum`, source-order, original types preserved.
-      #     minItems: <integer>               # JSON Schema `minItems` (arrays).
-      #     maxItems: <integer>               # JSON Schema `maxItems` (arrays).
-    required_fields: []
-    flexible_types: []                        # Fields with type ["integer","string"] etc.
-    combinators_used: []                      # oneOf | anyOf | not | oneOf-of-oneOf | json-aliases-present.
-  ext_struct:
-    package: openrtb_ext | org.prebid.server.proto.openrtb.ext.request.xyz
-    file: ...
-    type_name: ExtImpKobler
-    fields:
-      - name: Test
-        json_tag: test
-        type_native: bool | Boolean
-        omitempty: true
-        notes: []
-    custom_unmarshal: false
-    custom_unmarshal_accepts: []
-  params_test:
-    file: ...
-    valid_cases_count: 3
-    invalid_cases_count: 8
-    bidder_constant_referenced: openrtb_ext.BidderKobler
-
-code:                                         # Owned by read-adapter-code / read-bidder-class.
-  package_or_class: kobler | KoblerBidder
-  directory_name: kobler
-  package_directory_mismatch: false           # Go edge-case 1.
-  file_layout:
-    kind: single-file | multi-file
-    files: [{ name: ..., role: implementation|types|parsers|utils|models|data-table, loc: N }]
-  imports:
-    has_template_engine: false
-    has_currency_helper: true
-    has_jsonutil: true                        # Go-specific; Java uses JacksonMapper.
-    third_party: []
-  adapter_struct:                             # Go shape; Java uses bidder_class instead.
-    type_name: adapter
-    type_visibility: unexported | exported
-    fields: [{ name: endpoint, type: string }, ...]
-  builder:                                    # Go-only. Java construction lives in spring_config.
-    signature_canonical: true
-    extra_adapter_info_used: false
-    template_parsed_at_build: false
-    errors_returned: []
-  make_requests:
-    batching:
-      applied_in_order: true
-      rules: []                               # Ordered list of rule kinds; see behavior-taxonomy.md.
-    request_body:
-      kind: openrtb2-passthrough | openrtb2-modified | custom
-      custom_body_type: null
-    mutation:
-      mutates_request: true
-      entity_strategies:                      # Map of entity → strategy.
-        Site: copy-then-mutate | none
-        App: ...
-        Source: ...
-        Imp: in-place | immutable-rebuild
-        Banner: ...
-        Device: in-place
-      go_idiom: ptrutil.Clone | shallow-copy | direct-pointer-mutation | none
-      java_idiom: lombok-tobuilder | flexible-extension-fillExtension | none
-    imp_ext_unmarshal:
-      kind: standard-two-phase | direct | none | custom
-      mechanism_go: jsonutil-two-phase | null
-      mechanism_java: typeref-extprebid | typeref-custom-wrapper | direct-class | null
-      target_type: openrtb_ext.ExtImpKobler | ExtImpKobler
-      wrapper_type: null                      # E.g., AppnexusExtImp; null when standard.
-    endpoint_resolution:
-      kind: static | single-token-substitution | multi-token-substitution | query-parameter-augmentation | runtime-region-selection | deploy-time-token | dev-prod-toggle | custom
-      mechanism_go: text/template | macros.NewStringIndexBasedReplacer | net/url | string-concat | null
-      mechanism_java: string-replace | URIBuilder | custom-resolver-class | null
-      macro_field_set: []
-      template_params_struct_field_count: null
-    helpers: [{ name, signature }]
-  make_bids:
-    response_type: openrtb2.BidResponse | custom
-    custom_response_type: null
-    http_status_handling:
-      kind: framework-default | framework-default-plus-empty-seatbid-shortcircuit | custom-status-checks | canonical-go-helpers | legacy-raw-go
-    application_status_handling:
-      kind: none | retcode-field | custom-body-flag
-      field: null                             # E.g., "retcode" for Huaweiads.
-      success_codes: []
-      error_codes: []
-    bid_type_resolution:
-      method_chain: []                        # Ordered chain; see behavior-taxonomy.md.
-      default_value: banner | null
-      multi_format_detection: strict | lenient | none
-    bid_pointer_pattern: indexed-iteration | pointer-iteration | flatten-streams
-    bid_pointer_go_sibling: indexed-seatbid | range-value-pointer | null
-    currency_overwrite_safety: guarded | unguarded | unguarded-hardcoded | passthrough-from-response | none
-
-tests:                                        # Owned by read-adapter-code (Go) / read-bidder-class (Java).
-  test_root_directory: koblertest
-  go_directory_naming: canonical | legacy-test | custom
-  java_it_folder_naming: canonical | suffix-augmented | multi-folder | custom
-  fixture_inventory:
-    exemplary: [{ filename, sha256, bytes }]
-    supplemental: [...]
-    amp: [...]
-    video: [...]
-    videosupplemental: [...]
-    integration: []                           # Java 4-file split. Each entry: { filename, sha256, bytes, role }. `role` is a closed 4-value enum: `bidder-bid-request` | `bidder-bid-response` | `auction-request` | `auction-response` (matched against canonical filename pattern `test-{xyz}-bid-request.json` / `test-{xyz}-bid-response.json` / `test-auction-{name}-request.json` / `test-auction-{name}-response.json`).
-  uses_canonical_harness: true                # Go: RunJSONBidderTest. Java: VertxTest pattern (the canonical harness IS VertxTest on Java).
-  unit_test_methods_count: null               # Java JUnit count; null on Go.
-  unit_test_loc: null                         # Java only.
-  hand_written_test_methods: []               # Java JUnit method names.
-  fixture_handling: count-only | summary | verbatim
-  test_application_properties_entries_added: 0  # Java-only registry append count.
-  integration_test_class: KoblerTest          # OPTIONAL, Java-only. Java IT class name (no path; located under src/test/java/org/prebid/server/it/).
-  integration_test_pattern: 4-file-split | 6-file-with-cache | multi-folder | none  # OPTIONAL. Layout pattern for integration test fixtures (file count and folder shape). The fixture filenames themselves live in fixture_inventory.integration[].
-
-spring_config:                                # Java-only; null on Go.
-  factory_class: KoblerConfiguration
-  factory_method: koblerBidderDeps
-  property_source_path: classpath:/bidder-config/kobler.yaml
-  bidder_creator_lambda: |                    # Verbatim lambda body for round-trip fidelity.
-    cfg -> new KoblerBidder(cfg.getEndpoint(), cfg.getDevEndpoint(), currencyConversionService, mapper)
-  configuration_properties_class:
-    name: KoblerConfigurationProperties
-    extends: BidderConfigurationProperties
-    extra_fields:
-      - name: devEndpoint
-        type: String
-        validations: ["@NotBlank"]              # Verbatim Bean Validation annotations including the leading `@`. List-shaped strings: `["@NotBlank"]`, `["@NotNull"]`, `["@Valid", "@NotNull"]`, `["@Size(min=1, max=10)"]`. Empty list permitted.
-    nested_classes: []
-    lombok_annotations: [Data, EqualsAndHashCode, NoArgsConstructor]
-  bean_dependencies:
-    - { name: currencyConversionService, type: CurrencyConversionService }
-    - { name: externalUrl, type: String, source: "@Value(${external-url})" }
-    - { name: mapper, type: JacksonMapper }
-
-bidder_class:                                 # Java-specific shape; Go uses code.adapter_struct.
-  name: KoblerBidder
-  parameterized_request_type: BidRequest
-  parameterized_response_type: null           # Most adapters use the default; non-null for Mediasquare's custom payload.
-  override_methods: [makeHttpRequests, makeBids]
-  constructor:
-    arity: 4
-    parameters:
-      # `source` is a FREE-TEXT string carrying the lambda-binding expression. Examples in goldens:
-      #   "config.endpoint", "config.devEndpoint"         # dotted path into BidderConfigurationProperties getter.
-      #   "config.xapi.username"                          # nested access for Rubicon authentication.
-      #   "framework-injected"                            # autowired Spring bean (CurrencyConversionService, JacksonMapper, IdGenerator, Clock).
-      #   "factory-constant"                              # static factory wiring (Rubicon bidderName).
-      #   "factory-instantiated (new UUIDIdGenerator())"  # factory creates a fresh instance.
-      #   "@Value(${external-url})"                       # Spring property injection.
-      # Round-trip readers preserve verbatim.
-      - { name: endpointUrl, type: String, source: config.endpoint, role: properties }
-      - { name: devEndpoint, type: String, source: config.devEndpoint, role: properties }
-      - { name: currencyConversionService, type: CurrencyConversionService, source: framework-injected, role: helper-collaborator }
-      - { name: mapper, type: JacksonMapper, source: framework-injected, role: helper-collaborator }
-  static_fields:
-    - { name: KOBLER_EXT_TYPE_REFERENCE, type: TypeReference }
-    - { name: DEFAULT_BID_CURRENCY, type: String }
-    - { name: EXT_PREBID, type: String }
-  helper_classes_co_located: []
-  helper_classes_in_proto: [ExtImpKobler]
-
-iab_category_storage:                         # Replaces boolean iab_category_lookup.
-  storage_kind: yaml-inlined | go-data-table | dynamic-fetched | none
-  yaml_field: null                            # E.g., "iab-categories" for Appnexus Java.
-  go_data_file: null                          # E.g., "iab_categories.go" for MSFT Go.
-  table_size: null
-  injection: constructor-arg | static-init | null
-
-ext_pojo_construction:                        # Cross-language; describes how ExtImp{Xyz} is shaped.
-  framework_choice: lombok-value-builder | lombok-data | lombok-value-staticconstructor | go-struct
-  flexible_extension_used: false              # Java FlexibleExtension @JsonAnyGetter/Setter.
-  custom_unmarshal:
-    kind: none | go-unmarshaljson | jackson-jsondeserialize | jackson-jsonalias-only | runtime-isobject-isarray-branching
-    accepts_shapes: []
-    where_branched: bidder-class | jsondeserializer-class | type-method | null
-
-currency_conversion:                          # Cross-language consolidation of currency fields.
-  used: true
-  helper:
-    go_signature: "reqInfo.ConvertCurrency(value, from, to) (float64, error)"
-    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
-  injection: dependency | function-arg
-  bid_request_passed_for_context: false       # Java passes bidRequest for time-context; Go does not.
-
-headers_constructed:
-  pre_built_in_constructor: false             # E.g., Rubicon basic-auth header pre-built.
-  per_request_dynamic: true
-  custom_headers: []                          # E.g., "Content-Type: application/json;charset=utf-8".
-  authentication_kind: none | basic-auth | bearer-token | hmac-digest | custom
-  authentication_input: []                    # E.g., ["XAPI.Username","XAPI.Password"] for Rubicon.
-
-deploy_time_tokens: []                        # E.g., [{ token: REGION, file: rubicon.yaml, notes: "operator substitutes pre-deployment" }].
-
-code_naming: null                             # Java naming-rule workarounds + brand-acronym preservation. NULL on Go-source specs. Populated on every Java-source spec.
-  # yaml_name: elementaltv                     # Verbatim lowercase YAML name.
-  # class_name_root: ElementalTV               # Java identifier-safe root used for class names (e.g., ElementalTVBidder, ElementalTVConfiguration).
-  # identifier_workaround: null | digit-leading-rename | acronym-collision | custom
-  # preserves_acronym_case: true               # True when the class root preserves brand acronym uppercase (TV, Ad, IQ); false otherwise.
-  # notes: []                                  # Free-text rationale entries.
-
-quirks:                                       # Free-text bucket with optional taxon.
-  - id: ...
-    file: ...
-    summary: ...
-    edge_case_taxon: see behavior-taxonomy.md "quirks edge_case_taxon (full registry)" for the canonical list of ~22 registered taxa
-
-cross_language:
-  go_artifacts:
-    bidder_dir: adapters/kobler/
-    package_name: kobler
-    bidder_constant: openrtb_ext.BidderKobler
-  java_artifacts:
-    bidder_dir: src/main/java/org/prebid/server/bidder/kobler/
-    bidder_class: KoblerBidder
-    config_class: KoblerConfiguration
-    yaml_path: src/main/resources/bidder-config/kobler.yaml
-    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/kobler/
-  port_concerns:
-    aliases_inverted: true
-    yaml_unification: true
-    mutation_idiom_divergence: true           # Go-pointer vs lombok-tobuilder.
-    package_directory_mismatch: false
-    multi_file_layout: false
-    custom_unmarshaljson_present: false
-  go_specific_concerns: []                    # Free-text list (Go-only quirks the porter must address): port-fidelity issues that don't translate cleanly to Java. Populated dense in Go-source spec; sparse/empty in Java-source spec.
-  java_specific_concerns: []                  # Same shape, mirror semantics for Java.
-  port_lineage:
-    source_language: go
-    source_pr: prebid/prebid-server#3904
-    destination_language: java
-    destination_pr: prebid/prebid-server-java#3684
-    fidelity_review_themes: [port-fidelity, currency-conversion-divergence]
-  reviewer_cohort:
-    go: [bsardo, SyntaxNode, hhhjort]
-    java: [CTMBNara, AntoxaAntoxic, EmilNadimanov, sangarbe, osulzhenko]
-    cross_language_coordinator: bretg
+schema = json.load(open("prebid-server-go/read/skills/shared/adapter-spec.schema.json"))
+spec = normalize(yaml.safe_load(open("prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml")))
+errors = list(Draft202012Validator(schema).iter_errors(spec))
+assert errors == [], f"Validation errors: {errors}"
 ```
+
+CI runs this against every golden on every PR via `scripts/tests/test_schema_jsonschema.py`.
+
+### Per-language invariants (`source_language` discrimination)
+
+The schema uses JSON Schema 2020-12 `if/then/else` keyed on `source_language` `const`-value (per ADR-001 audit A3 — NOT OpenAPI's `discriminator` keyword) to enforce per-language invariants:
+
+- **Go-source specs** (`source_language: go`) MUST null `spring_config` and `bidder_class` (Java-only structural blocks)
+- **Java-source non-alias specs** (`source_language: java` AND `meta.is_alias: false`) MUST emit non-null `spring_config` and `bidder_class`
+- **Java-source alias specs** (`meta.is_alias: true`) MAY null `spring_config` and `bidder_class` (alias inherits from parent)
+- **Bilateral blocks** — `lifecycle.rename` and `code_naming` are present on either language when relevant (e.g., elementaltv-Go records the Adoppler→ElementalTV rename in `lifecycle.rename`)
+
+### Schema evolution
+
+Non-trivial schema decisions are documented as ADRs in [`docs/decisions/`](../../../../docs/decisions/):
+
+- [ADR-001](../../../../docs/decisions/001-phase-2-schema-field-additions.md) — Phase 2 schema field additions (`code_naming` top-level, `injection`→`delivery_mechanism` rename, `shared-genesis` source_language, `mutation.schain_movement`, `lifecycle.rename` sub-fields, 22 phantom-path resolutions, SemVer version format)
+- [ADR-007](../../../../docs/decisions/007-novel-pattern-schema-additions.md) — Five novel-pattern schema additions (multi-endpoint, language-stamped headers, mediatype-context-rewrite, bid-post-processing macros, imp-ext strip)
+
+When adding or changing a field:
+
+1. Edit `adapter-spec.schema.json` (the authoritative contract)
+2. If goldens need to change, edit them and verify with `make audit-goldens`
+3. Run `make ci` to confirm `test_schema_jsonschema.py` passes for all 22 goldens
+4. Document significant changes in `CHANGELOG.md` (Phase 2.7+)
+5. If the change is breaking, write an ADR and bump the schema version per the policy above
 
 ---
 
-## Per-section field reference
+## Worked example: Kobler (canonical port pair)
 
-### `provenance`
+Phase 2.0 milestone fixture. The full Go and Java specs live in the goldens directory:
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `source.repo` | string | yes | One of `prebid/prebid-server`, `prebid/prebid-server-java`. |
-| `source.ref` | object | yes | Exactly one of `branch`, `commit`, `pr`, `tag`. |
-| `source.resolved_commit` | string (40-char SHA) | yes | Always populated; spec is frozen at this commit. |
-| `source.fetch_method` | enum | yes | `github-raw`, `local-checkout`, `gh-cli`. |
-| `read.skill_versions` | object | yes | Map of skill name → semver. |
-| `read.timestamp_utc` | ISO8601 string | yes | Excluded from round-trip determinism comparison. |
-| `read.operator` | string | yes | E.g., `claude-code/opus-4-7`. Excluded from determinism comparison. |
-| `warnings` | array | yes | Empty array if no anomalies. See warnings schema below. |
+- Go-source spec: [`prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../../test-fixtures/kobler.golden.spec.yaml)
+- Java-source spec: [`prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml)
+- Cross-language assertions: [`cross-language-pairs/kobler.dual-spec-assertions.yaml`](../../../../cross-language-pairs/kobler.dual-spec-assertions.yaml)
 
-**Warnings schema** — each entry is `{ type, file, line, summary }`. Closed registry of `type` values: `bidder-constant-mismatch`, `yaml-field-name-typo`, `package-directory-mismatch`, `endpoint-placeholder-unresolved`, `legacy-test-helpers-imported`, `legacy-encoding-json-direct-usage`, `module-major-drift`, `disabled-bidder-read`, `alias-resolution-circular`, `bidder-params-sha-conflict`, `cross-language-byte-divergence`, `alias-only-no-bidder-constant`, `alias-only-spec`, `identifier-rule-workaround`, `bidder-name-rebrand`. Java-only additions: `pom-version-mismatch`, `class-yaml-name-mismatch`, `test-application-properties-missing-entries`, `ref-resolution-failure`, `missing-expected-file`, `incomplete-classification`. Per-type schema is canonical at [`../skills/read-adapter-orchestrator/references/provenance-warnings.md`](../skills/read-adapter-orchestrator/references/provenance-warnings.md) (Go) and [`../../../prebid-server-java/read/skills/read-bidder-orchestrator/references/provenance-warnings.md`](../../../prebid-server-java/read/skills/read-bidder-orchestrator/references/provenance-warnings.md) (Java). The Kobler test file emits a `bidder-constant-mismatch` warning because `kobler_test.go:12` references `openrtb_ext.BidderKargo` (copy-paste artifact) — see worked example below.
+Notable Kobler-pair properties demonstrated:
 
-### `meta`
+- **Byte-equal `bidder_params_json`**: both sides hash to `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685` (Rule R5-strict pass)
+- **Cross-language port lineage**: `source_pr: prebid/prebid-server#3904`, `destination_pr: prebid/prebid-server-java#3684`
+- **Currency-conversion idiom divergence (Rule 32)**: Go uses `function-arg` injection (`reqInfo.ConvertCurrency`); Java uses `dependency` injection (`CurrencyConversionService`) — captured via `currency_conversion.injection`
+- **R7 documented bug**: kobler `params_test.go:47` calls `validator.Validate(openrtb_ext.BidderKrushmedia, ...)` (copy-paste artifact) — surfaces as `bidder-constant-mismatch` warning
+- **Dev-prod toggle**: `bidder_info.endpoint_construction.kind: dev-prod-toggle` driven by `imp.ext.bidder.test` flag of the FIRST imp only
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `bidder_name` | string | yes | All-lowercase or snake_case directory name. |
-| `is_alias` | bool | yes | True if this bidder has no implementation, only a YAML referencing a parent. |
-| `alias_of` | string | yes (null if not alias) | Parent bidder name. |
-| `parent_aliases` | array | yes | If THIS is a parent, list child aliases. |
-| `whitelabel_only` | bool | yes | YAML `whiteLabelOnly` field. |
-| `disabled` | bool | yes | YAML `disabled` field. |
-| `module_path_major` | string \| null | yes | E.g., `v4`. Null on Java specs. |
-| `java_artifact_version` | string \| null | yes | E.g., `3.41.0`. Null on Go specs. |
+For other canonical examples covering the diversity of the corpus, see:
 
-### `aliases[]`
-
-Java parent-to-children alias children. The Java direction is INVERTED from Go (Java parent declares `aliases: { child: ~ }` whereas Go child declares `aliasOf: parent`). On a Go-source spec or a Java leaf-bidder spec, `aliases:` is the empty list `[]`. On a Java parent spec carrying alias children OR on a Java rename-origin spec carrying an `alias-back` tilde child, each child is one entry:
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `bidder_name` | string | yes | Lowercase YAML name of the alias child. |
-| `parent` | string | yes | Resolved parent name; equals `meta.bidder_name` on this spec when the parent is itself the spec subject. |
-| `config_form` | enum | yes | `tilde_inherit` when YAML value is `~`; `full_block` when YAML value is an override map. |
-| `parent_yaml_path` | string | yes | Path to the parent YAML where the alias is declared (Java parent->child direction). |
-| `parent_yaml_line` | integer | yes | Line in `parent_yaml_path` where the `<alias>: ~` (or full-block) entry sits under parent's `aliases:`. |
-| `inherited_fields[]` | array of strings | yes | Parent fields flowing through unchanged. Empty when `full_block` overrides everything. |
-| `overridden_fields[]` | array of strings | yes | Sub-keys overridden in `full_block` form. Empty for `tilde_inherit`. |
-| `test_assets.it_class` | string \| null | yes | Per-alias IT class name (Java edge case #24). Null when the alias has no dedicated IT class. |
-| `test_assets.it_class_file` | string \| null | yes | Repository path of the per-alias IT class. Null when `it_class` is null. |
-| `test_assets.fixture_dir` | string \| null | yes | Per-alias fixture directory under `src/test/resources/org/prebid/server/it/openrtb2/`. |
-| `test_assets.fixture_file_count` | integer | yes | Count of JSON files in `fixture_dir` (typically 4). 0 when no fixture dir exists. |
-| `test_assets.naming_asymmetry` | object \| null | yes | Set on digit-leading aliases where IT class uses a workaround but fixture dir keeps the YAML name. Carries `{ it_class_uses_workaround, fixture_dir_uses_yaml_name, rationale }`. Null otherwise. |
-| `test_application_properties_entries[]` | array of `{ key, value, line }` | yes | Per-alias lines appended to the central `test-application.properties` registry. |
-| `rename_origin` | bool | yes | True iff this alias is the backward-compatibility entry for a renamed parent (tilde-inherit alias-back; pairs with `lifecycle.rename`). |
-
-Canonical examples: `152media` alias under `adkernel` (digit-leading-rename + `naming_asymmetry`); `adoppler` alias-back under `elementaltv` (`rename_origin: true`).
-
-### `lifecycle` (optional, default null)
-
-Captures the bidder-rename-three-step refactor (Java edge case #33 — Adoppler -> ElementalTV via PR #4326). Default `null` on every spec that is not the rename target. When the spec subject IS the rename target (the new bidder name), populate `lifecycle.rename`.
-
-| Field | Type | Required when block present | Description |
-|---|---|---|---|
-| `rename.old_name` | string | yes | The pre-rename bidder name (e.g., `adoppler`). |
-| `rename.new_name` | string | yes | The post-rename bidder name (e.g., `elementaltv`); equals `meta.bidder_name`. |
-| `rename.pr` | string | yes | The PR identifier (`prebid/prebid-server-java#4326`). |
-| `rename.release` | string | yes | The release tag (e.g., `v3.38.0`). |
-| `rename.merged_at` | ISO date | yes | Date the rename PR merged. |
-| `rename.yaml_deletes[]` | array of paths | yes | Repository paths of files deleted as part of the rename (old YAML, old bidder code, old proto, old IT class, old fixture dir). |
-| `rename.yaml_adds[]` | array of paths | yes | Repository paths of files added as part of the rename. |
-| `rename.alias_back` | bool | yes | True when the new YAML retains a `aliases: { <old_name>: ~ }` entry for backward compatibility. |
-| `rename.alias_back_form` | enum \| null | yes | `tilde_inherit` (canonical) or `full_block`; null when `alias_back: false`. |
-| `rename.alias_back_yaml_path` | string \| null | yes | Path of the new YAML where the alias-back declaration lives. Null when `alias_back: false`. |
-| `rename.alias_back_yaml_line` | integer \| null | yes | Line of the `<old_name>: ~` declaration inside `alias_back_yaml_path`. Null when `alias_back: false`. |
-| `rename.package_moves[]` | array of `{ from, to }` | yes | Java package-directory moves (`bidder/<old>/ -> bidder/<new>/`). Empty list when none. |
-| `rename.fixture_dir_moves[]` | array of `{ from, to }` | yes | Test-resources moves (`it/openrtb2/<old>/ -> it/openrtb2/<new>/`). Empty list when none. |
-| `rename.notes[]` | array of strings | yes | Free-text notes describing the rename pattern. |
-
-Canonical example: `elementaltv.golden.spec.yaml` carries the full block; the paired alias child `adoppler` appears under `aliases[]` with `rename_origin: true`.
-
-### `bidder_info`
-
-The YAML-derived metadata. Field-by-field structure follows the `BidderInfo` Go struct (see `review/skills/bidder-info-pr-review/references/field-index.md`). Key cross-language differences:
-
-- `endpoint_compression` (Go: `endpointCompression`, Java: `endpoint-compression`) — both feed the same field; if YAML uses the wrong style for the language, surface as `yaml_field_name_quirks` entry.
-- `ortb_version` is Java-only (quoted string `"2.6"` in YAML); Go specs always emit null.
-- `default_enabled` defaults to `true`; Java's `enabled: false` opt-in pattern (Optidigital, Adverxo aliases) flips this to `false`.
-- `modifying_vast_xml_allowed` is a recent Java-side addition (FeedAd, Mediasquare).
-- `user_sync` keys diverge between languages by idiom: Go YAML uses camelCase keys (`cookieFamilyName`, `redirectUrl`); Java YAML uses kebab-case keys (`cookie-family-name`, `redirect.url`). Both readers preserve the verbatim per-language form (Validation Rule R5-divergent). The CI dual-spec assertion harness normalizes both to lowercase-hyphen for comparison; semantic equivalence is enforced, byte-equality is not.
-
-### `bidder_params_json` (verbatim) + `bidder_params_sha256`
-
-The cross-language contract. The exact bytes of `static/bidder-params/{xyz}.json` (Go) and `src/main/resources/static/bidder-params/{xyz}.json` (Java) MUST be byte-identical for the same bidder.
-
-**SHA verification process:**
-
-1. Read the file in binary mode (preserve trailing newlines, BOM, encoding).
-2. Compute SHA-256 of the raw bytes.
-3. Emit BOTH `bidder_params_json` (verbatim string) AND `bidder_params_sha256`.
-4. When two specs (one Go, one Java) reference the same bidder, the SHAs MUST match. A diff in SHA is a port-fidelity violation and surfaces as a port-translation rule failure.
-
-The verbatim JSON makes the spec round-trippable: a `write/` skill can reconstruct the file byte-for-byte from the spec without re-parsing.
-
-### `params`
-
-Three sub-blocks:
-
-- `schema_interpretation` — normalized JSON Schema interpretation. `properties` lists every field name + type + description. `combinators_used` enumerates which JSON Schema combinators appear (`oneOf`, `anyOf`, `not`, `oneOf-of-oneOf`, `json-aliases-present`). Identical across Go and Java specs of the same bidder.
-- `ext_struct` — the language-specific POJO/struct backing the params. `fields[]` lists each field with native type and JSON tag/annotation. `custom_unmarshal` flags non-default unmarshaling (Go `UnmarshalJSON`, Java `@JsonDeserialize`).
-- `params_test` — the unit-test file metadata: `valid_cases_count`, `invalid_cases_count`, and `bidder_constant_referenced`. The latter is load-bearing: a mismatch between this constant and the actual bidder name surfaces as a `bidder-constant-mismatch` warning.
-
-### `code`
-
-The heaviest section. Organized as:
-
-- `package_or_class` (Go: package name; Java: class name) and `directory_name`.
-- `package_directory_mismatch` — Go edge case 1 (33across vs ttx). Java equivalent: `directory_name == bidder_class.toLowerCase()` should hold; failure flags a TitleCase-acronym preservation case.
-- `file_layout` — `kind` is `single-file` (default for both languages) or `multi-file`; `files[]` enumerates each file with its `role` (`implementation`, `types`, `parsers`, `utils`, `models`, `data-table`).
-- `imports` — language-specific signal extraction. Go: `has_template_engine` for `text/template` import; `has_jsonutil` distinguishes `jsonutil` from raw `encoding/json`.
-- `adapter_struct` — Go-only. Java's equivalent lives in `bidder_class` (top-level, separate section).
-- `builder` — Go-only `Builder()` function. Java construction is described under `spring_config.bidder_creator_lambda`.
-- `make_requests` — the canonical request-shaping behavior. Sub-sections for `batching` (rules list — see `behavior-taxonomy.md#code-make_requests-batching-rules`), `request_body`, `mutation` (entity-by-entity strategies + per-language idioms), `imp_ext_unmarshal`, `endpoint_resolution` (kind + per-language mechanism).
-- `make_bids` — response-shaping behavior. Sub-sections for `http_status_handling` and `application_status_handling` (split for Huaweiads-style `retcode` body field), `bid_type_resolution.method_chain[]` (see `behavior-taxonomy.md`), `bid_pointer_pattern`, `currency_overwrite_safety`.
-
-The `code.make_requests.batching.rules[]` and `code.make_bids.bid_type_resolution.method_chain[]` are ordered lists, not scalar enums. This is the Phase 2 refactor: Appnexus emits `[max-imps-per-request: 10, pod-grouping]` (two rules); Aax has a 3-step bid-type chain (`by-bid-ext-typed-field → by-imp-mediatype → throw`).
-
-### `tests`
-
-Language-divergent fixture format:
-
-- **Go**: `httpCalls` array embedded in a single JSON test file. Subdirectories `exemplary/`, `supplemental/`, `amp/`, `video/`, `videosupplemental/`. Canonical harness: `RunJSONBidderTest`. Canonical root directory naming: `<bidder>test/`.
-- **Java**: 4-file split per integration test case — request, response, auction-request, auction-response. Each fixture entry under `tests.fixture_inventory.integration[]` carries a closed-enum `role`: `bidder-bid-request` (outbound to bidder; matches `test-{xyz}-bid-request.json`), `bidder-bid-response` (mock bidder response; matches `test-{xyz}-bid-response.json`), `auction-request` (inbound to PBS; matches `test-auction-{name}-request.json`), `auction-response` (outbound from PBS; matches `test-auction-{name}-response.json`). Incomplete sets emit `tests.integration_test_pattern: custom` plus a quirk. JUnit `@Test` methods are hand-written; `unit_test_methods_count` and `unit_test_loc` are populated. Per-alias IT class is required (Adverxo's `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java`).
-
-`fixture_handling` (`count-only` default, `summary`, `verbatim`) is a per-invocation knob: `count-only` lists filename + sha + bytes; `summary` adds extracted media types per fixture; `verbatim` inlines the full JSON body.
-
-### `spring_config` (Java-only; null on Go)
-
-Captures Spring DI structure:
-
-- `factory_class` and `factory_method` — the `@Configuration` class + `@Bean` method that creates the `BidderDeps`.
-- `property_source_path` — the YAML file the `@PropertySource` annotation points at.
-- `bidder_creator_lambda` — the verbatim lambda body inside `BidderDepsAssembler.bidderCreator(cfg -> new XyzBidder(...))`. Round-trip fidelity matters: a porter must reconstruct the exact constructor arg order.
-- `configuration_properties_class` — when an adapter declares custom YAML fields beyond the default `BidderConfigurationProperties`, this captures the subclass. Examples:
-  - **Kobler**: `KoblerConfigurationProperties extends BidderConfigurationProperties` with `@NotBlank private String devEndpoint`.
-  - **Appnexus**: extra `platformId` field + inlined `iabCategories` map (120 entries).
-  - **Huaweiads / NextMillennium**: nested `ExtraInfo` static class.
-- `bean_dependencies` — every `@Autowired` or `@Value` collaborator. `source` field distinguishes `framework-injected` (CurrencyConversionService, JacksonMapper) from `@Value(${...})` (externalUrl).
-
-### `bidder_class` (Java-specific shape; Go uses `code.adapter_struct`)
-
-Captures the Java class hierarchy:
-
-- `name` — class name, must match `directory_name` capitalized + `Bidder` suffix in canonical cases.
-- `parameterized_request_type` — defaults to `BidRequest`. Non-default for Mediasquare (`Bidder<MediasquareRequest>`), Huaweiads (`Bidder<HuaweiAdsRequest>`).
-- `parameterized_response_type` — null for the canonical case.
-- `override_methods` — typically `[makeHttpRequests, makeBids]`.
-- `constructor.parameters[]` — each parameter has `source` (FREE-TEXT string carrying the lambda-binding expression: `config.<getter>`, `framework-injected`, `factory-constant`, `factory-instantiated (...)`, `@Value(${...})`, etc.) and `role` (closed enum: `properties`, `helper-collaborator`, `framework-injected`, `authentication-input`). The `source` string is verbatim from the lambda body; readers preserve format for round-trip fidelity. `authentication-input` is reserved for credential parameters that feed a pre-built basic-auth or HMAC-digest header (canonical: Rubicon `xapiUsername`, `xapiPassword`). Drives port-translation rules for currency injection, mapper injection, etc.
-- `static_fields[]` — class-level constants (TypeReferences, default-currency strings, ext-key strings).
-- `helper_classes_co_located[]` — helpers in `bidder/{xyz}/` (e.g., `KueezExtractor`, `MediasquareUtil`). Distinct from:
-- `helper_classes_in_proto[]` — DTOs in `proto/openrtb/ext/request/{xyz}/` (e.g., `ExtImpKobler`).
-
-### `iab_category_storage`
-
-Replaces the old boolean `iab_category_lookup`. Adapters look up IAB categories from one of:
-
-- `yaml-inlined` — Java's Appnexus inlines a 120-entry `iabCategories` map directly in `bidder-config/appnexus.yaml`. Captured via `yaml_field`.
-- `go-data-table` — Go's MSFT puts the lookup in `adapters/msft/iab_categories.go` as a generated table. Captured via `go_data_file` and `table_size`.
-- `dynamic-fetched` — the adapter fetches categories at runtime (rare).
-- `none` — no IAB lookup.
-
-`injection` (`constructor-arg`, `static-init`, null) describes how the lookup table reaches the adapter.
-
-### `ext_pojo_construction`
-
-Describes the shape of `ExtImp{Xyz}` (the params POJO/struct):
-
-- `framework_choice`:
-  - `lombok-value-builder` (Java default — `@Value @Builder`).
-  - `lombok-data` (Java mutable — `@Data @NoArgsConstructor`; rare for ExtImp).
-  - `lombok-value-staticconstructor` (Java's `@Value(staticConstructor = "of")` — Kobler uses this).
-  - `go-struct` (Go default — plain struct with json tags).
-- `flexible_extension_used` — Java only; whether the POJO extends `FlexibleExtension` (`@JsonAnyGetter/Setter`) for unknown-field passthrough.
-- `custom_unmarshal.kind`:
-  - `go-unmarshaljson` — Go custom `UnmarshalJSON` method.
-  - `jackson-jsondeserialize` — Java `@JsonDeserialize(using = XyzDeserializer.class)`.
-  - `jackson-jsonalias-only` — Java `@JsonAlias({...})` for legacy field-name compatibility (no full deserializer).
-  - `runtime-isobject-isarray-branching` — Appnexus keywords field accepts string/object/array via runtime branching.
-  - `none` — default.
-- `where_branched` — for runtime-branching cases, identifies the branch point (`bidder-class`, `jsondeserializer-class`, `type-method`).
-
-### `currency_conversion`
-
-Cross-language consolidated description. The Go and Java helpers have different signatures:
-
-- Go: `reqInfo.ConvertCurrency(value, from, to) (float64, error)` — accessible only inside `MakeRequests`.
-- Java: `currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal` — bidRequest arg passed for time-context.
-
-`bid_request_passed_for_context` differs between languages and is a port-translation concern.
-
-### `headers_constructed`
-
-- `pre_built_in_constructor` — true when the adapter constructs static headers (basic-auth) once at construction time. Rubicon does this.
-- `per_request_dynamic` — true when headers are constructed per-request (dynamic body-hash, time-stamped HMAC). Huaweiads HMAC-SHA256 falls here.
-- `custom_headers` — the literal header tuples added beyond the framework-default `Content-Type: application/json`.
-- `authentication_kind` — `none`, `basic-auth`, `bearer-token`, `hmac-digest`, `custom`.
-- `authentication_input` — the config fields used to compute the auth header (e.g., `["XAPI.Username","XAPI.Password"]`).
-
-### `deploy_time_tokens[]`
-
-Distinct from runtime template macros. Each entry: `{ token, file, notes }`. Captures Rubicon-style `REGION` placeholder that the operator must substitute pre-deployment. Reviewers reject endpoints with unresolved non-template placeholders unless paired with `disabled: true` (canonical: PR #4502 appStockSSP `#{REGION}#`). The token itself surfaces here; the broader policy lives in `review/skills/shared/framework-utilities.md`.
-
-### `code_naming` (Java-only; null on Go-source specs)
-
-Captures Java's two naming-rule workarounds (digit-leading bidder names that violate Java identifier rules, and brand-acronym preservation that diverges from naive PascalCase). Set to `null` on every Go-source spec.
-
-| Field | Type | Required when non-null | Description |
-|---|---|---|---|
-| `yaml_name` | string | yes | Verbatim lowercase YAML name (e.g., `elementaltv`, `152media`). |
-| `class_name_root` | string | yes | The Java identifier-safe root used for `<X>Bidder.java`, `<X>Configuration.java`, etc. May equal naive PascalCase (`Kobler`), preserve brand acronym (`ElementalTV`), or apply a digit-leading rename (`OneFiveTwoMedia`). |
-| `identifier_workaround` | enum | yes | One of: `null` (no workaround needed), `digit-leading-rename` (canonical: `152media` -> `OneFiveTwoMedia`; spell out leading digits as English words), `acronym-collision` (rare; reserved for a future brand collision case), `custom` (REQUIRES paired `quirks` entry with `edge_case_taxon: identifier-rule-workaround`). |
-| `preserves_acronym_case` | bool | yes | True when the class root preserves brand acronym uppercase (`ElementalTV`, `FeedAd`, `BidTheatre`, `IQX`); false when the root is a strict PascalCase fold of the YAML name (`Kobler`, `Optidigital`). |
-| `notes[]` | array of strings | yes | Free-text rationale entries surfacing the workaround's mechanics. Empty list permitted. |
-
-Canonical examples: `152media` (`identifier_workaround: digit-leading-rename`, `preserves_acronym_case: false`), `elementaltv` (`identifier_workaround: null`, `preserves_acronym_case: true`).
-
-The block is paired with the legacy phantom path `code.naming.*` mentioned in some pre-PR-#1 SKILL prose; the canonical schema path is `code_naming.*` (top-level), not `code.naming.*` (nested). All SKILL/reference docs MUST reference the top-level form.
-
-### `quirks[]`
-
-Free-text bucket with optional taxon. Each entry: `{ id, file, summary, edge_case_taxon }`.
-
-The full registry of `edge_case_taxon` values is canonical in [behavior-taxonomy.md](behavior-taxonomy.md#quirks-edge_case_taxon-full-registry). That file lists ~22 taxa with descriptions and surfaces. New taxa are added there atomically when Phase 2+ findings surface them; this `adapter-spec.md` file does NOT duplicate the registry.
-
-A `custom` value in any enumerated behavioral field REQUIRES a corresponding `quirks` entry. This prevents un-classified behavior from silently flowing through.
-
-### `cross_language`
-
-REQUIRED in every spec, regardless of source language. Both `go_artifacts` and `java_artifacts` are present:
-
-- The source-language reader densely populates its own block.
-- The other-language block is populated with **path hints only**: `bidder_dir`, `bidder_class` / `package_name`, `config_class`, `yaml_path`, `proto_dir`. These tell port skills the destination layout.
-
-`port_concerns` flags the structural divergences a porter must handle:
-
-- `aliases_inverted` — Go child declares `aliasOf: parent`; Java parent declares `aliases: { child: ~ }`.
-- `yaml_unification` — Java's `bidder-config/{xyz}.yaml` unifies what Go splits into `static/bidder-info/` + main config.
-- `mutation_idiom_divergence` — Go pointer mutation vs Java Lombok `toBuilder().build()`.
-- `package_directory_mismatch`, `multi_file_layout`, `custom_unmarshaljson_present` — boolean flags a porter consults.
-
-`go_specific_concerns[]` and `java_specific_concerns[]` are free-text lists of language-only quirks the porter must address — port-fidelity issues that don't translate cleanly to the other language. The source-language spec populates its own list densely (e.g., a Go-source spec lists Go-only iteration idioms, value-receivers, package-level consts); the other-language list is sparse/empty.
-
-`port_lineage` is populated only for cross-language ports: `{ source_language, source_pr, destination_language, destination_pr, fidelity_review_themes[] }`. Captures the actual PR numbers (Kobler: Go #3904 → Java #3684). `fidelity_review_themes` lists themes pulled from the destination PR's review history (port-fidelity is the dominant Java review theme per Phase 2 findings).
-
-`reviewer_cohort` has three sub-fields: `go: [<github-username>...]` (active Go-team reviewers), `java: [<github-username>...]` (active Java-team reviewers), and `cross_language_coordinator: <github-username>` (the lone reviewer active across both repos — `bretg` per Phase 2 findings). Per Phase 2 the per-language cohorts are wholly disjoint; `cross_language_coordinator` is encoded separately so port skills can cc the coordinator on cross-language coordination PRs without conflating them with a single language's reviewer pool.
-
----
-
-## Worked example: Kobler (port pair)
-
-Kobler is a clean port pair: Go (PR #3904, kobler.go = 177 LOC) → Java (PR #3684, KoblerBidder.java = 195 LOC). Both repos carry a byte-identical `static/bidder-params/kobler.json` (sha256: `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685`). Two specs follow.
-
-### Go-source spec (excerpt)
-
-```yaml
-adapter_spec_version: 1
-spec_kind: prebid-server-adapter
-source_language: go
-
-provenance:
-  source: { repo: prebid/prebid-server, ref: { branch: master }, resolved_commit: <sha>, fetch_method: github-raw }
-  warnings:
-    - type: bidder-constant-mismatch
-      file: adapters/kobler/kobler_test.go
-      line: 12
-      summary: Builder called with openrtb_ext.BidderKargo (copy-paste artifact); should be BidderKobler.
-    - type: bidder-constant-mismatch
-      file: adapters/kobler/params_test.go
-      line: 47
-      summary: validator.Validate called with openrtb_ext.BidderKrushmedia; should be BidderKobler.
-
-meta:
-  bidder_name: kobler
-  is_alias: false
-  module_path_major: v4
-
-bidder_info:
-  endpoint: "https://bid.essrtb.com/bid/prebid_server_rtb_call"
-  endpoint_construction: { kind: dev-prod-toggle, macros_used: [], placeholders_unresolved: [] }
-  endpoint_compression: gzip
-  maintainer: { email: bidding-support@kobler.no }
-  capabilities:
-    site: { mediaTypes: [banner] }
-    app:  { mediaTypes: [banner] }
-  geoscope: [NOR, SWE, DNK]
-  gvl_vendor_id: 0
-
-bidder_params_json: |
-  {"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params",...}
-bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
-
-params:
-  schema_interpretation:
-    properties: [{ name: test, type: boolean, description: "Whether the request is for testing only..." }]
-    required_fields: []
-    combinators_used: []
-  ext_struct:
-    package: openrtb_ext
-    file: openrtb_ext/imp_kobler.go
-    type_name: ExtImpKobler
-    fields: [{ name: Test, json_tag: test, type_native: bool, omitempty: false }]
-    custom_unmarshal: false
-  params_test:
-    file: adapters/kobler/params_test.go
-    valid_cases_count: 3
-    invalid_cases_count: 8
-    bidder_constant_referenced: openrtb_ext.BidderKrushmedia    # MISMATCH — surfaces in warnings.
-
-code:
-  package_or_class: kobler
-  directory_name: kobler
-  package_directory_mismatch: false
-  file_layout:
-    kind: single-file
-    files: [{ name: kobler.go, role: implementation, loc: 177 }]
-  imports: { has_template_engine: false, has_currency_helper: true, has_jsonutil: true, third_party: [] }
-  adapter_struct:
-    type_name: adapter
-    type_visibility: unexported
-    fields: [{ name: endpoint, type: string }, { name: devEndpoint, type: string }]
-  builder:
-    signature_canonical: true
-    extra_adapter_info_used: false
-    template_parsed_at_build: false
-    errors_returned: []
-  make_requests:
-    batching: { applied_in_order: true, rules: [{ kind: single-batched }] }
-    request_body: { kind: openrtb2-modified }
-    mutation:
-      mutates_request: true
-      entity_strategies:
-        Device: in-place                       # device.IP="" device.IPv6=""
-        User: in-place                         # request.User = nil
-        Cur: append-if-missing                 # appends "USD" if not present
-        Imp: in-place                          # ConvertCurrency mutates BidFloor
-      go_idiom: shallow-copy                   # sanitizeRequest copies the request struct value
-    imp_ext_unmarshal:
-      kind: standard-two-phase
-      mechanism_go: jsonutil-two-phase
-      target_type: openrtb_ext.ExtImpKobler
-    endpoint_resolution:
-      kind: dev-prod-toggle
-      mechanism_go: string-concat              # No template; toggle between two const-like strings
-      macro_field_set: []
-  make_bids:
-    response_type: openrtb2.BidResponse
-    http_status_handling: { kind: legacy-raw-go }   # Direct StatusCode == 204 / != 200 checks; not the canonical helpers
-    application_status_handling: { kind: none }
-    bid_type_resolution:
-      default_value: banner
-      multi_format_detection: none
-      method_chain:
-        - method: by-bid-ext-typed-field
-          field: bid.ext.prebid.type
-          fallback_action: next
-        - method: hardcoded
-          hardcoded_value: BidTypeBanner
-          fallback_action: return-default
-    bid_pointer_pattern: indexed-iteration
-    bid_pointer_go_sibling: range-value-pointer
-    currency_overwrite_safety: passthrough-from-response
-
-tests:
-  test_root_directory: koblertest
-  go_directory_naming: canonical
-  fixture_inventory:
-    exemplary: [{ filename: site-simple_banner.json, ... }, { filename: app-simple_banner.json, ... }]
-    supplemental: [{ filename: status-204.json, ... }, { filename: status-404.json, ... }, ... ]
-  uses_canonical_harness: true
-  fixture_handling: count-only
-
-spring_config: null                            # Go has no Spring DI.
-
-bidder_class: null                             # Go uses code.adapter_struct.
-
-iab_category_storage: { storage_kind: none }
-
-ext_pojo_construction:
-  framework_choice: go-struct
-  flexible_extension_used: false
-  custom_unmarshal: { kind: none }
-
-currency_conversion:
-  used: true
-  helper: { go_signature: "reqInfo.ConvertCurrency(value, from, to) (float64, error)", java_signature: null }
-  injection: function-arg
-  bid_request_passed_for_context: false
-
-headers_constructed:
-  pre_built_in_constructor: false
-  per_request_dynamic: true
-  custom_headers: [{ name: Content-Type, value: "application/json;charset=utf-8" }]
-  authentication_kind: none
-
-deploy_time_tokens: []
-
-quirks:
-  - id: bidder-constant-mismatch-test
-    file: adapters/kobler/kobler_test.go
-    summary: Builder called with openrtb_ext.BidderKargo (copy-paste artifact); should be openrtb_ext.BidderKobler. Test passes because RunJSONBidderTest does not cross-check the constant.
-    edge_case_taxon: bidder-constant-mismatch
-  - id: bidder-constant-mismatch-params-test
-    file: adapters/kobler/params_test.go
-    summary: validator.Validate called with openrtb_ext.BidderKrushmedia inside TestInvalidParams; should be openrtb_ext.BidderKobler. The validator still rejects all 8 invalid params under the wrong name, so the test passes.
-    edge_case_taxon: bidder-constant-mismatch
-  - id: hardcoded-dev-endpoint
-    file: kobler.go
-    summary: devBidderEndpoint is a const at line 23; should live in YAML config (Kobler internal-test-campaign justification noted in code comment lines 82-83).
-    edge_case_taxon: hardcoded-config-as-anti-pattern
-  - id: dev-prod-toggle-via-imp-ext-test-flag
-    file: kobler.go
-    summary: testMode flag pulled from imp.ext.bidder.test of the FIRST imp only (line 55 - i==0); other imps' test flags are ignored.
-    edge_case_taxon: hardcoded-config-as-anti-pattern
-
-cross_language:
-  go_artifacts:
-    bidder_dir: adapters/kobler/
-    package_name: kobler
-    bidder_constant: openrtb_ext.BidderKobler
-  java_artifacts:
-    bidder_dir: src/main/java/org/prebid/server/bidder/kobler/
-    bidder_class: KoblerBidder
-    config_class: KoblerConfiguration
-    yaml_path: src/main/resources/bidder-config/kobler.yaml
-    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/kobler/
-  port_concerns:
-    aliases_inverted: false                    # No aliases on either side.
-    yaml_unification: true
-    mutation_idiom_divergence: true
-    package_directory_mismatch: false
-    multi_file_layout: false
-    custom_unmarshaljson_present: false
-  port_lineage:
-    source_language: go
-    source_pr: prebid/prebid-server#3904
-    destination_language: java
-    destination_pr: prebid/prebid-server-java#3684
-    fidelity_review_themes: [port-fidelity, currency-conversion-bidrequest-context, mutation-idiom-tobuilder, dev-endpoint-config-promotion]
-  reviewer_cohort:
-    go: []
-    java: [AntoxaAntoxic, osulzhenko]
-    cross_language_coordinator: bretg
-```
-
-### Java-source spec (excerpt)
-
-```yaml
-adapter_spec_version: 1
-spec_kind: prebid-server-adapter
-source_language: java
-
-provenance:
-  source: { repo: prebid/prebid-server-java, ref: { branch: master }, resolved_commit: <sha> }
-  warnings: []                                 # Java side has no copy-paste artifact.
-
-meta:
-  bidder_name: kobler
-  java_artifact_version: "3.41.0"
-
-bidder_info:
-  endpoint: "https://bid.essrtb.com/bid/prebid_server_rtb_call"
-  endpoint_construction: { kind: dev-prod-toggle, macros_used: [], placeholders_unresolved: [] }
-  endpoint_compression: gzip                   # YAML uses `endpoint-compression: gzip` (kebab-case).
-  ortb_version: null
-  default_enabled: true
-  modifying_vast_xml_allowed: false
-  maintainer: { email: bidding-support@kobler.no }
-  capabilities:
-    site: { mediaTypes: [banner] }
-    app:  { mediaTypes: [banner] }
-  geoscope: [NOR, SWE, DNK]
-  gvl_vendor_id: 0
-  yaml_extra_fields: { dev-endpoint: "https://bid-service.dev.essrtb.com/bid/prebid_server_rtb_call" }
-
-bidder_params_json: |
-  {"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params",...}
-bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685    # IDENTICAL TO GO.
-
-params:
-  schema_interpretation:                       # IDENTICAL TO GO (cross-language contract).
-    properties: [{ name: test, type: boolean, description: "Whether the request is for testing only..." }]
-    required_fields: []
-    combinators_used: []
-  ext_struct:
-    package: org.prebid.server.proto.openrtb.ext.request.kobler
-    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/kobler/ExtImpKobler.java
-    type_name: ExtImpKobler
-    fields: [{ name: test, json_tag: test, type_native: Boolean, omitempty: false, notes: ["@Value(staticConstructor=of)"] }]
-    custom_unmarshal: false
-  params_test:
-    file: src/test/java/org/prebid/server/bidder/kobler/KoblerBidderTest.java
-    valid_cases_count: ~                       # Java unit tests are method-counted, not case-counted.
-    invalid_cases_count: ~
-    bidder_constant_referenced: null
-
-code:
-  package_or_class: KoblerBidder
-  directory_name: kobler
-  package_directory_mismatch: false
-  file_layout:
-    kind: single-file
-    files: [{ name: KoblerBidder.java, role: implementation, loc: 195 }]
-  imports: { has_template_engine: false, has_currency_helper: true, has_jsonutil: false, third_party: [BooleanUtils, CollectionUtils] }
-  adapter_struct: null                         # Java uses bidder_class instead.
-  builder: null                                # Java construction described in spring_config.
-  make_requests:
-    batching: { applied_in_order: true, rules: [{ kind: single-batched }] }
-    request_body: { kind: openrtb2-modified }
-    mutation:
-      mutates_request: true
-      entity_strategies:
-        Device: immutable-rebuild              # device.toBuilder().ipv6(null).ip(null).build()
-        User: immutable-rebuild                # user(null) on root-level toBuilder
-        Cur: append-if-missing
-        Imp: immutable-rebuild                 # modifyImp via toBuilder
-      java_idiom: lombok-tobuilder
-    imp_ext_unmarshal:
-      kind: standard-two-phase
-      mechanism_java: typeref-extprebid        # KOBLER_EXT_TYPE_REFERENCE: TypeReference<ExtPrebid<?, ExtImpKobler>>
-      target_type: ExtImpKobler
-    endpoint_resolution:
-      kind: dev-prod-toggle
-      mechanism_java: string-replace           # Conditional pick between endpointUrl / devEndpoint; no URI building.
-      macro_field_set: []
-  make_bids:
-    response_type: BidResponse                 # com.iab.openrtb.response.BidResponse
-    http_status_handling: { kind: framework-default-plus-empty-seatbid-shortcircuit }
-    application_status_handling: { kind: none }
-    bid_type_resolution:
-      default_value: banner
-      multi_format_detection: none
-      method_chain:
-        - { method: by-bid-ext-typed-field, fallback_action: return-default }
-    bid_pointer_pattern: flatten-streams       # bidResponse.getSeatbid().stream().flatMap(...)
-    bid_pointer_go_sibling: null
-    currency_overwrite_safety: passthrough-from-response   # BidderBid.of(bid, type, bidResponse.getCur())
-
-tests:
-  test_root_directory: src/test/java/org/prebid/server/bidder/kobler/
-  java_it_folder_naming: canonical
-  fixture_inventory:
-    integration: []                            # 4-file split fixtures live under src/test/resources/org/prebid/server/it/openrtb2/kobler/
-  uses_canonical_harness: true                 # VertxTest pattern.
-  unit_test_methods_count: ~                   # Populated by read-bidder-class.
-  fixture_handling: count-only
-  test_application_properties_entries_added: 0
-
-spring_config:
-  factory_class: KoblerConfiguration
-  factory_method: koblerBidderDeps
-  property_source_path: classpath:/bidder-config/kobler.yaml
-  bidder_creator_lambda: |
-    cfg -> new KoblerBidder(cfg.getEndpoint(), cfg.getDevEndpoint(), currencyConversionService, mapper)
-  configuration_properties_class:
-    name: KoblerConfigurationProperties
-    extends: BidderConfigurationProperties
-    extra_fields: [{ name: devEndpoint, type: String, validations: ["@NotBlank"] }]
-    nested_classes: []
-    lombok_annotations: [Data, EqualsAndHashCode, NoArgsConstructor]
-  bean_dependencies:
-    - { name: currencyConversionService, type: CurrencyConversionService, source: framework-injected }
-    - { name: externalUrl, type: String, source: "@Value(${external-url})" }
-    - { name: mapper, type: JacksonMapper, source: framework-injected }
-
-bidder_class:
-  name: KoblerBidder
-  parameterized_request_type: BidRequest
-  parameterized_response_type: null
-  override_methods: [makeHttpRequests, makeBids]
-  constructor:
-    arity: 4
-    parameters:
-      # `source` is a FREE-TEXT string carrying the lambda-binding expression. Examples in goldens:
-      #   "config.endpoint", "config.devEndpoint"         # dotted path into BidderConfigurationProperties getter.
-      #   "config.xapi.username"                          # nested access for Rubicon authentication.
-      #   "framework-injected"                            # autowired Spring bean (CurrencyConversionService, JacksonMapper, IdGenerator, Clock).
-      #   "factory-constant"                              # static factory wiring (Rubicon bidderName).
-      #   "factory-instantiated (new UUIDIdGenerator())"  # factory creates a fresh instance.
-      #   "@Value(${external-url})"                       # Spring property injection.
-      # Round-trip readers preserve verbatim.
-      - { name: endpointUrl, type: String, source: config.endpoint, role: properties }
-      - { name: devEndpoint, type: String, source: config.devEndpoint, role: properties }
-      - { name: currencyConversionService, type: CurrencyConversionService, source: framework-injected, role: helper-collaborator }
-      - { name: mapper, type: JacksonMapper, source: framework-injected, role: helper-collaborator }
-  static_fields:
-    - { name: KOBLER_EXT_TYPE_REFERENCE, type: TypeReference }
-    - { name: DEFAULT_BID_CURRENCY, type: String, value: "USD" }
-    - { name: EXT_PREBID, type: String, value: "prebid" }
-  helper_classes_co_located: []
-  helper_classes_in_proto: [ExtImpKobler]
-
-iab_category_storage: { storage_kind: none }
-
-ext_pojo_construction:
-  framework_choice: lombok-value-staticconstructor
-  flexible_extension_used: false
-  custom_unmarshal: { kind: none }
-
-currency_conversion:
-  used: true
-  helper:
-    go_signature: null
-    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
-  injection: dependency
-  bid_request_passed_for_context: true
-
-headers_constructed:
-  pre_built_in_constructor: false
-  per_request_dynamic: true
-  custom_headers: [{ name: Content-Type, value: "application/json;charset=utf-8" }]
-  authentication_kind: none
-
-deploy_time_tokens: []
-
-quirks:
-  - id: hardcoded-dev-endpoint-now-in-config
-    file: src/main/resources/bidder-config/kobler.yaml
-    summary: dev-endpoint moved into BidderConfigurationProperties subclass — fixes the Go-side hardcoded-const anti-pattern. Cross-language win.
-    edge_case_taxon: port-fidelity-divergence
-
-cross_language:
-  go_artifacts:
-    bidder_dir: adapters/kobler/
-    package_name: kobler
-    bidder_constant: openrtb_ext.BidderKobler
-  java_artifacts:
-    bidder_dir: src/main/java/org/prebid/server/bidder/kobler/
-    bidder_class: KoblerBidder
-    config_class: KoblerConfiguration
-    yaml_path: src/main/resources/bidder-config/kobler.yaml
-    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/kobler/
-  port_concerns:
-    aliases_inverted: false
-    yaml_unification: true
-    mutation_idiom_divergence: true
-    package_directory_mismatch: false
-    multi_file_layout: false
-    custom_unmarshaljson_present: false
-  port_lineage:
-    source_language: go
-    source_pr: prebid/prebid-server#3904
-    destination_language: java
-    destination_pr: prebid/prebid-server-java#3684
-    fidelity_review_themes: [currency-conversion-bidrequest-context, mutation-idiom-tobuilder, dev-endpoint-config-promotion]
-  reviewer_cohort:
-    go: [bsardo, SyntaxNode]
-    java: [CTMBNara, AntoxaAntoxic]
-    cross_language_coordinator: bretg
-```
-
-### Cross-language assertions for the Kobler pair
-
-The dual-spec assertion file at `cross-language-pairs/kobler.dual-spec-assertions.yaml` enforces:
-
-| Assertion | Expected |
+| Bidder | Demonstrates |
 |---|---|
-| `bidder_params_sha256` equality | Go = Java = `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685` |
-| `bidder_info.capabilities` equality | site/app banner-only on both |
-| `bidder_info.maintainer.email` equality | `bidding-support@kobler.no` on both |
-| `bidder_info.geoscope` equality | `[NOR, SWE, DNK]` on both |
-| `params.schema_interpretation` deep equality | Both list `test: boolean`, no required, no combinators |
-| `code.make_requests.batching.rules[].kind` equality | Both emit `[single-batched]` |
-| `code.make_bids.bid_type_resolution.method_chain[].method` equality | Both emit `[by-bid-ext-typed-field]` with `return-default` |
-| `code.make_requests.endpoint_resolution.kind` equality | Both emit `dev-prod-toggle` |
-| `cross_language.port_lineage` equality | Both reference Go #3904 → Java #3684 |
-| `spring_config != null` only on Java | Go has null; Java has full block |
-| `bidder_class != null` only on Java | Go has null; Java has full block |
-| `code.adapter_struct != null` only on Go | Go has full block; Java has null |
-| `currency_conversion.bid_request_passed_for_context` | Go = false, Java = true (intentional divergence) |
-| `code.make_requests.mutation.go_idiom` Go-only | Go = `shallow-copy`; Java has `java_idiom: lombok-tobuilder` instead |
+| 152media | Alias-only spec (parent: adkernel); cross-language port pair |
+| elementaltv | `lifecycle.rename` from Adoppler (Rule 43 `bilateral` sub-type) |
+| huaweiads | Java-only `parameterized_request_type: Bidder<HuaweiAdsRequest>`, IAB-category go-data-table-equivalent storage, HMAC auth |
+| appnexus | `mutation.schain_movement` (OpenRTB 2.5→2.6 rebrand), custom `UnmarshalJSON`, yaml-inlined IAB-category data table |
+| rubicon | `cross_language.port_lineage.source_language: shared-genesis` (predates Go-Java pair convention) |
+| msft | Bidder-rename (formerly Microsoft); IAB-category data table; dual test root (`test/` + `test-extrainfo/`) |
+| optidigital | Phase A acceptance-gate (clean baseline); hardcoded dev-endpoint quirk; canonical `default_enabled` asymmetry (Rule 45) |
 
-A dual-spec assertion FAIL is a port-fidelity violation that surfaces in the cross-language test harness.
+The cross-language-pairs dual-spec assertions live at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` (7 pairs as of 2026-05-02).
 
 ---
 
 ## Validation rules (R1-R10)
 
-The orchestrator enforces these rules at read time. Failures are emitted under `provenance.warnings` (non-blocking) or surface as hard errors that abort the read.
+The orchestrator enforces these rules at read time. Failures are emitted under `provenance.warnings` (non-blocking) or surface as hard errors that abort the read. The CI harness at `scripts/round-trip-ci.py` runs each rule against every golden on PR-time + post-merge.
 
 | Rule | Description | Enforcement |
 |---|---|---|
@@ -1092,24 +161,28 @@ The orchestrator enforces these rules at read time. Failures are emitted under `
 | R3 | No invented fields. Every behavioral field has either a default flag (with structural evidence affirmatively matching the default) or a regex/AST/JSON-parse evidence pointer. A `custom` value REQUIRES a matching `quirks` entry. | Hard error |
 | R4 | Round-trip determinism. Re-running the read on the same commit produces a byte-identical spec modulo `provenance.read.timestamp_utc` and `provenance.read.operator`. | Hard error in CI; warning interactively |
 | R5-strict | Cross-language structural parity for port pairs — STRICT fields. For any bidder present in both repos, the following MUST be byte-identical (after canonical normalization): `bidder_params_sha256`, `bidder_info.capabilities`, `params.schema_interpretation`, `bidder_info.gvl_vendor_id`, `bidder_info.maintainer.email`, `bidder_info.geoscope`. Divergence is a hard FAIL (port-fidelity violation). | Hard FAIL in dual-spec-assertion suite |
-| R5-divergent | Cross-language structural parity for port pairs — LEGITIMATE-DIVERGENCE fields. The following fields MAY diverge between Go and Java specs as a matter of language idiom; CI normalizes for comparison rather than failing: `bidder_info.user_sync` (Go camelCase keys vs Java kebab-case keys — semantically equivalent; CI canonicalizes both to lowercase-hyphen), `bidder_info.endpoint` (deploy-time tokens, dev-prod toggles, and per-language template syntax allowed; the resolved-at-runtime URL must agree, the literal templates need not), `bidder_info.endpoint_compression` (Java specs sometimes omit when the framework default applies; Go specs always emit explicit value or null), `bidder_info.ortb_version` (Java-only quoted-string `"2.6"`; Go always emits null). Divergence on these fields surfaces as INFO-level only — never a fail. | INFO-level dual-spec-assertion note |
-| R6 | `meta.bidder_name == cross_language.go_artifacts.package_name` AND `meta.bidder_name.toLowerCase() == directory_name(cross_language.java_artifacts.bidder_dir)`. Mismatch is a `package-directory-mismatch` warning. | `provenance.warnings` |
-| R7 | If `params.params_test.bidder_constant_referenced != openrtb_ext.Bidder{Xyz}` (Go) or doesn't match the Java equivalent, emit `bidder-constant-mismatch` warning with file:line. | `provenance.warnings` |
+| R5-divergent | Cross-language structural parity for port pairs — LEGITIMATE-DIVERGENCE fields. The following fields MAY diverge between Go and Java specs as a matter of language idiom; CI normalizes for comparison rather than failing: `bidder_info.user_sync` (Go camelCase keys vs Java kebab-case keys — semantically equivalent), `bidder_info.endpoint` (deploy-time tokens, dev-prod toggles, and per-language template syntax allowed), `bidder_info.endpoint_compression` (Java specs sometimes omit when the framework default applies), `bidder_info.ortb_version` (Java-only quoted-string `"2.6"`; Go always emits null). Divergence on these fields surfaces as INFO-level only — never a fail. | INFO-level dual-spec-assertion note |
+| R6 | `meta.bidder_name == cross_language.go_artifacts.package_name` AND `meta.bidder_name.toLowerCase() == directory_name(cross_language.java_artifacts.bidder_dir)`. Mismatch is a `package-directory-mismatch` warning. **Alias suppression** (Phase 1 commit `340d2a5`): when `meta.is_alias=true`, R6 compares against `meta.alias_of` (parent), not the alias's own bidder name. | `provenance.warnings` |
+| R7 | If `params.params_test.bidder_constant_referenced` does not match the constant declared in `openrtb_ext/bidders.go` for this bidder name (Go), or doesn't match the Java equivalent, emit `bidder-constant-mismatch` warning with `file:line`. **Important** (Phase 1 commit `592b7bb`): the canonical constant is looked up in `bidders.go`, NOT derived by PascalCase — 84 of 271 upstream constants don't match a mechanical PascalCase. | `provenance.warnings` |
 | R8 | If `bidder_info.endpoint` contains a `{{.XYZ}}` macro and `XYZ` is not in `macros.EndpointTemplateParams` (Go) or the Java macro list, emit `endpoint-placeholder-unresolved` warning. | `provenance.warnings` |
 | R9 | If `code.imports.has_jsonutil == false` AND any `Marshal` or `Unmarshal` call appears in the adapter code (Go), emit `legacy-encoding-json-direct-usage` warning (recommended migration to `jsonutil`). | `provenance.warnings` |
 | R10 | If `tests.uses_canonical_harness == false` (Go: `RunJSONBidderTest` not called; Java: `VertxTest` not extended), emit `legacy-test-helpers-imported` warning. | `provenance.warnings` |
 
 Validation rule R7 is load-bearing: Phase 2 found two real source-code bugs in `kobler_test.go` and `params_test.go` (BidderKargo and BidderKrushmedia copy-paste artifacts) that pass tests because the validator/builder don't cross-check the constant. The spec's read-time validation surfaces these.
 
+A dual-spec assertion FAIL is a port-fidelity violation that surfaces in the cross-language test harness (per `cross-language-pairs/README.md`).
+
 ---
 
 ## Sources
 
-- Phase 2 reconnaissance findings (in conversation): 17 Go edge cases + 17 Java edge cases identified across `optidigital, kobler, 33across, mediasquare, msft, appnexus, adkernel` (Go) and `kobler, adverxo, ogury, feedad, seedtag, optidigital, mediasquare, elementaltv, 152media` (Java) plus the broader 9-adapter Java behavior taxonomy stress-test (`appnexus, rubicon, generic, aax, adview, kobler, mediasquare, nextmillennium, huaweiads`).
+- Phase 2 reconnaissance findings (this PR): the 17+17 edge-case enumeration across both languages, plus the broader 9-adapter Java behavior taxonomy stress-test.
 - `prebid/prebid-server` master at v4.1.0 (commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` as of 2026-04-27).
 - `prebid/prebid-server-java` master at v3.41.0 (commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a` as of 2026-04-22).
-- `prebid-server-go/references/new-bid-adapter-prs.md` — 89 reference PRs with `Patterns Demonstrated` tags.
-- `prebid-server-java/references/new-bid-adapter-prs.md` — 49 reference PRs with `Patterns Demonstrated` tags.
-- Sibling shared file: `prebid-server-go/review/skills/shared/framework-utilities.md`.
-- Sibling shared file: `prebid-server-go/read/skills/shared/behavior-taxonomy.md`.
-- Sibling shared file: `prebid-server-go/read/skills/shared/port-translation-rules.md`.
+- [`prebid-server-go/references/new-bid-adapter-prs.md`](../../../references/new-bid-adapter-prs.md) — 92 reference PRs with `Patterns Demonstrated` tags.
+- [`prebid-server-java/references/new-bid-adapter-prs.md`](../../../../prebid-server-java/references/new-bid-adapter-prs.md) — 49 reference PRs.
+- Sibling shared file: [`prebid-server-go/review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md).
+- Sibling shared file: [`behavior-taxonomy.md`](behavior-taxonomy.md).
+- Sibling shared file: [`port-translation-rules.md`](port-translation-rules.md) — 43 cross-language Go↔Java translation rules (Phase 2.5 expands to 46 with Rules 44/45/46 per ADR-003/004/005).
+- Sibling machine-readable schema: [`adapter-spec.schema.json`](adapter-spec.schema.json) — JSON Schema 2020-12 (Phase 2.0/2.1).
+- ADR index: [`docs/decisions/`](../../../../docs/decisions/).

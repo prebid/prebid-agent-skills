@@ -1,6 +1,6 @@
 # Proto POJO Patterns (Java)
 
-Detail-heavy reference for Java-side `ExtImp{Xyz}` and helper-proto class extraction. Consumed by [SKILL.md](../SKILL.md) Step 7 (`ext_pojo_construction.*`) and Step 2 (`bidder_class.helper_classes_in_proto[]` + `bidder_class.parameterized_request_type`). Cross-language schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#ext_pojo_construction](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#ext_pojo_construction).
+Detail-heavy reference for Java-side `ExtImp{Xyz}` and helper-proto class extraction. Consumed by [SKILL.md](../SKILL.md) Step 7 (`ext_pojo_construction.*`) and Step 2 (`bidder_class.helper_classes_in_proto[]` + `bidder_class.parameterized_request_type`). Cross-language schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json](../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json) (`$defs/ExtPojoConstruction`).
 
 This file documents:
 

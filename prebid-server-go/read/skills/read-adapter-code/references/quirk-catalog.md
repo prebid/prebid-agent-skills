@@ -108,7 +108,7 @@ A second sub-case from kobler: per-imp toggle behavior reading `imp.ext.bidder.t
   edge_case_taxon: bidder-constant-mismatch
 ```
 
-The companion `provenance.warnings` entry has `type: bidder-constant-mismatch` with `file:line` citation per [../../shared/adapter-spec.md#provenance](../../shared/adapter-spec.md#provenance).
+The companion `provenance.warnings` entry has `type: bidder-constant-mismatch` with `file:line` citation per [../../shared/adapter-spec.schema.json](../../shared/adapter-spec.schema.json) (`$defs/Provenance.warnings`).
 
 ### `multi-file-layout-justified`
 

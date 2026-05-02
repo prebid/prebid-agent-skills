@@ -1,6 +1,6 @@
 # JUnit + Integration-Test Patterns (Java)
 
-Detail-heavy reference for Java-side test inventory. Consumed by [SKILL.md](../SKILL.md) Steps 10–12 (`tests:` block — unit tests, IT class, IT fixtures, per-alias IT classes, registry append count). Cross-language schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#tests](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#tests).
+Detail-heavy reference for Java-side test inventory. Consumed by [SKILL.md](../SKILL.md) Steps 10–12 (`tests:` block — unit tests, IT class, IT fixtures, per-alias IT classes, registry append count). Cross-language schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json](../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json) (`$defs/Tests`).
 
 This file documents:
 
