@@ -1,6 +1,6 @@
 # Go test fixtures
 
-10 hand-authored Adapter Specification fixtures for the `prebid-server-go` read suite. All fixtures pinned to upstream commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` (`prebid/prebid-server` master, 2026-04-27).
+12 hand-authored Adapter Specification fixtures for the `prebid-server-go` read suite. All fixtures pinned to upstream commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` (`prebid/prebid-server` master, 2026-04-27).
 
 ## Fixtures
 
@@ -8,10 +8,12 @@
 |---|---|
 | `152media` | Alias-only spec (parent: adkernel); cross-language port pair |
 | `33across` | `package ttx` directory mismatch; `Bidder33Across` acronym preservation |
+| `aax` | Cross-language port pair; Java-side params schema omits `minLength: 1` (R5 fail) |
 | `adkernel` | Multi-alias parent (152media, rxnetwork, xapads); composed batching `[grouped-by-key, format-split]` |
 | `adtonos` | Currency conversion via `reqInfo.ConvertCurrency` helper |
 | `appnexus` | Custom `UnmarshalJSON` for keywords; pod-grouping batching; multi-imp |
 | `bidstack` | Bearer-token authentication |
+| `elementaltv` | Lifecycle rename from Adoppler; cross-language port pair |
 | `kobler` | Phase A acceptance-gate; cross-language port pair; documented R7 bugs (`BidderKargo` in `kobler_test.go:12`, `BidderKrushmedia` in `params_test.go:47`) |
 | `mediasquare` | Custom request body types (`msqResponse`, `msqParameters`); cross-language port pair |
 | `msft` | Bidder-name rebrand (formerly Microsoft); IAB-category data table; dual test root (`test/` + `test-extrainfo/`) |

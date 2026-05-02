@@ -48,7 +48,7 @@ overall:
   notes: ["..."]
 ```
 
-Consumed at runtime by `scripts/round-trip-ci.py` rule R5. As of PR #1, the harness reads four of sixteen assertion keys (`bidder_params_sha256`, `bidder_info_capabilities`, `bidder_info_gvl_vendor_id`, `params_schema_interpretation`); Phase D work expands consumption to the rest.
+Consumed at runtime by `scripts/round-trip-ci.py` rule R5. As of Wave 4, the harness reads ~14 of 16 assertion keys (`bidder_params_sha256`, `bidder_info_capabilities`, `bidder_info_gvl_vendor_id`, `params_schema_interpretation` + the strict-keys list at `R5_STRICT_KEYS` and divergent-keys list at `R5_DIVERGENT_KEYS` in `scripts/round-trip-ci.py`). Phase D work expands consumption to the remaining keys.
 
 ## Adding a new pair
 
