@@ -381,9 +381,9 @@ class TestR9LegacyEncoding(unittest.TestCase):
             "quirks": [],
             "provenance": {"warnings": []},
         })
-        # The function name post-Wave-4 might be `r_legacy_encoding_check`
-        # or `r9_check`. Try both.
-        check_fn = getattr(rtci, "r_legacy_encoding_check", None) or rtci.r9_check
+        # Wave 4 settled the function name as `r9_check`. Older drafts
+        # called it `r_legacy_encoding_check`; try the modern name first.
+        check_fn = getattr(rtci, "r9_check", None) or rtci.r_legacy_encoding_check
         # Some signatures take `registered`; try with empty list.
         try:
             findings = check_fn(spec, [], lenient=False)
@@ -393,13 +393,14 @@ class TestR9LegacyEncoding(unittest.TestCase):
                           if f.severity in (rtci.SEV_WARN, rtci.SEV_FAIL)
                           and ("legacy" in f.detail.lower() or "json" in f.detail.lower()
                                or "encoding" in f.detail.lower())]
-        # If post-Wave-4 r_legacy_encoding_check exists, this should fire. If
-        # not yet implemented (still pre-Wave-4), the test will fail — by design.
-        if hasattr(rtci, "r_legacy_encoding_check"):
-            self.assertTrue(
-                len(warns_or_fails) >= 1,
-                f"Expected R9 (legacy-encoding) to WARN; got: {findings}",
-            )
+        # The R9 check MUST fire for this spec (Go, has_jsonutil=false,
+        # uses_marshal=true, no paired quirk/warning). Unconditionally
+        # assert — earlier draft gated this on hasattr() and was a no-op
+        # because the function is named r9_check.
+        self.assertTrue(
+            len(warns_or_fails) >= 1,
+            f"Expected R9 (legacy-encoding) to WARN; got: {findings}",
+        )
 
 
 # ---------------------------------------------------------------------------
