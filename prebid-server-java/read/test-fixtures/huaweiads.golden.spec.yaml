@@ -1,4 +1,5 @@
-adapter_spec_version: 1
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
 
@@ -194,14 +195,6 @@ code:
   package_or_class: HuaweiAdsBidder
   directory_name: huaweiads
   package_directory_mismatch: false
-  naming:
-    yaml_name: huaweiads
-    class_name_root: HuaweiAds
-    preserves_acronym_case: true
-    notes:
-      - "Java class names mix TitleCase brand-acronym preservation: HuaweiAdsBidder, HuaweiAdsConfiguration, HuaweiAdsRequest, HuaweiAdsResponse, HuaweiAdSlotBuilder, HuaweiAdmBuilder, HuaweiAppBuilder, HuaweiDeviceBuilder, HuaweiNetworkBuilder, HuaweiEndpointResolver, HuaweiUtils. Integration test class is HuaweiAdsTest.java (not Huaweiads)."
-      - "Directory and YAML name remain all-lowercase huaweiads; bidder-name string constant in HuaweiAdsConfiguration.BIDDER_NAME is \"huaweiads\"."
-      - "Edge case #27: HuaweiAdsTest.java integration class preserves Ads acronym capitalization unlike the canonical {Bidder}Test pattern."
   file_layout:
     kind: multi-file
     files:
@@ -747,12 +740,21 @@ bidder_class:
     - "Edge case #28: Bidder<HuaweiAdsRequest> generic — class implements Bidder parameterized on HuaweiAdsRequest (vendor-specific request body), not the default BidRequest. Mediasquare is the only other adapter doing this."
     - "8-arg constructor — among the highest-arity bidder constructors after rubicon (15+) and appnexus."
 
+code_naming:
+  yaml_name: huaweiads
+  class_name_root: HuaweiAds
+  preserves_acronym_case: true
+  notes:
+    - "Java class names mix TitleCase brand-acronym preservation: HuaweiAdsBidder, HuaweiAdsConfiguration, HuaweiAdsRequest, HuaweiAdsResponse, HuaweiAdSlotBuilder, HuaweiAdmBuilder, HuaweiAppBuilder, HuaweiDeviceBuilder, HuaweiNetworkBuilder, HuaweiEndpointResolver, HuaweiUtils. Integration test class is HuaweiAdsTest.java (not Huaweiads)."
+    - "Directory and YAML name remain all-lowercase huaweiads; bidder-name string constant in HuaweiAdsConfiguration.BIDDER_NAME is \"huaweiads\"."
+    - "Edge case #27: HuaweiAdsTest.java integration class preserves Ads acronym capitalization unlike the canonical {Bidder}Test pattern."
+
 iab_category_storage:
   storage_kind: none
   yaml_field: null
   go_data_file: null
   table_size: null
-  injection: null
+  delivery_mechanism: null
 
 ext_pojo_construction:
   framework_choice: lombok-value-builder

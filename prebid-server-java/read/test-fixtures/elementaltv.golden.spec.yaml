@@ -1,4 +1,5 @@
-adapter_spec_version: 1
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
 
@@ -305,7 +306,7 @@ iab_category_storage:
   yaml_field: null
   go_data_file: null
   table_size: null
-  injection: null
+  delivery_mechanism: null
 
 ext_pojo_construction:
   framework_choice: lombok-value-staticconstructor
@@ -359,6 +360,7 @@ lifecycle:
   rename:
     old_name: adoppler
     new_name: elementaltv
+    subtype: bilateral
     pr: prebid/prebid-server-java#4326
     release: v3.38.0
     merged_at: 2026-01-12

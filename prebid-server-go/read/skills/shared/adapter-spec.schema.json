@@ -22,11 +22,9 @@
 
   "properties": {
     "adapter_spec_version": {
-      "description": "Schema version this spec conforms to. SemVer string per ADR-001 D7.",
-      "oneOf": [
-        { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-        { "type": "integer", "minimum": 1, "description": "Legacy Phase 1 form; Phase 2.7 migrates to SemVer string." }
-      ]
+      "description": "Schema version this spec conforms to. SemVer string per ADR-001 D7. Phase 2.7 dropped the legacy integer form once all 22 goldens migrated to '1.0.0'.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
     },
     "spec_kind": {
       "type": "string",
@@ -447,15 +445,10 @@
         "yaml_field": { "type": ["string", "null"] },
         "go_data_file": { "type": ["string", "null"] },
         "table_size": { "type": ["integer", "null"] },
-        "injection": {
-          "type": ["string", "null"],
-          "enum": ["constructor-arg", "static-init", null],
-          "description": "Phase 2.7 audit ADR-001 D2: rename to delivery_mechanism."
-        },
         "delivery_mechanism": {
           "type": ["string", "null"],
           "enum": ["constructor-arg", "static-init", null],
-          "description": "ADR-001 D2: replaces injection (Phase 2.7)."
+          "description": "ADR-001 D2: how the IAB category table is delivered to the adapter (Phase 2.7 renamed from `injection` to disambiguate from currency_conversion.injection)."
         }
       }
     },

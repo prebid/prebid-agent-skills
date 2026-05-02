@@ -1,4 +1,5 @@
-adapter_spec_version: 1
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
 
@@ -238,7 +239,7 @@ iab_category_storage:
   yaml_field: null
   go_data_file: null
   table_size: null
-  injection: null
+  delivery_mechanism: null
 
 ext_pojo_construction:
   framework_choice: go-struct
