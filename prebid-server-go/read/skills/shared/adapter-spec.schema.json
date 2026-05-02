@@ -44,9 +44,32 @@
       "type": ["string", "null"],
       "pattern": "^([a-f0-9]{64})?$"
     },
-    "params": { "$ref": "#/$defs/Params" },
-    "code": { "$ref": "#/$defs/Code" },
-    "tests": { "$ref": "#/$defs/Tests" },
+    "params": {
+      "oneOf": [
+        { "$ref": "#/$defs/Params" },
+        { "type": "null" }
+      ],
+      "description": "Null on alias-only specs (e.g., 152media-Java) where the alias inherits parent's params."
+    },
+    "code": {
+      "oneOf": [
+        { "$ref": "#/$defs/Code" },
+        { "type": "null" }
+      ],
+      "description": "Null on alias-only specs where the alias inherits parent's adapter code."
+    },
+    "tests": {
+      "oneOf": [
+        { "$ref": "#/$defs/Tests" },
+        { "type": "null" }
+      ],
+      "description": "Null on alias-only specs that don't carry their own test inventory."
+    },
+    "aliases": {
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/Alias" },
+      "description": "Rich alias metadata block. Per-alias entry on Java goldens; can be empty list on Go goldens that don't list aliases."
+    },
     "spring_config": { "type": ["object", "null"] },
     "bidder_class": { "type": ["object", "null"] },
     "code_naming": { "type": ["object", "null"], "description": "ADR-001 D1: top-level Java-only block (NOT nested under code.naming)." },
@@ -71,6 +94,41 @@
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
     }
   },
+
+  "allOf": [
+    {
+      "if": { "properties": { "source_language": { "const": "go" } }, "required": ["source_language"] },
+      "then": {
+        "description": "Go-source spec invariants per ADR-001: Java-only blocks must be null. spring_config and bidder_class are wholly Java-specific (Spring DI / class hierarchy). lifecycle.rename and code_naming are bilateral — Go side records them when present (e.g., elementaltv-Go has lifecycle.rename for the Adoppler→ElementalTV rename).",
+        "properties": {
+          "spring_config": { "type": "null" },
+          "bidder_class": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "source_language": { "const": "java" } }, "required": ["source_language"] },
+      "then": {
+        "description": "Java-source spec invariants per ADR-001: spring_config and bidder_class are non-null on non-alias goldens. lifecycle and code_naming are populated when relevant; otherwise null. Aliases (meta.is_alias=true) are exempt — they're permitted to null these blocks.",
+        "anyOf": [
+          {
+            "description": "Non-alias Java spec: spring_config and bidder_class must be present (non-null).",
+            "properties": {
+              "meta": { "properties": { "is_alias": { "const": false } } },
+              "spring_config": { "type": "object" },
+              "bidder_class": { "type": "object" }
+            }
+          },
+          {
+            "description": "Alias Java spec (meta.is_alias=true): spring_config / bidder_class are inherited from parent and may be null.",
+            "properties": {
+              "meta": { "properties": { "is_alias": { "const": true } } }
+            }
+          }
+        ]
+      }
+    }
+  ],
 
   "$defs": {
     "Provenance": {
@@ -164,7 +222,13 @@
           "properties": {
             "kind": {
               "type": "string",
-              "enum": ["static", "template-macro", "url-with-query", "dev-prod-toggle", "hardcoded-toggle", "runtime-region-selection", "deploy-time-token", "single-token-substitution", "custom"]
+              "enum": [
+                "static", "template-macro", "url-with-query", "dev-prod-toggle",
+                "hardcoded-toggle", "runtime-region-selection", "deploy-time-token",
+                "single-token-substitution", "multi-token-substitution",
+                "query-parameter-augmentation", "custom"
+              ],
+              "description": "Phase 2.1 accepts the UNION of bidder_info-scope and code-scope values. ADR-001 H3 documents the intended scope-distinct enums; Phase 2.7 will tighten this back to the 9-value bidder_info-scope set after fixing goldens that mix the two."
             },
             "macros_used": {
               "type": "array",
@@ -213,7 +277,13 @@
         },
         "yaml_field_name_quirks": {
           "type": "array",
-          "items": { "type": "object" }
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "object" }
+            ]
+          },
+          "description": "Items are sometimes strings (free-text) and sometimes objects with structured fields. Phase 2.7 will normalize."
         }
       }
     },
@@ -332,7 +402,8 @@
 
     "IabCategoryStorage": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
+      "description": "additionalProperties: true to admit free-text `notes` and other metadata fields (Phase 2.7 will tighten).",
       "properties": {
         "storage_kind": {
           "type": "string",
@@ -365,7 +436,8 @@
         "flexible_extension_used": { "type": "boolean" },
         "custom_unmarshal": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
+          "description": "additionalProperties: true to admit `notes` field on goldens that document branching strategies (Phase 2.7 tightens).",
           "properties": {
             "kind": {
               "type": "string",
@@ -385,7 +457,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "used": { "type": "boolean" },
+        "used": { "type": ["boolean", "null"], "description": "Null on alias specs where currency-conversion knowledge is inherited from parent." },
         "helper": {
           "type": ["object", "null"],
           "additionalProperties": false,
@@ -454,6 +526,71 @@
       }
     },
 
+    "Alias": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Per-alias metadata for Java parent goldens that declare aliases (e.g., adkernel parent's 152media child). Open map; Phase 2.7 will tighten if a stable subset emerges.",
+      "properties": {
+        "bidder_name": { "type": "string" },
+        "parent": { "type": "string" },
+        "config_form": {
+          "type": "string",
+          "enum": ["tilde_inherit", "full_block"],
+          "description": "ADR-005: tilde_inherit = `<name>: ~`; full_block = nested override block."
+        },
+        "parent_yaml_path": { "type": ["string", "null"] },
+        "parent_yaml_line": { "type": ["integer", "null"] },
+        "inherited_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "overridden_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "test_assets": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "properties": {
+            "it_class": { "type": ["string", "null"] },
+            "it_class_file": { "type": ["string", "null"] },
+            "fixture_dir": { "type": ["string", "null"] },
+            "fixture_file_count": { "type": ["integer", "null"] },
+            "naming_asymmetry": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "properties": {
+                "it_class_uses_workaround": { "type": "boolean" },
+                "fixture_dir_uses_yaml_name": { "type": "boolean" },
+                "rationale": { "type": ["string", "null"] }
+              }
+            }
+          }
+        },
+        "test_application_properties_entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "key": { "type": "string" },
+              "value": { "type": ["string", "boolean", "integer", "null"] },
+              "line": { "type": ["integer", "null"] }
+            }
+          }
+        },
+        "rename_origin": {
+          "type": "boolean",
+          "description": "ADR-006: marks aliases that exist solely to provide backward-compat after a lifecycle rename."
+        },
+        "relationship_flavor": {
+          "type": ["string", "null"],
+          "enum": ["endpoint-macro-substitution", "white-label-saas", "registration-only", null],
+          "description": "ADR-003 audit B6: Rule 44 sub-flavor for this child's empire relationship."
+        }
+      }
+    },
+
     "Quirk": {
       "type": "object",
       "required": ["id", "summary"],
@@ -486,7 +623,8 @@
             "source_pr": { "type": ["string", "null"] },
             "destination_language": {
               "type": ["string", "null"],
-              "enum": ["go", "java", null]
+              "enum": ["go", "java", "shared-genesis", null],
+              "description": "ADR-001 D3: matches source_language enum; shared-genesis admitted for pre-Go-Java pair convention bidders."
             },
             "destination_pr": { "type": ["string", "null"] },
             "fidelity_review_themes": {

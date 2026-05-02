@@ -1,8 +1,12 @@
-"""Phase 2.0 milestone test: validate kobler goldens against the
+"""Phase 2.0 + 2.1 milestone test: validate every golden against the
 new JSON Schema (`adapter-spec.schema.json`).
 
+Phase 2.0: kobler-Go and kobler-Java validate cleanly.
+Phase 2.1: ALL 22 goldens validate cleanly + if/then/else discrimination
+on `source_language` ensures Go specs null spring_config/bidder_class.
+
 Runs as a unit test so `make test` and the CI workflow exercise it
-automatically. Phase 2.1 will expand the scope to all 22 goldens.
+automatically.
 
 Why a separate file (rather than extending `test_schema_contract.py`):
 the contract test walks SKILL.md prose paths against a hand-curated
@@ -63,10 +67,7 @@ class TestSchemaSelfValidity(unittest.TestCase):
 
 class TestKoblerGoldensAgainstSchema(unittest.TestCase):
     """Phase 2.0 milestone: kobler-Go and kobler-Java validate cleanly.
-
-    Phase 2.1 will expand to all 22 goldens. The schema is currently
-    permissive on `code.*` and `tests.*` (`additionalProperties: true` on
-    open maps); Phase 2.1 tightens these as taxonomy lands.
+    Retained as a smoke test independent of the all-goldens run below.
     """
 
     @classmethod
@@ -98,6 +99,71 @@ class TestKoblerGoldensAgainstSchema(unittest.TestCase):
                 f"  {'.'.join(str(p) for p in e.path) or '<root>'}: {e.message[:200]}"
                 for e in errors[:5]
             ),
+        )
+
+
+def _discover_goldens():
+    """Discover all golden spec YAMLs under prebid-server-{go,java}/read/test-fixtures/."""
+    paths = []
+    for lang_dir in ("prebid-server-go", "prebid-server-java"):
+        d = REPO_ROOT / lang_dir / "read" / "test-fixtures"
+        for p in sorted(d.glob("*.golden.spec.yaml")):
+            paths.append(p)
+    return paths
+
+
+class TestAllGoldensAgainstSchema(unittest.TestCase):
+    """Phase 2.1 milestone: every golden validates against the schema.
+
+    Implemented as a single test that aggregates results across all 22
+    goldens. On failure, the message lists every failing golden + first
+    error per golden for fast triage.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.schema = _load_schema()
+        cls.validator = Draft202012Validator(cls.schema)
+
+    def test_all_22_goldens_validate(self):
+        paths = _discover_goldens()
+        self.assertGreater(len(paths), 0, "no goldens discovered")
+        failures = {}
+        for p in paths:
+            golden = _load_golden(str(p.relative_to(REPO_ROOT)))
+            errors = sorted(
+                self.validator.iter_errors(golden),
+                key=lambda e: list(e.path),
+            )
+            if errors:
+                rel = str(p.relative_to(REPO_ROOT))
+                failures[rel] = errors
+        if failures:
+            lines = [
+                f"{len(failures)} of {len(paths)} goldens failed schema validation:",
+            ]
+            for rel, errors in failures.items():
+                lines.append(f"  {rel}: {len(errors)} errors")
+                for e in errors[:3]:
+                    p_str = ".".join(str(x) for x in e.path) or "<root>"
+                    lines.append(f"    [{p_str}] {e.message[:200]}")
+            self.fail("\n".join(lines))
+
+    def test_go_specs_have_null_java_only_blocks(self):
+        """if/then/else discrimination: Go-source specs must null spring_config + bidder_class."""
+        violations = []
+        for p in _discover_goldens():
+            if "prebid-server-go" not in str(p):
+                continue
+            golden = _load_golden(str(p.relative_to(REPO_ROOT)))
+            for field in ("spring_config", "bidder_class"):
+                value = golden.get(field)
+                if value is not None:
+                    violations.append(f"{p.name} has non-null {field}")
+        self.assertEqual(
+            violations, [],
+            "Go-source goldens must null Java-only blocks (ADR-001):\n"
+            + "\n".join(f"  {v}" for v in violations),
         )
 
 
