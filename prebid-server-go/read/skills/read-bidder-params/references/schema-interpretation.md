@@ -362,7 +362,7 @@ validator.Validate(openrtb_ext.BidderKobler, json.RawMessage(validParam))
 
 Walk the file looking for `*ast.SelectorExpr` whose `X.Name == "openrtb_ext"` and `Sel.Name` starts with `Bidder` — that's the bidder constant.
 
-Both `TestValidParams` and `TestInvalidParams` typically reference the same constant. When they DIFFER (the kobler bug), use the value from `TestValidParams` for the field's primary value, and emit a `provenance.warnings[]` entry pointing at the line where the WRONG constant appears in `TestInvalidParams`.
+Both `TestValidParams` and `TestInvalidParams` typically reference the same constant. When they DIFFER (the kobler bug), emit `bidder_constant_referenced` as the **last-observed** `validator.Validate(openrtb_ext.Bidder<Name>, ...)` call in source order — i.e., the field captures what the code ACTUALLY references (which may be the buggy value), and the warning carries the canonical-vs-actual mismatch. This matches the schema's worked example at `shared/adapter-spec.md:715` which explicitly shows `bidder_constant_referenced: openrtb_ext.BidderKrushmedia    # MISMATCH — surfaces in warnings.` Both calls' mismatches with the canonical constant from `bidders.go` emit paired `bidder-constant-mismatch` warnings.
 
 The kobler real bug (REAL evidence — see `adapters/kobler/params_test.go` at master commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`):
 
