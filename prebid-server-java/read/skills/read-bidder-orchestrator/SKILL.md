@@ -29,7 +29,7 @@ Downstream consumers: the future `port-java2go/` skill suite (Phase D), `diff-sp
 | `--format=<set>` | no | `yaml,md` | Comma-separated subset of `yaml,md`. |
 | `--fixture-mode=<mode>` | no | `count` | `count`, `summary`, `verbatim`. |
 
-See [references/output-format.md](references/output-format.md) for emission rules.
+See [Output](#output) below for emission rules; the contract is the language-neutral form documented in the Go orchestrator's `## Output` section, with the Java-specific paths swapped in.
 
 ## Workflow
 
@@ -153,7 +153,19 @@ Assembly steps, in order:
 
 ### Step 7: Emit YAML + Markdown summary
 
-YAML output follows the canonical schema. Markdown summary uses the structure documented in [references/output-format.md](references/output-format.md). Both file emissions and stdout emissions use the same delimiters as the Go orchestrator.
+Emit per the [Output](#output) contract.
+
+## Output
+
+The Java orchestrator's emission rules are identical in shape to the Go orchestrator's (see [`../../../../prebid-server-go/read/skills/read-adapter-orchestrator/SKILL.md`](../../../../prebid-server-go/read/skills/read-adapter-orchestrator/SKILL.md) `## Output`), with the path roots swapped:
+
+- `--persist` → `prebid-server-java/read/specs/{bidder}/{shortsha}.{yaml,md}` plus `latest.yaml` symlink. Directory `.gitignore`d by default.
+- `--out=<path>` → same precedence and PATH/extension semantics as Go.
+- (default) → stdout with `--- yaml ---` / `--- markdown ---` delimiters.
+
+`--format` and `--fixture-mode` flags behave identically to Go. YAML encoding contract is identical (LF, 2-space indent, single trailing `\n`, fixture lists alphabetically sorted, header order matches `../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json`).
+
+Goldens at `read/test-fixtures/*.golden.spec.yaml` (Java side) demonstrate the canonical format for non-alias bidders, alias bidders, and the `lifecycle.rename` block.
 
 ## Cross-skill integration
 
@@ -168,27 +180,15 @@ When invoked via `pr-triage` for prior-spec comparison, the orchestrator's outpu
 
 ## Edge cases the orchestrator handles
 
-The 17 Java-specific edge cases (numbered #18–#34 in the master plan) all map to explicit field assignments — none fall through to `quirks` + `custom`:
+The 17 Java-specific edge cases (#18–#34) all map to explicit field assignments — none fall through to `quirks` + `custom`. The full catalog with per-case field mappings, master samples, and owner skills lives at [`../../../references/java-edge-cases.md`](../../../references/java-edge-cases.md).
 
-| # | Edge case | Handling |
-|---|---|---|
-| 18 | Spring `@Configuration` class with `@PropertySource` | `read-bidder-class` populates `spring_config.{factory_class, factory_method, property_source_path}`. Orchestrator validates `property_source_path` matches expected path. |
-| 19 | Configuration-class naming variance (`KoblerConfiguration` vs `AdverxoBidderConfiguration`) | `spring_config.factory_class` (verbatim) records the observed name. The orchestrator records both shapes (`<Name>Configuration` and `<Name>BidderConfiguration`) without warning. |
-| 20 | `BidderConfigurationProperties` subclass for custom YAML fields (Kobler `devEndpoint`, Appnexus `platformId`+`iabCategories`, Huaweiads/NextMillennium `ExtraInfo`) | `spring_config.configuration_properties_class.{name, extends, extra_fields[], nested_classes[]}` populated by reader. |
-| 21 | IAB categories inlined in YAML (Appnexus 120 entries) vs Go data file | `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: 120, injection: constructor-arg}` populated by `read-bidder-class`. |
-| 22 | Hand-written N `@Test` methods (no JSON harness) | `tests.{unit_test_methods_count, unit_test_loc, hand_written_test_methods[]}` populated by reader. |
-| 23 | Wiremock + 4-file IT fixture pattern | `tests.integration_test_pattern: 4-file-split` and `fixture_inventory.integration[]` carry the 4 files per case. |
-| 24 | Per-alias IT class + 4-file fixture set required | Aliases discovered in Step 4 carry `test_assets.{it_class, fixture_dir, fixture_file_count}`. |
-| 25 | Central `test-application.properties` registry append | Step 6 emits `tests.test_application_properties_entries_added: N` and warns if zero (likely missing). |
-| 26 | Class names break Java identifier rules (`152media` → `OneFiveTwoMediaTest`) | `code_naming.{yaml_name, class_name_root, identifier_workaround: digit-leading-rename}` (top-level). Orchestrator recognizes the digit-leading pattern in Step 2. |
-| 27 | TitleCase brand-acronym preservation (`ElementalTV`, `FeedAd`, `BidTheatre`) | `code_naming.preserves_acronym_case: true` (top-level). R6 doesn't warn for these — the heuristic checks against an allow-list of known acronyms. |
-| 28 | `Bidder<T>` generic for custom payloads (Mediasquare `Bidder<MediasquareRequest>`) | `bidder_class.parameterized_request_type` populated by reader. Triggers `imp-flatten-aggregate` rule in `batching.rules[]`. |
-| 29 | `ortb-version: "2.6"` quoted-string field | `bidder_info.ortb_version` populated. |
-| 30 | `enabled: false` opt-in default (Optidigital, Adverxo aliases) | `bidder_info.default_enabled: false`. Orchestrator emits `disabled-bidder-read` warning unless `--allow-disabled` was passed. |
-| 31 | `modifying-vast-xml-allowed: true` (FeedAd, Mediasquare) | `bidder_info.modifying_vast_xml_allowed: true`. |
-| 32 | Tilde-syntax empty alias `oldname: ~` | `aliases[].config_form: tilde_inherit` set by Step 4. |
-| 33 | Bidder rename three-step refactor (DELETE old YAML + CREATE new YAML + alias-back via tilde) | Step 4 detects the old-name-as-alias-of-new pattern and emits both specs (old: alias-only; new: full read). |
-| 34 | `endpoint-compression` vs `endpointCompression` typo | `yaml-field-name-typo` warning emitted by Step 6. The YAML field IS still parsed but PBS silently ignores it; reviewers reject the typo. |
+Orchestrator-specific responsibilities (the cases this orchestrator validates or merges across readers):
+
+- #18 — validates `spring_config.property_source_path` matches the expected `classpath:/bidder-config/{bidder}.yaml` shape.
+- #25 — Step 6 warns when `tests.test_application_properties_entries_added: 0` (likely missing append on a non-alias bidder).
+- #30 — emits `disabled-bidder-read` warning when `bidder_info.default_enabled: false` unless `--allow-disabled` was passed.
+- #33 — Step 4 detects the old-name-as-alias-of-new pattern and emits BOTH specs (old: alias-only; new: full read with `lifecycle.rename.*` populated).
+- #34 — Step 6 emits `yaml-field-name-typo` warning when `endpointCompression` (camelCase) is observed instead of `endpoint-compression` (kebab-case).
 
 ## Differences from Go orchestrator
 

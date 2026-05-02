@@ -313,29 +313,7 @@ Populate `cross_language.reviewer_cohort.java[]` from the actual review history 
 
 ## Edge case mapping (Java cases #18-#34)
 
-Each Java edge case maps to specific spec fields owned by this skill. Quirks are reserved for genuinely unclassifiable patterns.
-
-| # | Edge case | Captured by |
-|---|---|---|
-| 18 | Spring `@Configuration` class with `@PropertySource` | `spring_config.{factory_class, factory_method, property_source_path}` |
-| 19 | Configuration-class naming variance (`KoblerConfiguration` vs `AdverxoBidderConfiguration`) | `spring_config.factory_class` (verbatim) |
-| 20 | `BidderConfigurationProperties` subclass (Kobler `devEndpoint`, Appnexus `platformId`+`iabCategories`, Huaweiads `ExtraInfo`) | `spring_config.configuration_properties_class.{name, extends, extra_fields[], nested_classes[], lombok_annotations[]}` |
-| 21 | IAB categories inlined in YAML (Appnexus 120 entries) | `iab_category_storage.{storage_kind: yaml-inlined, yaml_field, table_size, injection}` |
-| 22 | Hand-written N `@Test` methods (no JSON harness) | `tests.{unit_test_methods_count, unit_test_loc, uses_canonical_harness, hand_written_test_methods[]}` |
-| 23 | Wiremock 4-file IT fixture pattern | `tests.integration_test_pattern: 4-file-split`, `tests.fixture_inventory.integration[]` |
-| 24 | Per-alias IT class + 4-file fixture set required | `aliases[].test_assets.{it_class, fixture_dir, fixture_file_count}` |
-| 25 | Central `test-application.properties` registry append | `tests.test_application_properties_entries_added: N` (canonical) + per-alias detail in `aliases[].test_application_properties_entries[]` |
-| 26 | Class names break Java identifier rules for digit-leading bidders | `code_naming.{yaml_name, class_name_root, identifier_workaround: digit-leading-rename}` (top-level) + quirk `identifier-rule-workaround` |
-| 27 | TitleCase brand-acronym preservation | `code_naming.preserves_acronym_case: true` (top-level) + quirk `acronym-case-preservation` |
-| 28 | `Bidder<T>` generic for custom payloads (Mediasquare, Huaweiads) | `bidder_class.parameterized_request_type` + `code.make_requests.request_body.{kind: custom, custom_body_type}` |
-| 29 | `ortb-version: "2.6"` quoted-string field | `bidder_info.ortb_version` (owned by `read-bidder-config`; this skill does not own) |
-| 30 | `enabled: false` opt-in default | `bidder_info.default_enabled: false` (owned by `read-bidder-config`) |
-| 31 | `modifying-vast-xml-allowed: true` | `bidder_info.modifying_vast_xml_allowed: true` (owned by `read-bidder-config`) |
-| 32 | Tilde-syntax empty alias `oldname: ~` | `aliases[].config_form: tilde_inherit` (owned by `read-bidder-config`) |
-| 33 | Bidder rename three-step refactor (DELETE old YAML + CREATE new YAML + alias-back via tilde) | `lifecycle.rename.*` (orchestrator-merged) |
-| 34 | `endpoint-compression` vs `endpointCompression` typo regression | `bidder_info.yaml_field_name_quirks[]` (owned by `read-bidder-config`) |
-
-The 17 Java edge cases #18-#34 above are surfaced by the Phase 2 reconnaissance findings. None require `custom`+`quirks` fallback because each maps to a typed field. Quirks emit only for genuinely unclassifiable patterns.
+Each Java edge case maps to specific spec fields. The full 17-case catalog with field mappings, master samples, and owner skills lives at [`../../../references/java-edge-cases.md`](../../../references/java-edge-cases.md). This skill owns cases #18–#28 (Spring/Java patterns); cases #29–#34 are owned by `read-bidder-config`. Quirks emit only for genuinely unclassifiable patterns.
 
 ## Cross-language note
 

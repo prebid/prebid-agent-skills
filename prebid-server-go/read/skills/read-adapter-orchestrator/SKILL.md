@@ -33,7 +33,7 @@ The skill accepts one bidder per invocation. Flags:
 | `--format=<fmt>` | no | `yaml,md` | `yaml`, `md`, or `yaml,md`. |
 | `--fixture-mode=<mode>` | no | `count` | `count` (filename + sha + bytes), `summary` (adds extracted media types per fixture), or `verbatim` (full JSON inlined). |
 
-Output details and the precedence between `--out` / `--persist` / `--format` live at [`references/output-format.md`](references/output-format.md).
+See [Output](#output) below for destination precedence and YAML encoding contract.
 
 ## Workflow
 
@@ -115,31 +115,21 @@ The complete validation rule list R1–R10 is canonical at [`../shared/adapter-s
 
 ### Step 7 — Emit YAML + Markdown
 
-Format the assembled spec per [`references/output-format.md`](references/output-format.md). Default behavior (no `--out`, no `--persist`):
-
-```
---- yaml ---
-adapter_spec_version: 1
-spec_kind: prebid-server-adapter
-source_language: go
-...
---- markdown ---
-# {bidder} adapter — {shortsha}
-...
-```
-
-The `--- yaml ---` / `--- markdown ---` delimiters let humans split the streams; tooling can use `yq` or `awk` to extract the YAML half.
+Emit per the [Output](#output) contract below.
 
 ## Output
 
-See [`references/output-format.md`](references/output-format.md) for:
+Destination precedence (one per invocation):
 
-- stdout format (delimiters, ordering)
-- `--out PATH` semantics (filename convention `{bidder}-{shortsha}.spec.{yaml,md}`)
-- `--persist` semantics (`prebid-server-go/read/specs/{bidder}/{shortsha}.{yaml,md}` + `latest.yaml` symlink + gitignore policy)
-- `--format` precedence
-- `--fixture-mode` payload differences (count vs summary vs verbatim)
-- Markdown summary structure (load-bearing fields surfaced, full YAML linked)
+1. `--persist` set → `prebid-server-go/read/specs/{bidder}/{shortsha}.{yaml,md}` plus a relative `latest.yaml` symlink. The `read/specs/` directory is `.gitignore`d by default; users opt into committing specs.
+2. `--out=<path>` set (and `--persist` not) → write to PATH. If PATH is a directory, write `{bidder}-{shortsha}.spec.{yaml,md}` inside; if PATH has a `.yaml` or `.md` extension, write to that exact file; otherwise treat as a directory and create it.
+3. (default) → stdout, with literal delimiters `--- yaml ---` and `--- markdown ---` separating the two halves.
+
+`--format=yaml` suppresses the Markdown half; `--format=md` suppresses the YAML half; `--format=yaml,md` (default) emits both. `--fixture-mode={count,summary,verbatim}` controls per-fixture payload in `tests.fixture_inventory.*`: `count` (filename + sha + bytes), `summary` (adds extracted media types), `verbatim` (inlines the JSON; 10–100× larger).
+
+YAML encoding contract (R4 byte-stable): LF line endings, 2-space indent, exactly one trailing `\n`, fixture lists sorted alphabetically by `filename`. Header order matches `../shared/adapter-spec.schema.json` property order; Java-only blocks (`spring_config`, `bidder_class`) emit as `null` on Go specs to keep the schema shape complete. Goldens at `read/test-fixtures/*.golden.spec.yaml` demonstrate the canonical format.
+
+The Markdown summary is a derived dashboard surfacing `meta`, `bidder_info`, `code` highlights, `quirks` count, and `provenance.warnings[]`. It is NOT a replacement for the YAML — consumers wanting structured data read the YAML.
 
 ## Provenance & warnings
 

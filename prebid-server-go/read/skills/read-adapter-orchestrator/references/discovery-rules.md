@@ -44,7 +44,7 @@ If this file is missing, the bidder does not exist at the resolved commit — ha
 | `adapters/<xyz>/<xyz>test/video/*.json` | optional | Video-specific tests. |
 | `adapters/<xyz>/<xyz>test/videosupplemental/*.json` | optional | Video error-path fixtures. |
 
-Each fixture file is recorded with `{ filename, sha256, bytes }` (`fixture-mode=count`, default), or with extracted media types (`summary`), or inlined (`verbatim`). See [`output-format.md`](output-format.md) for the per-mode payload.
+Each fixture file is recorded with `{ filename, sha256, bytes }` (`fixture-mode=count`, default), or with extracted media types (`summary`), or inlined (`verbatim`). See the orchestrator SKILL's `## Output` section for the per-mode payload.
 
 ### Registration files (read-only — orchestrator inspects, doesn't dispatch)
 
