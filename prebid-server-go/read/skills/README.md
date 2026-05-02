@@ -18,7 +18,7 @@ prebid-server-go/read/skills/
 ├── shared/                                    Cross-skill canonical references
 │   ├── adapter-spec.md                        Schema for the Adapter Specification format
 │   ├── behavior-taxonomy.md                   Enumerated values for behavioral fields
-│   ├── port-translation-rules.md              37 cross-language Go↔Java translation rules
+│   ├── port-translation-rules.md              46 cross-language Go↔Java translation rules
 │   ├── cross-skill-integration.md             How read/, review/, write/, port-* compose
 │   └── review-pattern-transfer-policy.md      Why review-skill findings do NOT cross languages
 ├── read-adapter-orchestrator/                 Entry-point skill: discovery, fetch, dispatch, assembly
@@ -66,7 +66,7 @@ Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. 10 fixtures pinn
 
 - `shared/adapter-spec.md` (~920 lines) — canonical schema with worked Kobler example
 - `shared/behavior-taxonomy.md` (~440 lines) — closed enumerations
-- `shared/port-translation-rules.md` (~1170 lines) — 37 cross-language rules
+- `shared/port-translation-rules.md` (~1594 lines, auto-generated from `port-translation-rules.yaml`) — 46 cross-language rules
 - `shared/cross-skill-integration.md` (~345 lines) — read/review/write/port composition
 - `shared/review-pattern-transfer-policy.md` (~191 lines) — review-pattern transfer ban
 - 10 goldens at `read/test-fixtures/` (Phase A `optidigital` + `kobler` plus 8 corpus fixtures)

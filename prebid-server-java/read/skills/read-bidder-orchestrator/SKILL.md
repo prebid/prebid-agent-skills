@@ -157,7 +157,7 @@ YAML output follows the canonical schema. Markdown summary uses the structure do
 
 ## Cross-skill integration
 
-The output spec feeds the future `port-java2go/` skill (Phase D; will live under `prebid-server-go/port-java2go/` since it produces Go artifacts). That skill will consume a Java-source spec and emit Go artifacts using the 37 port-translation rules at `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`. Specifically:
+The output spec feeds the future `port-java2go/` skill (Phase D; will live under `prebid-server-go/port-java2go/` since it produces Go artifacts). That skill will consume a Java-source spec and emit Go artifacts using the 46 port-translation rules at `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`. Specifically:
 
 - `port-java2go` reverses Rules 33 (alias inversion), 34 (YAML unification), 36 (4-file split → httpCalls), 37 (per-alias IT class deletion — Go aliases need no test files).
 - `port-java2go` consumes `cross_language.java_specific_concerns[]` to flag fidelity issues that don't translate cleanly to Go.
@@ -228,7 +228,7 @@ Manual inspection corpus (full v1, 10 Java goldens): `kobler, optidigital, media
 - Master plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md`
 - Canonical schema: `../../../../prebid-server-go/read/skills/shared/adapter-spec.md`
 - Behavior taxonomy: `../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md`
-- Port translation rules (37 rules): `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`
+- Port translation rules (46 rules): `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`
 - Java golden reference: `../../test-fixtures/kobler.golden.spec.yaml`
 - Java reference list (49 PRs): `../../references/new-bid-adapter-prs.md`
 - Sibling Go orchestrator: `../../../../prebid-server-go/read/skills/read-adapter-orchestrator/SKILL.md`

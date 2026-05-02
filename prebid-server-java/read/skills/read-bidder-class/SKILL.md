@@ -371,7 +371,7 @@ The exhaustive Appnexus golden is out of scope for this skill but the spot-check
 
 - **[../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../prebid-server-go/read/skills/shared/adapter-spec.md)** — canonical schema + Kobler worked example (Go and Java side by side).
 - **[../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md](../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md)** — every enumerated value with cross-references.
-- **[../../../../prebid-server-go/read/skills/shared/port-translation-rules.md](../../../../prebid-server-go/read/skills/shared/port-translation-rules.md)** — 37 Go↔Java port rules; the `cross_language.java_specific_concerns[]` text should reference rule numbers when applicable.
+- **[../../../../prebid-server-go/read/skills/shared/port-translation-rules.md](../../../../prebid-server-go/read/skills/shared/port-translation-rules.md)** — 46 Go↔Java port rules; the `cross_language.java_specific_concerns[]` text should reference rule numbers when applicable.
 - **[../../../references/new-bid-adapter-prs.md](../../../references/new-bid-adapter-prs.md)** — 49 reference PRs with Patterns Demonstrated tags + the Pattern Index.
 - **[references/spring-config-patterns.md](references/spring-config-patterns.md)** — Spring DI patterns (factory class naming, `BidderConfigurationProperties` subclass detection, bean dependencies, standard collaborators, Lombok annotations to recognize).
 - **[references/proto-pojo-patterns.md](references/proto-pojo-patterns.md)** — Java POJO patterns (`@Value @Builder @Jacksonized`, `@JsonProperty`, `@JsonAlias`, `@JsonDeserialize`, `FlexibleExtension`, helper proto co-location, `Bidder<T>` generic parameterization).

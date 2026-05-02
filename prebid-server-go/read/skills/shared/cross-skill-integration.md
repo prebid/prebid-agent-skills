@@ -16,7 +16,7 @@ Five downstream surfaces consume the spec:
 |---|---|---|---|---|
 | `prebid-server-go/write/` | spec → Go adapter | Future (Phase E) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server` |
 | `prebid-server-java/write/` | spec → Java adapter | Future (Phase E) | All sections; verbatim `bidder_params_json` is byte-load-bearing | New adapter PR ready for `prebid/prebid-server-java` |
-| `prebid-server-java/port-go2java/` | Go-source spec → Java adapter | Future (Phase D) | `cross_language.*`, [`port-translation-rules.md`](port-translation-rules.md) Rules 1–43 | New Java adapter port PR |
+| `prebid-server-java/port-go2java/` | Go-source spec → Java adapter | Future (Phase D) | `cross_language.*`, [`port-translation-rules.md`](port-translation-rules.md) Rules 1–46 | New Java adapter port PR |
 | `prebid-server-go/port-java2go/` | Java-source spec → Go adapter | Future (Phase D) | Symmetric inverse of the above | New Go adapter port PR |
 | `prebid-server-go/review/skills/pr-triage/` | spec as `prior_spec` | Existing (opt-in hook) | Whole spec read as comparator; behavioral regression detection | PR-triage manifest with `prior-spec-comparison` block |
 
@@ -109,7 +109,7 @@ Worked example — Kobler. The spec at [`/Users/quantum/Documents/GitHub/prebid-
 
 ## 3. `read` (Go) → `port-go2java`
 
-Translate a Go-source spec into Java adapter artifacts. The skill consumes the spec's `cross_language.*` block (path hints, port concerns, lineage) plus the [`port-translation-rules.md`](port-translation-rules.md) Rules 1–43 indexed by the spec field that drives them.
+Translate a Go-source spec into Java adapter artifacts. The skill consumes the spec's `cross_language.*` block (path hints, port concerns, lineage) plus the [`port-translation-rules.md`](port-translation-rules.md) Rules 1–46 indexed by the spec field that drives them.
 
 ### 3.1 Trigger fields
 
@@ -324,7 +324,7 @@ Example: msft's `iab_categories.go` has a 95-entry hardcoded map with custom cur
 
 The Adapter Specification is the unidirectional contract between `read/` and four downstream consumers. Each consumer reads the spec independently; no consumer talks to another consumer through the spec. Determinism (R4) and cross-language structural parity (R5) are the two correctness guarantees that survive the contract — everything else is a hint, a TODO, or a quirk for human judgment.
 
-The 43 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 12 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
+The 46 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 12 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
 
 The opt-in `pr-triage` hook is the only reverse-direction integration: review/ reads a spec to detect regressions on PR diffs. It is purely additive — review/ continues to function without read/.
 
@@ -391,7 +391,7 @@ Don't translate the R-rules into per-skill `script_eval` entries. The result wou
 
 - Master plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` — Phase E section "Cross-skill integration + handoff" + the spec format definition.
 - Canonical schema: [`adapter-spec.md`](adapter-spec.md) — full Adapter Specification format with worked Kobler dual-spec example.
-- Port translation rules: [`port-translation-rules.md`](port-translation-rules.md) — 37 explicit Go ↔ Java rules indexed by spec field driver.
+- Port translation rules: [`port-translation-rules.md`](port-translation-rules.md) — 46 explicit Go ↔ Java rules indexed by spec field driver.
 - Behavior taxonomy: [`behavior-taxonomy.md`](behavior-taxonomy.md) — enumerated values for behavioral fields and the `quirks[].edge_case_taxon` registry.
 - Review-pattern transfer policy: [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) — disjoint reviewer-cohort finding and the transfer ban.
 - Sibling Go orchestrator: [`../read-adapter-orchestrator/SKILL.md`](../read-adapter-orchestrator/SKILL.md) — discovery, fetch, dispatch, assembly, validation, emission for prebid-server-go.

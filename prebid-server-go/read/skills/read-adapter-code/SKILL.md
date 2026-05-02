@@ -220,7 +220,7 @@ This skill links to the existing review/ master-truth references rather than re-
 - **[../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md](../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md)** — adapter code patterns (Builder, MakeRequests, MakeBids, helpers). This skill's [adapter-code-patterns.md](references/adapter-code-patterns.md) adds READ-TIME classification rules on top.
 - **[../shared/adapter-spec.md](../shared/adapter-spec.md)** — canonical schema + Kobler worked example (Go and Java side by side).
 - **[../shared/behavior-taxonomy.md](../shared/behavior-taxonomy.md)** — every enumerated value with cross-references back to the review/ master-truth.
-- **[../shared/port-translation-rules.md](../shared/port-translation-rules.md)** — 37 Go↔Java port rules; the `cross_language.go_specific_concerns[]` text should reference rule numbers when applicable.
+- **[../shared/port-translation-rules.md](../shared/port-translation-rules.md)** — 46 Go↔Java port rules; the `cross_language.go_specific_concerns[]` text should reference rule numbers when applicable.
 
 ## Sources
 
