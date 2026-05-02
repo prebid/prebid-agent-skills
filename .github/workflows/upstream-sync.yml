@@ -1,0 +1,69 @@
+name: upstream-sync
+
+# Phase 4.1 drift detection. Runs Mondays at 09:00 UTC against upstream
+# `prebid/prebid-server` and `prebid/prebid-server-java` master HEADs and
+# uploads the drift report as an artifact.
+#
+# Manual trigger via workflow_dispatch supports ad-hoc runs (e.g., after a
+# merge of a major upstream PR).
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'        # Mondays 09:00 UTC
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Upstream ref to compare against (default: master)'
+        type: string
+        default: 'master'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run sync-from-upstream
+        id: sync
+        run: |
+          set +e
+          python3 scripts/sync-from-upstream.py \
+            --source-mode=github-raw \
+            --ref=${{ github.event.inputs.ref || 'master' }}
+          EXIT=$?
+          set -e
+          # Exit 0 = clean; 1 = fail (real drift requiring update); 2 = warn-only.
+          # Always upload the report; only block the workflow on EXIT=1.
+          echo "exit=$EXIT" >> $GITHUB_OUTPUT
+          if [ "$EXIT" -le 2 ]; then exit 0; else exit "$EXIT"; fi
+
+      - name: Upload drift-report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: |
+            scripts/output/drift-report.json
+            scripts/output/drift-report.md
+
+      - name: Surface drift summary in workflow output
+        if: always()
+        run: |
+          if [ -f scripts/output/drift-report.md ]; then
+            echo "## Drift report summary" >> $GITHUB_STEP_SUMMARY
+            cat scripts/output/drift-report.md >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.sync.outputs.exit }}" = "1" ]; then
+            echo "::warning::Upstream drift detected — review scripts/output/drift-report.md and update goldens."
+          fi

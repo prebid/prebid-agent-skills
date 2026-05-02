@@ -50,12 +50,9 @@ coverage:
 	python3 scripts/coverage-report.py
 
 sync:
-	@if [ ! -f scripts/sync-from-upstream.py ]; then \
-		echo "scripts/sync-from-upstream.py not yet built (Phase 4.1 stub)."; \
-		echo "Use \`make audit-goldens\` for the current Phase 1.5 golden-vs-upstream audit."; \
-		exit 0; \
-	fi
 	python3 scripts/sync-from-upstream.py
+	@echo ""
+	@echo "Drift report: scripts/output/drift-report.{json,md}"
 
 render-taxonomy:
 	python3 scripts/render-taxonomy.py

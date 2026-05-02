@@ -9,6 +9,9 @@ __pycache__/
 prebid-server-go/read/specs/
 prebid-server-java/read/specs/
 
+# Sync-from-upstream output (regenerated per-run; uploaded as a workflow artifact)
+scripts/output/
+
 # Virtual environments
 .venv/
 venv/
