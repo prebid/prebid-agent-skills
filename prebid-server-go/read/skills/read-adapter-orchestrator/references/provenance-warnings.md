@@ -32,9 +32,9 @@ The orchestrator preserves warning ordering: warnings are emitted in the order t
 
 ### `bidder-constant-mismatch`
 
-**Trigger**: `params.params_test.bidder_constant_referenced != openrtb_ext.Bidder<PascalCase(bidder)>` OR adapter-test code calls `Builder` / `validator.Validate` with a non-matching `openrtb_ext.Bidder*` constant.
+**Trigger**: `params.params_test.bidder_constant_referenced != <canonical-constant>` OR adapter-test code calls `Builder` / `validator.Validate` with a non-matching `openrtb_ext.Bidder*` constant. The `<canonical-constant>` is the value declared as `Bidder<X> BidderName = "<bidder>"` in `openrtb_ext/bidders.go` at the resolved commit — NOT a derived PascalCase form. Many bidders have manually-curated capitalization that doesn't match a mechanical PascalCase: `aja → BidderAJA`, `33across → Bidder33Across`, `cadent_aperture_mx → BidderCadentApertureMX`, `huaweiads → BidderHuaweiAds` (and ~80 other examples — 84 of 271 BidderName constants don't match simple PascalCase per upstream verification).
 
-**Detection**: At Step 6 the orchestrator extracts the actual bidder constant referenced in the params_test.go AND scans `adapters/<xyz>/<xyz>_test.go` for `Builder(openrtb_ext.Bidder<NAME>` calls. Each occurrence where `<NAME>` does not match the canonical PascalCase form of the bidder name → one warning.
+**Detection**: At Step 6 the orchestrator (a) reads `openrtb_ext/bidders.go` at the resolved commit and looks up the canonical `BidderName` constant for the bidder name, (b) extracts the actual bidder constant referenced in the params_test.go AND scans `adapters/<xyz>/<xyz>_test.go` for `Builder(openrtb_ext.Bidder<NAME>` calls, (c) emits one warning per occurrence where the referenced constant doesn't match the canonical `bidders.go` constant.
 
 **Real bug example** (from Phase 2 Kobler validation):
 
