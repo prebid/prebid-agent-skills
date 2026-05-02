@@ -4,17 +4,18 @@
 # live in scripts/ and scripts/tests/. The Makefile is a thin convenience
 # layer; the scripts themselves are the authoritative entry points.
 
-.PHONY: help install ci test audit-goldens audit-pr coverage clean
+.PHONY: help install ci test audit-goldens audit-pr coverage render-taxonomy clean
 
 help:
 	@echo "Available targets:"
-	@echo "  install         pip install -r requirements.txt"
-	@echo "  ci              Run unit tests + schema-contract + round-trip-ci (mirrors GH Actions)"
-	@echo "  test            Run unit tests only (scripts/tests/)"
-	@echo "  audit-goldens   Phase 1.5 golden-vs-upstream audit (all 22 goldens)"
-	@echo "  audit-pr URL=…  Phase 4.2 PR audit (requires CLAUDE_API_KEY for novelty classification)"
-	@echo "  coverage        Phase 4.3 per-rule, per-empire coverage report (markdown)"
-	@echo "  clean           Remove __pycache__ and .pyc files"
+	@echo "  install            pip install -r requirements.txt"
+	@echo "  ci                 Run unit tests + schema-contract + round-trip-ci (mirrors GH Actions)"
+	@echo "  test               Run unit tests only (scripts/tests/)"
+	@echo "  audit-goldens      Phase 1.5 golden-vs-upstream audit (all 22 goldens)"
+	@echo "  audit-pr URL=…     Phase 4.2 PR audit (requires CLAUDE_API_KEY for novelty classification)"
+	@echo "  coverage           Phase 4.3 per-rule, per-empire coverage report (markdown)"
+	@echo "  render-taxonomy    Phase 2.4 regenerate behavior-taxonomy.md from .yaml source"
+	@echo "  clean              Remove __pycache__ and .pyc files"
 
 install:
 	pip install -r requirements.txt
@@ -41,6 +42,9 @@ audit-pr:
 
 coverage:
 	python3 scripts/coverage-report.py
+
+render-taxonomy:
+	python3 scripts/render-taxonomy.py
 
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
