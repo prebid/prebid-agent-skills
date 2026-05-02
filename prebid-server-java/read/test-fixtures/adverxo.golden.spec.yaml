@@ -1,0 +1,443 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: adverxo
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - adport
+    - bidsmind
+    - harrenmedia
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: true               # ADR-003 Rule 44 — registration-only canonical master sample
+  empire_parent_flavor: registration-only
+
+bidder_info:
+  endpoint: "https://pbsadverxo.com/auction?adUnitId={{adUnitId}}&auth={{auth}}"
+  endpoint_construction:
+    kind: multi-token-substitution
+    macros_used:
+      - adUnitId
+      - auth
+    macro_syntax: java-string-replace
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "developer@adverxo.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - native
+        - video
+    app:
+      mediaTypes:
+        - banner
+        - native
+        - video
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync:
+    cookie_family_name: adverxo
+    iframe_url: "https://pbsadverxo.com/usync?type=iframe&gdpr={{gdpr}}&consent={{gdpr_consent}}&us_privacy={{us_privacy}}&redirect={{redirect_url}}"
+    redirect_url: "https://pbsadverxo.com/usync?type=image&gdpr={{gdpr}}&consent={{gdpr_consent}}&us_privacy={{us_privacy}}&redirect={{redirect_url}}"
+    uid_macro: "$UID"
+    support_cors: false
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Adverxo Adapter Params",
+    "description": "A schema which validates params accepted by the Adverxo adapter",
+    "type": "object",
+    "properties": {
+      "adUnitId": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Unique identifier for the ad unit in Adverxo platform."
+      },
+      "auth": {
+        "type": "string",
+        "minLength": 6,
+        "description": "Authentication token provided by Adverxo platform for the AdUnit."
+      }
+    },
+    "required": ["adUnitId", "auth"]
+  }
+bidder_params_sha256: 3f9eb07e582e01aab5fb772a15e130a4ffcabad3176c81f9b4588d082443d31a
+
+params:
+  schema_interpretation:
+    properties:
+      - name: adUnitId
+        type: integer
+        minimum: 1
+        description: "Unique identifier for the ad unit in Adverxo platform."
+      - name: auth
+        type: string
+        minLength: 6
+        description: "Authentication token provided by Adverxo platform for the AdUnit."
+    required_fields:
+      - adUnitId
+      - auth
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.adverxo
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/adverxo/ExtImpAdverxo.java
+    type_name: ExtImpAdverxo
+    fields:
+      - name: adUnitId
+        json_tag: adUnitId
+        type_native: Integer
+        omitempty: true
+        notes:
+          - "@JsonProperty(\"adUnitId\") explicit"
+      - name: auth
+        json_tag: auth
+        type_native: String
+        omitempty: true
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: AdverxoBidder
+  directory_name: adverxo
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file                         # bidder package contains only AdverxoBidder.java; helper classes (ExtImpAdverxo) live in the proto package, configuration and tests in their own packages.
+    files:
+      - name: AdverxoBidder.java
+        role: implementation
+        loc: 200
+  imports:
+    has_jsonutil: false                       # Go-only flag.
+    has_template_engine: false
+    has_currency_helper: true                 # CurrencyConversionService
+  make_requests:
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp                       # Rule 10 — one HttpRequest per imp
+    mutation:
+      mutates_request: true
+      go_idiom: null
+      java_idiom: lombok-tobuilder            # imp.toBuilder().build() + bidRequest.toBuilder()
+      entity_strategies:
+        Imp: immutable-rebuild                # Rule 5 — copy-then-mutate (Go) ↔ immutable-rebuild (Java)
+        Site: none
+        App: none
+        Source: none
+        Banner: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase                # Rule 1
+      mechanism_go: null
+      mechanism_java: typeref-extprebid       # TypeReference<ExtPrebid<?, ExtImpAdverxo>>
+      target_type: ExtImpAdverxo
+      wrapper_type: null
+    endpoint_resolution:
+      kind: multi-token-substitution
+      mechanism_go: null
+      mechanism_java: string-replace          # endpointUrl.replace("{{adUnitId}}", ...).replace("{{auth}}", ...)
+      macros_used:
+        - adUnitId
+        - auth
+    helpers:
+      - name: parseImpExt
+        signature: "private ExtImpAdverxo parseImpExt(Imp imp)"
+      - name: resolveEndpoint
+        signature: "private String resolveEndpoint(ExtImpAdverxo extImp)"
+      - name: modifyImp
+        signature: "private Imp modifyImp(BidRequest bidRequest, Imp imp)"
+      - name: resolveBidFloor
+        signature: "private Price resolveBidFloor(Imp imp, BidRequest bidRequest)"
+      - name: convertBidFloor
+        signature: "private Price convertBidFloor(Price bidFloorPrice, BidRequest bidRequest)"
+      - name: createRequest
+        signature: "private static BidRequest createRequest(BidRequest originalRequest, Imp modifiedImp)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidResponse bidResponse)"
+      - name: makeBid
+        signature: "private BidderBid makeBid(Bid bid, String currency)"
+      - name: getBidType
+        signature: "private static BidType getBidType(Integer mType)"
+      - name: processBidMacros
+        signature: "private static Bid processBidMacros(Bid bid, String adm)"
+      - name: replaceMacro
+        signature: "private static String replaceMacro(String input, String value)"
+      - name: resolveAdm
+        signature: "private static String resolveAdm(String bidAdm, BigDecimal price)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-mtype                # Rule 23 — switch on bid.getMtype() values 1, 2, 4
+          field: bid.mtype
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    http_status_handling:
+      kind: framework-default                 # Java — relies on Vert.x auto-handling via HttpUtil.validateResponse
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams      # bidResponse.getSeatbid().stream().flatMap(seatBid -> seatBid.getBid().stream())
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/adverxo/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-adverxo-bid-request.json
+        bytes: 798
+        role: bidder-bid-request
+      - filename: test-adverxo-bid-response.json
+        bytes: 783
+        role: bidder-bid-response
+      - filename: test-auction-adverxo-request.json
+        bytes: 475
+        role: auction-request
+      - filename: test-auction-adverxo-response.json
+        bytes: 865
+        role: auction-response
+  uses_canonical_harness: true               # AdverxoBidderTest extends VertxTest
+  unit_test_methods_count: 13
+  unit_test_loc: 333
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldReturnErrorIfImpExtInvalid
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0    # adverxo IT relies on YAML config + WireMock; no central registry append
+  integration_test_class: AdverxoTest
+  integration_test_pattern: 4-file-split
+
+aliases:
+  - name: adport
+    parent: adverxo
+    config_form: full_block                   # parent.aliases[adport] declares full endpoint + usersync overrides (NOT tilde_inherit)
+    relationship_flavor: registration-only    # ADR-003 Rule 44
+    test_assets:
+      it_class: AdportTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/adport/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false                            # ADR-004 Rule 45 — empire alias children typically disabled-by-default
+  - name: bidsmind
+    parent: adverxo
+    config_form: full_block
+    relationship_flavor: registration-only
+    test_assets:
+      it_class: BidsmindTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/bidsmind/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: harrenmedia
+    parent: adverxo
+    config_form: full_block
+    relationship_flavor: registration-only
+    test_assets:
+      it_class: HarrenmediaTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/harrenmedia/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+
+spring_config:
+  factory_class: AdverxoBidderConfiguration   # Edge case #19 — alternate `<Name>BidderConfiguration` naming
+  factory_method: adverxoBidderDeps
+  property_source_path: classpath:/bidder-config/adverxo.yaml
+  bidder_creator_lambda: |
+    config -> new AdverxoBidder(config.getEndpoint(), mapper, currencyConversionService)
+  configuration_properties_class: null        # No subclass — uses default BidderConfigurationProperties
+  bean_dependencies:
+    - name: adverxoConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.adverxo\")"
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+    - name: currencyConversionService
+      type: CurrencyConversionService
+      source: "@Autowired"
+
+bidder_class:
+  name: AdverxoBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointUrl
+        type: String
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+      - name: currencyConversionService
+        type: CurrencyConversionService
+        annotations: []
+    arity: 3
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: ADVERXO_EXT_TYPE_REFERENCE
+      type: "TypeReference<ExtPrebid<?, ExtImpAdverxo>>"
+    - name: DEFAULT_BID_CURRENCY
+      type: String
+      value: "USD"
+    - name: ADUNIT_MACROS_ENDPOINT
+      type: String
+      value: "{{adUnitId}}"
+    - name: AUTH_MACROS_ENDPOINT
+      type: String
+      value: "{{auth}}"
+    - name: PRICE_MACRO
+      type: String
+      value: "${AUCTION_PRICE}"
+  helper_classes_co_located: []
+  helper_classes_in_proto:
+    - ExtImpAdverxo
+
+code_naming: null
+
+lifecycle: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor   # @Value(staticConstructor = "of") — same shape as Kobler's ExtImpKobler
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: null
+    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
+  injection: dependency                       # Rule 32 — Java DI
+  bid_request_passed_for_context: true        # Java passes bidRequest for time-context (cross-language asymmetry vs Go)
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true                   # HttpUtil.headers() invoked per request (via BidderUtil.defaultRequest)
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: bid-post-processing-macro
+    file: src/main/java/org/prebid/server/bidder/adverxo/AdverxoBidder.java
+    summary: "AdverxoBidder.processBidMacros + resolveAdm replace `${AUCTION_PRICE}` macro in bid.adm with the actual bid price after bid-type classification — bid-post-processing pattern (ADR-007 F4 master sample)."
+    edge_case_taxon: bid-post-processing-macro
+  - id: configuration-naming-bidder-suffix
+    file: src/main/java/org/prebid/server/spring/config/bidder/AdverxoBidderConfiguration.java
+    summary: "Configuration class is `AdverxoBidderConfiguration` (with the explicit `Bidder` suffix) — Java edge case #19 alternate form. Most Java adapters use `<Name>Configuration`."
+    edge_case_taxon: identifier-rule-workaround    # Closest taxon; not a true Java identifier rule but a naming-variance signal
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/adverxo/
+    package_name: adverxo
+    bidder_constant: openrtb_ext.BidderAdverxo
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/adverxo/
+    bidder_class: AdverxoBidder
+    config_class: AdverxoBidderConfiguration
+    yaml_path: src/main/resources/bidder-config/adverxo.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/adverxo/
+  port_concerns:
+    aliases_inverted: true                    # Java parent declares aliases[adport,bidsmind,harrenmedia] in this YAML; Go declares per-alias YAMLs with aliasOf — Rule 33
+    yaml_unification: true                    # Java unifies what Go splits — Rule 34
+    mutation_idiom_divergence: true           # Java immutable-rebuild ↔ Go in-place — Rule 5
+    package_directory_mismatch: false
+    multi_file_layout: false                  # bidder package is single-file (AdverxoBidder.java); other artifacts live in sibling packages
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - currency-conversion-bidrequest-context
+      - mutation-idiom-tobuilder
+      - alias-empire-registration-only
+      - bid-post-processing-macro
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "Bean-construction-time URL validation: AdverxoBidder constructor calls HttpUtil.validateUrl(endpointUrl) at line 60. Throws IllegalArgumentException on invalid URL — caught by Spring at startup."
+    - "Static TypeReference<ExtPrebid<?, ExtImpAdverxo>> constructed once at class init (line 36)."
+    - "Per-imp split: each imp produces a distinct HttpRequest. parseImpExt + resolveEndpoint + modifyImp run per-imp; createRequest wraps the modified imp in a fresh BidRequest via toBuilder().build()."
+    - "modifyImp uses BidderUtil.shouldConvertBidFloor + currencyConversionService.convertCurrency with bidRequest passed for time-context — canonical Rule 32 cross-language asymmetry vs Go's 3-arg form."
+    - "ExtImpAdverxo uses @Value(staticConstructor = \"of\") — same Lombok shape as Kobler. Less common than @Value @Builder."
+    - "Empty-seatbid shortcircuit ordering: extractBids returns Collections.emptyList() BEFORE the seatbid stream when getSeatbid() is null/empty (line 152)."
+    - "Stream-pipeline defensive Objects::nonNull filters across getSeatbid → getBid → getBid (line 156-160) — five filters total. Go uses simple range loops without nil checks since Go ranges never iterate over nil-element slots."
+    - "${AUCTION_PRICE} macro replacement happens TWICE on native bids: resolveAdm replaces it on the raw adm (line 187), then processBidMacros replaces it again via replaceMacro on the toBuilder-rebuilt bid (line 175). Defensive but unusual — second replacement is a no-op when the first succeeded."
+    - "AdverxoBidderConfiguration uses `<Name>BidderConfiguration` naming form — Java edge case #19 alternate. Most Java configs use `<Name>Configuration`."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
+
+registry: {}

@@ -1,0 +1,166 @@
+dual_spec_assertion_version: 1
+bidder_name: adverxo
+go_spec: prebid-server-go/read/test-fixtures/adverxo.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/adverxo.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+assertions:
+  bidder_params_sha256:
+    go: 89b4de12ed21b480856b3de7a24215c59b93cb8d678d2517feaf53ef38e92410
+    java: 3f9eb07e582e01aab5fb772a15e130a4ffcabad3176c81f9b4588d082443d31a
+    byte_equal: false
+    semantically_equal: true                  # Same JSON Schema content; Java reformatted (2-space indent vs Go's 4-space inconsistent)
+    divergence_kind: byte-only
+    divergence_summary: |
+      JSON content equal (same $schema, properties, required, types). Bytes differ
+      because the Java version uses uniform 2-space indentation while the Go version
+      mixes 4-space + 2-space + closing brace at unusual indent. Rule 38
+      cross-language-byte-divergence WARN, not a port-fidelity violation in the strict
+      semantic sense — both files describe the same schema. To restore byte parity,
+      reformat the Go file to match Java's canonical 2-space form (or vice versa).
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, native, video]
+      app: [banner, native, video]
+    java:
+      site: [banner, native, video]
+      app: [banner, native, video]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 0
+    java: 0
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: developer@adverxo.com
+    java: developer@adverxo.com
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_endpoint:
+    go: "https://pbsadverxo.com/auction?id={{.AdUnit}}&auth={{.TokenID}}"
+    java: "https://pbsadverxo.com/auction?adUnitId={{adUnitId}}&auth={{auth}}"
+    byte_equal: false
+    semantically_equal: false
+    divergence_kind: macro-form-divergence
+    divergence_summary: |
+      Same observable URL pattern (both resolve to `.../auction?{key}={adUnitId}&auth={auth}`)
+      but with different macro syntax: Go uses Go-template form `{{.AdUnit}}` (resolved via
+      `macros.ResolveMacros` with `EndpointTemplateParams.AdUnit/TokenID`); Java uses
+      string-replace form `{{adUnitId}}` (resolved via `String.replace`). Both are valid
+      forms of Rule 11 (single/multi-token-substitution); the macro_syntax is recorded
+      under bidder_info.endpoint_construction.macro_syntax on each side
+      (`go-template` vs `java-string-replace`). Note the FIELD-NAME asymmetry too:
+      Go uses `id=` while Java uses `adUnitId=` in the URL — different query-param key
+      for the same `adUnitId` value. Cross-language contract: each side resolves to its
+      own valid endpoint shape; the upstream Adverxo backend MUST accept both keys.
+    severity: warn
+
+  bidder_info_default_enabled:
+    go: true
+    java: true
+    equivalent: true
+    rule_45_match: n/a                        # Adverxo parent itself is enabled on both sides; the 3 alias children flip to enabled=false on Java side per Rule 45
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [adUnitId, auth]
+    java_required_fields: [adUnitId, auth]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [adUnitId, auth]
+    java_properties: [adUnitId, auth]
+    equivalent: true
+    severity: pass
+
+  alias_graph:
+    go_aliases:                               # Go declares each alias as a separate static/bidder-info/<name>.yaml with `aliasOf: adverxo`
+      - adport
+      - bidsmind
+      - harrenmedia
+    java_aliases:                             # Java declares all 3 under parent.aliases[] block — Rule 33 cross-language inversion
+      - adport
+      - bidsmind
+      - harrenmedia
+    aliases_match: true
+    rule_33_inversion: true                   # Inverted-but-coherent: Go child→parent, Java parent→children
+    rule_44_empire_flavor: registration-only  # ADR-003 — adverxo is the smallest clean canonical for registration-only
+    severity: pass
+
+  empire_consolidation:
+    rule_44_canonical_master: true            # ADR-003 names adverxo as the "smallest clean" canonical for the registration-only flavor
+    parent_flavor: registration-only
+    child_flavor_coherence:                   # All 3 children declare relationship_flavor=registration-only on Java side
+      adport: registration-only
+      bidsmind: registration-only
+      harrenmedia: registration-only
+    severity: pass
+
+  port_lineage:
+    direction: shared-genesis                 # Both sides emerged independently around the same time (PR refs #3705 era); not a clear Go-to-Java port
+    source_pr: prebid/prebid-server-java#3705
+    destination_pr: prebid/prebid-server#3705
+    fidelity_review_themes:
+      - port-fidelity
+      - currency-conversion-bidrequest-context
+      - mutation-idiom-tobuilder
+      - alias-empire-registration-only
+      - bid-post-processing-macro
+
+  reviewer_cohort:
+    go_reviewers: []                          # To be populated when references PR #3705 is annotated
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 2
+  notes: |
+    Adverxo is the canonical Phase 5 P1 fixture for ADR-003 Rule 44 `registration-only`
+    empire flavor. The smallest clean empire (3 aliases: adport, bidsmind, harrenmedia)
+    where the parent's bidder_class serves all 4 names; Java aliases are pure name
+    registrations with per-alias `endpoint:` overrides under `parent.aliases[]` (Java
+    edge case Rule 33 inversion). Go side replicates the alias graph as 3 separate
+    `aliasOf: adverxo` YAMLs.
+
+    Two warn-level divergences: (1) bidder_params_sha256 byte-divergent due to JSON
+    formatting; semantically equal. (2) endpoint URL shape: Go uses `?id=` query key
+    + Go-template macros; Java uses `?adUnitId=` query key + string-replace macros.
+    Both forms valid per Rule 11; backend must accept both query keys.
+
+    Rule 32 currency-conversion asymmetry confirmed: Java passes bidRequest for
+    time-context (4-arg `currencyConversionService.convertCurrency`); Go uses 3-arg
+    `requestInfo.ConvertCurrency`. This is a per-language asymmetry, not a
+    port-fidelity violation.
+
+    Rule 5 mutation-idiom divergence confirmed: Java uses `imp.toBuilder()...build()`
+    immutable-rebuild + `bidRequest.toBuilder()` for createRequest; Go uses
+    `*request` shallow-copy + in-place imp mutation via pointer.
+
+    ADR-007 F4 master sample: both sides do `${AUCTION_PRICE}` macro replacement on
+    bid.adm AFTER bid-type classification (Java's processBidMacros + resolveAdm; Go's
+    resolveMacros + getNativeAdm). bid-post-processing-macro taxon emitted on both
+    spec-side quirks.
+
+    Phase 5 next: Phase 5 P1 #2 (smarthub/Attekmi — white-label-saas flavor with 9 aliases
+    + parent-rebrand co-occurrence) and #3 (teqblaze — 9 aliases white-label-saas).

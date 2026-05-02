@@ -1,0 +1,381 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: adverxo
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - adport
+    - bidsmind
+    - harrenmedia
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+  empire_canonical_master: true               # ADR-003 Rule 44 — registration-only canonical master sample
+  empire_parent_flavor: registration-only
+
+bidder_info:
+  endpoint: "https://pbsadverxo.com/auction?id={{.AdUnit}}&auth={{.TokenID}}"
+  endpoint_construction:
+    kind: multi-token-substitution
+    macros_used:
+      - AdUnit
+      - TokenID
+    macro_syntax: go-template
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "developer@adverxo.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - native
+        - video
+    app:
+      mediaTypes:
+        - banner
+        - native
+        - video
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync:
+    iframe_url: "https://pbsadverxo.com/usync?type=iframe&gdpr={{.GDPR}}&consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&redirect={{.RedirectURL}}"
+    redirect_url: "https://pbsadverxo.com/usync?type=image&gdpr={{.GDPR}}&consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&redirect={{.RedirectURL}}"
+    user_macro: "$UID"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |-
+  {
+      "$schema": "http://json-schema.org/draft-04/schema#",
+      "title": "Adverxo Adapter Params",
+      "description": "A schema which validates params accepted by the Adverxo adapter",
+      "type": "object",
+      "properties": {
+        "adUnitId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Unique identifier for the ad unit in Adverxo platform."
+        },
+        "auth": {
+          "type": "string",
+          "minLength": 6,
+          "description": "Authentication token provided by Adverxo platform for the AdUnit."
+        }
+      },
+      "required": ["adUnitId", "auth"]
+    }
+bidder_params_sha256: 89b4de12ed21b480856b3de7a24215c59b93cb8d678d2517feaf53ef38e92410
+
+params:
+  schema_interpretation:
+    properties:
+      - name: adUnitId
+        type: integer
+        minimum: 1
+        description: "Unique identifier for the ad unit in Adverxo platform."
+      - name: auth
+        type: string
+        minLength: 6
+        description: "Authentication token provided by Adverxo platform for the AdUnit."
+    required_fields:
+      - adUnitId
+      - auth
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_adverxo.go
+    type_name: ImpExtAdverxo                  # legacy ImpExt* form (vs newer ExtImp*); read-bidder-params surfaces as INFO quirk on assembly
+    fields:
+      - name: AdUnitId
+        json_tag: adUnitId
+        type_native: int
+        omitempty: false
+        notes: []
+      - name: Auth
+        json_tag: auth
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/adverxo/params_test.go
+    valid_cases_count: 2
+    invalid_cases_count: 10
+    bidder_constant_referenced: openrtb_ext.BidderAdverxo
+
+code:
+  package_or_class: adverxo
+  directory_name: adverxo
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: adverxo.go
+        role: implementation
+        loc: 215
+  imports:
+    has_template_engine: true                 # text/template
+    has_currency_helper: true
+    has_jsonutil: false
+    third_party:
+      - github.com/buger/jsonparser
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpointTemplate
+        type: "*template.Template"
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: true            # text/template parsed in Builder
+    errors_returned:
+      - "unable to parse endpoint url template: %v"
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp                       # Rule 10 — one HTTP request per imp
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place                         # modifyImp(&imp, ...) writes to value-copied imp
+        Cur: none
+      go_idiom: shallow-copy                  # makeRequestCopyWithImp does *request shallow copy
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase        # Rule 1 — adapters.ExtImpBidder → openrtb_ext.ImpExtAdverxo
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtAdverxo
+      wrapper_type: null
+    endpoint_resolution:
+      kind: multi-token-substitution
+      mechanism_go: text/template
+      mechanism_java: null
+      macro_field_set:
+        - AdUnit
+        - TokenID
+      template_params_struct_field_count: 2
+    helpers:
+      - name: getAdUnitsParams
+        signature: "func getAdUnitsParams(imp openrtb2.Imp) (*openrtb_ext.ImpExtAdverxo, error)"
+      - name: modifyImp
+        signature: "func modifyImp(imp *openrtb2.Imp, requestInfo *adapters.ExtraRequestInfo) error"
+      - name: makeRequestCopyWithImp
+        signature: "func makeRequestCopyWithImp(request *openrtb2.BidRequest, imp openrtb2.Imp) openrtb2.BidRequest"
+      - name: buildEndpointURL
+        signature: "func (adapter *adapter) buildEndpointURL(params *openrtb_ext.ImpExtAdverxo) (string, error)"
+      - name: getMediaTypeForBid
+        signature: "func getMediaTypeForBid(bid *openrtb2.Bid) (openrtb_ext.BidType, error)"
+      - name: getNativeAdm
+        signature: "func getNativeAdm(adm string) (string, error)"
+      - name: resolveMacros
+        signature: "func resolveMacros(bid *openrtb2.Bid)"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: legacy-raw-go                     # explicit StatusNoContent + != StatusOK checks (lines 90-100)
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-mtype                # Rule 23
+          field: bid.MType
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    bid_pointer_pattern: pointer-iteration    # `for _, bid := range seatBid.Bid { bid := bid; ... }` — explicit shadowing
+    bid_pointer_go_sibling: range-value-shadow
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: adverxotest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: banner.json
+        sha256: a53d8f923ea1a916921f253e6d7d33574d9dd01a
+        bytes: 2648
+      - filename: native.json
+        sha256: e9df74b81dfd958b77e337eb96083f134f9b246d
+        bytes: 3169
+      - filename: video.json
+        sha256: a2c91fff78e8e06e3d0fd73f58b5a55a3d29f27f
+        bytes: 1819
+    supplemental:
+      - filename: bad_imp_ext.json
+        sha256: 9c5e16c98e5f2357ab6a0fc23e803d6fb8b9ee7e
+        bytes: 361
+      - filename: bad_impext_bidder.json
+        sha256: c61652f53e63b0456825bc0d965b4e166471e084
+        bytes: 482
+      - filename: currency_conversion.json
+        sha256: 3562b05e7a8490bd03d84b3ebf9b58635d661f10
+        bytes: 3146
+      - filename: currency_rate_not_found.json
+        sha256: 9bc2ef75fd9ce8e6bd664ce1d20892e02e5ce5d5
+        bytes: 824
+      - filename: invalid_mtype.json
+        sha256: 5fcdee305fcf731d74188fc50169f81dcccc9cba
+        bytes: 2369
+      - filename: invalid_native_adm.json
+        sha256: 90694752e575a8ca136756423b08992ce2c60eab
+        bytes: 2493
+      - filename: multi_imps.json
+        sha256: f5eb56565f086aa536058da5693ef3a7f3bcf4f9
+        bytes: 4590
+      - filename: multiformat.json
+        sha256: 06f3be7bd0bc9483d3e44a636655cc656ab17d48
+        bytes: 2805
+      - filename: no_bid.json
+        sha256: 0585f342047536683e82aa0c5ffc03fc04ae9471
+        bytes: 1754
+      - filename: resolve_ortb_macro.json
+        sha256: 02840ea0d83ff999000fa7c183c26630ba497291
+        bytes: 2653
+      - filename: server_error.json
+        sha256: 47d29364f0458e412276efcf9a709f55719fa145
+        bytes: 1885
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true               # adverxo_test.go calls adapterstest.RunJSONBidderTest
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+aliases: []                                   # Go-side aliases live as separate spec files (adport.golden.spec.yaml etc., future).
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+lifecycle: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: "reqInfo.ConvertCurrency(value, from, to) (float64, error)"
+    java_signature: null
+  injection: function-arg                     # Rule 32 — Go-side, NO bidRequest passed
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false                  # adverxo.go does not set custom headers; Body is JSON-marshaled directly into RequestData
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: legacy-impext-naming
+    file: openrtb_ext/imp_adverxo.go
+    summary: "Type name `ImpExtAdverxo` (legacy `ImpExt*`) instead of newer `ExtImp*` form. Existing-adapter convention; no rename PR."
+    edge_case_taxon: legacy-impext-naming
+  - id: bid-post-processing-macro
+    file: adverxo.go
+    line: 0
+    summary: "resolveMacros / getNativeAdm replace `${AUCTION_PRICE}` macro in bid.AdM with the actual bid price after bid type classification — bid-post-processing pattern (ADR-007 F4)."
+    edge_case_taxon: bid-post-processing-macro
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/adverxo/
+    package_name: adverxo
+    bidder_constant: openrtb_ext.BidderAdverxo
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/adverxo/
+    bidder_class: AdverxoBidder
+    config_class: AdverxoBidderConfiguration  # Java edge case #19 — alternate `<Name>BidderConfiguration` form (vs `<Name>Configuration`)
+    yaml_path: src/main/resources/bidder-config/adverxo.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/adverxo/
+  port_concerns:
+    aliases_inverted: true                    # Java declares parent.aliases[]; Go declares per-alias YAMLs with aliasOf — Rule 33
+    yaml_unification: false                   # Go-source spec; Java-source counterpart sets true
+    mutation_idiom_divergence: true           # Go in-place + shallow-copy ↔ Java immutable-rebuild (Rule 5)
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: prebid/prebid-server#3705      # Adverxo establish PR; Java side #3705 in references list
+    destination_language: java
+    destination_pr: prebid/prebid-server-java#3705
+    fidelity_review_themes:
+      - port-fidelity
+      - currency-conversion-bidrequest-context
+      - mutation-idiom-tobuilder
+      - alias-empire-registration-only
+      - bid-post-processing-macro
+  go_specific_concerns:
+    - "Builder uses text/template parsed at construction time (line 25). The template is reused across all MakeRequests calls — see Rule 11 mechanism `text/template`."
+    - "Per-imp endpoint resolution: each imp's adUnitId + auth produce a distinct endpoint URL via macros.ResolveMacros (line 175). Multi-imp callers receive multiple HTTP requests."
+    - "Currency conversion uses `requestInfo.ConvertCurrency(value, from, to)` (3-arg, no bidRequest). Java side uses 4-arg `currencyConversionService.convertCurrency(value, bidRequest, from, to)` for time-context — canonical Rule 32 cross-language asymmetry."
+    - "MakeBids uses legacy raw status checks (StatusCode == http.StatusNoContent / != http.StatusOK at lines 88-100) instead of canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors helpers."
+    - "Bid AdM macro replacement: resolveMacros() replaces `${AUCTION_PRICE}` after bid-type classification (line 121). For native bids, getNativeAdm() ALSO replaces `${AUCTION_PRICE}` defensively — double-replacement is benign but unusual."
+    - "Range-with-shadowing pattern at line 116: `for _, bid := range seatBid.Bid { bid := bid; ... }` — explicit re-binding to capture pointer correctly inside the loop body. Modern Go (1.22+) loop-var semantics make the shadowing redundant but the code targets older versions."
+  java_specific_concerns: []                  # populated on Java-source spec
+  reviewer_cohort:
+    go: []                                    # Go-side reviewer cohort to be filled when references PR #3705 is annotated
+    java: []
+    cross_language_coordinator: bretg
