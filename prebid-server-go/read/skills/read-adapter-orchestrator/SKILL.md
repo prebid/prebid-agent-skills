@@ -190,7 +190,7 @@ The orchestrator does NOT call write/ or port-go2java/; it ONLY produces the spe
 | **Bidder constant mismatch** | `params_test.go` references wrong bidder constant (kobler `BidderKargo`/`BidderKrushmedia` real bug) → `bidder-constant-mismatch` warning. |
 | **YAML field-name typo** | `endpointCompression` (camelCase) vs canonical `endpoint-compression` (kebab-case) → `yaml-field-name-typo` warning + `bidder_info.yaml_field_name_quirks[]` entry. |
 | **Package/directory mismatch** | `33across` package mismatch (directory `33across`, package `ttx`) → `code.package_directory_mismatch: true` + `package-directory-mismatch` warning. |
-| **Multi-file layout** | msft (5+ files), mediasquare (3 files), appnexus (4 files) → `code.file_layout.kind: multi-file` + `code.file_layout.files[].role` per file. |
+| **Multi-file layout** | When `adapters/<bidder>/` has more than one non-test `.go` file, emit `code.file_layout.kind: multi-file` + `code.file_layout.files[].role` per file. Concrete file counts vary per bidder; consult the bidder's golden at `read/test-fixtures/<bidder>.golden.spec.yaml` (the `code.file_layout.files[]` array) for authoritative counts at the pinned commit. |
 | **Legacy test-directory naming** | msft uses `test/` + `test-extrainfo/` (NOT canonical `msfttest/`) → `tests.go_directory_naming: legacy-test` (or `custom` for the dual-directory case + paired quirk). |
 | **Custom request/response body** | mediasquare uses non-OpenRTB body → `code.make_requests.request_body.kind: custom` + `quirks[]` entry referencing the field. |
 | **Custom UnmarshalJSON** | appnexus keywords field branches at runtime on JSON shape → `ext_pojo_construction.custom_unmarshal.kind: go-unmarshaljson` + `where_branched: type-method`. |
