@@ -1,9 +1,17 @@
 name: round-trip-ci
 
-# Runs the full R1-R10 validation harness, schema-contract test, and
-# unit tests on every PR + push to main. Restores CI gating that was
-# removed in commit 52177e6 — now respects .github/known-broken-pairs.txt
-# instead of hardcoding aax.
+# Phase 4.7 hardened CI gates. Runs on every PR + push to main:
+#  - Render-drift: re-render behavior-taxonomy.md, port-translation-rules.md,
+#    docs/coverage-report.md from their YAML/Python sources and assert no drift.
+#  - Schema validation: every golden validates against adapter-spec.schema.json
+#    (Go-source and Java-source discrimination via if/then/else).
+#  - R1–R10 round-trip CI + dual-spec assertions: respects .github/known-broken-pairs.txt
+#    so the aax pair (the one historically-broken pair) is downgraded fail→warn.
+#  - Mechanizable port-rule lints (Phase 2.6) for Rules 5, 9, 33, 36, 38, 44, 46.
+#  - Schema-contract test: all SKILL-cited dotted paths exist in the schema.
+#  - Unit tests: full discovery across scripts/tests/ for the harness internals.
+#  - Description-length lint (informational): SKILL frontmatter description
+#    over 600 chars triggers an info-level annotation (not blocking).
 
 on:
   pull_request:
@@ -12,13 +20,16 @@ on:
       - 'prebid-server-java/**'
       - 'cross-language-pairs/**'
       - 'scripts/**'
+      - 'docs/**'
+      - 'templates/**'
       - 'requirements.txt'
+      - 'Makefile'
+      - 'CHANGELOG.md'
       - '.github/workflows/round-trip-ci.yml'
       - '.github/known-broken-pairs.txt'
   push:
     branches:
       - main
-  # Manual trigger for ad-hoc runs (e.g., post-upstream-sync verification)
   workflow_dispatch: {}
 
 jobs:
@@ -38,18 +49,32 @@ jobs:
       - name: Read known-broken pairs
         id: known-broken
         run: |
-          # Strip comments + blank lines, join with commas
           PAIRS=$(grep -vE '^\s*(#|$)' .github/known-broken-pairs.txt | tr '\n' ',' | sed 's/,$//')
           echo "pairs=$PAIRS" >> $GITHUB_OUTPUT
           echo "Known-broken pairs: $PAIRS"
 
-      - name: Schema contract test (SKILLs vs schema registry)
+      - name: Render-drift — behavior-taxonomy.md
+        run: python3 scripts/render-taxonomy.py --check
+
+      - name: Render-drift — port-translation-rules.md
+        run: python3 scripts/render-port-rules.py --check
+
+      - name: Render-drift — docs/coverage-report.md
+        run: python3 scripts/coverage-report.py --check
+
+      - name: Schema-contract test (dotted paths in registry)
         run: python3 scripts/tests/test_schema_contract.py
 
-      - name: Unit tests (R1-R10 + harness internals)
+      - name: Schema validation — all 22 goldens
+        run: python3 -m unittest scripts.tests.test_schema_jsonschema -v
+
+      - name: Audit goldens vs upstream signatures
+        run: python3 scripts/audit-golden.py --all
+
+      - name: Unit tests (full harness)
         run: python3 -m unittest discover -s scripts/tests -v
 
-      - name: Round-trip CI (R1-R10 + dual-spec assertions)
+      - name: Round-trip CI (R1–R10 + dual-spec assertions)
         run: |
           set +e
           python3 scripts/round-trip-ci.py --strict-r3 \
@@ -57,5 +82,30 @@ jobs:
           EXIT=$?
           set -e
           # Exit codes: 0=all pass, 1=fail, 2=warn-only.
-          # In CI we treat 0 and 2 as success; only 1 (real FAIL) blocks.
           if [ "$EXIT" -le 2 ]; then exit 0; else exit "$EXIT"; fi
+
+      - name: Mechanizable port-rule lints (Phase 2.6)
+        run: |
+          set +e
+          python3 scripts/lib/lint-port-rules.py
+          EXIT=$?
+          set -e
+          if [ "$EXIT" -le 2 ]; then exit 0; else exit "$EXIT"; fi
+
+      - name: Description-length lint (informational)
+        run: |
+          # Phase 4.7 informational gate: warn when a SKILL's frontmatter
+          # `description:` exceeds 600 chars. Doesn't block; just surfaces.
+          set +e
+          OVERLONG=0
+          for f in $(find prebid-server-go/read/skills prebid-server-java/read/skills -name 'SKILL.md'); do
+            DESC=$(awk '/^description: /,/^[a-z_]+: /' "$f" | head -n -1 | sed 's/^description: //' | tr -d '\n')
+            LEN=${#DESC}
+            if [ "$LEN" -gt 600 ]; then
+              echo "::notice file=$f::SKILL description is $LEN chars (soft limit 600); consider tightening for at-a-glance dispatch."
+              OVERLONG=$((OVERLONG + 1))
+            fi
+          done
+          echo "Description-length lint: $OVERLONG SKILLs exceed the 600-char soft limit."
+          # Always exit 0 — informational only.
+          exit 0

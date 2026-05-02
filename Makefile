@@ -24,7 +24,11 @@ install:
 	pip install -r requirements.txt
 
 ci: test
+	python3 scripts/render-taxonomy.py --check
+	python3 scripts/render-port-rules.py --check
+	python3 scripts/coverage-report.py --check
 	python3 scripts/tests/test_schema_contract.py
+	python3 scripts/audit-golden.py --all
 	@PAIRS=$$(grep -vE '^\s*(#|$$)' .github/known-broken-pairs.txt | tr '\n' ',' | sed 's/,$$//'); \
 	python3 scripts/round-trip-ci.py --strict-r3 --allow-known-broken-pairs "$$PAIRS"; \
 	EXIT=$$?; \
