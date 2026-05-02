@@ -166,6 +166,115 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
             + "\n".join(f"  {v}" for v in violations),
         )
 
+    def test_no_truly_invented_keys_outside_open_maps(self):
+        """Phase 2.3 phantom-path detector for goldens.
+
+        jsonschema's `iter_errors` accepts any key under blocks declared as
+        `additionalProperties: true` (open maps), so a typo'd field there
+        wouldn't fail validation. This test catches that case by
+        cross-referencing every dotted path in every golden against the
+        schema's vocabulary.
+
+        A path is INVENTED when:
+        - It's not declared anywhere in the schema's $defs
+        - AND it's not under an open-map prefix (additionalProperties:true)
+        - AND its leaf key is not a property name mentioned anywhere in the schema
+
+        The third clause is permissive — a property name mentioned in any
+        $def's properties block is "known to the schema" even if its
+        appearance at this specific path is unconventional. Phase 2.4
+        will tighten by adding $defs for BidderClass / SpringConfig /
+        Lifecycle / CodeNaming.
+        """
+        # Collect every property name mentioned anywhere in the schema
+        schema = _load_schema()
+        known_keys: set = set()
+        def collect_names(node):
+            if isinstance(node, dict):
+                if isinstance(node.get("properties"), dict):
+                    known_keys.update(node["properties"].keys())
+                for v in node.values():
+                    collect_names(v)
+            elif isinstance(node, list):
+                for item in node:
+                    collect_names(item)
+        collect_names(schema)
+
+        # Open-map paths derived from schema (additionalProperties: true on object)
+        open_map_paths: set = set()
+        def find_open_maps(node, prefix=""):
+            node_resolved = node
+            if isinstance(node, dict) and "$ref" in node:
+                ref = node["$ref"]
+                if ref.startswith("#/$defs/"):
+                    name = ref[len("#/$defs/"):]
+                    node_resolved = schema.get("$defs", {}).get(name, {})
+            if not isinstance(node_resolved, dict):
+                return
+            t = node_resolved.get("type")
+            if isinstance(t, str): t = [t]
+            # Two open-map flavors:
+            # 1. additionalProperties: true (any key, any value)
+            # 2. additionalProperties: <subschema> (any key, value matches schema)
+            addl = node_resolved.get("additionalProperties")
+            is_open_map = (
+                addl is True
+                or (isinstance(addl, dict) and addl)  # non-empty schema
+            )
+            if is_open_map and isinstance(t, list) and "object" in t and prefix:
+                open_map_paths.add(prefix)
+            if isinstance(node_resolved.get("properties"), dict):
+                for k, v in node_resolved["properties"].items():
+                    p = f"{prefix}.{k}" if prefix else k
+                    find_open_maps(v, p)
+            if isinstance(node_resolved.get("items"), dict):
+                find_open_maps(node_resolved["items"], prefix)
+            for kw in ("oneOf", "anyOf", "allOf"):
+                if kw in node_resolved:
+                    for branch in node_resolved[kw]:
+                        find_open_maps(branch, prefix)
+        find_open_maps(schema)
+
+        def under_open_map(path: str) -> bool:
+            parts = path.split(".")
+            for i in range(len(parts), 0, -1):
+                prefix = ".".join(parts[:i])
+                if prefix in open_map_paths:
+                    return True
+            return False
+
+        invented: list = []
+        for p in _discover_goldens():
+            golden = _load_golden(str(p.relative_to(REPO_ROOT)))
+
+            def walk(node, prefix=""):
+                if isinstance(node, dict):
+                    for k, v in node.items():
+                        path = f"{prefix}.{k}" if prefix else k
+                        # Skip keys that are well-known property names
+                        if k in known_keys:
+                            yield from walk(v, path)
+                            continue
+                        # Skip keys under an open-map prefix
+                        if under_open_map(path):
+                            yield from walk(v, path)
+                            continue
+                        # This key is truly invented
+                        yield (str(p.relative_to(REPO_ROOT)), path, k)
+                        # Don't recurse — once an invented key is hit, deeper
+                        # mentions are downstream effects of the invention
+                elif isinstance(node, list):
+                    for item in node:
+                        yield from walk(item, prefix)
+
+            invented.extend(walk(golden))
+
+        if invented:
+            lines = [f"{len(invented)} invented key(s) found in goldens:"]
+            for golden, path, key in invented[:30]:
+                lines.append(f"  {golden}: '{key}' at path {path}")
+            self.fail("\n".join(lines))
+
 
 if __name__ == "__main__":
     unittest.main()

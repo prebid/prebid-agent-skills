@@ -2,12 +2,18 @@
 """Schema contract test.
 
 Every dotted path used in any SKILL.md under prebid-server-{go,java}/read/skills/
-must resolve to a defined section/key in either:
-- prebid-server-go/read/skills/shared/adapter-spec.md, or
-- prebid-server-go/read/skills/shared/behavior-taxonomy.md.
+must resolve to a defined property in either:
+- prebid-server-go/read/skills/shared/adapter-spec.schema.json (Phase 2.0+ canonical), or
+- prebid-server-go/read/skills/shared/behavior-taxonomy.md (taxonomy enums, still in markdown).
 
 Catches "phantom field" bugs: a SKILL claims a field that does not exist in
 the canonical schema. This bug class drove most Wave 2 fixes in PR #1.
+
+Phase 2.3 (2026-05-02): the schema registry is now derived from the JSON
+Schema at `adapter-spec.schema.json` rather than parsed from markdown
+pseudo-code. The 180-entry hand-curated SCHEMA_REGISTRY_EXTRAS is gone —
+the JSON Schema is the source of truth. Open-map points (paths admitting
+`additionalProperties: true`) are also derived automatically.
 
 Usage (from repo root):
     python3 scripts/tests/test_schema_contract.py
@@ -23,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import os
 import re
 import sys
@@ -36,8 +43,8 @@ except ImportError:
 
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
-ADAPTER_SPEC = os.path.join(
-    REPO_ROOT, "prebid-server-go", "read", "skills", "shared", "adapter-spec.md"
+ADAPTER_SPEC_SCHEMA_JSON = os.path.join(
+    REPO_ROOT, "prebid-server-go", "read", "skills", "shared", "adapter-spec.schema.json"
 )
 BEHAVIOR_TAXONOMY = os.path.join(
     REPO_ROOT, "prebid-server-go", "read", "skills", "shared", "behavior-taxonomy.md"
@@ -86,13 +93,24 @@ OPEN_MAP_POINTS = frozenset({
 })
 
 
-# Explicit registry supplement: schema fields that the markdown parser misses
-# because they're documented in prose tables under section headers in formats
-# the parser doesn't catch. Curated from `adapter-spec.md` section-by-section.
-# Adding here means: "this path EXISTS in the canonical schema even if my
-# parser couldn't extract it." Removing or omitting one would re-surface real
-# phantoms; keep this list aligned with the schema by hand on schema bumps.
-SCHEMA_REGISTRY_EXTRAS = frozenset({
+# Phase 2.3 deprecated: SCHEMA_REGISTRY_EXTRAS was a 180-entry hand-curated
+# supplement filling gaps in the markdown-parser-extracted registry. With
+# `build_schema_registry()` now reading paths directly from
+# adapter-spec.schema.json's $defs (Phase 2.3), this hand-curated list is
+# redundant. Kept as an empty placeholder for downstream callers who imported
+# it; will be deleted once we confirm no consumer references it.
+#
+# Historical content: ~180 paths covering cross_language, bidder_info, meta,
+# code, bidder_class, tests, spring_config, provenance, params, code_naming,
+# iab_category_storage, ext_pojo_construction, currency_conversion,
+# headers_constructed, aliases, lifecycle. All of these now derive from
+# adapter-spec.schema.json $defs.
+SCHEMA_REGISTRY_EXTRAS: frozenset = frozenset()
+
+
+# DEPRECATED PRE-PHASE-2.3 SUPPLEMENT (kept commented for reference until
+# verified-not-needed). The schema's $defs now cover these.
+_DEPRECATED_PRE_PHASE_2_3_EXTRAS = frozenset({
     # cross_language fields
     "cross_language.go_artifacts", "cross_language.java_artifacts",
     "cross_language.go_specific_concerns", "cross_language.java_specific_concerns",
@@ -342,26 +360,113 @@ def parse_section_table_field_paths(md_text: str) -> Set[str]:
     return paths
 
 
+def _resolve_ref(schema: dict, node):
+    """If node is `{"$ref": "#/$defs/X"}`, return $defs.X. Otherwise return node verbatim."""
+    if isinstance(node, dict) and "$ref" in node:
+        ref = node["$ref"]
+        if ref.startswith("#/$defs/"):
+            ref_name = ref[len("#/$defs/"):]
+            return schema.get("$defs", {}).get(ref_name, node)
+    return node
+
+
+def _walk_schema(schema: dict, node, prefix: str, registry: Set[str], open_maps: Set[str]) -> None:
+    """Walk a JSON Schema 2020-12 node, collecting all dotted property paths.
+
+    Resolves $ref to #/$defs/* inline. Detects open-map points (objects with
+    `additionalProperties: true`). Walks oneOf/anyOf/allOf and if/then/else
+    branches uniformly so the source_language discrimination is unwrapped.
+    """
+    node = _resolve_ref(schema, node)
+    if not isinstance(node, dict):
+        return
+
+    # additionalProperties: True at this level -> open map keyed by `prefix`
+    addl = node.get("additionalProperties")
+    types = node.get("type")
+    if isinstance(types, str):
+        types = [types]
+    is_object = isinstance(types, list) and "object" in types
+    if addl is True and is_object and prefix:
+        open_maps.add(prefix)
+
+    # Walk explicit properties
+    props = node.get("properties")
+    if isinstance(props, dict):
+        for k, v in props.items():
+            p = f"{prefix}.{k}" if prefix else k
+            registry.add(p)
+            _walk_schema(schema, v, p, registry, open_maps)
+
+    # Walk array items (items inherit the parent's prefix — array indices
+    # are not part of the dotted path)
+    items = node.get("items")
+    if isinstance(items, dict):
+        _walk_schema(schema, items, prefix, registry, open_maps)
+
+    # Walk all branches uniformly
+    for keyword in ("oneOf", "anyOf", "allOf"):
+        branches = node.get(keyword)
+        if isinstance(branches, list):
+            for branch in branches:
+                _walk_schema(schema, branch, prefix, registry, open_maps)
+
+    # if/then/else for source_language discrimination (Phase 2.1)
+    for keyword in ("if", "then", "else"):
+        if keyword in node:
+            _walk_schema(schema, node[keyword], prefix, registry, open_maps)
+
+
 def build_schema_registry() -> Set[str]:
-    """Union of paths defined by adapter-spec.md and behavior-taxonomy.md."""
+    """Union of property paths from adapter-spec.schema.json + behavior-taxonomy.md.
+
+    Phase 2.3: the JSON Schema is the source of truth for the structural
+    contract. Markdown taxonomy paths from behavior-taxonomy.md are still
+    parsed (taxon enum tables haven't been migrated to data yet — that's
+    Phase 2.4).
+    """
     registry: Set[str] = set()
-    for path in (ADAPTER_SPEC, BEHAVIOR_TAXONOMY):
-        if not os.path.isfile(path):
-            sys.stderr.write(f"ERROR: schema source missing: {path}\n")
+
+    # Primary source: JSON Schema
+    if not os.path.isfile(ADAPTER_SPEC_SCHEMA_JSON):
+        sys.stderr.write(f"ERROR: schema missing: {ADAPTER_SPEC_SCHEMA_JSON}\n")
+        sys.exit(2)
+    with open(ADAPTER_SPEC_SCHEMA_JSON, "r", encoding="utf-8") as fh:
+        try:
+            schema_json = json.load(fh)
+        except json.JSONDecodeError as exc:
+            sys.stderr.write(f"ERROR: invalid JSON in {ADAPTER_SPEC_SCHEMA_JSON}: {exc}\n")
             sys.exit(2)
-        with open(path, "r", encoding="utf-8") as fh:
-            text = fh.read()
-        registry |= parse_yaml_paths_from_codeblocks(text)
-        registry |= parse_header_paths(text)
-        registry |= parse_table_field_paths(text)
-        registry |= parse_section_table_field_paths(text)
-    # Defensive — ensure every top-level key is registered even if a typo in
-    # either source would otherwise drop a real top-level from the registry.
+    schema_open_maps: Set[str] = set()
+    _walk_schema(schema_json, schema_json, "", registry, schema_open_maps)
+
+    # Merge schema-derived open-maps with the static OPEN_MAP_POINTS so
+    # the existing constant continues to work for legacy callers. Phase 2.4
+    # may consolidate.
+    global _DERIVED_OPEN_MAPS
+    _DERIVED_OPEN_MAPS = schema_open_maps
+
+    # Secondary source: behavior-taxonomy.md (markdown) — taxon enum paths
+    # such as `code.make_bids.bid_type_resolution.method_chain[].method` etc.
+    if not os.path.isfile(BEHAVIOR_TAXONOMY):
+        sys.stderr.write(f"ERROR: taxonomy missing: {BEHAVIOR_TAXONOMY}\n")
+        sys.exit(2)
+    with open(BEHAVIOR_TAXONOMY, "r", encoding="utf-8") as fh:
+        taxonomy_text = fh.read()
+    registry |= parse_yaml_paths_from_codeblocks(taxonomy_text)
+    registry |= parse_header_paths(taxonomy_text)
+    registry |= parse_table_field_paths(taxonomy_text)
+    registry |= parse_section_table_field_paths(taxonomy_text)
+
+    # Defensive: every top-level key registered even if the schema walker
+    # somehow drops one.
     registry |= SCHEMA_TOP_LEVEL_KEYS
-    # Add the curated supplement: schema fields the markdown parser misses
-    # because they're documented in patterns the regex doesn't catch.
-    registry |= SCHEMA_REGISTRY_EXTRAS
     return registry
+
+
+# Module-level cache of open-maps derived from the last build_schema_registry()
+# call. Populated by _walk_schema; consumed by is_phantom.
+_DERIVED_OPEN_MAPS: Set[str] = set()
 
 
 # Match `foo.bar` or `foo.bar.baz` (≥1 dot) where every segment is a snake_case
@@ -388,8 +493,12 @@ def is_phantom(path: str, registry: Set[str]) -> bool:
     normalized = path.replace("[]", "")
     if normalized in registry:
         return False
-    # Open-map: any path under a known open-map prefix is accepted.
-    for open_prefix in OPEN_MAP_POINTS:
+    # Open-map: any path under a known open-map prefix is accepted. Two
+    # sources merge: the static OPEN_MAP_POINTS (legacy) and the
+    # _DERIVED_OPEN_MAPS populated from adapter-spec.schema.json's
+    # additionalProperties:true blocks during build_schema_registry().
+    all_open_maps = OPEN_MAP_POINTS | _DERIVED_OPEN_MAPS
+    for open_prefix in all_open_maps:
         if normalized == open_prefix or normalized.startswith(open_prefix + "."):
             return False
     # Walk upward — if a registered prefix is found and the trailing segments
@@ -397,7 +506,7 @@ def is_phantom(path: str, registry: Set[str]) -> bool:
     parts = normalized.split(".")
     for i in range(len(parts) - 1, 0, -1):
         candidate = ".".join(parts[:i])
-        if candidate in OPEN_MAP_POINTS:
+        if candidate in all_open_maps:
             return False
     # Final defensive check: registered top-level alone is OK.
     if len(parts) == 1 and head in registry:

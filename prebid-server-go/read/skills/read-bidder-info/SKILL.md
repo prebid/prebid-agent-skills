@@ -38,7 +38,7 @@ Walk the parsed YAML and map each known top-level key to the spec field. The can
 
 - `endpoint` -> `bidder_info.endpoint` (string).
 - `endpointCompression` -> `bidder_info.endpoint_compression` (string; expected canonical value `"GZIP"` uppercase per `exchange/bidder.go` constant — silently fails compression if any other casing).
-- `disabled` (bool) -> `meta.disabled` is OWNED by the orchestrator's `meta` block (NOT this skill); but if present in this YAML, surface here so the orchestrator can read it. Emit no `bidder_info.disabled` field.
+- `disabled` (bool) -> `meta.disabled` is OWNED by the orchestrator's `meta` block (NOT this skill); but if present in this YAML, surface here so the orchestrator can read it. Do NOT emit a `disabled` field under bidder_info — there is no such path in the schema; emit only via meta.
 - `whiteLabelOnly` -> same handling as `disabled`: orchestrator reads it from this skill's pass-through.
 - `modifyingVastXmlAllowed` (bool) -> `bidder_info.modifying_vast_xml_allowed`. Default `false` if absent.
 - `aliasOf` -> orchestrator reads it for `meta.alias_of` and the alias short-circuit. Pass-through.

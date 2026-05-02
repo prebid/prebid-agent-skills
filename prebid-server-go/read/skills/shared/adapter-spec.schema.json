@@ -70,10 +70,26 @@
       "items": { "$ref": "#/$defs/Alias" },
       "description": "Rich alias metadata block. Per-alias entry on Java goldens; can be empty list on Go goldens that don't list aliases."
     },
-    "spring_config": { "type": ["object", "null"] },
-    "bidder_class": { "type": ["object", "null"] },
-    "code_naming": { "type": ["object", "null"], "description": "ADR-001 D1: top-level Java-only block (NOT nested under code.naming)." },
-    "lifecycle": { "type": ["object", "null"], "description": "ADR-001 D5: top-level lifecycle.rename block on post-rename specs." },
+    "spring_config": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "description": "Java-only Spring DI block. Phase 2.0/2.1 declares as open-map; Phase 2.4 will add a proper $defs/SpringConfig with factory_class, factory_method, property_source_path, bidder_creator_lambda, configuration_properties_class.extra_fields[], bean_dependencies[]."
+    },
+    "bidder_class": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "description": "Java-only class hierarchy block. Phase 2.0/2.1 open-map; Phase 2.4 adds $defs/BidderClass with name, parameterized_request_type, parameterized_response_type, override_methods, constructor.parameters[], static_fields[], helper_classes_co_located[], helper_classes_in_proto[]."
+    },
+    "code_naming": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "description": "ADR-001 D1: top-level Java-only block (NOT nested under code.naming). Phase 2.0/2.1 open-map; Phase 2.4 adds $defs/CodeNaming with class_name_root, yaml_name, preserves_acronym_case, notes."
+    },
+    "lifecycle": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "description": "ADR-001 D5: top-level lifecycle.rename block on post-rename specs. Phase 2.0/2.1 open-map; Phase 2.4 adds $defs/Lifecycle with full lifecycle.rename.{old_name, new_name, subtype, alias_back, alias_back_form, package_moves[], fixture_dir_moves[], yaml_deletes[], yaml_adds[], merged_at, release}."
+    },
     "iab_category_storage": { "$ref": "#/$defs/IabCategoryStorage" },
     "ext_pojo_construction": { "$ref": "#/$defs/ExtPojoConstruction" },
     "currency_conversion": { "$ref": "#/$defs/CurrencyConversion" },
@@ -87,7 +103,11 @@
       "items": { "$ref": "#/$defs/Quirk" }
     },
     "cross_language": { "$ref": "#/$defs/CrossLanguage" },
-    "registry": { "type": "object", "description": "ADR-001 D6: present on Java goldens that record test-application.properties registry; will be moved to tests.test_application_properties.* in Phase 2.7." },
+    "registry": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-001 D6: present on Java goldens that record test-application.properties registry. Open-map for Phase 2.0/2.1; Phase 2.7 will move to tests.test_application_properties.* with proper $defs."
+    },
     "taxonomy_version": {
       "description": "ADR-001 D7: SemVer string for behavior taxonomy version goldens conform to.",
       "type": "string",
@@ -162,7 +182,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "skill_versions": { "type": "object" },
+            "skill_versions": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Open map keyed by skill name (`orchestrator`, `read-adapter-code`, etc.); value is the SemVer string version."
+            },
             "timestamp_utc": { "type": "string" },
             "operator": { "type": "string" }
           }
@@ -279,11 +303,22 @@
           "type": "array",
           "items": {
             "oneOf": [
-              { "type": "string" },
-              { "type": "object" }
+              { "type": "string", "description": "Free-text quirk (huaweiads-Java style)." },
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Structured quirk (adkernel-Go style). Common keys: field, observed_value, canonical_value, summary, observed.",
+                "properties": {
+                  "field": { "type": "string" },
+                  "observed": { "type": "string" },
+                  "observed_value": { "type": ["string", "boolean", "number", "null"] },
+                  "canonical_value": { "type": ["string", "boolean", "number", "null"] },
+                  "summary": { "type": "string" }
+                }
+              }
             ]
           },
-          "description": "Items are sometimes strings (free-text) and sometimes objects with structured fields. Phase 2.7 will normalize."
+          "description": "Items are sometimes strings (free-text) and sometimes objects with structured fields. Phase 2.7 may normalize to one shape."
         }
       }
     },
