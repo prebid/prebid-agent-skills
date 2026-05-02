@@ -4,7 +4,7 @@
 # live in scripts/ and scripts/tests/. The Makefile is a thin convenience
 # layer; the scripts themselves are the authoritative entry points.
 
-.PHONY: help install ci test audit-goldens audit-pr coverage render-taxonomy render-port-rules lint-port-rules clean
+.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules clean
 
 help:
 	@echo "Available targets:"
@@ -14,6 +14,7 @@ help:
 	@echo "  audit-goldens      Phase 1.5 golden-vs-upstream audit (all 22 goldens)"
 	@echo "  audit-pr URL=…     Phase 4.2 PR audit (requires CLAUDE_API_KEY for novelty classification)"
 	@echo "  coverage           Phase 4.3 per-rule, per-empire coverage report (markdown)"
+	@echo "  sync               Phase 4.1 drift detection vs upstream prebid-server / prebid-server-java"
 	@echo "  render-taxonomy    Phase 2.4 regenerate behavior-taxonomy.md from .yaml source"
 	@echo "  render-port-rules  Phase 2.5 regenerate port-translation-rules.md from .yaml source"
 	@echo "  lint-port-rules    Phase 2.6 mechanizable port-rule lints (Rules 5/9/33/36/38/44/46)"
@@ -47,6 +48,14 @@ audit-pr:
 
 coverage:
 	python3 scripts/coverage-report.py
+
+sync:
+	@if [ ! -f scripts/sync-from-upstream.py ]; then \
+		echo "scripts/sync-from-upstream.py not yet built (Phase 4.1 stub)."; \
+		echo "Use \`make audit-goldens\` for the current Phase 1.5 golden-vs-upstream audit."; \
+		exit 0; \
+	fi
+	python3 scripts/sync-from-upstream.py
 
 render-taxonomy:
 	python3 scripts/render-taxonomy.py
