@@ -1,3 +1,6 @@
 # Test/CI dependencies for scripts/round-trip-ci.py and scripts/tests/.
 # Install with: pip install -r requirements.txt
 PyYAML>=6.0
+# jsonschema 4.18+ required for full JSON Schema 2020-12 support
+# (used by adapter-spec.schema.json validation in Phase 2+).
+jsonschema>=4.18
