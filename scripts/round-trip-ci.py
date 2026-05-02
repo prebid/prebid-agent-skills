@@ -842,30 +842,40 @@ def r6_check(spec: Spec) -> List[Finding]:
         (w.get("type") or "").startswith("bidder-name-rebrand")
         for w in warnings if isinstance(w, dict)
     )
-    if pkg and pkg != bidder_name:
+    # Alias suppression: when meta.is_alias=true, cross_language artifacts
+    # route through the parent's package/dir (Go aliases live under the
+    # parent's adapters/<parent>/ package; Java alias-only YAMLs register
+    # under the parent's bidder dir). Compare package_name and bidder_dir
+    # against meta.alias_of (the parent), not the alias's own bidder_name.
+    is_alias = bool(spec.get("meta.is_alias"))
+    alias_of = (spec.get("meta.alias_of") or "").strip()
+    expected_pkg_name = alias_of if (is_alias and alias_of) else bidder_name
+    alias_note = f" (parent={alias_of})" if is_alias and alias_of else ""
+    if pkg and pkg != expected_pkg_name:
         # Real-world divergence: msft uses BidderMicrosoft constant but bidder dir is msft.
-        # The test is package_name == bidder_name (not bidder_constant); package_name
-        # should match the directory.
+        # The test is package_name == bidder_name (or alias's parent); package_name
+        # should match the directory the adapter code lives in.
         findings.append(
             Finding(
                 "R6",
                 spec.label,
                 SEV_WARN,
-                f"meta.bidder_name={bidder_name} != go_artifacts.package_name={pkg}",
+                f"meta.bidder_name={bidder_name} != go_artifacts.package_name={pkg}{alias_note}",
             )
         )
-    if java_dir_basename and java_dir_basename.lower() != bidder_name.lower():
+    if java_dir_basename and java_dir_basename.lower() != expected_pkg_name.lower():
         findings.append(
             Finding(
                 "R6",
                 spec.label,
                 SEV_WARN,
-                f"meta.bidder_name={bidder_name} != java_artifacts.bidder_dir basename={java_dir_basename}",
+                f"meta.bidder_name={bidder_name} != java_artifacts.bidder_dir basename={java_dir_basename}{alias_note}",
             )
         )
     # Validate cross_language.go_artifacts.bidder_constant on Go-source specs.
+    # For aliases, inherit the parent's expected constant.
     bidder_constant = go_arts.get("bidder_constant") or ""
-    expected_constant = f"openrtb_ext.Bidder{bidder_name.capitalize()}"
+    expected_constant = f"openrtb_ext.Bidder{expected_pkg_name.capitalize()}"
     if bidder_constant and bidder_constant.lower() != expected_constant.lower() and not rebrand:
         findings.append(
             Finding(

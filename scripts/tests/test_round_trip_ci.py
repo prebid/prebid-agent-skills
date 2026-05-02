@@ -305,6 +305,73 @@ class TestR6(unittest.TestCase):
             f"Expected rebrand warning to suppress bidder_constant FAIL; got: {constant_fails}",
         )
 
+    def test_alias_suppresses_package_dir_warns(self):
+        """When meta.is_alias=true, R6 must compare cross_language artifacts
+        against meta.alias_of (parent), NOT against the alias's own bidder_name.
+        The alias's package_name and bidder_dir route through the parent.
+
+        Real-world canonical: 152media is an alias of adkernel; its
+        go_artifacts.package_name=adkernel and java_artifacts.bidder_dir=
+        adapters/adkernel/ — without alias suppression, R6 spuriously WARNed
+        on every alias golden."""
+        spec = make_spec("152media", "go", {
+            "meta": {
+                "bidder_name": "152media",
+                "is_alias": True,
+                "alias_of": "adkernel",
+            },
+            "cross_language": {
+                "go_artifacts": {
+                    "package_name": "adkernel",
+                    "bidder_constant": "openrtb_ext.BidderAdkernel",
+                },
+                "java_artifacts": {
+                    "bidder_dir": "src/main/java/org/prebid/server/bidder/adkernel/",
+                },
+            },
+        })
+        findings = rtci.r6_check(spec)
+        # Should NOT warn on package_name or bidder_dir mismatch
+        package_warns = [f for f in findings
+                         if f.severity == rtci.SEV_WARN
+                         and ("package_name" in f.detail or "bidder_dir" in f.detail)]
+        self.assertEqual(
+            package_warns, [],
+            f"Alias R6 should not warn on package/dir mismatch when "
+            f"the alias correctly routes to its parent; got: {package_warns}",
+        )
+        # Should also not warn on bidder_constant since alias inherits parent's constant
+        constant_warns = [f for f in findings
+                          if f.severity == rtci.SEV_WARN and "bidder_constant" in f.detail]
+        self.assertEqual(
+            constant_warns, [],
+            f"Alias R6 should accept parent's bidder_constant; got: {constant_warns}",
+        )
+
+    def test_alias_with_wrong_parent_still_warns(self):
+        """When meta.is_alias=true but the alias's package_name doesn't match
+        meta.alias_of, R6 MUST still WARN — alias suppression doesn't mean
+        no validation, it means validation against the parent."""
+        spec = make_spec("foo", "go", {
+            "meta": {
+                "bidder_name": "foo",
+                "is_alias": True,
+                "alias_of": "barparent",
+            },
+            "cross_language": {
+                "go_artifacts": {
+                    "package_name": "wrongparent",  # should be barparent
+                },
+            },
+        })
+        findings = rtci.r6_check(spec)
+        package_warns = [f for f in findings
+                         if f.severity == rtci.SEV_WARN and "package_name" in f.detail]
+        self.assertTrue(
+            len(package_warns) >= 1,
+            f"Expected WARN when alias's package_name doesn't match parent; got: {findings}",
+        )
+
 
 # ---------------------------------------------------------------------------
 # R7: bidder-constant-mismatch — walk warnings AND quirks
