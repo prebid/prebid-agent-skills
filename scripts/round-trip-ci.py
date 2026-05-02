@@ -1348,7 +1348,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Print every finding (including PASS) in text mode",
     )
+    parser.add_argument(
+        "--allow-known-broken-pairs",
+        default="",
+        metavar="LIST",
+        help=(
+            "Comma-separated list of cross-language-pair bidder names "
+            "whose dual-spec FAILs are downgraded to informational (do not "
+            "set exit code 1). Used in CI to admit intentional severity:fail "
+            "assertions while still gating on unexpected regressions."
+        ),
+    )
     args = parser.parse_args(argv)
+    known_broken = {
+        b.strip() for b in (args.allow_known_broken_pairs or "").split(",")
+        if b.strip()
+    }
 
     specs = discover_specs()
     if not specs:
@@ -1408,6 +1423,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             ))
     if not all_r5_bidders:
         findings.append(Finding("R5", "n/a", SEV_PASS, "no port pairs to compare"))
+
+    # Apply --allow-known-broken-pairs: downgrade FAIL→WARN for findings whose
+    # spec label is `pair/<bidder>` or `<lang>/<bidder>` for any bidder in the
+    # known-broken list. The pair file's intentional severity:fail still
+    # surfaces in output (now as WARN) but doesn't drive the exit code to 1.
+    if known_broken:
+        downgraded = []
+        for f in findings:
+            spec_bidder = f.spec.split("/", 1)[-1] if "/" in f.spec else f.spec
+            if f.severity == SEV_FAIL and spec_bidder in known_broken:
+                downgraded.append(Finding(
+                    f.rule, f.spec, SEV_WARN,
+                    f.detail + " [downgraded by --allow-known-broken-pairs]",
+                ))
+            else:
+                downgraded.append(f)
+        findings = downgraded
 
     counts = aggregate(findings)
 

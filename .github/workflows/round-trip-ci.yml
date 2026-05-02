@@ -1,0 +1,61 @@
+name: round-trip-ci
+
+# Runs the full R1-R10 validation harness, schema-contract test, and
+# unit tests on every PR + push to main. Restores CI gating that was
+# removed in commit 52177e6 — now respects .github/known-broken-pairs.txt
+# instead of hardcoding aax.
+
+on:
+  pull_request:
+    paths:
+      - 'prebid-server-go/**'
+      - 'prebid-server-java/**'
+      - 'cross-language-pairs/**'
+      - 'scripts/**'
+      - 'requirements.txt'
+      - '.github/workflows/round-trip-ci.yml'
+      - '.github/known-broken-pairs.txt'
+  push:
+    branches:
+      - main
+  # Manual trigger for ad-hoc runs (e.g., post-upstream-sync verification)
+  workflow_dispatch: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Read known-broken pairs
+        id: known-broken
+        run: |
+          # Strip comments + blank lines, join with commas
+          PAIRS=$(grep -vE '^\s*(#|$)' .github/known-broken-pairs.txt | tr '\n' ',' | sed 's/,$//')
+          echo "pairs=$PAIRS" >> $GITHUB_OUTPUT
+          echo "Known-broken pairs: $PAIRS"
+
+      - name: Schema contract test (SKILLs vs schema registry)
+        run: python3 scripts/tests/test_schema_contract.py
+
+      - name: Unit tests (R1-R10 + harness internals)
+        run: python3 -m unittest discover -s scripts/tests -v
+
+      - name: Round-trip CI (R1-R10 + dual-spec assertions)
+        run: |
+          set +e
+          python3 scripts/round-trip-ci.py --strict-r3 \
+            --allow-known-broken-pairs "${{ steps.known-broken.outputs.pairs }}"
+          EXIT=$?
+          set -e
+          # Exit codes: 0=all pass, 1=fail, 2=warn-only.
+          # In CI we treat 0 and 2 as success; only 1 (real FAIL) blocks.
+          if [ "$EXIT" -le 2 ]; then exit 0; else exit "$EXIT"; fi

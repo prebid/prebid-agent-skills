@@ -1,0 +1,20 @@
+# Known-broken cross-language pairs whose dual-spec assertions FAIL by
+# design. Listed bidders are excluded from the round-trip CI's blocking
+# rules; their failures are reported as informational.
+#
+# One bidder name per line. Lines starting with # are comments; blank
+# lines are ignored. Bidders are matched case-sensitively against the
+# `bidder_name` field of the cross-language-pairs/<name>.dual-spec-
+# assertions.yaml file.
+#
+# When to add a bidder here:
+# - The dual-spec assertion file declares severity:fail on >=1 key, AND
+# - The failure is a documented reality (e.g., aax: Java omits minLength:1)
+#   that we're choosing to track via the assertion rather than fix
+#
+# When to remove a bidder:
+# - The upstream divergence has been resolved (e.g., a future PR fixes
+#   the schema gap) and the assertion file's severity drops to warn or
+#   pass
+
+aax
