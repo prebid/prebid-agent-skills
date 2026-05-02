@@ -1,6 +1,6 @@
-# New Bid Adapters in prebid-server-java — 2025 → 2026-04-27
+# New Bid Adapters in prebid-server-java — 2025 → 2026-05-02
 
-Generated: 2026-04-27
+Generated: 2026-04-27 (initial); refreshed 2026-05-02 (added Parent Lifecycle Events section + alias-empire pattern tags)
 Source: `github_activity.db` (prebid/prebid-server-java, repository_id=2)
 
 ## Definition
@@ -240,6 +240,38 @@ These PRs add a new bidder name but no new `Bidder.java` directory — they reus
 
 ---
 
+## Parent Lifecycle Events
+
+PRs that change empire/parent topology — rebrands, alias migrations between parents, parent-evolution events. These are NOT new adapters or alias-only adapters; they reshape the cross-language alias graph and are first-class evidence for port-translation rules around alias-empire consolidation (proposed Rule 44) and lifecycle renames (Rule 43).
+
+### v3.21.0 — 2025-02-21
+
+| PR | Event | Affected | Merged |
+|---|---|---|---|
+| [#3699](https://github.com/prebid/prebid-server-java/pull/3699) | SmartHub → Attekmi rebrand — `parent-rebrand, attekmi-family-rebrand-from-smarthub` | SmartHub parent + 9 aliases | 2025-02-05 |
+
+### v3.39.0 — 2026-02-06
+
+| PR | Event | Affected | Merged |
+|---|---|---|---|
+| [#4356](https://github.com/prebid/prebid-server-java/pull/4356) | Migrate ProgX from Vidazoo to TeqBlaze empire — `alias-reparent, cross-empire-migration` | ProgX (alias) | 2026-02-04 |
+| [#4359](https://github.com/prebid/prebid-server-java/pull/4359) | Nexx360: Preserve custom imp.ext fields — `parent-evolve` | Nexx360 parent + 4 aliases | 2026-02-04 |
+
+### Pending next release (post v3.41.0)
+
+| PR | Event | Affected | Merged |
+|---|---|---|---|
+| [#4467](https://github.com/prebid/prebid-server-java/pull/4467) | Ybidder: New Nexx360 alias — `alias-add, nexx360-family, registration-only-alias` | Nexx360 family | 2026-04-27 |
+| [#4473](https://github.com/prebid/prebid-server-java/pull/4473) | Harion: New TeqBlaze alias — `alias-add, teqblaze-family, white-label-saas` | TeqBlaze family | 2026-04-27 |
+
+### Notes on lifecycle events
+
+- A **`parent-rebrand`** event renames the parent itself (SmartHub → Attekmi, #3699). Existing aliases stay; new aliases land under the rebranded name. The pre-rebrand parent typically retains backward-compat as a tilde-alias on the renamed parent.
+- An **`alias-reparent`** event moves an alias from one empire to another (ProgX: Vidazoo → TeqBlaze, #4356). This requires migration of fixtures + properties registry entries. Cross-language: Go counterpart `prebid/prebid-server#4352` (ProgX Change alias of) reflects the same migration on the Go side.
+- A **`parent-evolve`** event modifies the parent's behavior in a way that propagates to all aliases. Often introduces new `imp.ext` fields, vendor-id support, or endpoint-resolution refinements (Nexx360 #4359; SmartHub→Attekmi #3699 also qualifies).
+
+---
+
 ## Pattern Index
 
 Cross-reference of pattern tags to canonical exemplar PRs. Each tag is a short slug used in the per-PR `Patterns Demonstrated` annotations above. Skills' `references/*.md` Pattern Catalog sections cite tags from this index. Java-specific tags carry Java semantics; cross-language tags (e.g., `port-from-go`, `bidder-rename-major-version`) parallel the Go list's Pattern Index.
@@ -295,10 +327,21 @@ Cross-reference of pattern tags to canonical exemplar PRs. Each tag is a short s
 | Tag | Description | Exemplar PRs |
 |---|---|---|
 | `limelight-family` | Alias rooted at the LimelightDigital/Limelight parent family | #3805, #4272 |
-| `teqblaze-family` | Alias rooted at the TeqBlaze parent | #4273, #4361 |
-| `attekmi-family-rebrand-from-smarthub` | Alias under the Attekmi parent (post SmartHub→Attekmi rebrand) | #4365 |
+| `teqblaze-family` | Alias rooted at the TeqBlaze parent | #4273, #4361, #4473 |
+| `attekmi-family-rebrand-from-smarthub` | Alias under the Attekmi parent (post SmartHub→Attekmi rebrand) | #4365, #3699 |
+| `nexx360-family` | Alias rooted at the Nexx360 parent (registration-only, no endpoint override) | #4467 |
 | `co-shipped-second-alias-rxnetwork` | Alias PR co-ships a second sibling alias in the same PR (rxnetwork bundled) | #3829 |
 | `gvl-name-mismatch-tolerated` | GVL ID name does not match bidder name; tolerated when relationship is credible | #4273 |
+| `alias-empire` | Java parent declares ≥3 aliases under `aliases:` block, sharing the parent's `Bidder<T>` instance via `BidderDepsAssembler.aliasesDeps()`. Three flavors: `endpoint-macro-substitution` (LimeLightDigital), `white-label-saas` (SmartHub/Attekmi, TeqBlaze), `registration-only` (Nexx360, Adverxo). | #2228 (LimeLightDigital establish, pre-window), #4053 (Nexx360 establish), #4161 (TeqBlaze establish), #3705 (Adverxo establish) |
+| `alias-add` | Single PR adds one alias under an existing parent. Most common alias-evolution event. | #4272, #4365, #4467, #4473 |
+| `alias-reparent` | Alias migrated from one parent's empire to another (cross-empire migration). | #4356 |
+| `cross-empire-migration` | Synonymous with `alias-reparent`; emphasizes the cross-empire dimension. | #4356 |
+| `parent-rebrand` | Parent bidder itself renamed; existing aliases retained, new aliases land under new name. Pairs with backward-compat alias-back. | #3699 |
+| `parent-evolve` | Parent's behavior modified in a way that propagates to all aliases (new `imp.ext` fields, vendor-id, endpoint refinements). | #4359 |
+| `registration-only-alias` | Alias YAML registers a name but inherits parent's endpoint and behavior fully (no `endpoint:` override). | #4467 |
+| `white-label-saas` | Parent is a SaaS/multi-tenant framework; aliases are publisher-branded white-labels with per-alias endpoints. | #4161 (TeqBlaze), #4365 (Attekmi family) |
+| `endpoint-macro-substitution-empire` | Parent uses `imp.ext.bidder` to fill endpoint macros (`{{Host}}`, `{{PublisherID}}`); aliases differentiate by what their publishers provide. | (LimeLightDigital establish predates window) |
+| `primary-to-alias-migration-counterpart` | Java equivalent of a Go `primary-to-alias` conversion (ProgX, AdsInteractive). | #4356 |
 
 ### Naming-Edge-Case Patterns
 

@@ -4,8 +4,8 @@ Reference list of new-bidder PRs in [prebid/prebid-server](https://github.com/pr
 
 - **Source:** prebid/prebid-server
 - **Period:** 2025-01-08 → 2026-04-16
-- **Totals:** 42 new bid adapters + 48 alias-only adapters (90 total; 42 currently tagged with `Patterns Demonstrated`)
-- **Last refreshed:** 2026-04-27
+- **Totals:** 42 new bid adapters + 50 alias-only adapters (92 total; 44 currently tagged with `Patterns Demonstrated`)
+- **Last refreshed:** 2026-05-02 (added primary-to-alias conversions #4359, #4352 and pattern tags)
 
 **Classification (by heading):**
 - **New Bid Adapters** — PRs that add a brand-new adapter directory with Go code (`adapters/<name>/<name>.go` + tests + registration).
@@ -157,6 +157,10 @@ None. All "New Adapter" PRs in this release were alias-only — see below.
 - [#4547](https://github.com/prebid/prebid-server/pull/4547) — `gvl-name-mismatch-tolerated-corporate-restructure`
 - [#4283](https://github.com/prebid/prebid-server/pull/4283) — `approval-stall, blocked-on-docs-label`
 
+### v3.31.0 — 2026-01-14
+- [#4359](https://github.com/prebid/prebid-server/pull/4359) — `primary-to-alias, alias-conversion` — AdsInteractive: convert Go-primary → TeqBlaze alias.
+- [#4352](https://github.com/prebid/prebid-server/pull/4352) — `primary-to-alias, alias-conversion, cross-empire-migration` — ProgX: convert from Vidazoo alias to standalone, then to TeqBlaze alias on Java.
+
 ### v4.0.0 — 2026-03-06
 - [#4616](https://github.com/prebid/prebid-server/pull/4616) — `ssl-cert-refresh`
 - [#4532](https://github.com/prebid/prebid-server/pull/4532)
@@ -240,6 +244,9 @@ Cross-reference of pattern tags to canonical exemplar PRs. Each tag is a short s
 | `endpoint-empty-body-fix` | SmartHub-family endpoints initially returned 404 on empty body; publisher fixed | #4164 |
 | `inherited-email-confirmation` | Alias maintainer.email matches parent's; reviewer confirms intentional | #4441 |
 | `setuid-cookie-flow-test` | Reviewer runs PBS locally to verify userSync setuid cookie flow end-to-end | #4534 |
+| `primary-to-alias` | Existing Go-primary adapter folded into a parent's alias-empire (deletes own Go code, replaces with `aliasOf:` YAML). Java counterpart is `alias-reparent` / `primary-to-alias-migration-counterpart`. | #4359, #4352 |
+| `alias-conversion` | Synonymous with `primary-to-alias`; emphasizes the conversion event. | #4359, #4352 |
+| `cross-empire-migration` | Adapter moves from one Java empire to another (e.g., ProgX: Vidazoo → TeqBlaze). On Go side surfaces as a `primary-to-alias` against the new parent. | #4352 |
 
 ### Policy & Process Patterns
 
