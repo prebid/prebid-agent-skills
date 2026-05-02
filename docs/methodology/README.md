@@ -7,13 +7,13 @@ has shipped.
 
 | Document | Purpose | Phase introduced |
 |---|---|---|
+| [`pr-ingestion.md`](pr-ingestion.md) | `scripts/audit-pr.py` workflow: novelty classification of upstream PRs against existing taxonomy/rules/edge cases. API + manual modes. | Phase 4.2 |
 | [`schema-versioning.md`](schema-versioning.md) | SemVer increment rules for the three independently-versioned artifacts (schema, taxonomy, port-rules). What's MAJOR vs MINOR vs PATCH. Migration script protocol. | Phase 4.4 |
 | [`repo-rules.md`](repo-rules.md) | Snapshot of upstream `prebid/prebid-server` and `prebid/prebid-server-java` policies the read skills depend on (naming, GVL, fixture structure, default-enabled). With provenance + update cadence. | Phase 4.5 |
 | [`rollback.md`](rollback.md) | Per-commit revert-safety guarantees. Fix-forward vs revert policy. The Phase 2.7 migration's irreversibility caveats. | Phase 4.6 |
 
 Future additions:
 
-- `pr-ingestion.md` — Phase 4.2 audit-pr.py workflow + novelty-classification rubric.
 - `coverage-protocol.md` — Phase 4.3 coverage report consumption (how to read `docs/coverage-report.md`).
 
 ## How to use these docs
