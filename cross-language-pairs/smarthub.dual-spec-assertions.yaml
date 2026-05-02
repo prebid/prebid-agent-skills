@@ -1,0 +1,213 @@
+dual_spec_assertion_version: 1
+bidder_name: smarthub
+go_spec: prebid-server-go/read/test-fixtures/smarthub.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/smarthub.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+assertions:
+  bidder_params_sha256:
+    go: 6d0d79e63f17e65beac23cb9dab6a7ad90e3eb729f333b725a106cc14415b000
+    java: 92b2e3f638f6219083b14306cab72a3bee59f41c59e4961aa71accc152be0b65
+    byte_equal: false
+    semantically_equal: true                  # Same JSON Schema content (same $schema, properties, required, types). Java has trailing newline; Go does not.
+    divergence_kind: byte-only
+    divergence_summary: |
+      JSON content equal. Bytes differ in trailing-newline presence: Java JSON ends
+      with `}\n`; Go JSON ends with `}`. Rule 38 cross-language-byte-divergence WARN.
+      To restore byte parity, drop the trailing newline on Java side (or add one on Go).
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    java:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 0
+    java: 0
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: prebid@attekmi.com
+    java: prebid@attekmi.com
+    equivalent: true
+    divergence_summary: |
+      Both sides use `prebid@attekmi.com` (post-rebrand contact). Note: this is the
+      Attekmi contact even though the bidder YAML name remains `smarthub` —
+      SmartHub→Attekmi rebrand is partially propagated.
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_endpoint:
+    go: "https://prebid.attekmi.com/pbserver?partnerName={{.Host}}&seat={{.AccountID}}&token={{.SourceId}}"
+    java: "https://prebid.attekmi.com/pbserver?partnerName={{Host}}&seat={{AccountID}}&token={{SourceId}}"
+    byte_equal: false
+    semantically_equal: false
+    divergence_kind: macro-form-divergence
+    divergence_summary: |
+      Same observable URL pattern (both resolve to
+      `prebid.attekmi.com/pbserver?partnerName={Host}&seat={AccountID}&token={SourceId}`)
+      but with different macro syntax: Go uses Go-template form `{{.Host}}` (resolved
+      via `macros.ResolveMacros` with `EndpointTemplateParams.Host/AccountID/SourceId`);
+      Java uses string-replace form `{{Host}}` (resolved via three chained
+      `String.replace` calls). Both forms valid per Rule 11
+      (multi-token-substitution); the macro_syntax field on each
+      bidder_info.endpoint_construction records the form (`go-template` vs
+      `java-string-replace`). NOT a port-fidelity violation — the canonical
+      cross-language asymmetry around macro syntax (per ADR-005-adjacent observation).
+    severity: warn
+
+  bidder_info_default_enabled:
+    go: true
+    java: true
+    equivalent: true
+    rule_45_match: n/a                        # smarthub parent itself enabled; the 9 alias children flip to enabled=false on Java side per Rule 45
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [seat, token]
+    java_required_fields: [seat, token]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [partnerName, seat, token]
+    java_properties: [partnerName, seat, token]
+    equivalent: true
+    severity: pass
+
+  alias_graph:
+    go_aliases:                               # Each is a separate static/bidder-info/<name>.yaml with `aliasOf: smarthub`
+      - markapp
+      - jdpmedia
+      - tredio
+      - felixads
+      - jambojar
+      - adinify
+      - artechnology
+      - addigi
+      - radianfusion
+    java_aliases:                             # All 9 declared under parent.aliases[] block — Rule 33 cross-language inversion
+      - markapp
+      - jdpmedia
+      - tredio
+      - felixads
+      - jambojar
+      - adinify
+      - artechnology
+      - addigi
+      - radianfusion
+    aliases_match: true
+    rule_33_inversion: true
+    rule_44_empire_flavor: white-label-saas
+    severity: pass
+
+  empire_consolidation:
+    rule_44_canonical_master: true            # ADR-003 names smarthub as the white-label-saas canonical master sample
+    parent_flavor: white-label-saas
+    child_flavor_coherence:
+      markapp: white-label-saas
+      jdpmedia: white-label-saas
+      tredio: white-label-saas
+      felixads: white-label-saas
+      jambojar: white-label-saas
+      adinify: white-label-saas
+      artechnology: white-label-saas
+      addigi: white-label-saas
+      radianfusion: white-label-saas
+    severity: pass
+
+  alias_test_coverage:
+    java_aliases_with_it_class: 8             # 8 of 9 (missing: jdpmedia)
+    java_aliases_missing_it_class: [jdpmedia]
+    java_aliases_with_fixture_dir: 9          # All 9 have fixture dirs
+    severity: warn
+    note: |
+      jdpmedia is declared as an alias in parent.aliases[] AND has its IT fixture
+      dir at `src/test/resources/org/prebid/server/it/openrtb2/jdpmedia/` — but
+      `JdpmediaTest.java` does not exist alongside the 8 sibling alias IT classes.
+      Surfaces as `incomplete-classification` quirk on the Java spec's
+      aliases[jdpmedia].
+
+  rebrand_status:
+    state: in-progress                        # SmartHub → Attekmi rebrand
+    indicators:
+      go: ["JSON title 'Attekmi (formerly SmartHub)'", "endpoint host prebid.attekmi.com", "maintainer prebid@attekmi.com"]
+      java: ["JSON title 'Attekmi (formerly SmartHub)'", "endpoint host prebid.attekmi.com", "maintainer prebid@attekmi.com"]
+    not_yet_renamed:
+      go: ["YAML name `smarthub`", "package name `smarthub`", "Go bidder constant `BidderSmartHub`"]
+      java: ["YAML name `smarthub`", "class name `SmarthubBidder`", "config class `SmarthubConfiguration`", "proto class `ExtImpSmarthub`"]
+    severity: pass
+    note: |
+      ADR-003 references Java PR #3699 as the planned SmartHub→Attekmi rename. As of
+      both pinned commits (Go 2fae16f3, Java a1fe64e1), the rename has NOT landed —
+      only the URL host + maintainer + JSON title carry the Attekmi branding. When
+      the rename PR merges, this fixture will need a Phase 2.7-style migration to
+      add `lifecycle.rename` blocks (subtype likely `bilateral` per ADR-006 if both
+      languages rename) and rename the goldens.
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: prebid/prebid-server-java#1442
+    destination_pr: prebid/prebid-server#1932
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-white-label-saas
+      - parent-rebrand-in-progress
+      - first-imp-extraction-anti-pattern
+
+  reviewer_cohort:
+    go_reviewers: []                          # Pre-window establish PR; reviewer cohort not annotated
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 3
+  notes: |
+    Smarthub is the canonical Phase 5 P1 #2 fixture for ADR-003 Rule 44
+    `white-label-saas` empire flavor. Largest empire in the corpus today (9 aliases
+    on both sides, all coherently registered). Distinguished from adverxo
+    (registration-only) by the per-alias `endpoint:` overrides — each alias child
+    proxies through its own SaaS host (`{name}-prebid.attekmi.com`) while routing
+    through the shared smarthub `Bidder<T>` instance.
+
+    Three warn-level findings: (1) bidder_params_sha256 byte-divergent due to
+    trailing-newline difference; semantically equal. (2) endpoint URL macro-form
+    divergence (Go-template `{{.X}}` vs Java string-replace `{{X}}`); both forms
+    valid Rule 11. (3) Alias IT class coverage — 8 of 9 Java aliases have IT
+    classes; jdpmedia is missing despite having its fixture dir.
+
+    No mutation-idiom divergence: both sides do `openrtb2-passthrough` (the entire
+    BidRequest is marshaled directly). No currency conversion on either side.
+    Single-batched on both sides (one HTTP request per call) — but with first-imp-
+    only-extraction anti-pattern: only `request.imp[0].ext` is consulted for endpoint
+    resolution (multi-imp callers' subsequent imps' bidder ext is ignored).
+
+    Rebrand-in-progress: ADR-003 references the SmartHub→Attekmi rename via Java
+    PR #3699. As of these pinned commits the rename has NOT landed — the YAML name,
+    class names, and Go bidder constant remain `smarthub`/`SmartHub`. Only the URL
+    host + maintainer email + JSON title carry the Attekmi branding. When the
+    rename lands, this fixture will need Phase 2.7-style migration (add
+    `lifecycle.rename` block; rename goldens).
+
+    Phase 5 next: P1 #3 (teqblaze — second white-label-saas master with 9 aliases
+    and a parallel structure to smarthub), then P2 (limelightDigital
+    endpoint-macro-substitution flavor).
