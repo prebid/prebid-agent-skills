@@ -107,8 +107,9 @@ assertions:
       name; Java retains pre-rebrand). Upstream evidence (this fixture pair) shows the
       ACTUAL state is `bilateral` with phantom-rename history. Both sides have vungle
       as canonical; both have backward-compat for liftoff (different mechanisms). The
-      subtype on this fixture is `bilateral`. ADR-006 needs follow-up correction;
-      deferred to a future commit.
+      subtype on this fixture is `bilateral`. ADR-006 was subsequently corrected
+      per this evidence — see CHANGELOG `## Unreleased — ADR corrections (no
+      version bump)` and ADR-006 line 3 "refined 2026-05-03".
 
   imp_ext_three-key-wrapper:                   # Both sides repack imp.ext with overlapping content
     go_wrapper: vungleImpressionExt
@@ -189,7 +190,8 @@ overall:
       - Java backward-compat: `aliases: { liftoff: { enabled: false } }` (tilde-inherit)
       - Go backward-compat: removed-bidder warning map redirecting to vungle
 
-    ADR-006 needs follow-up correction; this dual-spec is the canonical evidence.
+    ADR-006 was corrected per this evidence — see CHANGELOG `## Unreleased — ADR
+    corrections (no version bump)` for the bilateral phantom-rename reclassification.
 
     Patterns captured for the first time:
       - ADR-007 F3 mediatype-context-rewrite-site-to-app master sample on BOTH sides.

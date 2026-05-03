@@ -1,6 +1,6 @@
 # ADR-007: Five New Schema Fields for Novel Patterns
 
-**Date**: 2026-05-02 (refined 2026-05-02 audit C7 — added array ordering policy for round-trip determinism)
+**Date**: 2026-05-02 (refined 2026-05-02 audit C7 — added array ordering policy for round-trip determinism; refined 2026-05-03 — F1 Java-side wording tightened; F2 footnote on one-sided header mutations added per Phase 5 empirical verification)
 **Status**: Proposed (Phase 2 execution adds to schema)
 
 **Note on array ordering and R4 round-trip determinism**: The new fields F1 (`endpoints[]`), F2 (`language_stamped_headers[]`), and F4 (`bid_post_processing.macros[]`) are arrays. To preserve R4 round-trip-determinism (`yaml.safe_dump → load → dump` byte-equality), arrays in the schema MUST have a deterministic ordering policy:
@@ -19,7 +19,9 @@ Add five schema fields/blocks to capture the novel patterns. Each is targeted to
 
 **Pattern**: A single adapter routes requests to **multiple distinct endpoints** based on mediatype (or other dispatch logic). Current `endpoint_resolution.kind` enum models a single resolution path.
 
-**Master sample**: `beachfront` — splits requests by mediatype: `bannerEndpoint` for banner, `videoEndpoint` for video (parallel ADM and NURL paths). Go encodes both endpoints as a single JSON-string in `config.ExtraAdapterInfo`; Java promotes them to structured `BeachfrontConfigurationProperties.{bannerEndpoint, videoEndpoint}`.
+**Master sample**: `beachfront` — splits requests by mediatype: `bannerEndpoint` for banner, `videoEndpoint` for video (parallel ADM and NURL paths). Go encodes both endpoints by storing the banner endpoint in `config.Endpoint` (the standard slot) and the video endpoint as a JSON-string in `config.ExtraAdapterInfo` (`{"video_endpoint": "..."}`); Java promotes only the second endpoint to a structured `BeachfrontConfigurationProperties.videoEndpoint` field on a `@ConfigurationProperties`-bound subclass — the banner endpoint reuses the inherited `BidderConfigurationProperties.endpoint` field. Java YAML `bidder-config/beachfront.yaml` exposes the second endpoint via a custom `video-endpoint:` key (the only non-standard endpoint key in the entire Java corpus at the pinned commits).
+
+**Empirical cardinality** (verified at Go SHA `2fae16f3` / Java SHA `a1fe64e1`): exactly one bidder — `beachfront`. No other corpus bidder uses a multi-endpoint-by-mediatype YAML shape. Treat as a singleton master sample; future corpus expansion that introduces a second F1 example should add a fixture rather than amend the schema.
 
 **Schema addition**:
 ```yaml
@@ -48,6 +50,8 @@ headers_constructed:
 ```
 
 **Cross-language**: This is an **explicit port-asymmetry** that Rule 38 (bidder_params byte-fidelity) does NOT cover — Rule 38 is about params JSON, not outbound HTTP headers. New Pattern Index tag: `language-stamped-header-divergence`.
+
+**Footnote on one-sided header mutations (NOT F2)**: F2 requires the SAME header NAME to be emitted by BOTH languages with divergent values. Adapters where only one language emits the header (e.g., `aduptech` Java emits `Componentid: prebid-java` but Go aduptech emits no Componentid header at all) are a different asymmetry — model them as a quirk on the side that adds the header, not as F2. The schema field `language_stamped_headers[]` REQUIRES both `go_value` and `java_value` populated; one-sided header additions would have a missing field. Likewise, sibling adapters that share the F2 mechanism but lack a cross-language counterpart (e.g., Go-only `fwssp` emits `Componentid: prebid-go` but has no Java port) are LATENT F2 candidates — F2 would apply if a Java port lands later, but the corpus at these SHAs has only `freewheelssp` as a fully cross-language F2 master.
 
 ### F3 — `mutation.entity_strategies.Site/App: synthesize-replacement` (mediatype-context rewrite)
 

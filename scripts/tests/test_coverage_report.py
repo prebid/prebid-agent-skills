@@ -53,13 +53,18 @@ class TestCoverageComputations(unittest.TestCase):
         covered = {p["bidder"] for p in readiness if p["covered"]}
         self.assertIn("adverxo", covered, "Phase 5 P1 #3 — adverxo pair fixture must be in the corpus")
 
-    def test_rule_46_pairs_count_is_12(self):
+    def test_rule_46_pairs_count_is_11(self):
         coverage = cr.compute_rule_46_coverage(self.goldens)
-        self.assertEqual(12, len(coverage), "ADR-005 lists 12 Rule 46 naming pairs")
+        self.assertEqual(11, len(coverage),
+                         "ADR-005 lists 11 Rule 46 naming pairs (refined 2026-05-03 "
+                         "from 12 — freewheel-ssp/freewheelssp removed; see ADR-005 "
+                         "Excluded cases section)")
 
     def test_lifecycle_pairs_count_is_7(self):
         coverage = cr.compute_lifecycle_coverage(self.goldens)
-        # ADR-006: 1 bilateral + 4 java-leads + 2 go-leads = 7 pairs (8th is bidirectional in inventory)
+        # ADR-006 (refined 2026-05-03): 2 bilateral + 1 java-leads + 0 go-leads
+        # + 2 mirror-topology + 2 inverted-parent = 7 pairs (8th is bidirectional
+        # in inventory)
         self.assertEqual(7, len(coverage), "ADR-006 lists 7 lifecycle-rename pairs (subset of 8 inventory entries)")
 
     def test_elementaltv_lifecycle_is_covered_bilateral(self):

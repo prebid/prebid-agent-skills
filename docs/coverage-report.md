@@ -21,7 +21,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 - `java_empire_parents`: **32**
 - `java_empire_aliases`: **95**
 - `disabled_asymmetric_pairs`: **78**
-- `naming_normalization_pairs`: **12**
+- `naming_normalization_pairs`: **11**
 - `lifecycle_rename_pairs`: **8**
 
 ---
@@ -34,10 +34,10 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `teqblaze` | P1 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (white-label-saas, 9 aliases) |
 | `adverxo` | P1 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (registration-only, 3 aliases — smallest clean canonical) |
 | `limelightDigital` | P2 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (endpoint-macro-substitution, 15 aliases) |
-| `vungle` | P2 | ✓ | ✓ | ✓ covered | ADR-006 Rule 43 go-leads (liftoff/vungle cross-name pair) |
-| `emxdigital` | P2 | ✓ | ✓ | ✓ covered | ADR-006 Rule 43 java-leads (cadent_aperture_mx/emxdigital cross-name) |
+| `vungle` | P2 | ✓ | ✓ | ✓ covered | ADR-006 Rule 43 bilateral phantom-rename (liftoff/vungle — refined 2026-05-03 from go-leads) |
+| `emxdigital` | P2 | ✓ | ✓ | ✓ covered | ADR-006 Rule 43 java-leads with Go dual-core registration (cadent_aperture_mx/emxdigital cross-name) |
 | `adkernelAdn` | P3 | ✓ | ✓ | ✓ covered | ADR-005 Rule 46 naming-normalization master (adkernelAdn → adkerneladn) |
-| `freewheelssp` | Stretch | ✓ | ✓ | ✓ covered | ADR-007 F2 master (multi-endpoint-by-mediatype) |
+| `freewheelssp` | Stretch | ✓ | ✓ | ✓ covered | ADR-007 F2 master (language-stamped-header-divergence — refined 2026-05-03 from multi-endpoint-by-mediatype label-collision) |
 | `thetradedesk` | Stretch | ✓ | ✓ | ✓ covered | ADR-007 F4 master (bid-post-processing-macro) |
 
 **Phase 5 status**: 9 of 9 pairs covered. 0 remaining (matches ADR-008's 9-pair plan).
@@ -53,7 +53,6 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `boldwin_rapid` | `boldwinrapid` | `underscore-drop` | — | — |
 | `emx_digital` | `emxdigital` | `underscore-drop` | — | ✓ |
 | `e_volution` | `evolution` | `underscore-drop` | — | — |
-| `freewheel-ssp` | `freewheelssp` | `hyphen-drop` | — | ✓ |
 | `lm_kiviads` | `lmkiviads` | `underscore-drop` | — | — |
 | `mgidX` | `mgidx` | `lowercase` | — | — |
 | `sa_lunamedia` | `salunamedia` | `underscore-drop` | — | — |
@@ -61,7 +60,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `stroeerCore` | `stroeercore` | `lowercase` | — | — |
 | `triplelift_native` | `tripleliftnative` | `underscore-drop` | — | — |
 
-**Rule 46 coverage**: 1 of 12 pairs fully covered. ADR-005 lists 12 verified pairs.
+**Rule 46 coverage**: 1 of 11 pairs fully covered. ADR-005 lists 11 verified pairs.
 
 ---
 
@@ -70,14 +69,14 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | Go | Java | Sub-type | Go golden | Java golden | Why |
 |---|---|---|---|---|---|
 | `elementaltv` | `elementaltv` | `bilateral` | ✓ | ✓ | Adoppler→ElementalTV (PR java#4326 + go#4639) |
-| `cadent_aperture_mx` | `emxdigital` | `java-leads` | ✓ | ✓ | Cadent acquired EMX |
-| `conversant` | `epsilon` | `java-leads` | — | — | Publicis Epsilon acquired Conversant |
-| `magnite` | `rubicon` | `java-leads` | — | ✓ | Magnite/Rubicon merger |
-| `intenze` | `gothamads` | `java-leads` | — | — | acquisition |
-| `liftoff` | `vungle` | `go-leads` | — | ✓ | Liftoff acquired Vungle 2021 |
-| `equativ` | `smartadserver` | `go-leads` | — | — | Smart AdServer rebrand 2022 |
+| `vungle` | `vungle` | `bilateral` | ✓ | ✓ | Liftoff acquired Vungle 2021 — phantom-rename (refined 2026-05-03 from go-leads); both sides canonical at vungle |
+| `cadent_aperture_mx` | `emxdigital` | `java-leads` | ✓ | ✓ | Cadent acquired EMX (Go has dual-core registration of both cadent_aperture_mx + emx_digital) |
+| `conversant` | `epsilon` | `inverted-parent` | — | — | Publicis Epsilon acquired Conversant — Go parent=conversant, Java parent=epsilon (refined 2026-05-03 from java-leads) |
+| `magnite` | `rubicon` | `mirror-topology` | — | ✓ | Magnite/Rubicon merger — both sides parent=rubicon, alias=magnite (refined 2026-05-03 from java-leads) |
+| `intenze` | `gothamads` | `inverted-parent` | — | — | Acquisition — Go parent=intenze with gothamads in removed-warn map; Java parent=gothamads (refined 2026-05-03 from java-leads) |
+| `equativ` | `smartadserver` | `mirror-topology` | — | — | Smart AdServer rebrand 2022 — both sides parent=smartadserver, alias=equativ (refined 2026-05-03 from go-leads) |
 
-**Rule 43 coverage**: 2 of 7 pairs fully covered (`elementaltv` is the only `bilateral` master in the corpus today).
+**Rule 43 coverage**: 3 of 7 pairs fully covered (`elementaltv` is the only `bilateral` master in the corpus today).
 
 ---
 
@@ -167,9 +166,9 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 | Rule 35 | Custom property subclass for extra YAML fields | `kobler` | 1 | 0 |
 | Rule 44 | Java alias-empire consolidation | `adkernel`, `adverxo`, `limelightDigital`, `nexx360`*, `smarthub`, `teqblaze` | 5 | 1 |
 | Rule 45 | Disabled-by-default Java alias | `audienceNetwork`*, `mgidX`*, `optidigital` | 1 | 2 |
-| Rule 46 | Naming-convention normalization | `adkernel`, `adkernelAdn`, `adkerneladn`, `audienceNetwork`*, `audiencenetwork`*, `boldwin_rapid`*, `boldwinrapid`*, `e_volution`*, `elementaltv`, `emx_digital`*, `emxdigital`, `evolution`*, `freewheel-ssp`*, `freewheelssp`, `lm_kiviads`*, `lmkiviads`*, `mgidX`*, `mgidx`*, `sa_lunamedia`*, `salunamedia`*, `sspBC`*, `sspbc`*, `stroeerCore`*, `stroeercore`*, `triplelift_native`*, `tripleliftnative`* | 6 | 20 |
+| Rule 46 | Naming-convention normalization | `adkernel`, `adkernelAdn`, `adkerneladn`, `audienceNetwork`*, `audiencenetwork`*, `boldwin_rapid`*, `boldwinrapid`*, `e_volution`*, `elementaltv`, `emx_digital`*, `emxdigital`, `evolution`*, `freewheelssp`, `lm_kiviads`*, `lmkiviads`*, `mgidX`*, `mgidx`*, `sa_lunamedia`*, `salunamedia`*, `sspBC`*, `sspbc`*, `stroeerCore`*, `stroeercore`*, `triplelift_native`*, `tripleliftnative`* | 6 | 19 |
 | Rule 42 | IAB-categories storage cross-language translation | `appnexus`, `msft` | 2 | 0 |
-| Rule 43 | Bidder-rename three-step lifecycle | `appnexus`, `cadent_aperture_mx`, `conversant`*, `elementaltv`, `emxdigital`, `epsilon`*, `equativ`*, `gothamads`*, `intenze`*, `liftoff`*, `magnite`*, `rubicon`, `smartadserver`*, `vungle` | 6 | 8 |
+| Rule 43 | Bidder-rename three-step lifecycle | `appnexus`, `cadent_aperture_mx`, `conversant`*, `elementaltv`, `emx_digital`*, `emxdigital`, `epsilon`*, `equativ`*, `freewheelssp`, `gothamads`*, `intenze`*, `magnite`*, `rubicon`, `smartadserver`*, `vungle` | 7 | 8 |
 | Rule 36 | Go httpCalls array vs Java 4-file split | `kobler` | 1 | 0 |
 | Rule 37 | Per-alias IT class requirement (Java-only) | (generic) | 0 | 0 |
 
@@ -179,11 +178,10 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 
 ## 8. Top gaps to close (sorted by impact)
 
-- Rule 43 sub-type `java-leads`: pair `conversant/epsilon` (Publicis Epsilon acquired Conversant)
-- Rule 43 sub-type `java-leads`: pair `magnite/rubicon` (Magnite/Rubicon merger)
-- Rule 43 sub-type `java-leads`: pair `intenze/gothamads` (acquisition)
-- Rule 43 sub-type `go-leads`: pair `liftoff/vungle` (Liftoff acquired Vungle 2021)
-- Rule 43 sub-type `go-leads`: pair `equativ/smartadserver` (Smart AdServer rebrand 2022)
+- Rule 43 sub-type `inverted-parent`: pair `conversant/epsilon` (Publicis Epsilon acquired Conversant — Go parent=conversant, Java parent=epsilon (refined 2026-05-03 from java-leads))
+- Rule 43 sub-type `mirror-topology`: pair `magnite/rubicon` (Magnite/Rubicon merger — both sides parent=rubicon, alias=magnite (refined 2026-05-03 from java-leads))
+- Rule 43 sub-type `inverted-parent`: pair `intenze/gothamads` (Acquisition — Go parent=intenze with gothamads in removed-warn map; Java parent=gothamads (refined 2026-05-03 from java-leads))
+- Rule 43 sub-type `mirror-topology`: pair `equativ/smartadserver` (Smart AdServer rebrand 2022 — both sides parent=smartadserver, alias=equativ (refined 2026-05-03 from go-leads))
 - Empire parent `nexx360` (registration-only, 4 aliases) — Nexx360 established Java#4053
 
 ---

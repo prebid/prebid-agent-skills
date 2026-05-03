@@ -396,17 +396,26 @@ overall:
         a non-Phase-5 gap).
       - 40 goldens (20 Go + 20 Java).
 
-    ADR corrections queued (defer to future commits, per precedent):
+    ADR corrections landed (per the ADR-corrections commit; see CHANGELOG
+    `## Unreleased — ADR corrections (no version bump)`):
 
-      - None for this fixture. ADR-007 F4 confirmed; no corrections
-        needed for this pair. (Earlier ADR-007 F2 contradiction from
-        freewheelssp remains queued for follow-up.)
+      - None for this fixture. ADR-007 F4 was empirically RE-AFFIRMED.
+        thetradedesk IS the canonical `bid-post-processing-macro` master
+        (single-macro-three-field flavor). No correction required for this
+        pair.
+      - The earlier "ADR-007 F2 contradiction" framing in the freewheelssp
+        narrative was resolved as a label-collision in
+        scripts/coverage-report.py:58 (mis-attributing F2 as
+        "multi-endpoint-by-mediatype" instead of
+        "language-stamped-header-divergence"). The label was corrected;
+        F2's master-sample claim itself was empirically validated.
 
     Phase 5 next: NONE — corpus is at 9/9. Phase 5 is complete.
-    Recommended follow-up commits:
-      - ADR-007 F2 correction (reclassify or remove F2 pattern, since
-        freewheelssp contradicted it)
-      - ADR-005 RULE_46_PAIRS correction for freewheel-ssp/freewheelssp
+    Follow-up commits landed (per the ADR-corrections commit):
+      - ADR-007 F2 RE-AFFIRMED + label-collision fix in
+        scripts/coverage-report.py:58.
+      - ADR-005 RULE_46_PAIRS row freewheel-ssp/freewheelssp REMOVED
+        (count 12 → 11).
         (canonical pair is same-name; hyphen-drop applies to Go's alias
         stub only)
       - ADR-006 correction for liftoff/vungle (bilateral phantom-rename,

@@ -5,7 +5,7 @@ java_spec: prebid-server-java/read/test-fixtures/freewheelssp.golden.spec.yaml
 go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
 java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
 
-cross_name_pair: false                          # Both canonical YAMLs use `freewheelssp` (same name). The hyphenated `freewheel-ssp` form is a Go-only YAML ALIAS-STUB via top-level `aliasOf:` field — NOT the canonical Go-side name. ADR-005 RULE_46_PAIRS lists ('freewheel-ssp', 'freewheelssp', 'hyphen-drop') — empirically the hyphenated form is alias-only, not the canonical. Defer ADR-005 correction to a future commit.
+cross_name_pair: false                          # Both canonical YAMLs use `freewheelssp` (same name). The hyphenated `freewheel-ssp` form is a Go-only YAML ALIAS-STUB via top-level `aliasOf:` field — NOT the canonical Go-side name. ADR-005 RULE_46_PAIRS originally listed ('freewheel-ssp', 'freewheelssp', 'hyphen-drop') — corrected per this evidence; the row was removed from RULE_46_PAIRS (count 12 → 11). See CHANGELOG `## Unreleased — ADR corrections (no version bump)` and ADR-005 "Excluded cases" section.
 
 assertions:
   bidder_params_sha256:
@@ -203,7 +203,7 @@ assertions:
     rule_46_canonical_form: freewheelssp
     empirical_canonical_match: true                # BOTH sides use `freewheelssp` (same name) as the canonical bidder name
     rule_46_applies_to_alias_only: true            # The hyphen-drop transformation applies ONLY between Go's alias-stub `freewheel-ssp` and Go's canonical `freewheelssp`. It does NOT describe the cross-language pairing (which is same-name).
-    adr_005_correction_needed: true
+    adr_005_correction_landed: true              # See CHANGELOG `## Unreleased — ADR corrections` and ADR-005 "Excluded cases" section
     go_internal_forms:
       canonical_yaml: freewheelssp
       alias_stub_yaml: freewheel-ssp           # `aliasOf: freewheelssp` top-level field — Go-only alias-stub mechanism
@@ -227,10 +227,12 @@ assertions:
       INTERNAL alias-to-canonical relationship, NOT the cross-language
       canonical-to-canonical pairing.
 
-      ADR-005 needs correction: the freewheel pair is NOT a cross-name pair
-      at the canonical level. Both canonical sides match. The hyphenated
-      form is purely a Go-side alias surface. Defer correction to a future
-      commit (precedent: vungle ADR-006, cadent ADR-006 corrections).
+      ADR-005 was subsequently corrected per this evidence: the freewheel pair
+      was removed from RULE_46_PAIRS (count 12 → 11) since it is NOT a
+      cross-name pair at the canonical level. Both canonical sides match.
+      The hyphenated form is purely a Go-side alias surface. See CHANGELOG
+      `## Unreleased — ADR corrections (no version bump)` and ADR-005
+      "Excluded cases" section.
 
       Notably, Java side has UNIFIED naming: BIDDER_NAME constant matches
       YAML key (both `freewheelssp`), unlike adkerneladn where BIDDER_NAME
@@ -261,8 +263,8 @@ assertions:
     destination_pr: null
     fidelity_review_themes:
       - port-fidelity
-      - adr-007-f2-empirical-correction-needed
-      - adr-005-rule-46-canonical-same-name-correction-needed
+      - adr-007-f2-label-collision-corrected   # ADR-007 F2 master claim (freewheelssp = language-stamped-header-divergence) was empirically correct; the bug was in coverage-report.py:58 mis-labeling F2 as multi-endpoint-by-mediatype. Corrected per this evidence.
+      - adr-005-rule-46-canonical-same-name-corrected   # freewheel-ssp/freewheelssp removed from RULE_46_PAIRS (count 12 → 11); see ADR-005 "Excluded cases".
       - alias-of-yaml-stub-go-only-mechanism
       - fwssp-cross-language-topology-asymmetry
       - hardcoded-video-bid-type-rule-26-master
@@ -361,13 +363,20 @@ overall:
       - Empire parents (ADR-003 deep-dived): 4 of 5 (only nexx360 remaining).
       - 38 goldens (19 Go + 19 Java).
 
-    ADR corrections queued (defer to future commits, per precedent):
-      - ADR-007 F2: freewheelssp is NOT the multi-endpoint-by-mediatype
-        master. Single endpoint on both sides. Reclassify; find a different
-        master if F2 is a real pattern (or remove F2 from ADR-007).
-      - ADR-005 RULE_46_PAIRS: freewheel-ssp/freewheelssp is NOT a
-        cross-language Rule 46 pair. Hyphen-drop applies to Go's alias-stub
-        only. Reclassify or remove from RULE_46_PAIRS.
+    ADR corrections landed (per the ADR-corrections commit; see CHANGELOG
+    `## Unreleased — ADR corrections (no version bump)`):
+      - ADR-007 F2: empirically RE-AFFIRMED. freewheelssp IS the
+        `language-stamped-header-divergence` master sample (Componentid:
+        prebid-go vs prebid-java). The "F2 contradicted" framing in the
+        original narrative was a label-collision artifact in
+        scripts/coverage-report.py:58 (which mis-attributed F2 as
+        "multi-endpoint-by-mediatype" — that label belongs to F1, master =
+        beachfront). The label was corrected; ADR-007 F2 itself was
+        empirically validated by 5-agent investigation.
+      - ADR-005 RULE_46_PAIRS: freewheel-ssp/freewheelssp REMOVED from the
+        12-pair table (count → 11). The hyphen-drop transformation applies
+        INTRA-Go (alias-stub → canonical), not cross-language. See ADR-005
+        "Excluded cases" section.
 
     Phase 5 next: STRETCH #2 — `thetradedesk` (ADR-007 F4 master,
     bid-post-processing-macro). Note: ADR-007 F4 is also at risk of

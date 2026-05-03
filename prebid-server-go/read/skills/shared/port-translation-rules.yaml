@@ -1318,7 +1318,7 @@ sections:
       1. **Digit-leading workaround** — digit-leading names spell out the digit for the Java *class root* but the parent-YAML name still drops the digit. Example: `33across → thirtythreeacross.yaml + Thirtythree` class root; `152media → 152media` YAML alias under adkernel + `OneFiveTwoMedia` class root.
       2. **Brand-acronym preservation** — TitleCase class root preserves brand acronyms; YAML name stays lowercase. Examples: `elementaltv → elementaltv.yaml + ElementalTV` class root; `feedad → feedad.yaml + FeedAd`; `bidscube → bidscube.yaml + BidsCube`.
 
-      **The 12 verified pairs** (Round 3 inventory):
+      **The 11 verified pairs** (Round 3 inventory; refined 2026-05-03 from 12 — `freewheel-ssp/freewheelssp` removed after Phase 5 empirical verification, see ADR-005 "Excluded cases"):
 
       | Go (raw) | Java (raw) | Transformation |
       |---|---|---|
@@ -1327,7 +1327,6 @@ sections:
       | boldwin_rapid | boldwinrapid | `underscore-drop` |
       | emx_digital | emxdigital | `underscore-drop` (also Rule 43 lifecycle rebrand) |
       | e_volution | evolution | `underscore-drop` |
-      | freewheel-ssp | freewheelssp | `hyphen-drop` |
       | lm_kiviads | lmkiviads | `underscore-drop` |
       | mgidX | mgidx | `lowercase` |
       | sa_lunamedia | salunamedia | `underscore-drop` |
@@ -1348,7 +1347,7 @@ sections:
 
       **Translation rule**: A porter detecting a Go bidder name with mixed case or `_`/`-` separators MUST derive the Java parent-YAML name via `name.lower().replace('_','').replace('-','')`, surface `naming-convention-normalization` as a quirk on the Java-side spec with the matching transformation enum, and populate the dual-spec `naming_asymmetry` block.
 
-      **Why separate from Rule 43 (lifecycle rename)**: Rule 43 is *event-driven* (the moment of a rename). Rule 46 is *static* (the resting-state contract). The two can co-occur (a rename PR may also normalize). Cases that DON'T belong under Rule 43 (they belong under Rule 46): `33across/thirtythreeacross`, `freewheelssp/fwssp`.
+      **Why separate from Rule 43 (lifecycle rename)**: Rule 43 is *event-driven* (the moment of a rename). Rule 46 is *static* (the resting-state contract). The two can co-occur (a rename PR may also normalize). Cases that DON'T belong under Rule 43 (they belong under Rule 46): `33across/thirtythreeacross`, `freewheelssp/fwssp`. Cases that DON'T belong under Rule 46 (they're Go-only alias-stubs, not cross-language Rule 46 pairs): `freewheel-ssp/freewheelssp` — Go-only YAML alias-stub via top-level `aliasOf:` field; both canonical YAMLs use `freewheelssp` (refined 2026-05-03 per Phase 5 empirical evidence).
 
       **Round-trip considerations**: Round-trip-safe IFF the dual-spec `naming_asymmetry` block is populated correctly. The mechanical transformation is deterministic; round-tripping `boldwinrapid` (Java) → `boldwin_rapid` (Go) requires consulting the assertion to recover the underscore.
 
@@ -1458,15 +1457,17 @@ sections:
 
       **Round-trip considerations**: Round-trip-safe iff both languages adopt the rename in lockstep AND use a consistent backward-compat mechanism. If only one language renames OR the languages choose divergent backward-compat strategies (Java alias-back vs Go clean-delete), the cross-language port becomes asymmetric — the port skill detects mismatched `meta.bidder_name` (Go: `adoppler`, Java: `elementaltv`) and surfaces a `bidder-rename-divergent-handling` warning. The `rename.merged_at` and `rename.release` fields anchor the lifecycle event; consumers compare these timestamps to detect lag. A porter that does the rename on the destination side MUST preserve operator-facing migration guidance.
 
-      **Sub-types** (`lifecycle.rename.subtype` field per ADR-006 — refines the translation rule based on which side(s) rename):
+      **Sub-types** (`lifecycle.rename.subtype` field per ADR-006 — 5 sub-types refined 2026-05-03 from the original 3 after Phase 5 empirical verification of all 7 lifecycle pairs):
 
       | Sub-type | Backward-compat side | Master sample | Porter implication |
       |---|---|---|---|
-      | `bilateral` | Both sides | `adoppler → elementaltv` (Java 2026-01-12, Go 2026-03-04, ~52 days apart — bilateral but NOT lockstep) | Apply three-step refactor on destination; preserve symmetric back-compat. |
-      | `java-leads` | Java only (tilde-alias) | `cadent_aperture_mx (Go) ↔ emxdigital (Java)` (Cadent/EMX acquisition); `conversant ↔ epsilon` (Publicis Epsilon acquisition); `magnite ↔ rubicon` (Magnite/Rubicon merger); `intenze ↔ gothamads` | Porter Go→Java: do NOT rename. Java already has the post-rebrand name; emit `cross_language.lifecycle.subtype: java-leads` quirk on the spec. |
-      | `go-leads` | Go only (removed-bidder warning) | `liftoff (Go) ↔ vungle (Java)` (Liftoff acquired Vungle 2021); `equativ (Go) ↔ smartadserver (Java)` (Smart AdServer rebrand 2022) | Porter Java→Go: do NOT rename. Go already has the post-rebrand name; emit `cross_language.lifecycle.subtype: go-leads` quirk. |
+      | `bilateral` | Both sides | `adoppler → elementaltv` (Java 2026-01-12, Go 2026-03-04, ~52 days apart — bilateral but NOT lockstep). Plus `liftoff/vungle` phantom-rename (refined 2026-05-03 from go-leads — both sides canonical at vungle; Go has removed-bidder warning for liftoff, Java has tilde-inherit alias). | Apply three-step refactor on destination; preserve symmetric back-compat. |
+      | `java-leads` | Java only (tilde-alias) | `cadent_aperture_mx (Go) ↔ emxdigital (Java)` (Cadent/EMX acquisition; Go has dual-core registration of BOTH cadent_aperture_mx + emx_digital — topology more nuanced than simple "Go fossilizes legacy"). | Porter Go→Java: do NOT rename. Java already has the post-rebrand name; emit `cross_language.lifecycle.subtype: java-leads` quirk on the spec. |
+      | `go-leads` | Go only (removed-bidder warning) | NONE at SHAs `2fae16f3` (Go) / `a1fe64e1` (Java). Both originally-classified `go-leads` pairs were reclassified after Phase 5 empirical verification: liftoff/vungle → bilateral, equativ/smartadserver → mirror-topology. The subtype is preserved for future corpus expansion. | Porter Java→Go: do NOT rename. Go already has the post-rebrand name; emit `cross_language.lifecycle.subtype: go-leads` quirk. |
+      | `mirror-topology` (NEW 2026-05-03) | Both sides agree on parent name + alias name; defaults inverted | `magnite/rubicon` (both sides parent=rubicon, alias=magnite; Go: parent disabled / alias enabled; Java: parent enabled / alias disabled). `equativ/smartadserver` (both sides parent=smartadserver, alias=equativ; same defaults pattern). | The rebrand is acknowledged in metadata but neither side adopted the new name as canonical. No rename required when porting; carry the alias declaration; flip the enable-default if destination convention prefers the inverse. |
+      | `inverted-parent` (NEW 2026-05-03) | Go parent ≠ Java parent; each side picked the opposite canonical | `conversant (Go) ↔ epsilon (Java)` (Go parent=conversant, Java parent=epsilon; both names live on both sides via aliasOf/aliases blocks). `intenze/gothamads` with Go-led removal (Go parent=intenze with `gothamads` in removed-warn map; Java parent=gothamads with intenze disabled-alias — Go LEADS in opposite direction of Java parent). | Porting requires deliberate canonical choice. Each side records its own canonical via `meta.bidder_name`; emit `cross_language.lifecycle.subtype: inverted-parent` quirk. If Go has actively removed the other name (sub-flavor), also note `go_removed: true`. |
 
-      **What does NOT belong under Rule 43**: `33across (Go) ↔ thirtythreeacross (Java)` is pure naming-normalization (Rule 46), not a lifecycle event. `mediafuse (Go alias) ↔ appnexus (Java parent declaring mediafuse alias)` is alias-graph divergence (Rule 33), not a rename. The terminology note: `bilateral` accurately describes "both sides eventually rename" — it was originally drafted as `synchronized` but renamed in pre-execution audit because the two languages renaming 52 days apart is bilateral cooperation, NOT lockstep timing.
+      **What does NOT belong under Rule 43**: `33across (Go) ↔ thirtythreeacross (Java)` is pure naming-normalization (Rule 46), not a lifecycle event. `mediafuse (Go alias) ↔ appnexus (Java parent declaring mediafuse alias)` is alias-graph divergence (Rule 33), not a rename. `freewheel-ssp/freewheelssp` is a Go-only YAML alias-stub (refined 2026-05-03; see Rule 46 above). The terminology note: `bilateral` accurately describes "both sides eventually rename" — it was originally drafted as `synchronized` but renamed in pre-execution audit because the two languages renaming 52 days apart is bilateral cooperation, NOT lockstep timing.
 
       **Notes**: Adoppler→ElementalTV is the canonical example. Java edge case #33; PR `prebid/prebid-server-java#4326`; release v3.38.0; merged 2026-01-12. Go-side rename PR `prebid/prebid-server#4639`; merged 2026-03-04 (two months later). The two PRs were independent — neither auto-propagated. The `lifecycle.rename` block is populated only on the post-rename spec (the new-name spec); the alias-back entry on the same spec carries `rename_origin: true` to signal the backward-compat origin. Reference: `adapter-spec.md` lines 410-430 for the `lifecycle.rename` schema; `behavior-taxonomy.md` `bidder-rename-three-step` taxon for the quirk pairing.
 - kind: round_trip_safety
@@ -1658,4 +1659,4 @@ sources:
 - 'Sibling shared file: `prebid-server-go/read/skills/shared/adapter-spec.md`.'
 - 'Sibling shared file: `prebid-server-go/read/skills/shared/behavior-taxonomy.md`.'
 - 'ADR-003 (Rule 44 — alias-empire consolidation), ADR-004 (Rule 45 — disabled-by-default Java alias), ADR-005 (Rule 46 — naming-convention normalization), ADR-006 (Rule 43 sub-categorization) — see `docs/decisions/`.'
-- 'Round 3 cross-language inventory: 358 Go bidders + 350 Java bidders; 32 Java alias-empire parents (95 children); 78 disabled-asymmetric pairs; 12 naming-convention pairs; 8 lifecycle-rename pairs.'
+- 'Round 3 cross-language inventory: 358 Go bidders + 350 Java bidders; 32 Java alias-empire parents (95 children); 78 disabled-asymmetric pairs; 11 naming-convention pairs (refined 2026-05-03 from 12 — freewheel-ssp/freewheelssp removed; see ADR-005); 8 lifecycle-rename pairs.'

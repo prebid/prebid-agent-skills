@@ -14,6 +14,158 @@ Every entry references the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## Unreleased — ADR corrections (no version bump) — 2026-05-03
+
+ADR amendments and reference-data corrections from Phase 5 fixture-authoring
+empirical evidence (commits `d9742a7` vungle, `3523009` cadent/emxdigital,
+`f11b2ba` freewheelssp, `ea0a37a` thetradedesk) plus follow-up empirical
+verification of all 7 lifecycle pairs. **No SemVer bump on schema, taxonomy,
+or port-rules artifacts** per `docs/methodology/schema-versioning.md` —
+ADR text refinements and Python data-table updates are out of the SemVer
+perimeter. No migration script required.
+
+### ADR-005 (Rule 46 — Naming-Convention Normalization)
+
+#### Removed
+- `freewheel-ssp/freewheelssp` row from RULE_46_PAIRS (count 12 → 11). Both
+  canonical YAMLs use `freewheelssp`; the hyphenated form is a Go-only YAML
+  alias-stub via top-level `aliasOf:` field. The hyphen-drop transformation
+  applies INTRA-Go (alias-stub → canonical), NOT cross-language. Per Phase 5
+  commit `f11b2ba` and ADR-005 "Excluded cases" section.
+
+#### Refined
+- Master-samples list — Hyphen-drop slot now empty (no cross-language master
+  at the pinned commits). Future fixtures that surface a true cross-language
+  hyphen-drop pair can fill this slot.
+
+### ADR-006 (Rule 43 — Lifecycle Subtype Categorization)
+
+#### Added
+- Two new sub-types: `mirror-topology` (both sides agree on parent name +
+  alias name; defaults inverted; rebrand acknowledged in metadata but neither
+  side adopted the new name as canonical) and `inverted-parent` (Go parent ≠
+  Java parent; each side picked the OPPOSITE canonical; sub-flavor:
+  `+ go-removed` when Go has actively rejected the other name via
+  `removed-bidder` warning map).
+
+#### Reclassified
+- `liftoff/vungle`: `go-leads` → `bilateral` (phantom-rename; both sides
+  canonical at `vungle` at the pinned commits; backward-compat: Go via
+  removed-bidder warning, Java via tilde-inherit alias). Per commit
+  `d9742a7`.
+- `cadent_aperture_mx/emxdigital`: `java-leads` (label kept, defensible) with
+  topology nuance — Go has DUAL-CORE REGISTRATION of BOTH `cadent_aperture_mx`
+  AND `emx_digital` as core sibling bidders sharing one Builder (not the
+  textbook "Go fossilizes" pattern). Per commit `3523009`.
+- `conversant/epsilon`: `java-leads` → `inverted-parent`. Go parent =
+  `conversant` (canonical-shape YAML); Java parent = `epsilon` (canonical-
+  shape YAML). Both sides keep both names alive but with opposite parent
+  choices. No removed-bidder warning on either side.
+- `magnite/rubicon`: `java-leads` → `mirror-topology`. Both sides have
+  `rubicon` as parent + `magnite` as alias. Defaults inverted (Go: parent
+  disabled / alias enabled; Java: parent enabled / alias disabled). Merger
+  acknowledged in YAML comments but bidder-name structure unchanged.
+- `intenze/gothamads`: `java-leads` → `inverted-parent` (with Go-led
+  removal). Go parent = `intenze` with `gothamads` in `removed-warn` map;
+  Java parent = `gothamads` with intenze disabled-alias. Go LEADS rename in
+  the OPPOSITE direction of Java parent choice.
+- `equativ/smartadserver`: `go-leads` → `mirror-topology`. Both sides have
+  `smartadserver` as parent + `equativ` as alias. Maintainer email is
+  `*@equativ.com` (post-rebrand) on both sides — rebrand-aware metadata, but
+  bidder-name unchanged. No removed-bidder warning.
+
+#### Distribution
+- 7 LIFECYCLE_PAIRS now distribute: **2 bilateral + 1 java-leads +
+  0 go-leads + 2 mirror-topology + 2 inverted-parent**. Empirical
+  cardinality of `go-leads` = 0 at the pinned commits; the subtype is
+  preserved for future corpus expansion.
+
+### ADR-007 (Five New Schema Fields for Novel Patterns)
+
+#### Refined
+- F1 (multi-endpoint-by-mediatype, master = `beachfront`): tightened
+  Java-side wording — only `videoEndpoint` is added as a custom property
+  field; the banner endpoint reuses the inherited `BidderConfigurationProperties.endpoint`.
+  Both languages have two effective endpoint slots; the wording previously
+  implied two custom Java fields, but `BeachfrontConfigurationProperties`
+  declares only `videoEndpoint`.
+- F2 (language-stamped-header-divergence, master = `freewheelssp`): added
+  footnote distinguishing F2 (cross-language same-header-divergent-values)
+  from one-sided header mutations (e.g., `aduptech` Java emits
+  `Componentid: prebid-java` but Go aduptech emits no Componentid header).
+  F2 requires both languages to emit the same header name with divergent
+  values.
+
+#### Empirically re-affirmed
+- F1 master = `beachfront`: empirical cardinality at the pinned commits is
+  exactly 1 (no other corpus bidder uses multi-endpoint-by-mediatype YAML
+  shape).
+- F2 master = `freewheelssp`: empirically validated. The "F2 contradicted"
+  framing in the freewheelssp dual-spec narrative was a label-collision
+  artifact in `scripts/coverage-report.py:58` (mis-labeling F2 as
+  "multi-endpoint-by-mediatype"). The label was corrected; F2's
+  master-sample claim itself stands.
+
+### ADR-008 (Phase 5 Pair Fixtures)
+
+#### Refined
+- Pair 5 row: `liftoff-Go + vungle-Java` (cross-name) → `vungle-Go +
+  vungle-Java` (same-name canonical). Subtype: `go-leads` → `bilateral`
+  phantom-rename.
+- Pair 6 row (`cadent_aperture_mx/emxdigital`): added topology nuance note
+  about Go dual-core registration.
+
+### Tooling
+
+- `scripts/coverage-report.py:58`: relabeled freewheelssp PHASE_5_PAIRS
+  summary from "ADR-007 F2 master (multi-endpoint-by-mediatype)" to
+  "ADR-007 F2 master (language-stamped-header-divergence — refined
+  2026-05-03 from multi-endpoint-by-mediatype label-collision)".
+- `scripts/coverage-report.py:55,56`: updated vungle and emxdigital
+  PHASE_5_PAIRS summaries per the lifecycle reclassifications.
+- `scripts/coverage-report.py:69`: dropped freewheel-ssp tuple from
+  RULE_46_PAIRS.
+- `scripts/coverage-report.py:80-86`: rewrote LIFECYCLE_PAIRS — 5 of 7
+  tuples reclassified per the empirical 7-pair table.
+- `scripts/coverage-report.py:105`: INVENTORY_TOTALS["naming_normalization_pairs"]
+  12 → 11.
+- `scripts/tests/test_coverage_report.py:56`: renamed
+  `test_rule_46_pairs_count_is_12` → `_is_11`; updated assertion + message.
+- `scripts/tests/test_coverage_report.py:62`: updated subtype tally comment
+  in `test_lifecycle_pairs_count_is_7` (count stays 7).
+- `scripts/tests/test_render_port_rules.py:96-110`: extended
+  `test_rule_43_sub_types_documented` to assert all 5 subtypes (added
+  `mirror-topology` and `inverted-parent`).
+
+### Documentation (auto-regenerated)
+
+- `docs/coverage-report.md`: regenerated via `scripts/coverage-report.py`.
+- `prebid-server-go/read/skills/shared/port-translation-rules.md`:
+  regenerated via `scripts/render-port-rules.py`. Rule 46 table 12 → 11
+  rows; Rule 43 sub-types table 3 → 5 rows.
+- `prebid-server-go/read/skills/shared/behavior-taxonomy.md`: regenerated
+  via `scripts/render-taxonomy.py`. `naming-convention-normalization` taxon
+  description: 12 → 11 cases.
+
+### Dual-spec narrative refinements
+
+- `cross-language-pairs/{vungle,emxdigital,freewheelssp,thetradedesk,adkernelAdn}.dual-spec-assertions.yaml`:
+  replaced "queued/deferred to future commit" markers with citations to
+  this corrections commit. Empirical evidence sections preserved verbatim
+  as the source-of-truth.
+
+### Acknowledgments
+
+- Per `docs/methodology/rollback.md:54-57`, ADR corrections used in-place
+  edits with "Refined 2026-05-03" date stamps (matching ADR-006 line 3's
+  existing "audit A5" precedent). Original `Refined 2026-05-02` date stamps
+  preserved.
+- Per `docs/methodology/schema-versioning.md:18-62`, no SemVer bump
+  triggered — ADR text refinements and Python data-table updates are out
+  of the perimeter.
+
+---
+
 ## [adapter_spec_version 1.0.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-02
 
 First official versioned release. Cuts the schema spine and the data-driven

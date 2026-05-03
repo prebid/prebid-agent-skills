@@ -1,7 +1,7 @@
 # ADR-008: Phase 5 Expanded Pair Fixtures
 
-**Date**: 2026-05-02 (refined 2026-05-02 audit B1 — empire-parent goldens use existing flat `parent_aliases` listing, not 9-15 separate alias-child specs; effort revised down 2 days)
-**Status**: Proposed (Phase 5 execution authors the fixtures)
+**Date**: 2026-05-02 (refined 2026-05-02 audit B1 — empire-parent goldens use existing flat `parent_aliases` listing, not 9-15 separate alias-child specs; effort revised down 2 days; refined 2026-05-03 — vungle pair reclassified `go-leads` → `bilateral` per Phase 5 empirical evidence; cadent pair carries dual-core-registration nuance note; freewheelssp F2 master claim confirmed empirically)
+**Status**: Proposed (Phase 5 execution authors the fixtures; corpus complete at 9/9 as of commit `ea0a37a`)
 
 **Note on empire-parent fixture structure**: A Java empire parent's golden does NOT spec each alias child individually. It carries a single bidder spec with a flat `parent_aliases: [child1, child2, ...]` listing of alias names + the parent's own behavior fields. This matches the existing kobler/optidigital pattern (which list `parent_aliases` as a name list). The dual-spec assertion file's `cross_language_alias_graph` block (NEW) captures cross-language alias-graph alignment per-empire. Per-alias detailed coverage happens incrementally as future fixtures (post-Phase-5) target individual alias children.
 **Context**: The original plan had Phase 5 add 3 Java goldens (adkernel, adtonos, bidstack). Round 3 inventory analysis revealed that's insufficient to pressure-test the 3 newly-proposed rules (44, 45, 46) and the Rule 43 sub-categorization. Phase 5 should add 7 pair fixtures (with 2 stretch) to provide master samples for each new rule, each sub-categorization branch, and the empire-coverage gap.
@@ -16,8 +16,8 @@
 | 2 | **teqblaze-Go + teqblaze-Java** | Rule 44 (`white-label-saas` flavor); ADR-008 `alias-reparent` evidence (ProgX migration); 9-alias empire | 1.5 days | **P1** |
 | 3 | **adverxo-Go + adverxo-Java** | Rule 44 (`registration-only` flavor); cleanest small empire; canonical `port-from-go` exemplar | 1 day | **P1** |
 | 4 | **limelightDigital-Go + limelightDigital-Java** | Rule 44 (`endpoint-macro-substitution` flavor) — biggest empire (15 aliases); pressure tests at scale | 1.5 days | P2 |
-| 5 | **liftoff-Go + vungle-Java** (cross-name) | Rule 43 `go-leads` master sample; ADR-007 F3 `synthesize-app-replacement` master sample (vungle's Site→App rewrite) | 1.5 days | P2 |
-| 6 | **cadent_aperture_mx-Go + emxdigital-Java** (cross-name) | Rule 43 `java-leads` master sample; Rule 46 `underscore-drop` evidence | 1.5 days | P2 |
+| 5 | **vungle-Go + vungle-Java** (same-name canonical, refined 2026-05-03 from `liftoff-Go + vungle-Java` cross-name) | Rule 43 `bilateral` master sample (phantom-rename refined from `go-leads` per Phase 5 empirical verification — both sides canonical at `vungle`; backward-compat for `liftoff` via Go removed-bidder warning + Java tilde-inherit alias); ADR-007 F3 `synthesize-app-replacement` master sample (vungle's Site→App rewrite) | 1.5 days | P2 |
+| 6 | **cadent_aperture_mx-Go + emxdigital-Java** (cross-name) | Rule 43 `java-leads` master sample (defensible label, but Go has dual-core registration of BOTH `cadent_aperture_mx` AND `emx_digital` as core sibling bidders sharing one Builder — topology more nuanced than simple `java-leads`); Rule 46 `underscore-drop` evidence (intra-Java `emx_digital` ↔ `emxdigital`, NOT cross-language) | 1.5 days | P2 |
 | 7 | **adkernelAdn-Go + adkerneladn-Java** (naming-normalized) | Rule 46 `lowercase` master sample; cleanest naming-asymmetry pair | 1 day | P3 |
 | 8 (stretch) | **freewheelssp-Go + freewheelssp-Java** | ADR-007 F2 `language-stamped-header-divergence` master sample (`Componentid: prebid-go` vs `prebid-java`); **PR refs to verify via `gh pr view` before citing** | 1.5 days | Stretch |
 | 9 (stretch) | **thetradedesk-Go + thetradedesk-Java** | ADR-007 F4 `bid-post-processing-macro` master sample (`AUCTION_PRICE` replacement) | 1.5 days | Stretch |
@@ -91,24 +91,43 @@ Stress-tests Rule 44 at scale:
 
 **Note**: limelightDigital establish PRs (Java #2228, Go #2539) predate the references' 2025 window. The fixture cites them in `port_lineage` but doesn't add them as standalone reference entries.
 
-### Pair 5 — liftoff (Go) / vungle (Java) cross-name (P2)
+### Pair 5 — vungle (P2, refined 2026-05-03)
 
-**Cross-name handling**: Go fixture filename = `liftoff.golden.spec.yaml`; Java fixture filename = `vungle.golden.spec.yaml`. Dual-spec filename = `vungle.dual-spec-assertions.yaml` (uses canonical post-rebrand name) + new `cross_name_alignment` block:
+**Empirical pair structure** (refined 2026-05-03 from cross-name `liftoff/vungle` to same-name `vungle/vungle`):
+
+Both Go and Java goldens use canonical name `vungle` at the pinned commits. The pair is a `bilateral` phantom-rename, not a `go-leads` rebrand. Liftoff acquired Vungle in 2021 — a parent-company-name change that did NOT translate into a code-level bidder rename. The SSP product remained `Vungle Exchange`. Some operators configured `liftoff` based on the acquisition news; both prebid servers handle this with backward-compat surfaces:
+
+- **Go side**: `exchange/adapter_util.go::GetDisabledBidderWarningMessages` carries a removed-bidder warning entry redirecting `liftoff` → `vungle`. NO `static/bidder-info/liftoff.yaml` exists. The bidder name was never actually renamed in Go code; the legacy operator name `liftoff` is rejected with a redirect message.
+- **Java side**: `aliases.liftoff: { enabled: false }` tilde-inherit under `vungle.yaml`. The legacy operator name routes to the vungle adapter through the alias resolution layer (default-disabled — operators must opt in).
+
+Go fixture filename = `vungle.golden.spec.yaml`; Java fixture filename = `vungle.golden.spec.yaml`. Dual-spec filename = `vungle.dual-spec-assertions.yaml` (already authored at commit `d9742a7`).
+
+The dual-spec assertion file carries a `lifecycle.rename` block recording the empirical state:
 
 ```yaml
-cross_name_alignment:
-  go_yaml_name: liftoff
-  java_yaml_name: vungle
-  semantic_pair: true
-  alignment_kind: rule-43-go-leads-rebrand
-  rationale: "Liftoff acquired Vungle 2021. Go adopted post-acquisition canonical 'liftoff'; Java retained pre-acquisition 'vungle'. Cross-language references: prebid/prebid-server#3727 (Go rename, 2024-06), prebid/prebid-server-java#3383 (Java retains vungle, 2024-08)."
+lifecycle:
+  rename:
+    old_name: liftoff
+    new_name: vungle
+    subtype: bilateral                      # Empirical correction from 'go-leads' (ADR-006 refined 2026-05-03)
+    go_alias_back: removed-bidder-warning-map
+    java_alias_back: tilde_inherit
 ```
 
-Per ADR-007 F3, this fixture is the canonical `synthesize-app-replacement` master (vungle's Site→App rewrite).
+Per ADR-007 F3, this fixture is the canonical `synthesize-app-replacement` master (vungle's Site→App rewrite). F3 master claim is independent of the lifecycle reclassification.
 
-### Pair 6 — cadent_aperture_mx (Go) / emxdigital (Java) cross-name (P2)
+### Pair 6 — cadent_aperture_mx (Go) / emxdigital (Java) cross-name (P2, refined 2026-05-03)
 
-Mirror of pair 5 in the inverse direction. Go YAML = `cadent_aperture_mx.golden.spec.yaml`; Java = `emxdigital.golden.spec.yaml`. Demonstrates Rule 43 `java-leads` + Rule 46 `underscore-drop`.
+Cross-name pair: Go YAML = `cadent_aperture_mx.golden.spec.yaml`; Java = `emxdigital.golden.spec.yaml`. Demonstrates Rule 43 `java-leads` (defensible) + Rule 46 `underscore-drop` (intra-Java only).
+
+**Empirical topology nuance** (refined 2026-05-03; see `cross-language-pairs/emxdigital.dual-spec-assertions.yaml`): The `java-leads` label is defensible but more nuanced than a simple "Go fossilizes the legacy name" framing:
+
+- **Java**: parent `emxdigital` (legacy EMX brand) + alias `cadent_aperture_mx` under `emxdigital.yaml` with `enabled: false` and `geoscope: [USA, CAN]`. Java has chosen a single canonical (`emxdigital`).
+- **Go**: DUAL-CORE REGISTRATION. BOTH `cadent_aperture_mx` AND `emx_digital` are registered as fully-enabled core sibling bidders in `coreBidderNames`, sharing the same `cadentaperturemx.Builder` function via separate entries in `exchange/adapter_builders.go`. Each Go name has its own `static/bidder-info/<name>.yaml` (byte-identical sha256 `8ee63ad8…`) and its own `static/bidder-params/<name>.json` (semantically equal, byte-different — the `emx_digital.json` description has a copy-paste bug saying "Cadent Aperture MX adapter"). NEITHER Go name is in `GetDisabledBidderWarningMessages`.
+
+Go has NOT consolidated to a single canonical; it carries both names as live core bidders. The "java-leads" label captures Java's parent-canonical choice but the Go-side topology is dual-core, not legacy-fossilized.
+
+Rule 46 `underscore-drop` applies INTRA-Java (BIDDER_NAME constant `emx_digital` ↔ Spring/YAML key `emxdigital`), NOT as a cross-language pair (Java's canonical YAML key `emxdigital` lacks the underscored form).
 
 ### Pair 7 — adkernelAdn (Go) / adkerneladn (Java) (P3)
 
@@ -126,7 +145,7 @@ P3 (pair 7, 1 day) and stretch (pairs 8-9, 1.5 days each) are nice-to-have.
 
 - Phase 5 effort: 4 days P1 → 9.5 days P1+P2+P3 → 12.5 days with stretch (revised down 2 days per audit B1)
 - Empire coverage: 5 → 8 of 32 Java empire parents (25%)
-- Lifecycle coverage: 1 (elementaltv) → 4 (elementaltv + smarthub + vungle/liftoff + emxdigital/cadent_aperture_mx) — all 3 sub-types covered
+- Lifecycle coverage: 1 (elementaltv) → 3 (elementaltv `bilateral` + vungle `bilateral` phantom-rename + cadent_aperture_mx/emxdigital `java-leads` with dual-core nuance) — `bilateral` and `java-leads` covered. `go-leads` has empirical cardinality 0 at the pinned commits (refined 2026-05-03; both originally-classified `go-leads` pairs reclassified). The 5-subtype taxonomy (`bilateral | java-leads | go-leads | mirror-topology | inverted-parent`) is documented in ADR-006 with master samples for 4 of 5 subtypes.
 - Naming-asymmetry coverage: 0 → 1 (adkernelAdn/adkerneladn) — Rule 46 has master sample
 - Novel-pattern master samples (with stretch): F1 ✗, F2 ✓ (freewheelssp), F3 ✓ (vungle), F4 ✓ (thetradedesk), F5 ✗
 - Coverage report at end of Phase 5 lists the remaining 24 uncovered empire parents and 8 uncovered lifecycle pairs as tracked gaps for incremental future work

@@ -52,21 +52,22 @@ PHASE_5_PAIRS = [
     ("teqblaze", "P1", "ADR-003 Rule 44 (white-label-saas, 9 aliases)"),
     ("adverxo", "P1", "ADR-003 Rule 44 (registration-only, 3 aliases — smallest clean canonical)"),
     ("limelightDigital", "P2", "ADR-003 Rule 44 (endpoint-macro-substitution, 15 aliases)"),
-    ("vungle", "P2", "ADR-006 Rule 43 go-leads (liftoff/vungle cross-name pair)"),
-    ("emxdigital", "P2", "ADR-006 Rule 43 java-leads (cadent_aperture_mx/emxdigital cross-name)"),
+    ("vungle", "P2", "ADR-006 Rule 43 bilateral phantom-rename (liftoff/vungle — refined 2026-05-03 from go-leads)"),
+    ("emxdigital", "P2", "ADR-006 Rule 43 java-leads with Go dual-core registration (cadent_aperture_mx/emxdigital cross-name)"),
     ("adkernelAdn", "P3", "ADR-005 Rule 46 naming-normalization master (adkernelAdn → adkerneladn)"),
-    ("freewheelssp", "Stretch", "ADR-007 F2 master (multi-endpoint-by-mediatype)"),
+    ("freewheelssp", "Stretch", "ADR-007 F2 master (language-stamped-header-divergence — refined 2026-05-03 from multi-endpoint-by-mediatype label-collision)"),
     ("thetradedesk", "Stretch", "ADR-007 F4 master (bid-post-processing-macro)"),
 ]
 
-# Rule 46 naming-convention pairs (ADR-005, 12 verified pairs).
+# Rule 46 naming-convention pairs (ADR-005, 11 verified pairs — refined 2026-05-03
+# from 12 after Phase 5 empirical verification removed freewheel-ssp/freewheelssp;
+# see ADR-005 "Excluded cases" section).
 RULE_46_PAIRS = [
     ("adkernelAdn", "adkerneladn", "lowercase"),
     ("audienceNetwork", "audiencenetwork", "lowercase"),
     ("boldwin_rapid", "boldwinrapid", "underscore-drop"),
     ("emx_digital", "emxdigital", "underscore-drop"),
     ("e_volution", "evolution", "underscore-drop"),
-    ("freewheel-ssp", "freewheelssp", "hyphen-drop"),
     ("lm_kiviads", "lmkiviads", "underscore-drop"),
     ("mgidX", "mgidx", "lowercase"),
     ("sa_lunamedia", "salunamedia", "underscore-drop"),
@@ -75,15 +76,19 @@ RULE_46_PAIRS = [
     ("triplelift_native", "tripleliftnative", "underscore-drop"),
 ]
 
-# Rule 43 lifecycle-rename pairs (ADR-006).
+# Rule 43 lifecycle-rename pairs (ADR-006). Refined 2026-05-03 — 5 of 7 pairs
+# reclassified per Phase 5 empirical verification (commit `f11b2ba` and
+# follow-up). Distribution: 2 bilateral + 1 java-leads + 0 go-leads + 2
+# mirror-topology + 2 inverted-parent. See ADR-006 for verbatim evidence and
+# subtype definitions.
 LIFECYCLE_PAIRS = [
     ("elementaltv", "elementaltv", "bilateral", "Adoppler→ElementalTV (PR java#4326 + go#4639)"),
-    ("cadent_aperture_mx", "emxdigital", "java-leads", "Cadent acquired EMX"),
-    ("conversant", "epsilon", "java-leads", "Publicis Epsilon acquired Conversant"),
-    ("magnite", "rubicon", "java-leads", "Magnite/Rubicon merger"),
-    ("intenze", "gothamads", "java-leads", "acquisition"),
-    ("liftoff", "vungle", "go-leads", "Liftoff acquired Vungle 2021"),
-    ("equativ", "smartadserver", "go-leads", "Smart AdServer rebrand 2022"),
+    ("vungle", "vungle", "bilateral", "Liftoff acquired Vungle 2021 — phantom-rename (refined 2026-05-03 from go-leads); both sides canonical at vungle"),
+    ("cadent_aperture_mx", "emxdigital", "java-leads", "Cadent acquired EMX (Go has dual-core registration of both cadent_aperture_mx + emx_digital)"),
+    ("conversant", "epsilon", "inverted-parent", "Publicis Epsilon acquired Conversant — Go parent=conversant, Java parent=epsilon (refined 2026-05-03 from java-leads)"),
+    ("magnite", "rubicon", "mirror-topology", "Magnite/Rubicon merger — both sides parent=rubicon, alias=magnite (refined 2026-05-03 from java-leads)"),
+    ("intenze", "gothamads", "inverted-parent", "Acquisition — Go parent=intenze with gothamads in removed-warn map; Java parent=gothamads (refined 2026-05-03 from java-leads)"),
+    ("equativ", "smartadserver", "mirror-topology", "Smart AdServer rebrand 2022 — both sides parent=smartadserver, alias=equativ (refined 2026-05-03 from go-leads)"),
 ]
 
 # Java empire parents deep-dived in ADR-003 (5 of 32 total).
@@ -102,7 +107,7 @@ INVENTORY_TOTALS = {
     "java_empire_parents": 32,
     "java_empire_aliases": 95,
     "disabled_asymmetric_pairs": 78,
-    "naming_normalization_pairs": 12,
+    "naming_normalization_pairs": 11,
     "lifecycle_rename_pairs": 8,
 }
 

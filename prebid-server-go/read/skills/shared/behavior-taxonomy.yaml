@@ -521,7 +521,7 @@ quirks_taxa:
 
   # Rule 46 taxon (ADR-005 — naming convention normalization):
   - id: naming-convention-normalization
-    description: 'Java parent-YAML name derived from Go bidder name by lowercasing + dropping non-alphanumerics. 12 verified cases including boldwin_rapid → boldwinrapid, audienceNetwork → audiencenetwork, freewheel-ssp → freewheelssp.'
+    description: 'Java parent-YAML name derived from Go bidder name by lowercasing + dropping non-alphanumerics. 11 verified cases (refined 2026-05-03 from 12 — `freewheel-ssp/freewheelssp` removed per Phase 5 empirical verification; both canonical YAMLs use `freewheelssp`; the hyphenated form is a Go-only alias-stub via `aliasOf:`. See ADR-005 "Excluded cases".), including boldwin_rapid → boldwinrapid, audienceNetwork → audiencenetwork, adkernelAdn → adkerneladn.'
     surfaces_in: ["quirks (Java spec) + dual-spec assertion naming_asymmetry"]
 
 post_taxa_note: |

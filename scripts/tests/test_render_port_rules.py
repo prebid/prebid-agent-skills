@@ -94,7 +94,8 @@ class TestPortRulesRenderDrift(unittest.TestCase):
         self.assertIn("naming-convention", rules_by_id[46]["title"].lower())
 
     def test_rule_43_sub_types_documented(self):
-        """ADR-006: Rule 43 body MUST mention the three sub-types."""
+        """ADR-006: Rule 43 body MUST mention the five sub-types (refined
+        2026-05-03 — added mirror-topology and inverted-parent)."""
         data = render_port_rules.load_yaml()
         rule_43 = None
         for sec in data["sections"]:
@@ -105,7 +106,10 @@ class TestPortRulesRenderDrift(unittest.TestCase):
                         break
         assert rule_43 is not None, "Rule 43 not found"
         body = rule_43["body"]
-        for subtype in ("bilateral", "java-leads", "go-leads"):
+        for subtype in (
+            "bilateral", "java-leads", "go-leads",
+            "mirror-topology", "inverted-parent",
+        ):
             self.assertIn(subtype, body,
                           f"Rule 43 body missing sub-type {subtype!r} (ADR-006)")
 

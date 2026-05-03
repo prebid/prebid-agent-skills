@@ -1,8 +1,8 @@
 # ADR-005: Rule 46 — Naming-Convention Normalization
 
-**Date**: 2026-05-02 (refined 2026-05-02 audit A2 — moved cross-language facts from per-language spec to dual-spec assertion format)
+**Date**: 2026-05-02 (refined 2026-05-02 audit A2 — moved cross-language facts from per-language spec to dual-spec assertion format; refined 2026-05-03 — drop freewheel-ssp/freewheelssp from RULE_46_PAIRS per Phase 5 empirical verification, count 12 → 11)
 **Status**: Proposed (Phase 2 execution adds to `port-translation-rules.md`)
-**Context**: Round 3 inventory identified 12 cross-language pairs where Go uses camelCase or snake_case bidder names and Java normalizes to all-lowercase, alphanumeric-only. The pattern is mechanical and was previously conflated with Rule 43 (lifecycle rename). It's not a rename — it's a naming-convention transformation on the resting state. Round 3 lifecycle-naming deep-dive confirmed this should be a separate rule.
+**Context**: Round 3 inventory identified 11 cross-language pairs (refined from 12 after empirical verification — see freewheelssp dual-spec) where Go uses camelCase or snake_case bidder names and Java normalizes to all-lowercase, alphanumeric-only. The pattern is mechanical and was previously conflated with Rule 43 (lifecycle rename). It's not a rename — it's a naming-convention transformation on the resting state. Round 3 lifecycle-naming deep-dive confirmed this should be a separate rule.
 
 ## Decision
 
@@ -38,7 +38,7 @@ def go_to_java_parent_yaml_name(go_name: str) -> str:
 
 **Rationale for moving to dual-spec**: A Go-only or Java-only reader can't populate cross-language naming-asymmetry facts. The dual-spec file is the natural cross-language joiner; this matches ADR-004's architecture for Rule 45.
 
-**The 12 verified pairs**:
+**The 11 verified pairs** (refined 2026-05-03 — `freewheel-ssp/freewheelssp` removed; see "Excluded cases" below):
 
 | Go (raw) | Java (raw) | Transformation |
 |---|---|---|
@@ -47,13 +47,23 @@ def go_to_java_parent_yaml_name(go_name: str) -> str:
 | boldwin_rapid | boldwinrapid | `underscore-drop` |
 | emx_digital | emxdigital | `underscore-drop` (+ also a Rule 43 lifecycle rebrand) |
 | e_volution | evolution | `underscore-drop` |
-| freewheel-ssp | freewheelssp | `hyphen-drop` |
 | lm_kiviads | lmkiviads | `underscore-drop` |
 | mgidX | mgidx | `lowercase` |
 | sa_lunamedia | salunamedia | `underscore-drop` |
 | sspBC | sspbc | `lowercase` |
 | stroeerCore | stroeercore | `lowercase` |
 | triplelift_native | tripleliftnative | `underscore-drop` |
+
+### Excluded cases — `freewheel-ssp/freewheelssp` (Phase 5 empirical correction)
+
+The `freewheel-ssp/freewheelssp` pair was originally listed as a cross-language `hyphen-drop` Rule 46 case, but Phase 5 fixture authoring (commit `f11b2ba`, see `cross-language-pairs/freewheelssp.dual-spec-assertions.yaml`) verified that **both canonical YAMLs use `freewheelssp` (same name)** at the pinned commits:
+
+- Go canonical: `static/bidder-info/freewheelssp.yaml` (sha256 `42f84dcf…`, 510B, full config).
+- Java canonical: `src/main/resources/bidder-config/freewheelssp.yaml` (sha256 `82da1671…`).
+
+The hyphenated `freewheel-ssp.yaml` form is a **Go-only YAML alias-stub** declared via a top-level `aliasOf: freewheelssp` field (sha256 `c5a2bdc5…`, 262B). The hyphen-drop transformation `freewheel-ssp → freewheelssp` IS mechanically valid, but it applies INTRA-Go (alias-stub → canonical), not CROSS-LANGUAGE. Rule 46 as defined is a cross-language contract; the freewheel pair doesn't qualify.
+
+This is the only pair removed; the corpus inventory now stands at **11 cross-language Rule 46 pairs** (previously 12). `INVENTORY_TOTALS["naming_normalization_pairs"]` in `scripts/coverage-report.py:105` is updated to `11`.
 
 ## Why separate from Rule 43
 
@@ -68,11 +78,11 @@ Cases that DON'T fit Rule 43 (they belong under Rule 46):
 
 ## Canonical master samples
 
-- **Lowercase**: `audienceNetwork → audiencenetwork` (single transformation, no other variations)
-- **Underscore-drop**: `boldwin_rapid → boldwinrapid` (PR `prebid/prebid-server-java#4285`, already tagged `snake-case-bidder-name`)
-- **Hyphen-drop**: `freewheel-ssp → freewheelssp` (only hyphen case in the 12-pair set)
-- **Digit-leading-workaround**: `152media → 152media + OneFiveTwoMedia class root` (PR `prebid/prebid-server-java#3829`, already tagged `digit-leading-bidder-class-workaround-OneFiveTwoMedia`)
-- **Brand-acronym-preservation**: `elementaltv → ElementalTV class root` (PR `prebid/prebid-server-java#4326`, already tagged `acronym-case-preservation`)
+- **Lowercase**: `audienceNetwork → audiencenetwork` (single transformation, no other variations). Phase 5 master sample: `adkernelAdn/adkerneladn`.
+- **Underscore-drop**: `boldwin_rapid → boldwinrapid` (PR `prebid/prebid-server-java#4285`, already tagged `snake-case-bidder-name`).
+- **Hyphen-drop**: NO empirical cross-language master sample at the pinned commits. The previously-cited `freewheel-ssp → freewheelssp` was reclassified as a Go-only alias-stub (see "Excluded cases" above). If a future fixture surfaces a true cross-language hyphen-drop pair, this slot can be filled.
+- **Digit-leading-workaround**: `152media → 152media + OneFiveTwoMedia class root` (PR `prebid/prebid-server-java#3829`, already tagged `digit-leading-bidder-class-workaround-OneFiveTwoMedia`).
+- **Brand-acronym-preservation**: `elementaltv → ElementalTV class root` (PR `prebid/prebid-server-java#4326`, already tagged `acronym-case-preservation`).
 
 ## Mechanizability
 
