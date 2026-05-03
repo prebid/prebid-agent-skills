@@ -1,7 +1,7 @@
 # ADR-003: Rule 44 — Java Alias-Empire Consolidation
 
 **Date**: 2026-05-02
-**Status**: Proposed (Phase 2 execution adds to `port-translation-rules.md` / `port-translation-rules.yaml`)
+**Status**: Accepted (Phase 2 executed — Rule 44 lives at `port-translation-rules.yaml`/.md; rendered count 46)
 **Context**: Round 3 inventory revealed that Java consolidates 95 of its 350 bidders as aliases under 32 parent "alias-empires", while Go keeps most of them as standalone primary bidders. This is a systematic cross-language pattern that no current rule captures. Empire deep-dive on 5 parents (limelightDigital, teqblaze, smarthub/Attekmi, adtelligent, nexx360) confirms a single mechanism with three observational sub-flavors.
 
 ## Decision

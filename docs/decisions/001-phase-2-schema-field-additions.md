@@ -1,7 +1,7 @@
 # ADR-001: Phase 2 Schema Field Additions
 
 **Date**: 2026-05-02 (refined 2026-05-02 with pre-execution audit corrections: A4 added D6 phantom-path completion; A3/C6 use JSON Schema terminology; B4 SemVer string format)
-**Status**: Proposed (Phase 2 execution accepts/rejects)
+**Status**: Accepted (Phase 2 executed — schema migration landed; goldens migrated; CHANGELOG records the version bumps)
 **Context**: Round 3 verification surfaced five schema-decision forks that were ambiguous in earlier rounds. Each one needs a concrete answer before Phase 2 (schema migration) so we don't fragment the migration commits.
 
 **Note on JSON Schema terminology**: This ADR (and ADR-007) reference Java-only blocks needing a discriminated polymorphism. JSON Schema 2020-12 expresses this via `if/then/else` keyed on `source_language` `const`-value, NOT via OpenAPI's `discriminator` keyword. All references to "discriminator" elsewhere in the plan refer to this `if/then/else` shape.
@@ -12,7 +12,7 @@
 
 ### D1 — `code_naming` location: top-level
 
-**Context**: Schema declares `code_naming.*` (top-level) at `adapter-spec.md:357,625`, but huaweiads-java golden at line 197 uses nested `code.naming.*`. The contradiction surfaced as H1 during the review.
+**Context**: The schema declared `code_naming.*` as a top-level property (in `adapter-spec.md` and now in `adapter-spec.schema.json` `$defs/Code` siblings), but the huaweiads-java golden carried a nested `code.naming.*` block. The contradiction surfaced as H1 during the review.
 
 **Options**:
 1. Top-level `code_naming.*` (matches `spring_config`, `bidder_class`, `lifecycle` Java-only top-level pattern)
@@ -24,7 +24,7 @@
 
 ### D2 — `injection` field rename: `delivery_mechanism`
 
-**Context**: `adapter-spec.md:330` declares `iab_category_storage.injection: constructor-arg | static-init | null`; `adapter-spec.md:345` declares `currency_conversion.injection: dependency | function-arg`. Same field name, different scopes, different enums — schema-internal name collision surfaced in Round 3.
+**Context**: Pre-rename the schema declared both `iab_category_storage.injection: constructor-arg | static-init | null` AND `currency_conversion.injection: dependency | function-arg`. Same field name, different scopes, different enums — schema-internal name collision surfaced in Round 3.
 
 **Options**:
 1. Rename `iab_category_storage.injection` → `iab_category_storage.delivery_mechanism`

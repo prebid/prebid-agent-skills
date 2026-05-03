@@ -1,7 +1,7 @@
 # ADR-008: Phase 5 Expanded Pair Fixtures
 
 **Date**: 2026-05-02 (refined 2026-05-02 audit B1 — empire-parent goldens use existing flat `parent_aliases` listing, not 9-15 separate alias-child specs; effort revised down 2 days; refined 2026-05-03 — vungle pair reclassified `go-leads` → `bilateral` per Phase 5 empirical evidence; cadent pair carries dual-core-registration nuance note; freewheelssp F2 master claim confirmed empirically)
-**Status**: Proposed (Phase 5 execution authors the fixtures; corpus complete at 9/9 as of commit `ea0a37a`)
+**Status**: Accepted (Phase 5 executed — corpus complete at 9/9 as of commit `ea0a37a`; all pair fixtures shipped with cross-language assertions)
 
 **Note on empire-parent fixture structure**: A Java empire parent's golden does NOT spec each alias child individually. It carries a single bidder spec with a flat `parent_aliases: [child1, child2, ...]` listing of alias names + the parent's own behavior fields. This matches the existing kobler/optidigital pattern (which list `parent_aliases` as a name list). The dual-spec assertion file's `cross_language_alias_graph` block (NEW) captures cross-language alias-graph alignment per-empire. Per-alias detailed coverage happens incrementally as future fixtures (post-Phase-5) target individual alias children.
 **Context**: The original plan had Phase 5 add 3 Java goldens (adkernel, adtonos, bidstack). Round 3 inventory analysis revealed that's insufficient to pressure-test the 3 newly-proposed rules (44, 45, 46) and the Rule 43 sub-categorization. Phase 5 should add 7 pair fixtures (with 2 stretch) to provide master samples for each new rule, each sub-categorization branch, and the empire-coverage gap.

@@ -179,7 +179,7 @@ Release dates from `gh release list --repo prebid/prebid-server-java`. PRs are a
 
 ## Alias-Only Adapters
 
-These PRs add a new bidder name but no new `Bidder.java` directory — they reuse a parent adapter's Java code via the `aliasOf:` field in `src/main/resources/bidder-config/<parent>.yaml`. PR sizes are larger than Go aliases because each Java alias still needs an integration test class and JSON test fixtures (~7 files each).
+These PRs add a new bidder name but no new `Bidder.java` directory — they reuse a parent adapter's Java code via an `aliases: { <child>: ~ }` entry in the parent's `src/main/resources/bidder-config/<parent>.yaml` (tilde-inherit form: child inherits parent's endpoint, capabilities, etc.). The Java mechanism is INVERTED from Go's child-side `aliasOf:` field — in Java the parent's YAML lists its aliases; in Go each alias YAML names its parent. PR sizes are larger than Go aliases because each Java alias still needs an integration test class and JSON test fixtures (~7 files each).
 
 **14 alias-only adapters** between 2025-02-20 and 2026-04-22.
 

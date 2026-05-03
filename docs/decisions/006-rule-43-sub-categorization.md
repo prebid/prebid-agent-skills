@@ -1,7 +1,7 @@
 # ADR-006: Rule 43 Sub-Categorization
 
 **Date**: 2026-05-02 (refined 2026-05-02 audit A5 — renamed `synchronized` to `bilateral`; refined 2026-05-03 — added 2 new subtypes `mirror-topology` and `inverted-parent`; reclassified 5 of 7 lifecycle pairs per Phase 5 empirical verification)
-**Status**: Proposed (Phase 2 execution updates `port-translation-rules.md`)
+**Status**: Accepted (Phase 2 executed — `lifecycle.rename.subtype` carries the 5-value enum `bilateral | java-leads | go-leads | mirror-topology | inverted-parent` in `port-translation-rules.yaml`; ADR amended via 2026-05-03 audit + Phase 5 empirical reclassification per CHANGELOG `Unreleased — ADR corrections`)
 
 **Note on terminology**: The `bilateral` sub-type was originally drafted as `synchronized` but renamed during the pre-execution audit. The Adoppler→ElementalTV canonical example shows the two languages renaming **52 days apart** (Java 2026-01-12, Go 2026-03-04). That's bilateral cooperation but NOT lockstep timing. `bilateral` accurately describes "both sides eventually rename"; `synchronized` would falsely imply simultaneity.
 

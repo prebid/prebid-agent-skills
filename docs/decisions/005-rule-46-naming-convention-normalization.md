@@ -1,7 +1,7 @@
 # ADR-005: Rule 46 — Naming-Convention Normalization
 
 **Date**: 2026-05-02 (refined 2026-05-02 audit A2 — moved cross-language facts from per-language spec to dual-spec assertion format; refined 2026-05-03 — drop freewheel-ssp/freewheelssp from RULE_46_PAIRS per Phase 5 empirical verification, count 12 → 11)
-**Status**: Proposed (Phase 2 execution adds to `port-translation-rules.md`)
+**Status**: Accepted (Phase 2 executed — Rule 46 lives at `port-translation-rules.yaml`/.md; rendered count 46)
 **Context**: Round 3 inventory identified 11 cross-language pairs (refined from 12 after empirical verification — see freewheelssp dual-spec) where Go uses camelCase or snake_case bidder names and Java normalizes to all-lowercase, alphanumeric-only. The pattern is mechanical and was previously conflated with Rule 43 (lifecycle rename). It's not a rename — it's a naming-convention transformation on the resting state. Round 3 lifecycle-naming deep-dive confirmed this should be a separate rule.
 
 ## Decision

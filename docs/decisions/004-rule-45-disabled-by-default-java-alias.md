@@ -1,7 +1,7 @@
 # ADR-004: Rule 45 — Disabled-by-Default Java Alias
 
 **Date**: 2026-05-02 (refined 2026-05-02 audit A1 — moved cross-language facts from per-language spec to dual-spec assertion format)
-**Status**: Proposed (Phase 2 execution adds to `port-translation-rules.md`)
+**Status**: Accepted (Phase 2 executed — Rule 45 lives at `port-translation-rules.yaml`/.md; rendered count 46)
 **Context**: Round 3 inventory revealed 78 cross-language disabled-asymmetric bidders (Java disabled by default, Go enabled — or vice versa for ~6 cases). The pattern is systematic: Java's empire children typically ship `enabled: false`, requiring publishers to opt in. Go's aliases ship enabled by default. This asymmetry is real and common but no current rule names it.
 
 ## Decision
