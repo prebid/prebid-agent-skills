@@ -69,13 +69,13 @@ For each file in the inputs:
 
 1. Read the file at `provenance.source.resolved_commit` (orchestrator-provided; do not re-fetch).
 2. Compute `loc`.
-3. Tag the file with one role from this enum: `bidder, configuration, configuration-properties, proto-ext, proto-helper, deserializer, test-unit, test-it`. Detection rules and worked examples live in [references/spring-config-patterns.md](references/spring-config-patterns.md) (for `configuration` / `configuration-properties`), [references/proto-pojo-patterns.md](references/proto-pojo-patterns.md) (for `proto-ext` / `proto-helper` / `deserializer`), and [references/junit-it-patterns.md](references/junit-it-patterns.md) (for `test-unit` / `test-it`).
+3. Tag the file with one role from this 5-value enum: `implementation, models, parsers, types, utils`. Deterministic filename → role mapping rules live in [references/file-role-heuristics.md](references/file-role-heuristics.md). Cross-language note: Go's enum is the same 5 values plus `data-table` (Go-only — Java records IAB-category tables as `iab_category_storage.storage_kind: yaml-inlined` per ADR-001 D2). The other references in this directory cover deeper Java extraction patterns referenced from later Steps, NOT role tagging: [references/spring-config-patterns.md](references/spring-config-patterns.md) (Step 3 — `spring_config.*` and Step 2 parameter-role classification), [references/proto-pojo-patterns.md](references/proto-pojo-patterns.md) (Step 7 — `ext_pojo_construction.*`), and [references/junit-it-patterns.md](references/junit-it-patterns.md) (Steps 10–12 — `tests.*`). The lint at `scripts/lib/lint-java-roles.py` gates the enum at CI time.
 
 Record the bidder-package files in `code.file_layout.files[]`. Set `code.file_layout.kind: multi-file` if more than one bidder-package `*.java` file (e.g., Mediasquare's `MediasquareBidder.java` + `MediasquareUtil.java` co-located helper); otherwise `single-file`. Counts apply only to bidder-package files — `proto/`, `spring/config/`, `test/` files do NOT inflate the layout count.
 
 ### Step 2 — Extract `bidder_class.*`
 
-From the file with role=`bidder`:
+From the file with role=`implementation` (the `{Xyz}Bidder.java` file declaring `class XyzBidder implements Bidder<T>`):
 
 1. Parse the class declaration line. Extract:
    - `name` — the class identifier (e.g., `KoblerBidder`).
@@ -93,7 +93,7 @@ From the file with role=`bidder`:
 
 ### Step 3 — Extract `spring_config.*`
 
-From the file with role=`configuration`:
+From `src/main/java/org/prebid/server/spring/config/bidder/{Xyz}Configuration.java` (the Spring factory class — lives OUTSIDE the bidder package and is therefore NOT recorded in `code.file_layout.files[]`; locate it by canonical path):
 
 1. `factory_class` — the class identifier (e.g., `KoblerConfiguration`). Naming variance: `<Name>Configuration` (Kobler, Optidigital) vs `<Name>BidderConfiguration` (Adverxo). Edge case #19; record either name verbatim.
 2. `factory_method` — the `@Bean` method returning `BidderDeps`. Naming: `<name>BidderDeps` (e.g., `koblerBidderDeps`).
@@ -136,7 +136,7 @@ Set `storage_kind`: `yaml-inlined` (Java pattern, Appnexus 120-entry `iab-catego
 
 ### Step 7 — Extract `ext_pojo_construction.*`
 
-From the file(s) with role=`proto-ext`:
+From the param-ext POJO at `proto/openrtb/ext/request/{xyz}/ExtImp{Xyz}.java` (recorded in `file_layout.files[]` with role=`models` per the heuristics doc; located by canonical path) plus any sibling `proto/{Xyz}*Ext{Imp,Bid,Req}*.java` files in the bidder package (also role=`models`):
 
 - **`framework_choice`** — `lombok-value-builder` (`@Value @Builder @Jacksonized`, default), `lombok-value-staticconstructor` (Kobler's `@Value(staticConstructor = "of")`), `lombok-data` (rare). `go-struct` never set.
 - **`flexible_extension_used`** — true when the class extends `FlexibleExtension` (`@JsonAnyGetter`/`@JsonAnySetter` passthrough).

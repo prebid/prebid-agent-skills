@@ -98,6 +98,15 @@ jobs:
           set -e
           if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
 
+      - name: File-role enum lint (Wave 4 — Java + Go)
+        run: |
+          set +e
+          python3 scripts/lib/lint-java-roles.py --include-go
+          EXIT=$?
+          set -e
+          # Exit codes: 0=all pass, 1=fail, 2=warn-only.
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
+
       - name: Description-length lint (informational)
         run: |
           # Phase 4.7 informational gate: warn when a SKILL's frontmatter

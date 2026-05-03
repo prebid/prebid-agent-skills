@@ -4,7 +4,7 @@
 # live in scripts/ and scripts/tests/. The Makefile is a thin convenience
 # layer; the scripts themselves are the authoritative entry points.
 
-.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules clean
+.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules lint-java-roles clean
 
 help:
 	@echo "Available targets:"
@@ -18,6 +18,7 @@ help:
 	@echo "  render-taxonomy    Phase 2.4 regenerate behavior-taxonomy.md from .yaml source"
 	@echo "  render-port-rules  Phase 2.5 regenerate port-translation-rules.md from .yaml source"
 	@echo "  lint-port-rules    Phase 2.6 mechanizable port-rule lints (Rules 5/9/33/36/38/44/46)"
+	@echo "  lint-java-roles    Wave 4 file-role enum gate (Java + Go via --include-go)"
 	@echo "  clean              Remove __pycache__ and .pyc files"
 
 install:
@@ -36,6 +37,9 @@ ci: test
 	EXIT=$$?; \
 	if [ $$EXIT -eq 0 ] || [ $$EXIT -eq 2 ]; then : ; else exit $$EXIT; fi
 	@python3 scripts/lib/lint-port-rules.py; \
+	EXIT=$$?; \
+	if [ $$EXIT -eq 0 ] || [ $$EXIT -eq 2 ]; then : ; else exit $$EXIT; fi
+	@python3 scripts/lib/lint-java-roles.py --include-go; \
 	EXIT=$$?; \
 	if [ $$EXIT -eq 0 ] || [ $$EXIT -eq 2 ]; then exit 0; else exit $$EXIT; fi
 
@@ -68,6 +72,9 @@ render-port-rules:
 
 lint-port-rules:
 	python3 scripts/lib/lint-port-rules.py
+
+lint-java-roles:
+	python3 scripts/lib/lint-java-roles.py --include-go
 
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
