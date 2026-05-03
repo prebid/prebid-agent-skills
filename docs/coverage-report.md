@@ -9,10 +9,10 @@ Tracks per-rule, per-empire, per-pair coverage of the goldens corpus against ADR
 
 ## 1. Golden inventory
 
-- **Go goldens**: 14 (152media, 33across, aax, adkernel, adtonos, adverxo, appnexus, bidstack, elementaltv, kobler, mediasquare, msft, optidigital, smarthub)
-- **Java goldens**: 12 (152media, aax, adverxo, appnexus, elementaltv, generic, huaweiads, kobler, mediasquare, optidigital, rubicon, smarthub)
-- **Paired goldens** (both languages): 9 (152media, aax, adverxo, appnexus, elementaltv, kobler, mediasquare, optidigital, smarthub)
-- **Dual-spec assertion files**: 9
+- **Go goldens**: 15 (152media, 33across, aax, adkernel, adtonos, adverxo, appnexus, bidstack, elementaltv, kobler, mediasquare, msft, optidigital, smarthub, teqblaze)
+- **Java goldens**: 13 (152media, aax, adverxo, appnexus, elementaltv, generic, huaweiads, kobler, mediasquare, optidigital, rubicon, smarthub, teqblaze)
+- **Paired goldens** (both languages): 10 (152media, aax, adverxo, appnexus, elementaltv, kobler, mediasquare, optidigital, smarthub, teqblaze)
+- **Dual-spec assertion files**: 10
 
 Reconnaissance totals (Round 3 inventory, ADR-003):
 
@@ -31,7 +31,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | Bidder | Priority | Go | Java | Status | Why |
 |---|---|---|---|---|---|
 | `smarthub` | P1 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 canonical (white-label-saas, 9 aliases, parent-rebrand) |
-| `teqblaze` | P1 | — | — | missing | ADR-003 Rule 44 (white-label-saas, 9 aliases) |
+| `teqblaze` | P1 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (white-label-saas, 9 aliases) |
 | `adverxo` | P1 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (registration-only, 3 aliases — smallest clean canonical) |
 | `limelightDigital` | P2 | — | — | missing | ADR-003 Rule 44 (endpoint-macro-substitution, 15 aliases) |
 | `vungle` | P2 | — | — | missing | ADR-006 Rule 43 go-leads (liftoff/vungle cross-name pair) |
@@ -40,7 +40,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `freewheelssp` | Stretch | — | — | missing | ADR-007 F2 master (multi-endpoint-by-mediatype) |
 | `thetradedesk` | Stretch | — | — | missing | ADR-007 F4 master (bid-post-processing-macro) |
 
-**Phase 5 status**: 2 of 9 pairs covered. 7 remaining (matches ADR-008's 9-pair plan).
+**Phase 5 status**: 3 of 9 pairs covered. 6 remaining (matches ADR-008's 9-pair plan).
 
 ---
 
@@ -86,12 +86,12 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | Parent | Flavor | Aliases | Java golden | Go golden | Note |
 |---|---|---|---|---|---|
 | `smarthub` | `white-label-saas` | 9 | ✓ | ✓ | SmartHub→Attekmi rebrand co-occurs |
-| `teqblaze` | `white-label-saas` | 9 | — | — | TeqBlaze established Java#4161 |
+| `teqblaze` | `white-label-saas` | 9 | ✓ | ✓ | TeqBlaze established Java#4161 |
 | `limelightDigital` | `endpoint-macro-substitution` | 15 | — | — | complexity-high reference |
 | `nexx360` | `registration-only` | 4 | — | — | Nexx360 established Java#4053 |
 | `adverxo` | `registration-only` | 3 | ✓ | ✓ | smallest clean canonical |
 
-**Empire coverage**: 2 of 5 deep-dived parents covered. Total Java empire parents in upstream corpus: 32 (95 children).
+**Empire coverage**: 3 of 5 deep-dived parents covered. Total Java empire parents in upstream corpus: 32 (95 children).
 
 ---
 
@@ -108,6 +108,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `mediasquare` | ✓ | ✓ | — | — | — | 8 |
 | `optidigital` | ✓ | ✓ | — | — | — | 8 |
 | `smarthub` | ✓ | ✓ | — | — | — | 8 |
+| `teqblaze` | ✓ | ✓ | — | — | — | 8 |
 
 `naming_asymmetry` is a Phase 2.7 dual-spec block (ADR-005). Existing assertions don't have it because none of the 7 covered pairs hit Rule 46. Phase 5's `adkernelAdn`/`adkerneladn` pair will populate it for the first time.
 
@@ -158,7 +159,7 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 | Rule 33 | Aliases inversion (child→parent vs parent→children) | (generic) | 0 | 0 |
 | Rule 34 | YAML unification (Go split vs Java unified) | `kobler` | 1 | 0 |
 | Rule 35 | Custom property subclass for extra YAML fields | `kobler` | 1 | 0 |
-| Rule 44 | Java alias-empire consolidation | `adkernel`, `adverxo`, `limelightDigital`*, `nexx360`*, `smarthub`, `teqblaze`* | 3 | 3 |
+| Rule 44 | Java alias-empire consolidation | `adkernel`, `adverxo`, `limelightDigital`*, `nexx360`*, `smarthub`, `teqblaze` | 4 | 2 |
 | Rule 45 | Disabled-by-default Java alias | `audienceNetwork`*, `mgidX`*, `optidigital` | 1 | 2 |
 | Rule 46 | Naming-convention normalization | `adkernel`, `adkernelAdn`*, `adkerneladn`*, `audienceNetwork`*, `audiencenetwork`*, `boldwin_rapid`*, `boldwinrapid`*, `e_volution`*, `elementaltv`, `emx_digital`*, `emxdigital`*, `evolution`*, `freewheel-ssp`*, `freewheelssp`*, `lm_kiviads`*, `lmkiviads`*, `mgidX`*, `mgidx`*, `sa_lunamedia`*, `salunamedia`*, `sspBC`*, `sspbc`*, `stroeerCore`*, `stroeercore`*, `triplelift_native`*, `tripleliftnative`* | 2 | 24 |
 | Rule 42 | IAB-categories storage cross-language translation | `appnexus`, `msft` | 2 | 0 |
@@ -172,7 +173,6 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 
 ## 8. Top gaps to close (sorted by impact)
 
-- Phase 5 P1: pair `teqblaze` — ADR-003 Rule 44 (white-label-saas, 9 aliases)
 - Phase 5 P2: pair `limelightDigital` — ADR-003 Rule 44 (endpoint-macro-substitution, 15 aliases)
 - Phase 5 P2: pair `vungle` — ADR-006 Rule 43 go-leads (liftoff/vungle cross-name pair)
 - Phase 5 P2: pair `emxdigital` — ADR-006 Rule 43 java-leads (cadent_aperture_mx/emxdigital cross-name)
@@ -185,7 +185,6 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 - Rule 43 sub-type `java-leads`: pair `intenze/gothamads` (acquisition)
 - Rule 43 sub-type `go-leads`: pair `liftoff/vungle` (Liftoff acquired Vungle 2021)
 - Rule 43 sub-type `go-leads`: pair `equativ/smartadserver` (Smart AdServer rebrand 2022)
-- Empire parent `teqblaze` (white-label-saas, 9 aliases) — TeqBlaze established Java#4161
 - Empire parent `limelightDigital` (endpoint-macro-substitution, 15 aliases) — complexity-high reference
 - Empire parent `nexx360` (registration-only, 4 aliases) — Nexx360 established Java#4053
 
@@ -193,7 +192,7 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 
 ## Sources
 
-- Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (26 files).
-- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (9 files).
+- Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (28 files).
+- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (10 files).
 - Port-translation rules (46 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.
 - ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).

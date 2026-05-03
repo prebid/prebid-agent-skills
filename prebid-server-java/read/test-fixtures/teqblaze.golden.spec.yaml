@@ -1,0 +1,523 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: teqblaze
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - 360playvid
+    - pinkLion
+    - rocketlab
+    - appStockSSP
+    - gravite
+    - bidfuse
+    - adsinteractive
+    - progx
+    - harion
+    - mycodemedia
+  whitelabel_only: true
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: false
+  empire_parent_flavor: white-label-saas
+
+bidder_info:
+  endpoint: "http://"                         # Placeholder. Java YAML declares an unusable endpoint at parent level; aliases supply real per-host endpoints. Parent itself never receives traffic.
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "github@teqblaze.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks:
+    - field: mata-info
+      bidder: gravite                         # gravite alias declares `mata-info` instead of canonical `meta-info` — silent typo. The maintainer-email + vendor-id under it are SILENTLY IGNORED by Spring's YAML binding (since meta-info is the recognized field).
+      severity: WARN
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Teqblaze Adapter Params",
+    "description": "A schema which validates params accepted by the TeqBlaze adapter",
+    "type": "object",
+    "properties": {
+      "placementId": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Placement ID"
+      },
+      "endpointId": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Endpoint ID"
+      }
+    },
+    "oneOf": [
+      {
+        "required": [
+          "placementId"
+        ]
+      },
+      {
+        "required": [
+          "endpointId"
+        ]
+      }
+    ]
+  }
+bidder_params_sha256: cf4b60b8f32e1379fe25290858433b8f03041384eabca6380dad1c91b0363f2a
+
+params:
+  schema_interpretation:
+    properties:
+      - name: placementId
+        type: string
+        minLength: 1
+        description: "Placement ID"
+      - name: endpointId
+        type: string
+        minLength: 1
+        description: "Endpoint ID"
+    required_fields: []
+    flexible_types: []
+    combinators_used:
+      - oneOf
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.teqblaze
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/teqblaze/ExtImpTeqblaze.java
+    type_name: ExtImpTeqblaze                 # Input ext (from imp.ext.bidder)
+    fields:
+      - name: placementId
+        json_tag: placementId
+        type_native: String
+        omitempty: true
+        notes:
+          - "@JsonProperty(\"placementId\") explicit"
+      - name: endpointId
+        json_tag: endpointId
+        type_native: String
+        omitempty: true
+        notes:
+          - "@JsonProperty(\"endpointId\") explicit"
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: TeqblazeBidder
+  directory_name: teqblaze
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: TeqblazeBidder.java
+        role: implementation
+        loc: 156
+  imports:
+    has_jsonutil: false
+    has_template_engine: false
+    has_currency_helper: false
+  make_requests:
+    request_body:
+      kind: openrtb2-modified                 # imp.ext is REPACKED with new shape (see imp_ext_repack quirk; symmetric with Go side)
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp                       # Rule 10
+    mutation:
+      mutates_request: true
+      go_idiom: null
+      java_idiom: lombok-tobuilder            # imp.toBuilder().ext(modifiedImpExtBidder).build() + bidRequest.toBuilder().imp(List.of(imp)).build()
+      entity_strategies:
+        Imp: immutable-rebuild
+        Site: none
+        App: none
+        Source: none
+        Banner: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid       # TypeReference<ExtPrebid<?, ExtImpTeqblaze>>
+      target_type: ExtImpTeqblaze
+      wrapper_type: null
+    endpoint_resolution:
+      kind: literal
+      mechanism_go: null
+      mechanism_java: literal                  # No macro substitution — the parent's endpoint is "http://" placeholder; aliases supply real URLs.
+      macros_used: []
+    helpers:
+      - name: parseExtImp
+        signature: "private ExtImpTeqblaze parseExtImp(Imp imp)"
+      - name: modifyImp
+        signature: "private Imp modifyImp(Imp imp, ExtImpTeqblaze extImpTeqblaze)"
+      - name: resolveImpExt
+        signature: "private TeqblazeExtImp resolveImpExt(ExtImpTeqblaze extImpTeqblaze)"
+      - name: makeHttpRequest
+        signature: "private HttpRequest<BidRequest> makeHttpRequest(BidRequest request, Imp imp)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidResponse bidResponse)"
+      - name: getBidType
+        signature: "private BidType getBidType(Bid bid)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-mtype                # Rule 23. Java case-list: 1=banner, 2=video, 3=audio, 4=native (THROWS on null/default).
+          field: bid.mtype
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/teqblaze/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-teqblaze-bid-request.json
+        bytes: 914
+        role: bidder-bid-request
+      - filename: test-teqblaze-bid-response.json
+        bytes: 334
+        role: bidder-bid-response
+      - filename: test-auction-teqblaze-request.json
+        bytes: 303
+        role: auction-request
+      - filename: test-auction-teqblaze-response.json
+        bytes: 709
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 16
+  unit_test_loc: 385
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: TeqblazeTest
+  integration_test_pattern: 4-file-split
+
+aliases:
+  - name: 360playvid                          # Digit-leading alias name. Java's class-naming rule requires a class-root spell-out (Rule 46 digit-leading-workaround); none used here because no per-alias IT class exists.
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null                          # NO per-alias IT class for any of the 10 teqblaze aliases (distinct from smarthub which has 8/9 IT classes).
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: pinkLion                            # camelCase alias name (capital L)
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: rocketlab
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: appStockSSP                         # camelCase alias with deploy-time-token #{REGION}# in endpoint (Rule 15 master sample candidate)
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: gravite
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false                            # gravite has the `mata-info` typo — its declared maintainer-email + vendor-id are silently ignored by Spring binding
+  - name: bidfuse
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: adsinteractive
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: progx
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: harion
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: mycodemedia
+    parent: teqblaze
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+
+spring_config:
+  factory_class: TeqblazeConfiguration
+  factory_class_package: org.prebid.server.spring.config.bidder.util   # ANOMALY: lives in spring/config/bidder/util/ NOT spring/config/bidder/. Only Java config currently in this subpackage.
+  factory_method: teqblazeBidderDeps
+  property_source_path: classpath:/bidder-config/teqblaze.yaml
+  bidder_creator_lambda: |
+    config -> new TeqblazeBidder(config.getEndpoint(), mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: teqblazeConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.teqblaze\")"
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+
+bidder_class:
+  name: TeqblazeBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointUrl
+        type: String
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+    arity: 2
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: EXT_TYPE_REF
+      type: "TypeReference<ExtPrebid<?, ExtImpTeqblaze>>"
+    - name: PUBLISHER_PROPERTY
+      type: String
+      value: "publisher"
+    - name: NETWORK_PROPERTY
+      type: String
+      value: "network"
+    - name: BIDDER_PROPERTY
+      type: String
+      value: "bidder"
+  helper_classes_co_located:
+    - TeqblazeExtImp                         # Output ext POJO with `type` + placementId + endpointId. Lives in `bidder/teqblaze/proto/` subpackage (NOT `proto/openrtb/ext/request/teqblaze/`).
+  helper_classes_in_proto:
+    - ExtImpTeqblaze                         # Input ext POJO. Lives in canonical `proto/openrtb/ext/request/teqblaze/`.
+
+code_naming: null
+
+lifecycle: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor   # ExtImpTeqblaze: @Value(staticConstructor = "of"). The output ext (TeqblazeExtImp) uses @Value @Builder instead.
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true                   # BidderUtil.defaultRequest(...) invokes HttpUtil.headers() per request
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens:
+  - token: "#{REGION}#"
+    on_alias: appStockSSP
+    valid_values:
+      - lb            # US_EAST
+      - ortb-eu       # EU
+      - ortb-apac     # APAC
+    note: "Operator-substituted before deployment per regional datacenter. Rule 15 master sample. The PBS-Java startup will fail if the token remains unresolved AND the alias is enabled (currently disabled-by-default per Rule 45 so the token doesn't block startup)."
+
+quirks:
+  - id: imp-ext-repack-with-type-tag
+    file: src/main/java/org/prebid/server/bidder/teqblaze/TeqblazeBidder.java
+    line: 80
+    summary: "modifyImp REPACKS imp.ext.bidder with the TeqblazeExtImp output POJO: `{type: publisher|network, placementId|endpointId: <value>}`. Input ExtImpTeqblaze has only placementId+endpointId; output adds the type tag classifying which mode the imp is in. Symmetric with Go side. Two ext POJO classes used: ExtImpTeqblaze (input, in canonical proto/) + TeqblazeExtImp (output, in bidder/teqblaze/proto/ — non-canonical location)."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: configuration-class-non-canonical-package
+    file: src/main/java/org/prebid/server/spring/config/bidder/util/TeqblazeConfiguration.java
+    summary: "TeqblazeConfiguration lives in `org.prebid.server.spring.config.bidder.util` package (the `util/` subpackage), NOT the canonical `org.prebid.server.spring.config.bidder` package. Only Java config currently in this subpackage today (255 sibling configs in the canonical location). Likely an upstream artifact from when teqblaze was first ported and got mis-placed; reviewers haven't moved it back."
+    edge_case_taxon: incomplete-classification
+  - id: yaml-field-name-typo-mata-info
+    file: src/main/resources/bidder-config/teqblaze.yaml
+    line: 50
+    summary: "gravite alias declares `mata-info:` (line 50) instead of canonical `meta-info:`. The maintainer-email (`support@gravite.net`) and vendor-id (`377`) under the typo'd key are SILENTLY IGNORED by Spring's YAML binding. Distinct yaml-field-name-typo from Java edge case #34's `endpointCompression` regression. Cross-language fidelity NOT broken (Go alias gravite.yaml separately specifies its own maintainer)."
+    edge_case_taxon: yaml-field-name-typo
+  - id: white-label-only-parent-placeholder-endpoint
+    file: src/main/resources/bidder-config/teqblaze.yaml
+    summary: "Parent declares `endpoint: http://` — an unusable placeholder. Parent is non-functional; only the 10 alias children (each with own endpoint host) function. Distinct from smarthub-style white-label-saas where the parent itself functions (`prebid.attekmi.com`)."
+    edge_case_taxon: incomplete-classification
+  - id: bid-mtype-audio-divergence
+    file: src/main/java/org/prebid/server/bidder/teqblaze/TeqblazeBidder.java
+    summary: "Java getBidType supports mtype=3 (audio); Go side does NOT. The capabilities block on both sides only declares banner+video+native, so audio bids would never be requested — but the Java adapter would correctly classify an audio bid if one arrived; Go would throw. Asymmetry is a port-fidelity gap (porter Java→Go missed the audio case)."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/teqblaze/
+    package_name: teqblaze
+    bidder_constant: openrtb_ext.BidderTeqBlaze
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/teqblaze/
+    bidder_class: TeqblazeBidder
+    config_class: TeqblazeConfiguration
+    yaml_path: src/main/resources/bidder-config/teqblaze.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/teqblaze/
+  port_concerns:
+    aliases_inverted: true
+    yaml_unification: true
+    mutation_idiom_divergence: true           # Java imp.toBuilder().ext(...).build() ↔ Go reqCopy.Imp[0].Ext = repackedJSON
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: prebid/prebid-server-java#4161
+    destination_language: null
+    destination_pr: prebid/prebid-server#4480
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-white-label-saas
+      - imp-ext-repack
+      - bid-mtype-audio-divergence
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "TeqblazeConfiguration lives in spring/config/bidder/util/ (NOT canonical spring/config/bidder/). Likely an upstream port-time mis-placement; only Java config in this subpackage today."
+    - "imp.ext repack via TeqblazeExtImp output POJO: input ExtImpTeqblaze has placementId+endpointId; output adds `type: publisher|network` derived from which input field was supplied. Two ext POJO classes: ExtImpTeqblaze (canonical proto/) + TeqblazeExtImp (non-canonical bidder/teqblaze/proto/)."
+    - "10 aliases all default-disabled — Rule 45 mass-evidence (matching smarthub). NONE of the 10 have per-alias IT classes; only the parent TeqblazeTest exists. Distinct from smarthub which has 8/9 alias IT classes."
+    - "appStockSSP alias has Rule 15 deploy-time-token: `endpoint: https://#{REGION}#.al-ad.com/pserver`. Operator substitutes #{REGION}# before deployment (lb/ortb-eu/ortb-apac for US_EAST/EU/APAC). Aliasing-with-token is rare; typically tokens live on parent. Currently defused because alias is disabled-by-default."
+    - "gravite alias has yaml-field-name-typo: `mata-info:` instead of `meta-info:` (line 50). Maintainer-email and vendor-id under the typo'd key are silently ignored by Spring."
+    - "Bid type resolution supports mtype=1 (banner), 2 (video), 3 (audio), 4 (native). Capabilities only declare banner+video+native — but an audio bid would still classify correctly. Cross-language asymmetry: Go does NOT support mtype=3 (audio)."
+    - "TeqblazeBidder uses BidderUtil.defaultRequest for outgoing HTTP request construction — Rule 8 Java side."
+    - "ExtImpTeqblaze uses @Value(staticConstructor = \"of\"); TeqblazeExtImp uses @Value @Builder. Two POJO frameworks for the input vs output ext shapes."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
+
+registry: {}

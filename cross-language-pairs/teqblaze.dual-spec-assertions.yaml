@@ -1,0 +1,260 @@
+dual_spec_assertion_version: 1
+bidder_name: teqblaze
+go_spec: prebid-server-go/read/test-fixtures/teqblaze.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/teqblaze.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+assertions:
+  bidder_params_sha256:
+    go: ef396f97c184f14224d0006d6277c6982e7afea42f650e43f31af2c79e8b53bb
+    java: cf4b60b8f32e1379fe25290858433b8f03041384eabca6380dad1c91b0363f2a
+    byte_equal: false
+    semantically_equal: true                  # Same JSON Schema content (same $schema, properties, required+oneOf, types). TWO byte differences.
+    divergence_kind: byte-only
+    divergence_summary: |
+      Two byte differences:
+      (1) Title: Go says `"TeqBlaze Adapter Params"` (capital B). Java says `"Teqblaze Adapter Params"` (lowercase b). Description text on both says "TeqBlaze" — only the title diverges.
+      (2) `oneOf` expansion: Go uses single-line form `{ "required": ["placementId"] }`. Java uses multi-line expanded form (each required: [...] on own indented line). Same JSON content; pretty-print style differs.
+      Plus trailing-newline-presence: Java ends with `}\n`; Go ends with `}` (no trailing newline). Rule 38 byte-only divergence; Rule 39 derived view (combinators_used) agrees on `[oneOf]`.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    java:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 0
+    java: 0
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: github@teqblaze.com
+    java: github@teqblaze.com
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_endpoint:
+    go: ""                                    # whiteLabelOnly: true; parent has no endpoint
+    java: "http://"                           # placeholder, never used
+    byte_equal: false
+    semantically_equal: true                  # Both indicate "parent non-functional"; aliases supply real endpoints
+    divergence_kind: parent-non-functional-divergence
+    divergence_summary: |
+      Both sides declare the parent as non-functional but with different sentinels:
+      Go uses `whiteLabelOnly: true` + omitted endpoint; Java uses `endpoint: http://`
+      placeholder. Aliases (10 each side) supply real per-host endpoints. NOT a
+      port-fidelity violation — it's the white-label-only-parent pattern (alternative
+      to smarthub-style where the parent itself functions). Distinct flavor variant.
+    severity: warn
+
+  bidder_info_default_enabled:
+    go: true
+    java: true
+    equivalent: true
+    rule_45_match: n/a                        # Parent enabled on both; the 10 alias children all default-disabled on Java side per Rule 45
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: []
+    java_required_fields: []
+    go_combinators_used: [oneOf]
+    java_combinators_used: [oneOf]
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [placementId, endpointId]
+    java_properties: [placementId, endpointId]
+    equivalent: true
+    severity: pass
+    note: "First corpus example of params `oneOf` combinator (gates on placementId XOR endpointId)."
+
+  alias_graph:
+    go_aliases:
+      - 360playvid
+      - pinkLion
+      - rocketlab
+      - appStockSSP
+      - gravite
+      - bidfuse
+      - adsinteractive
+      - progx
+      - harion
+      - mycodemedia
+    java_aliases:
+      - 360playvid
+      - pinkLion
+      - rocketlab
+      - appStockSSP
+      - gravite
+      - bidfuse
+      - adsinteractive
+      - progx
+      - harion
+      - mycodemedia
+    aliases_match: true
+    rule_33_inversion: true
+    rule_44_empire_flavor: white-label-saas
+    severity: pass
+
+  empire_consolidation:
+    rule_44_canonical_master: false           # smarthub is the canonical white-label-saas master; teqblaze is the second largest reference
+    parent_flavor: white-label-saas
+    child_flavor_coherence:
+      360playvid: white-label-saas
+      pinkLion: white-label-saas
+      rocketlab: white-label-saas
+      appStockSSP: white-label-saas
+      gravite: white-label-saas
+      bidfuse: white-label-saas
+      adsinteractive: white-label-saas
+      progx: white-label-saas
+      harion: white-label-saas
+      mycodemedia: white-label-saas
+    severity: pass
+
+  alias_test_coverage:
+    java_aliases_with_it_class: 0             # NONE of 10 aliases has its own IT class (distinct from smarthub which has 8/9)
+    java_aliases_missing_it_class:
+      - 360playvid
+      - pinkLion
+      - rocketlab
+      - appStockSSP
+      - gravite
+      - bidfuse
+      - adsinteractive
+      - progx
+      - harion
+      - mycodemedia
+    java_aliases_with_fixture_dir: 0          # No per-alias fixture dirs either
+    severity: warn
+    note: |
+      All 10 teqblaze aliases lack per-alias IT classes AND fixture dirs. Only the
+      parent TeqblazeTest exists (with the canonical 4-file fixture set). Distinct
+      from smarthub (8/9 aliases have IT classes + all 9 have fixture dirs).
+      Reviewers may flag as gap — Rule 37 expects per-alias IT class on Java side
+      for production-grade coverage.
+
+  imp_ext_repack:
+    both_sides_repack: true                   # Symmetric: Go and Java both build a new ext shape with `type: publisher|network` tag
+    go_input_shape: "{placementId | endpointId}"
+    go_output_shape: "{bidder: {type, placementId|endpointId}}"
+    java_input_shape: "ExtImpTeqblaze {placementId, endpointId}"
+    java_output_shape: "TeqblazeExtImp {type, placementId, endpointId}"
+    severity: pass
+    note: |
+      The input ext (parsed from imp.ext.bidder) carries placementId XOR endpointId.
+      Both languages REPACK to add a `type: publisher|network` tag derived from
+      which input field was supplied. Java uses two ext POJO classes
+      (ExtImpTeqblaze in canonical proto/, TeqblazeExtImp in non-canonical
+      bidder/teqblaze/proto/ — the helper-class-co-located helper_classes_in_proto
+      split). Go uses anonymous structs (reqBodyExt + reqBodyExtBidder defined in
+      teqblaze.go).
+
+  config_class_location:
+    go_path: "(N/A — Go has no Spring config)"
+    java_path: "src/main/java/org/prebid/server/spring/config/bidder/util/TeqblazeConfiguration.java"
+    canonical_path: "src/main/java/org/prebid/server/spring/config/bidder/<Name>Configuration.java"
+    severity: warn
+    note: |
+      TeqblazeConfiguration lives in `spring/config/bidder/util/` subpackage instead
+      of the canonical `spring/config/bidder/`. Of 255 bidder Configuration classes,
+      teqblaze is the only one in the util/ subpackage today. Likely an upstream
+      port-time mis-placement. Cross-language fidelity NOT broken — Spring still
+      finds the @Configuration; this is a code-organization artifact only.
+
+  yaml_field_name_typos:
+    go: []
+    java:
+      - alias: gravite
+        field: mata-info
+        canonical: meta-info
+        line: 50
+        severity: WARN
+        note: "Maintainer-email + vendor-id under typo'd key are silently ignored by Spring binding."
+    severity: warn
+
+  bid_type_resolution:
+    go_method_chain: [{ method: by-bid-mtype, supports: [banner, video, native] }]
+    java_method_chain: [{ method: by-bid-mtype, supports: [banner, video, audio, native] }]
+    equivalent: false
+    divergence_summary: |
+      Java supports mtype=3 (audio) AND mtype=4 (native). Go supports mtype=1/2/3
+      (banner/video/native) using the openrtb2.MarkupNative constant which equals 3,
+      so the Go side's "case openrtb2.MarkupNative" actually classifies mtype=3 as
+      native — but a real audio bid (per OpenRTB 2.6) would be mtype=3 typed audio.
+      The Go implementation conflates audio with native by reading the constant
+      semantics; a real cross-language port would treat them distinctly. Audio not
+      in capabilities on either side, so this is a latent gap rather than runtime
+      bug today. Recorded as bid-mtype-audio-divergence quirk on Java spec.
+    severity: warn
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: prebid/prebid-server-java#4161
+    destination_pr: prebid/prebid-server#4480
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-white-label-saas
+      - imp-ext-repack
+      - bid-mtype-audio-divergence
+      - white-label-only-parent
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 6
+  notes: |
+    Teqblaze is the Phase 5 P1 #3 fixture for ADR-003 Rule 44 white-label-saas
+    flavor — second-largest empire today (10 aliases, parallel to smarthub's 9).
+    Distinguished from smarthub by:
+      (1) parent itself non-functional — Go declares whiteLabelOnly: true with no
+          endpoint; Java has placeholder `endpoint: http://`. Neither parent
+          receives traffic.
+      (2) imp.ext repack: both sides REPACK imp.ext.bidder with a derived
+          `type: publisher|network` tag based on which of placementId XOR
+          endpointId was supplied. Java uses two POJO classes; Go uses anonymous
+          structs.
+      (3) per-alias IT classes: none. Distinct from smarthub's 8/9 IT class coverage.
+      (4) `oneOf` combinator in params JSON — first corpus example.
+
+    Six warn-level findings:
+      (1) bidder_params_sha byte-divergence (title 'TeqBlaze' vs 'Teqblaze' + oneOf
+          formatting + trailing newline).
+      (2) parent-non-functional-divergence: Go whiteLabelOnly vs Java placeholder.
+      (3) alias_test_coverage: 0/10 aliases have IT classes (vs smarthub 8/9).
+      (4) config_class_location: TeqblazeConfiguration in util/ subpackage anomaly.
+      (5) yaml-field-name-typo: gravite alias has `mata-info` instead of `meta-info`.
+      (6) bid_type_resolution: Java supports audio (mtype=3); Go conflates with
+          native via openrtb2.MarkupNative constant.
+
+    Notable patterns captured:
+      - Rule 15 deploy-time-token #{REGION}# on appStockSSP alias.
+      - Rule 46 digit-leading alias name (360playvid).
+      - First params oneOf combinator in corpus.
+      - Two ext POJO classes per Java bidder (input + output ext shape divergence).
+
+    Phase 5 next: P2 (limelightDigital — third empire flavor: endpoint-macro-substitution
+    with 15 aliases — the complexity-high reference per ADR-003).
