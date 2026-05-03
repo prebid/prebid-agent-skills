@@ -68,14 +68,13 @@ jobs:
       - name: Schema validation — all goldens
         run: python3 -m unittest scripts.tests.test_schema_jsonschema -v
 
-      - name: Audit goldens vs upstream signatures
-        run: |
-          set +e
-          python3 scripts/audit-golden.py --all
-          EXIT=$?
-          set -e
-          # Exit codes: 0=all pass, 1=fail, 2=warn-only.
-          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
+      # NOTE: `audit-golden.py` runs upstream `gh api` calls to verify each
+      # golden's recorded SHAs / file paths match the upstream repo at the
+      # pinned commit. Required at fixture-authoring time, not at PR time.
+      # Removed from CI to keep the workflow hermetic (no external API
+      # dependency, no GH_TOKEN coupling). Authors run `make audit-goldens`
+      # locally before submitting fixture-touching PRs — see
+      # `prebid-server-{go,java}/read/test-fixtures/README.md`.
 
       - name: Unit tests (full harness)
         run: python3 -m unittest discover -s scripts/tests -v

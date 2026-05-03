@@ -30,6 +30,19 @@
 
 Each fixture should reproduce byte-identically when re-emitted by the read-orchestrator skill against the same `provenance.source.resolved_commit`, modulo `provenance.read.timestamp_utc` and `provenance.read.operator`.
 
+## Upstream-signature audit (manual; pre-PR for fixture-touching changes)
+
+`scripts/audit-golden.py` cross-checks each golden's recorded `bidder_params_sha256`, file-inventory paths, and a few other claims against the upstream `prebid/prebid-server-java` repo at the pinned `provenance.source.resolved_commit`. It uses `gh api` and therefore requires `gh auth login` (or `GH_TOKEN`) — that's why it's NOT part of `make ci` (CI is hermetic).
+
+Run it manually before submitting a fixture-touching PR:
+
+```bash
+make audit-goldens          # all fixtures (Go + Java)
+python3 scripts/audit-golden.py kobler   # one bidder
+```
+
+Exit codes: `0` clean, `1` real failures, `2` warnings only, `3` `gh` API unreachable (auth missing or rate-limited — re-run after `gh auth login`).
+
 ## Adding or refreshing a fixture
 
 1. Identify the bidder and the upstream commit to pin against.

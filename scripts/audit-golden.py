@@ -99,52 +99,109 @@ class Audit:
 
 # ---------------------------------------------------------------------------
 # Upstream fetch helpers (gh api authenticated)
+#
+# This script is intentionally NOT part of `make ci` — it requires `gh auth
+# login` (or GH_TOKEN). Run manually as `make audit-goldens` before
+# submitting fixture-touching PRs.
 # ---------------------------------------------------------------------------
 
 GO_REPO = "prebid/prebid-server"
 JAVA_REPO = "prebid/prebid-server-java"
 
 
-def gh_get_file(repo: str, path: str, ref: str) -> Optional[bytes]:
-    """Fetch a single file's raw bytes via gh api. Returns None on 404."""
+class GhApiUnreachable(Exception):
+    """Raised by `gh_get_file` / `gh_list_dir` when the gh CLI is
+    unauthenticated, rate-limited, network-failed, or otherwise can't reach
+    the API. DISTINCT from a genuine HTTP 404 (file/directory doesn't exist
+    at the ref), which returns `None`.
+
+    The audit caller MUST abort the entire audit when this is raised —
+    treating "API unreachable" as "every file is missing" produces a
+    false-negative flood (240+ false FAILs) that masks real upstream-drift
+    signals. The original incident: missing `GH_TOKEN` in CI caused
+    unauthenticated `gh api` calls to rate-limit/401, the script swallowed
+    all non-zero returncodes as 404, and the workflow reported "246
+    failures" against goldens whose upstream files actually existed.
+    """
+
+
+def _gh_api(repo: str, path: str, ref: str) -> Any:
+    """Run `gh api repos/{repo}/contents/{path}?ref={ref}` and return the
+    parsed JSON.
+
+    Returns:
+        - The parsed JSON (dict for files, list for directories) on success.
+        - `None` on a genuine HTTP 404 (file/dir doesn't exist at the ref).
+
+    Raises:
+        GhApiUnreachable on any non-404 failure (auth missing, rate limit,
+        timeout, gh CLI not installed, malformed response). Caller MUST
+        propagate to the audit's top-level handler so the run aborts
+        rather than silently treating every fetch as "missing".
+    """
     try:
         result = subprocess.run(
             ["gh", "api", f"repos/{repo}/contents/{path}?ref={ref}"],
             capture_output=True, text=True, timeout=30,
         )
-    except Exception:
-        return None
+    except FileNotFoundError as exc:
+        raise GhApiUnreachable(f"gh CLI not installed: {exc}")
+    except subprocess.TimeoutExpired:
+        raise GhApiUnreachable(f"timeout fetching {repo}/{path}@{ref}")
+    except Exception as exc:
+        raise GhApiUnreachable(
+            f"gh subprocess failed for {repo}/{path}@{ref}: {type(exc).__name__}: {exc}"
+        )
+
     if result.returncode != 0:
-        return None
+        stderr = (result.stderr or "").strip()
+        # `gh api` exits non-zero with stderr like "gh: Not Found (HTTP 404)"
+        # for a genuine 404. Auth failures, rate limits, and network errors
+        # surface as different stderr text — treat them as unreachable so
+        # the audit aborts rather than flooding false 404s.
+        if "HTTP 404" in stderr or "Not Found" in stderr:
+            return None
+        raise GhApiUnreachable(
+            f"gh api failed for {repo}/{path}@{ref} (returncode={result.returncode}): "
+            f"{stderr or '<empty stderr>'}"
+        )
+
     try:
-        d = json.loads(result.stdout)
-    except json.JSONDecodeError:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise GhApiUnreachable(
+            f"gh api returned non-JSON for {repo}/{path}@{ref}: {exc}"
+        )
+
+
+def gh_get_file(repo: str, path: str, ref: str) -> Optional[bytes]:
+    """Fetch a single file's raw bytes via gh api. Returns None on a genuine
+    HTTP 404. Raises `GhApiUnreachable` on any other failure mode."""
+    d = _gh_api(repo, path, ref)
+    if d is None:
         return None
     if not isinstance(d, dict) or "content" not in d:
+        # Unexpected shape (e.g., directory listing returned where file
+        # expected). Treat as not-found — caller decides what to do.
         return None
     try:
         return base64.b64decode(d["content"])
-    except Exception:
-        return None
+    except Exception as exc:
+        raise GhApiUnreachable(
+            f"base64 decode failed for {repo}/{path}@{ref}: {exc}"
+        )
 
 
 def gh_list_dir(repo: str, path: str, ref: str) -> Optional[List[Dict[str, Any]]]:
-    """List a directory's entries via gh api. Returns None on 404."""
-    try:
-        result = subprocess.run(
-            ["gh", "api", f"repos/{repo}/contents/{path}?ref={ref}"],
-            capture_output=True, text=True, timeout=30,
-        )
-    except Exception:
-        return None
-    if result.returncode != 0:
-        return None
-    try:
-        d = json.loads(result.stdout)
-    except json.JSONDecodeError:
+    """List a directory's entries via gh api. Returns None on a genuine
+    HTTP 404. Raises `GhApiUnreachable` on any other failure mode."""
+    d = _gh_api(repo, path, ref)
+    if d is None:
         return None
     if isinstance(d, list):
         return d
+    # Unexpected shape (file returned where directory expected). Treat as
+    # not-found — caller decides what to do.
     return None
 
 
@@ -725,7 +782,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"ERROR: no goldens matched {'--all' if args.all else args.bidder!r}", file=sys.stderr)
         return 1
 
-    audits = [audit_one(p) for p in paths]
+    try:
+        audits = [audit_one(p) for p in paths]
+    except GhApiUnreachable as exc:
+        print(f"ABORT: gh API unreachable — {exc}", file=sys.stderr)
+        print(
+            "This typically means `gh auth login` hasn't been run, GH_TOKEN "
+            "is missing, or upstream is rate-limiting. The audit cannot "
+            "distinguish real upstream-drift from API failures and is "
+            "aborting (exit 3) to prevent a false-negative flood.",
+            file=sys.stderr,
+        )
+        return 3
     if args.json:
         text, code = render_json(audits)
     else:
