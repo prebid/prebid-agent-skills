@@ -322,7 +322,7 @@ lifecycle:
     notes:
       - "Liftoff acquired Vungle in 2021 (parent-company-name change; the SSP/exchange product remained Vungle Exchange)."
       - "Java handles legacy `liftoff` operator-config via tilde-inherit alias under vungle.yaml's `aliases:` block (default-disabled). LiftoffTest IT class exercises this alias-back path (fixture dir openrtb2/liftoff/)."
-      - "ADR-006 originally classified liftoff/vungle as `go-leads`. Upstream evidence (this fixture pair) shows the actual state is `bilateral` with phantom-rename history. ADR-006 needs follow-up correction; deferred to future commit."
+      - "ADR-006 originally classified liftoff/vungle as `go-leads`. Upstream evidence (this fixture pair) shows the actual state is `bilateral` with phantom-rename history. ADR-006 was subsequently corrected per this evidence — see CHANGELOG `## Unreleased — ADR corrections (no version bump)` and ADR-006 line 3 `refined 2026-05-03`."
 
 iab_category_storage:
   storage_kind: none

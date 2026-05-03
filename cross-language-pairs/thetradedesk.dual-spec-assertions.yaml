@@ -295,10 +295,13 @@ overall:
   warning_count: 8
   notes: |
     thetradedesk is the canonical Phase 5 stretch #2 fixture for ADR-007 F4
-    `bid-post-processing-macro`. UNLIKE the F2 precedent (freewheelssp
-    contradicted ADR-007 F2's multi-endpoint-by-mediatype claim), F4 is
-    EMPIRICALLY CONFIRMED with high confidence. thetradedesk IS the
-    canonical comprehensive master sample.
+    `bid-post-processing-macro`. UNLIKE the F2 label-collision precedent
+    (`coverage-report.py:58` originally mis-labeled F2 as
+    `multi-endpoint-by-mediatype` — that's actually F1's master = beachfront;
+    the label was corrected per the ADR-corrections commit and F2 was
+    empirically RE-AFFIRMED as `language-stamped-header-divergence`), F4 is
+    EMPIRICALLY CONFIRMED with high confidence on the original master claim.
+    thetradedesk IS the canonical comprehensive master sample.
 
     Empirical state at pinned commits (Go 2fae16f3, Java a1fe64e1):
 
@@ -334,7 +337,9 @@ overall:
     Patterns captured for the first time in the corpus:
 
       - ADR-007 F4 EMPIRICAL CONFIRMATION — first explicit master-sample
-        fixture confirming F4. Distinct from F2 (contradicted) — both
+        fixture confirming F4. Distinct from F2 (re-affirmed; the
+        "contradicted" framing was a coverage-report.py:58 label-collision
+        artifact only, corrected per the ADR-corrections commit) — both
         F4 patterns are real and well-documented in upstream code.
       - SINGLE-MACRO-THREE-FIELD FLAVOR — explicit sub-classification
         of F4. Distinguishes from multi-macro variants that may emerge
@@ -389,8 +394,9 @@ overall:
         + S2). PHASE 5 CORPUS COMPLETE.
       - Lifecycle pairs covered: 3 of 7 (unchanged — thetradedesk has
         no lifecycle).
-      - Rule 46 pairs covered: 1 of 12 (unchanged — thetradedesk is
-        not a Rule 46 case).
+      - Rule 46 pairs covered: 1 of 11 (refined 2026-05-03 from 12 —
+        freewheel-ssp/freewheelssp removed from RULE_46_PAIRS; thetradedesk
+        is not a Rule 46 case).
       - Empire parents (ADR-003 deep-dived): 4 of 5 (only nexx360
         remaining — and nexx360 is NOT in PHASE_5_PAIRS, so this is
         a non-Phase-5 gap).

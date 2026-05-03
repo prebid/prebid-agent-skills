@@ -23,10 +23,10 @@ provenance:
       file: src/main/java/org/prebid/server/bidder/freewheelssp/
       line: 0
       summary: "The bidder package contains ONLY one class: `FreewheelSSPBidder.java`. There is NO separate Util/Helper/Model class — Java edge case #19 (alternate naming form: package has only the Bidder-suffix class). Same pattern as emxdigital and adkerneladn."
-    - type: adr-007-f2-empirical-contradiction
+    - type: adr-007-f2-label-collision-corrected
       file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
       line: 43
-      summary: "ADR-007 F2 cites freewheelssp as the canonical master sample for the `multi-endpoint-by-mediatype` pattern. EMPIRICAL EVIDENCE CONTRADICTS this claim: bidder class has ONE `endpointUrl String` field; makeHttpRequests uses `BidderUtil.defaultRequest(...)` with the single endpointUrl, NO per-mediatype URL selection, NO conditional branching. Capabilities declare video-only — banner is not in scope. The `fwssp` alias has a DIFFERENT endpoint at YAML config level (alias-with-different-endpoint pattern), NOT a runtime multi-endpoint switch. ADR-007 F2's master-sample classification needs correction."
+      summary: "ADR-007 F2 master claim (freewheelssp = `language-stamped-header-divergence`) was empirically RE-AFFIRMED — Componentid: prebid-go (Go) vs Componentid: prebid-java (Java). The earlier `coverage-report.py:58` framing labeled F2 as `multi-endpoint-by-mediatype` (which is actually F1's master = beachfront); that label-collision was corrected per the ADR-corrections commit. Empirical structural evidence on the SINGLE-endpoint fact: bidder class has ONE `endpointUrl String` field; makeHttpRequests uses `BidderUtil.defaultRequest(...)` with single endpointUrl. Capabilities declare video-only — confirming F2 is about HEADER divergence (Componentid value), not per-mediatype endpoint switching. The `fwssp` alias's different endpoint is at YAML config level (alias-with-different-endpoint pattern), NOT a runtime multi-endpoint switch."
     - type: java-pojo-extra-fields-asymmetry
       file: src/main/java/org/prebid/server/proto/openrtb/ext/request/freewheelssp/ExtImpFreewheelSSP.java
       line: 0
@@ -364,9 +364,9 @@ quirks:
     file: src/main/java/org/prebid/server/bidder/freewheelssp/
     summary: "Bidder package contains ONLY `FreewheelSSPBidder.java`. No Util/Helper/Model classes. Java edge case #19 alternate naming. Same pattern as emxdigital and adkerneladn."
     edge_case_taxon: yaml-field-name-typo
-  - id: adr-007-f2-claim-contradicted
+  - id: adr-007-f2-label-collision-corrected
     file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
-    summary: "ADR-007 F2 cites freewheelssp as the canonical multi-endpoint-by-mediatype master. EMPIRICALLY WRONG: bidder has SINGLE `endpointUrl String` field; makeHttpRequests uses BidderUtil.defaultRequest with single endpointUrl. No per-mediatype URL switching. Capabilities are video-only. The fwssp alias's different endpoint is at YAML config level, NOT runtime."
+    summary: "ADR-007 F2 master claim (freewheelssp = language-stamped-header-divergence) RE-AFFIRMED. The label-collision in coverage-report.py:58 (mis-labeling F2 as multi-endpoint-by-mediatype, which is F1's master = beachfront) was corrected per the ADR-corrections commit. Empirical structural evidence on the SINGLE-endpoint fact: bidder has ONE `endpointUrl String` field; makeHttpRequests uses BidderUtil.defaultRequest with single endpointUrl — confirming F2 is about HEADER divergence (Componentid value), not per-mediatype endpoint switching. Capabilities are video-only."
     edge_case_taxon: hardcoded-config-as-anti-pattern
   - id: java-pojo-extra-fields-snake-case
     file: src/main/java/org/prebid/server/proto/openrtb/ext/request/freewheelssp/ExtImpFreewheelSSP.java
@@ -431,8 +431,8 @@ cross_language:
     destination_pr: null
     fidelity_review_themes:
       - port-fidelity
-      - adr-007-f2-empirical-correction
-      - adr-005-rule-46-canonical-same-name-correction
+      - adr-007-f2-label-collision-corrected
+      - adr-005-rule-46-canonical-same-name-corrected
       - alias-of-yaml-stub-mechanism
       - fwssp-cross-language-topology-asymmetry
       - hardcoded-video-bid-type

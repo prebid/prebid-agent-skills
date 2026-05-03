@@ -23,10 +23,10 @@ provenance:
       file: static/bidder-info/
       line: 0
       summary: "Go has THREE bidder-info YAML files for the freewheel ecosystem: (1) `freewheelssp.yaml` (canonical, sha 42f84dcf, full config), (2) `freewheel-ssp.yaml` (sha c5a2bdc5, ALIAS-STUB via top-level `aliasOf: freewheelssp` field — a NEW Go-side alias mechanism not previously seen in the corpus, distinct from cadent's full-duplication and from vungle's removed-bidder-warning-map), (3) `fwssp.yaml` (sha 351c3d08, separate top-level bidder package at adapters/fwssp/ with its own Builder, different upstream endpoint https://prebid.v.fwmrm.net/ortb/ssp). Both `BidderFreewheelSSP` (=\"freewheelssp\") and `BidderFWSSP` (=\"fwssp\") are registered as core bidders. The hyphenated `freewheel-ssp` form has no separate bidder constant — it inherits via `aliasOf:` indirection at the YAML layer."
-    - type: adr-007-f2-empirical-contradiction
+    - type: adr-007-f2-label-collision-corrected
       file: adapters/freewheelssp/freewheelssp.go
       line: 16
-      summary: "ADR-007 F2 cites freewheelssp as the canonical master sample for the `multi-endpoint-by-mediatype` pattern. EMPIRICAL EVIDENCE CONTRADICTS this claim: the adapter struct has ONE `endpoint string` field; MakeRequests uses `a.endpoint` verbatim with NO per-mediatype URL selection, NO conditional branching, NO template macro substitution. Capabilities declare video-only on both site and app — banner is not in scope. The `fwssp` sibling (separate bidder, different endpoint) is an ALIAS-WITH-DIFFERENT-ENDPOINT pattern at the framework dispatch level, NOT a runtime multi-endpoint switch. ADR-007 F2's master-sample classification needs correction; freewheelssp does NOT exemplify multi-endpoint-by-mediatype."
+      summary: "ADR-007 F2 master claim (freewheelssp = `language-stamped-header-divergence`) was empirically RE-AFFIRMED — Componentid: prebid-go (Go) vs Componentid: prebid-java (Java). The earlier `coverage-report.py:58` framing labeled F2 as `multi-endpoint-by-mediatype` (which is actually F1's master = beachfront); that label-collision was corrected per the ADR-corrections commit. Empirical structural evidence on the SINGLE-endpoint fact: the adapter struct has ONE `endpoint string` field; MakeRequests uses `a.endpoint` verbatim with NO per-mediatype URL selection. Capabilities declare video-only — confirming F2 is about HEADER divergence (Componentid value), not per-mediatype endpoint switching. The `fwssp` sibling (separate bidder, different endpoint) is alias-with-different-endpoint at framework-dispatch level, NOT runtime multi-endpoint."
 
 meta:
   bidder_name: freewheelssp                   # Canonical name on both sides (no hyphen). The hyphenated `freewheel-ssp` is a Go-only YAML alias-stub.
@@ -285,10 +285,10 @@ quirks:
     line: 1
     summary: "FIRST CORPUS EXAMPLE of the Go `aliasOf:` YAML alias-stub mechanism. The hyphenated YAML file declares `aliasOf: freewheelssp` as its first field; the framework reads this and treats freewheel-ssp as a runtime alias of freewheelssp (sharing endpoint, params, and adapter code). Distinct from cadent's full-duplication pattern. Distinct from vungle's removed-bidder warning."
     edge_case_taxon: bidder-rename-three-step
-  - id: adr-007-f2-claim-contradicted
+  - id: adr-007-f2-label-collision-corrected
     file: adapters/freewheelssp/freewheelssp.go
     line: 16
-    summary: "ADR-007 F2 cites freewheelssp as the canonical multi-endpoint-by-mediatype master. EMPIRICALLY WRONG: adapter struct has SINGLE `endpoint string` field; MakeRequests uses it verbatim. No per-mediatype URL switching. Capabilities are video-only (no banner in scope). The fwssp sibling (separate bidder, different endpoint) is alias-with-different-endpoint at framework-dispatch level, NOT runtime multi-endpoint."
+    summary: "ADR-007 F2 master claim (freewheelssp = language-stamped-header-divergence) RE-AFFIRMED. The label-collision in coverage-report.py:58 (mis-labeling F2 as multi-endpoint-by-mediatype, which is F1's master = beachfront) was corrected per the ADR-corrections commit. Empirical structural evidence on the SINGLE-endpoint fact: adapter struct has ONE `endpoint string` field; MakeRequests uses it verbatim — confirming F2 is about HEADER divergence (Componentid value), not per-mediatype endpoint switching. Capabilities are video-only (no banner in scope)."
     edge_case_taxon: hardcoded-config-as-anti-pattern
   - id: hardcoded-video-bid-type
     file: adapters/freewheelssp/freewheelssp.go
@@ -355,8 +355,8 @@ cross_language:
     destination_pr: null
     fidelity_review_themes:
       - port-fidelity
-      - adr-007-f2-empirical-correction
-      - adr-005-rule-46-canonical-same-name-correction
+      - adr-007-f2-label-collision-corrected
+      - adr-005-rule-46-canonical-same-name-corrected
       - alias-of-yaml-stub-mechanism
       - fwssp-cross-language-topology-asymmetry
       - hardcoded-video-bid-type

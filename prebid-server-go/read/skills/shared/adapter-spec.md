@@ -183,6 +183,6 @@ A dual-spec assertion FAIL is a port-fidelity violation that surfaces in the cro
 - [`prebid-server-java/references/new-bid-adapter-prs.md`](../../../../prebid-server-java/references/new-bid-adapter-prs.md) — 49 reference PRs.
 - Sibling shared file: [`prebid-server-go/review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md).
 - Sibling shared file: [`behavior-taxonomy.md`](behavior-taxonomy.md).
-- Sibling shared file: [`port-translation-rules.md`](port-translation-rules.md) — 46 cross-language Go↔Java translation rules (auto-generated from `port-translation-rules.yaml`; Rules 44/45/46 added in Phase 2.5 per ADR-003/004/005; Rule 43 sub-types `bilateral`/`java-leads`/`go-leads` per ADR-006).
+- Sibling shared file: [`port-translation-rules.md`](port-translation-rules.md) — 46 cross-language Go↔Java translation rules (auto-generated from `port-translation-rules.yaml`; Rules 44/45/46 added in Phase 2.5 per ADR-003/004/005; Rule 43 sub-types `bilateral`/`java-leads`/`go-leads`/`mirror-topology`/`inverted-parent` per ADR-006, 5 subtypes refined 2026-05-03 from 3).
 - Sibling machine-readable schema: [`adapter-spec.schema.json`](adapter-spec.schema.json) — JSON Schema 2020-12 (Phase 2.0/2.1).
 - ADR index: [`docs/decisions/`](../../../../docs/decisions/).

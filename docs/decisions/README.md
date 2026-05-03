@@ -33,9 +33,9 @@ This directory captures non-obvious decisions made during PR review and planning
 | [ADR-003](003-rule-44-alias-empire-consolidation.md) | Rule 44: Java alias-empire consolidation pattern | Proposed |
 | [ADR-004](004-rule-45-disabled-by-default-java-alias.md) | Rule 45: Disabled-by-default Java alias pattern | Proposed |
 | [ADR-005](005-rule-46-naming-convention-normalization.md) | Rule 46: Naming-convention normalization (Java lowercases Go camelCase/snake_case) | Proposed |
-| [ADR-006](006-rule-43-sub-categorization.md) | Rule 43 sub-categorization: synchronized / java-leads / go-leads lifecycle renames | Proposed |
+| [ADR-006](006-rule-43-sub-categorization.md) | Rule 43 sub-categorization: bilateral / java-leads / go-leads / mirror-topology / inverted-parent lifecycle renames (5 subtypes; refined 2026-05-03 from 3 — `synchronized` renamed to `bilateral` in audit A5; `mirror-topology` and `inverted-parent` added per Phase 5 empirical evidence) | Proposed |
 | [ADR-007](007-novel-pattern-schema-additions.md) | Five new schema fields for novel patterns observed in diversity sample | Proposed |
-| [ADR-008](008-phase-5-pair-fixtures.md) | Phase 5 expanded pair fixtures: 7 new pairs (smarthub, teqblaze, adverxo, limelightDigital, vungle/liftoff, emxdigital/cadent_aperture_mx, adkernelAdn/adkerneladn) — 9.5 days P1-P3 | Proposed |
+| [ADR-008](008-phase-5-pair-fixtures.md) | Phase 5 expanded pair fixtures: 7 new pairs (smarthub, teqblaze, adverxo, limelightDigital, vungle [refined 2026-05-03 from vungle/liftoff cross-name], emxdigital/cadent_aperture_mx, adkernelAdn/adkerneladn) — 9.5 days P1-P3 | Proposed |
 
 ADRs marked `Proposed` are pending Phase 2 (schema migration) execution. They become `Accepted` when the corresponding code/schema changes land.
 

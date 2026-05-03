@@ -94,7 +94,7 @@ lifecycle:
       - { from: <path>, to: <path> }
     yaml_deletes: []
     yaml_adds: []
-    rename_subtype: synchronized | java-leads | go-leads   # ADR-006
+    rename_subtype: bilateral | java-leads | go-leads | mirror-topology | inverted-parent   # ADR-006 (refined 2026-05-03 from 3 to 5 subtypes; was synchronized | java-leads | go-leads — `synchronized` renamed to `bilateral` in audit A5; `mirror-topology` and `inverted-parent` added per Phase 5 empirical evidence)
     merged_at: <date>
     release: <version>
 ```

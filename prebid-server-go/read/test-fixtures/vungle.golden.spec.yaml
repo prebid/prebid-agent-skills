@@ -256,7 +256,7 @@ lifecycle:
       - "Liftoff acquired Vungle in 2021. The acquisition was a parent-company-name change; the SSP/exchange product remained `Vungle Exchange`."
       - "Some operators configured `liftoff` based on the acquisition news (treating it as a rename). Both prebid-server-go and prebid-server-java handle this with backward-compat: Go via the removed-bidder warning map; Java via tilde_inherit alias `aliases: { liftoff: { enabled: false } }` in vungle.yaml."
       - "Maintainer email is `vxssp@liftoff.io` (Liftoff parent company) on both sides."
-      - "ADR-006 originally classified this as go-leads with `liftoff (Go) ↔ vungle (Java)`. Upstream evidence (this fixture) shows the actual state is bilateral with phantom-rename history. ADR-006 needs follow-up correction; deferred to future commit."
+      - "ADR-006 originally classified this as go-leads with `liftoff (Go) ↔ vungle (Java)`. Upstream evidence (this fixture) shows the actual state is bilateral with phantom-rename history. ADR-006 was subsequently corrected per this evidence — see CHANGELOG `## Unreleased — ADR corrections (no version bump)` and ADR-006 line 3 `refined 2026-05-03`."
 
 iab_category_storage:
   storage_kind: none

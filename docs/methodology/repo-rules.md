@@ -121,7 +121,7 @@ the policy was last re-confirmed.
 
 - Go upstream: `prebid/prebid-server` master at v4.1.0 (commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`, 2026-04-27).
 - Java upstream: `prebid/prebid-server-java` master at v3.41.0 (commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a`, 2026-04-22).
-- ADR-005 (Rule 46 naming): the mechanical transformation table + 12 verified pairs.
+- ADR-005 (Rule 46 naming): the mechanical transformation table + 11 verified pairs (refined 2026-05-03 from 12 — `freewheel-ssp/freewheelssp` removed; see ADR-005 "Excluded cases").
 - ADR-003 (Rule 44 alias-empire): 32-parent / 95-alias inventory.
 - ADR-004 (Rule 45 disabled-by-default): 78 disabled-asymmetric pairs.
 - Java edge cases #18–#34: `prebid-server-java/references/java-edge-cases.md`.

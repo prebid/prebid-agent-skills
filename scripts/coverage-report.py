@@ -8,8 +8,12 @@ Produces a markdown matrix at docs/coverage-report.md that shows:
    whether both halves are present and the assertion file is structurally valid.
 3. Phase 5 readiness — per ADR-008, the 9 prioritized pair fixtures and what's
    currently covered.
-4. Rule 46 naming pairs — 12 from ADR-005; which are in the corpus.
-5. Rule 43 lifecycle sub-types — bilateral / java-leads / go-leads coverage.
+4. Rule 46 naming pairs — 11 from ADR-005 (refined 2026-05-03 from 12 —
+   freewheel-ssp/freewheelssp removed; see ADR-005 "Excluded cases"); which
+   are in the corpus.
+5. Rule 43 lifecycle sub-types — bilateral / java-leads / go-leads /
+   mirror-topology / inverted-parent coverage (5 subtypes refined 2026-05-03
+   from 3).
 6. Java empire parents — 5 deep-dived in ADR-003 + the 32-parent total target;
    which have Java goldens, which have child goldens.
 7. Per-rule master-sample mentions — for each of the 46 rules in

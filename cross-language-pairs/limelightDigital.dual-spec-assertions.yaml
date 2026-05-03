@@ -286,5 +286,7 @@ overall:
       - white-label-saas: smarthub (9) + teqblaze (10, parent non-functional)
       - endpoint-macro-substitution: limelightDigital (15)
 
-    Phase 5 next: P2 #2 (liftoff/vungle — Rule 43 `go-leads` lifecycle sub-type
-    cross-name pair).
+    Phase 5 next: P2 #2 (vungle/vungle — Rule 43 `bilateral` phantom-rename
+    same-name pair; refined 2026-05-03 from `liftoff/vungle` cross-name
+    `go-leads` expectation per Phase 5 empirical evidence — see CHANGELOG
+    `## Unreleased — ADR corrections (no version bump)`).
