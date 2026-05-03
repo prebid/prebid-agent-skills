@@ -1,0 +1,302 @@
+dual_spec_assertion_version: 1
+bidder_name: emxdigital                       # Phase 5 key — matches PHASE_5_PAIRS in scripts/coverage-report.py. Note: Go-side filename uses `cadent_aperture_mx` (cross-name pair).
+go_spec: prebid-server-go/read/test-fixtures/cadent_aperture_mx.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/emxdigital.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+cross_name_pair: true                          # Go bidder name `cadent_aperture_mx` differs from Java bidder name `emxdigital` — TRUE cross-name pair (FIRST in the corpus to require explicit cross-name handling)
+
+assertions:
+  bidder_params_sha256:
+    go_cadent_aperture_mx: 737b0ab2b135ac90a610212736bc1915e98b5a452d87cdebaee7c682e51957a6
+    go_emx_digital:        2b35602b68a78d9af8884a90b455939d8e4b9b07708f3a6627e51a9ddc3bd02c
+    java_emx_digital:      0e1252c73f997b35a99dbfaabc83ccf602a0c60de8e9253c0eecdac971dfd6de
+    byte_equal_go_internal: false              # Go cadent.json (513B) vs Go emx_digital.json (506B) differ in title/description (emx file has copy-paste bug saying "Cadent Aperture MX adapter" in description)
+    byte_equal_cross_lang: false               # Java (466B, 2-space indent) differs from both Go files (4-space indent + extra blank line + 2-space final brace)
+    semantically_equal: true                   # All three: same `properties` (tagid string required, bidfloor string optional), same `required: [tagid]`, same `$schema`, same `type: object`
+    divergence_kind: byte-only-with-emx-typo
+    divergence_summary: "All three params JSON files have semantically identical schema content. Go cadent.json (513B, 4-space indent) ≠ Go emx_digital.json (506B, similar indent but different title/description — and description still says 'Cadent Aperture MX' even in the EMX file: copy-paste bug at upstream). Java emx_digital.json (466B, 2-space indent) is internally consistent. Bytes differ across all three pairings, but schema semantics are equal."
+    severity: warn
+
+  bidder_info_yaml_byte_equality:
+    go_cadent_yaml_sha:    8ee63ad8171be58806cd796650525fc0056669ee9111d879ab5b828da9803a5f
+    go_emx_yaml_sha:       8ee63ad8171be58806cd796650525fc0056669ee9111d879ab5b828da9803a5f
+    go_internal_byte_equal: true                # Go cadent.yaml === Go emx_digital.yaml (byte-identical, same sha256)
+    note: "Both Go bidder-info YAMLs are byte-identical — the duplicate registration is purely textual. Both files declare the same endpoint, capabilities, maintainer, gvlVendorID, and userSync. This contrasts with the Go params JSONs, which are byte-different (different titles/descriptions)."
+    severity: pass
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video]
+      app: [banner, video]
+    java:
+      site: [banner, video]
+      app: [banner, video]
+    equivalent: true
+    severity: pass
+
+  bidder_info_endpoint:
+    go: "https://hb.emxdgt.com"
+    java: "https://hb.emxdgt.com"
+    equivalent: true
+    severity: pass
+    note: "Hostname `hb.emxdgt.com` retains the legacy EMX domain on both sides. The SSP infrastructure was not rebranded along with the company name (cadent.tv maintainer)."
+
+  bidder_info_endpoint_compression:
+    go: null
+    java: null
+    equivalent: true
+    severity: pass
+
+  bidder_info_modifying_vast_xml_allowed:
+    go: false
+    java: false
+    equivalent: true
+    severity: pass
+
+  bidder_info_maintainer:
+    go: contactaperturemx@cadent.tv
+    java: contactaperturemx@cadent.tv
+    equivalent: true
+    severity: pass
+    note: "Maintainer email reflects post-acquisition Cadent parent-company address; bidder names retain both legacy (emx_digital) and new (cadent_aperture_mx) forms with asymmetric topology across languages."
+
+  bidder_info_gvl_vendor_id:
+    go: 183
+    java: 183
+    equivalent: true
+    severity: pass
+
+  bidder_info_default_enabled:
+    go_cadent_aperture_mx: true                 # Go core bidder default-enabled
+    go_emx_digital: true                        # Go sibling core bidder default-enabled
+    java_emxdigital_parent: true                # Java parent default-enabled
+    java_cadent_alias: false                    # Java alias default-DISABLED (Rule 45 instance) + geo-restricted [USA, CAN]
+    rule_45_match: alias-only                   # Disabled-by-default applies ONLY to the Java cadent alias, not to the parent or to either Go registration
+    severity: warn
+    note: "Asymmetric default-enabled state. Go sides are both fully enabled. Java parent (emxdigital) is enabled but the cadent_aperture_mx ALIAS is disabled by default with geoscope [USA, CAN]. Operators must explicitly opt in to the Java alias via `adapters.emxdigital.aliases.cadent_aperture_mx.enabled=true`."
+
+  params_schema_interpretation:
+    go_required_fields: [tagid]
+    java_required_fields: [tagid]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types:
+      - { field: tagid, declared_type: string, runtime_parse: int64, rejection_kind: parse-error-or-zero }
+      - { field: bidfloor, declared_type: string, runtime_parse: float64, rejection_kind: silent-zero-on-parse-error }
+    java_flexible_types:
+      - { field: tagid, declared_type: string, runtime_parse: Integer, rejection_kind: parse-error-or-zero }
+      - { field: bidfloor, declared_type: string, runtime_parse: BigDecimal, rejection_kind: silent-skip-on-parse-error }
+    go_properties: [tagid, bidfloor]
+    java_properties: [tagid, bidfloor]
+    equivalent_schema: true
+    equivalent_runtime_parsing: semantically_equal
+    severity: pass
+    note: "Both sides parse string-typed fields at runtime: tagid → integer (rejects parse error and zero), bidfloor → decimal (silently skips on parse error). Cross-language behavioral parity on validation logic."
+
+  alias_graph:                                  # Cross-language alias topology divergence
+    go_aliases: []                              # Go has NO YAML aliases. The "alias" relationship lives at the bidder-registration layer.
+    go_dual_core_registration:
+      - cadent_aperture_mx                      # Both registered as core bidders in coreBidderNames
+      - emx_digital                             # Both share the same cadentaperturemx.Builder
+    java_aliases:
+      - name: cadent_aperture_mx
+        enabled: false
+        geoscope: [USA, CAN]
+        config_form: tilde_inherit_with_geoscope
+    aliases_match: false
+    rule_33_inversion: true                     # Aliases-inverted: Java parent has Go-canonical name as alias; Go has both as siblings (no parent/child relationship)
+    rule_44_empire_flavor: null                 # Not an empire — bilateral rename only
+    rule_45_match: java-alias-only              # Disabled-by-default applies only to the Java alias
+    rule_46_match: false                        # The cross-language pair is not a Rule 46 case (no underscore-drop normalization). HOWEVER, Rule 46 DOES apply WITHIN the Java side: emx_digital (BIDDER_NAME constant) ↔ emxdigital (YAML/Spring key).
+    severity: warn
+    note: |
+      Cross-language asymmetric alias topology. Go has dual-core-bidder-registration:
+      BOTH `cadent_aperture_mx` and `emx_digital` are registered as core bidders in
+      `coreBidderNames`, sharing the same `cadentaperturemx.Builder` function. Each
+      has its own bidder-info yaml (byte-identical sha256 8ee63ad8…) and its own
+      bidder-params json (semantically equal, byte-different — emx file has a
+      copy-paste bug saying 'Cadent Aperture MX adapter' in description). NEITHER is
+      in `exchange/adapter_util.go::GetDisabledBidderWarningMessages`.
+
+      Java has parent-with-disabled-alias: `emxdigital` (legacy EMX brand) is the
+      canonical YAML parent, with `cadent_aperture_mx` (new Cadent brand) as a
+      disabled+geo-restricted alias under it (tilde_inherit form, geoscope [USA, CAN]).
+
+      The Java approach is more conservative — operators must explicitly enable the
+      Cadent name. The Go approach is more permissive — both names work out of the
+      box. Both retain both names, but with different organizational primacy.
+
+  lifecycle:
+    rename:
+      old_name: emx_digital
+      new_name: cadent_aperture_mx
+      subtype_adr006: java-leads               # ADR-006 LIFECYCLE_PAIRS classification
+      subtype_empirical: java-leads-with-go-dual-registration  # More precise: Java has chosen canonical (parent emxdigital + alias cadent), Go has NOT consolidated (both registered as core sibling bidders)
+      go_alias_back: dual-core-bidder-registration
+      java_alias_back: tilde_inherit_with_geoscope
+      merged_at: null                          # No discrete rename PR — gradual brand transition following Cadent's acquisition of EMX Digital
+      release: null
+    severity: warn
+    note: |
+      Cadent acquired EMX Digital; the SSP/exchange product was rebranded to
+      'Cadent Aperture MX'. Maintainer email is `contactaperturemx@cadent.tv` on
+      both sides. Endpoint hostname `hb.emxdgt.com` retains the legacy EMX domain.
+
+      ADR-006 LIFECYCLE_PAIRS classifies this as `java-leads` with go=cadent_aperture_mx
+      and java=emxdigital. The label is empirically defensible under the parent-canonical
+      interpretation: Java has designated `emxdigital` as its single canonical parent
+      (with cadent_aperture_mx as a disabled alias). Go has NOT designated a canonical —
+      both names are first-class core bidders. Strictly, the rename is partial on both
+      sides, but the asymmetry in topology (Java committed, Go undecided) supports the
+      "java-leads" classification.
+
+      Distinct from the vungle/liftoff phantom-rename pattern (where Go had a
+      removed-bidder warning map entry, NOT dual registration). Here Go fully retains
+      BOTH names as currently-supported core bidders without any deprecation signal.
+
+  naming_asymmetry:
+    go_yaml_keys: [cadent_aperture_mx, emx_digital]   # TWO yaml keys
+    java_yaml_keys: [emxdigital]                       # ONE yaml key (with cadent_aperture_mx as alias child)
+    go_package_name: cadentaperturemx                  # Go convention drops underscores
+    go_directory_name: cadent_aperture_mx              # Directory keeps underscores
+    go_test_root: cadent_aperture_mxtest                # Test fixture root keeps underscores (3-form within Go)
+    go_bidder_constants: [BidderCadentApertureMX, BidderEmxDigital]
+    java_package_name: emxdigital                      # No underscore (Spring convention)
+    java_class_names: [EmxDigitalBidder, EmxDigitalConfiguration, ExtImpEmxDigital]
+    java_bidder_name_constant: "emx_digital"           # Used as Prebid routing identifier and as params filename
+    java_config_props_prefix: "adapters.emxdigital"    # No underscore (Spring property key)
+    java_params_filename: emx_digital.json             # Uses underscored form (matches Java BIDDER_NAME constant)
+    java_cookie_family_name: emx_digital               # Uses underscored form
+    java_it_class_emxdigital: EmxdigitalTest            # Title-case `Emxdigital` (NOT `EmxDigitalTest`) — naming-case divergence from class form
+    java_it_class_alias: CadentApertureMxTest           # `Mx` not `MX` — diverges from Go's all-caps `BidderCadentApertureMX` constant
+    rule_46_within_java: true                           # emx_digital (BIDDER_NAME / params filename) ↔ emxdigital (YAML / Spring) — underscore-drop normalization WITHIN Java
+    rule_46_cross_lang: partial                         # Go cadent_aperture_mx aligns with Java alias key cadent_aperture_mx (no normalization needed). Go emx_digital aligns with Java BIDDER_NAME constant emx_digital (no normalization needed). The normalization is intra-Java.
+    severity: warn
+    note: |
+      Tri-form Java naming: BIDDER_NAME `emx_digital` (underscored — Prebid routing
+      identifier and params filename); YAML/Spring property key `emxdigital` (no
+      underscore); class names PascalCase `EmxDigitalBidder/Configuration/ExtImpEmxDigital`.
+      Plus the integration test class title-cases break further: `EmxdigitalTest`
+      (NOT `EmxDigitalTest`) and `CadentApertureMxTest` (NOT `CadentApertureMXTest`).
+
+      Tri-form Go naming: package `cadentaperturemx` (drops underscores), directory
+      `cadent_aperture_mx` (keeps underscores), test fixture root `cadent_aperture_mxtest`
+      (keeps underscores). Within the same Go bidder.
+
+      Rule 46 normalization (underscore-drop) applies WITHIN the Java side itself
+      (emx_digital ↔ emxdigital), not just cross-language. This is the FIRST corpus
+      example of intra-language Rule 46 normalization.
+
+  cross_lang_behavioral:
+    url_format:                          "{endpoint}?t={timeout}&ts={epoch_seconds}&src=pbserver"   # Cross-language symmetric
+    default_timeout_ms:                  1000                                                         # Cross-language symmetric
+    go_testing_mode_override:            true        # `testing bool` flag pins ts=2060541160 for golden test stability
+    java_testing_mode_override:          false       # No equivalent — relies on ${json-unit.any-number} placeholders
+    vast40_protocol_filter:              true        # Both filter — Go uses adcom1.CreativeVAST40, Java uses literal 7
+    imp_id_clobbered_to_bid_id:          go_only     # Go: sb.Bid[i].ImpID = sb.Bid[i].ID; Java: no clobber
+    currency_propagated:                 java_only   # Java: BidderBid.cur = bidResponse.getCur(); Go: not propagated (TypedBid has no currency field)
+    bid_type_case_sensitivity:           divergent   # Go: strings.ToLower(raw) before substring match; Java: case-sensitive StringUtils.containsAny — Java would miss `<VAST>` uppercase
+    imp_ext_path:                        "ext.bidder.<tagid|bidfloor>"   # Cross-language symmetric (both flatten via Prebid wrapper)
+    secure_flag_derivation:              "site.page > app.domain > app.storeurl scheme=https"   # Cross-language symmetric
+    dnt_header_always_when_non_nil:      true        # Cross-language symmetric (both add DNT regardless of 0/1 value)
+    banner_format_lift_first:            true        # Cross-language symmetric — both lift Format[0] into W/H and slice
+    bidfloor_parse_error_silent:         true        # Cross-language symmetric — both silently skip on NumberFormatException
+    severity: warn
+    note: "Four behavioral divergences (testing-mode, ImpID-clobber, currency-propagation, case-sensitivity) and seven symmetries. The case-sensitivity divergence is the most concerning — Java would miss VAST responses with uppercase tags, but real Cadent responses likely use lowercase, so it's a latent fidelity gap rather than an active bug."
+
+  port_lineage:
+    direction: shared-genesis                        # No discrete port PR — both sides developed independently or with shared genesis
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - bidder-rename-cadent-acquired-emx
+      - dual-core-bidder-registration-go
+      - parent-with-disabled-alias-java
+      - bid-type-string-sniff-case-sensitivity
+      - imp-id-clobber-go-only
+      - currency-propagation-java-only
+      - tri-form-java-naming
+      - tri-form-go-naming
+      - alias-with-geoscope-and-default-disabled
+      - intra-language-rule-46-normalization
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 6
+  notes: |
+    cadent_aperture_mx (Go) ↔ emxdigital (Java) is the Phase 5 P2 #3 fixture intended
+    to cover ADR-006 Rule 43 java-leads sub-type AND establish the canonical pattern
+    for TRUE cross-name pairs (where Go bidder name ≠ Java bidder name in upstream).
+
+    Empirical state at pinned commits (Go 2fae16f3, Java a1fe64e1):
+
+      - Go: BOTH `cadent_aperture_mx` and `emx_digital` registered as core bidders
+        in `coreBidderNames`, sharing the `cadentaperturemx.Builder`. Each has its
+        own bidder-info yaml (byte-identical sha256 8ee63ad8…) and its own bidder-
+        params json (semantically equal, byte-different — emx_digital file has a
+        copy-paste bug in description: still says "Cadent Aperture MX adapter").
+        NEITHER is in `GetDisabledBidderWarningMessages` — both currently-supported.
+
+      - Java: ONE bidder code path (`EmxDigitalBidder`). YAML structure: `emxdigital`
+        parent + `cadent_aperture_mx` alias (tilde_inherit, default-disabled,
+        geoscope [USA, CAN]). Comment in YAML: "CadentAperture only operates in
+        North America". Two integration test classes: EmxdigitalTest (parent) and
+        CadentApertureMxTest (alias) — both hit `/emx_digital-exchange` wiremock.
+
+      - ADR-006 classification `java-leads` is defensible: Java has designated a
+        canonical parent name; Go has not consolidated. The label fits under the
+        parent-canonical interpretation, though strictly the rename is partial on
+        both sides.
+
+    Patterns captured for the first time:
+      - DUAL-CORE-BIDDER-REGISTRATION on Go side (both names share Builder; both
+        first-class) — first corpus example. Distinct from vungle's removed-bidder-
+        warning-map (clean-delete) and from typical alias-back patterns.
+      - TRI-FORM JAVA NAMING (BIDDER_NAME / YAML key / class names) — first corpus
+        example showing Rule 46 normalization happening WITHIN one language.
+      - TRI-FORM GO NAMING (package / directory / test root) — first corpus example
+        showing internal Go naming asymmetry across the same bidder.
+      - ALIAS-WITH-GEOSCOPE-AND-DEFAULT-DISABLED — first corpus example combining
+        Rule 45 (disabled-by-default) with the geoscope alias-only field.
+      - JAVA EDGE CASE #19 (alternate naming form: only Bidder-suffix class in
+        package, no Util/Helper/Model classes) — captured in detail.
+      - CROSS-NAME PAIR — Go bidder name `cadent_aperture_mx` ≠ Java bidder name
+        `emxdigital`. FIRST in the corpus to require cross-name handling in
+        scripts/coverage-report.py.
+      - PARAMS DESCRIPTION TYPO (Go emx_digital.json description says "Cadent
+        Aperture MX adapter") — first corpus example of upstream params copy-paste
+        bug.
+      - INTERNAL JAVA RULE 46 NORMALIZATION (emx_digital ↔ emxdigital) — first
+        corpus example of intra-language naming-form normalization.
+
+    Six warn-level findings:
+      (1) bidder_params_sha three-way byte-divergence (Go cadent / Go emx / Java emx
+          all differ; emx_digital file has copy-paste bug; semantically equal).
+      (2) bidder_info_default_enabled asymmetric (Java alias is default-DISABLED with
+          geoscope; Go sides both fully enabled).
+      (3) alias_graph cross-language topology asymmetry (Go dual-core-siblings vs
+          Java parent-with-disabled-alias).
+      (4) lifecycle subtype `java-leads` partially defensible — empirical state is
+          more nuanced (asymmetric topology, partial rename on both sides).
+      (5) naming_asymmetry: tri-form Java + tri-form Go + intra-language Rule 46.
+      (6) cross_lang_behavioral: 4 divergences (testing-mode, ImpID-clobber,
+          currency-propagation, case-sensitivity) + 7 symmetries.
+
+    Coverage progression (post-this-commit):
+      - Phase 5: 6 of 9 pairs (P1 complete + P2 #1-#3: limelightDigital + vungle +
+        cadent_aperture_mx/emxdigital).
+      - Lifecycle pairs covered: 3 of 7 (elementaltv `bilateral` real + vungle
+        `bilateral` phantom + cadent_aperture_mx/emxdigital `java-leads` partial).
+      - 34 goldens (17 Go + 17 Java).
+
+    Phase 5 next: P3 (adkernelAdn/adkerneladn — Rule 46 naming-normalization
+    master, ALSO a true cross-name pair via underscore drop).

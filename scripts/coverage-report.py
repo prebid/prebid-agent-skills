@@ -209,13 +209,32 @@ def extract_mentioned_bidders(text: str) -> set[str]:
 
 # ─── Per-section computations ─────────────────────────────────────────────
 
+def _build_cross_name_lookup() -> dict[str, tuple[str, str]]:
+    """Cross-name pairs from LIFECYCLE_PAIRS where Go name != Java name.
+    Both names map to the same (go_name, java_name) tuple so Phase 5 entries
+    keyed by either side resolve correctly."""
+    lookup = {}
+    for entry in LIFECYCLE_PAIRS:
+        go, java = entry[0], entry[1]
+        if go != java:
+            lookup[go] = (go, java)
+            lookup[java] = (go, java)
+    return lookup
+
+
 def compute_phase_5_readiness(goldens: dict[str, set[str]]) -> list[dict]:
     """Map each Phase 5 pair to {bidder, priority, gap}."""
+    cross_name = _build_cross_name_lookup()
     out = []
     for bidder, priority, summary in PHASE_5_PAIRS:
         bidder_lc = bidder.lower()
-        has_go = bidder in goldens["go"] or bidder_lc in goldens["go"]
-        has_java = bidder in goldens["java"] or bidder_lc in goldens["java"]
+        if bidder in cross_name:
+            go_name, java_name = cross_name[bidder]
+            has_go = go_name in goldens["go"] or go_name.lower() in goldens["go"]
+            has_java = java_name in goldens["java"] or java_name.lower() in goldens["java"]
+        else:
+            has_go = bidder in goldens["go"] or bidder_lc in goldens["go"]
+            has_java = bidder in goldens["java"] or bidder_lc in goldens["java"]
         out.append({
             "bidder": bidder,
             "priority": priority,
@@ -268,6 +287,26 @@ def compute_empire_coverage(goldens: dict[str, set[str]]) -> list[dict]:
     return out
 
 
+def _resolve_dual_spec_filenames(bidder: str, d: dict) -> tuple[str, str]:
+    """Extract go/java golden filenames from a dual-spec.
+
+    Prefers explicit `go_spec`/`java_spec` paths in the dual-spec content
+    (load-bearing for cross-name pairs and ADR-corrected lifecycle entries);
+    falls back to LIFECYCLE_PAIRS cross-name lookup if paths are absent;
+    falls back to bidder name if neither.
+    """
+    go_match = java_match = None
+    if isinstance(d, dict):
+        go_match = re.search(r"/([^/]+)\.golden\.spec\.yaml$", d.get("go_spec") or "")
+        java_match = re.search(r"/([^/]+)\.golden\.spec\.yaml$", d.get("java_spec") or "")
+    if go_match and java_match:
+        return go_match.group(1), java_match.group(1)
+    cross_name = _build_cross_name_lookup()
+    if bidder in cross_name:
+        return cross_name[bidder]
+    return bidder, bidder
+
+
 def compute_dual_spec_coherency(goldens: dict[str, set[str]],
                                   duals: dict[str, dict]) -> list[dict]:
     out = []
@@ -281,14 +320,16 @@ def compute_dual_spec_coherency(goldens: dict[str, set[str]],
                 "has_java": False,
             })
             continue
+        go_name, java_name = _resolve_dual_spec_filenames(bidder, d or {})
         out.append({
             "bidder": bidder,
-            "has_go": bidder in goldens["go"],
-            "has_java": bidder in goldens["java"],
+            "has_go": go_name in goldens["go"],
+            "has_java": java_name in goldens["java"],
             "has_naming_asymmetry": "naming_asymmetry" in (d or {}),
             "has_bidder_info_default_enabled": "bidder_info_default_enabled" in (d or {}),
             "has_bidder_params_sha256": "bidder_params_sha256" in (d or {}),
             "block_count": len(d or {}),
+            "is_cross_name": go_name != java_name,
         })
     return out
 

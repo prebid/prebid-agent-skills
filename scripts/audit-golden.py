@@ -174,6 +174,22 @@ def check_c1_bidder_params_sha(audit: Audit, golden: Dict[str, Any]) -> None:
         path = f"src/main/resources/static/bidder-params/{audit.bidder}.json"
         repo = JAVA_REPO
     upstream = gh_get_file(repo, path, audit.commit)
+    if upstream is None and audit.language == "java":
+        # Java tri-form naming asymmetry: bidder may use no-underscore form as
+        # YAML/Spring key (e.g., `emxdigital`) but underscored form as Prebid
+        # routing identifier and params filename (e.g., `emx_digital.json`).
+        # Fall back to `cookie_family_name` (canonical Prebid identifier) if
+        # different from the YAML key.
+        cookie_family = (
+            ((golden.get("bidder_info") or {}).get("user_sync") or {})
+            .get("cookie_family_name")
+        )
+        if cookie_family and cookie_family != audit.bidder:
+            alt_path = f"src/main/resources/static/bidder-params/{cookie_family}.json"
+            alt_upstream = gh_get_file(repo, alt_path, audit.commit)
+            if alt_upstream is not None:
+                upstream = alt_upstream
+                path = alt_path
     if upstream is None:
         audit.findings.append(Finding(
             "C1", SEV_WARN, "bidder_params_sha256",
