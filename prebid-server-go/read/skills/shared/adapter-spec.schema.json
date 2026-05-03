@@ -193,6 +193,7 @@
           "type": "array",
           "items": {
             "type": "object",
+            "additionalProperties": false,
             "required": ["type"],
             "properties": {
               "type": { "type": "string" },
@@ -365,7 +366,7 @@
         "package_directory_mismatch": { "type": ["boolean", "null"] },
         "file_layout": {
           "type": ["object", "null"],
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "type": "string",
@@ -382,7 +383,9 @@
                   "loc": { "type": ["integer", "null"] }
                 }
               }
-            }
+            },
+            "file_count_total": { "type": ["integer", "null"] },
+            "notes": { "type": ["array", "null"], "items": { "type": "string" } }
           }
         },
         "imports": { "type": ["object", "null"] },
@@ -505,7 +508,7 @@
 
     "Tests": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "test_root_directory": { "type": ["string", "null"] },
         "go_directory_naming": {
@@ -539,14 +542,15 @@
           "type": ["object", "null"],
           "additionalProperties": { "type": "integer" },
           "description": "ADR-001 D6: open map keyed by test class name, value is method count."
-        }
+        },
+        "test_application_properties_keys": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },
 
     "IabCategoryStorage": {
       "type": "object",
-      "additionalProperties": true,
-      "description": "additionalProperties: true to admit free-text `notes` and other metadata fields (Phase 2.7 will tighten).",
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; `notes` admitted as declared property.",
       "properties": {
         "storage_kind": {
           "type": "string",
@@ -559,7 +563,8 @@
           "type": ["string", "null"],
           "enum": ["constructor-arg", "static-init", null],
           "description": "ADR-001 D2: how the IAB category table is delivered to the adapter (Phase 2.7 renamed from `injection` to disambiguate from currency_conversion.injection)."
-        }
+        },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },
 
@@ -574,8 +579,8 @@
         "flexible_extension_used": { "type": "boolean" },
         "custom_unmarshal": {
           "type": "object",
-          "additionalProperties": true,
-          "description": "additionalProperties: true to admit `notes` field on goldens that document branching strategies (Phase 2.7 tightens).",
+          "additionalProperties": false,
+          "description": "Closed in Phase 2.8 / Wave 11b; `notes` admitted as declared property for goldens documenting branching strategies.",
           "properties": {
             "kind": {
               "type": "string",
@@ -585,7 +590,8 @@
               "type": "array",
               "items": { "type": "string" }
             },
-            "where_branched": { "type": ["string", "null"] }
+            "where_branched": { "type": ["string", "null"] },
+            "notes": { "type": ["array", "null"], "items": { "type": "string" } }
           }
         }
       }
@@ -614,7 +620,7 @@
 
     "HeadersConstructed": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "pre_built_in_constructor": { "type": ["boolean", "null"] },
         "per_request_dynamic": { "type": ["boolean", "null"] },
@@ -642,6 +648,7 @@
           "type": "array",
           "items": {
             "type": "object",
+            "additionalProperties": false,
             "properties": {
               "name": { "type": "string" },
               "go_value": { "type": "string" },
@@ -650,17 +657,28 @@
             }
           },
           "description": "ADR-007 F2: array kept in logical (declaration) order; not lex-sorted (audit C7)."
-        }
+        },
+        "authentication_algorithm": { "type": ["string", "null"] },
+        "authentication_output_encoding": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },
 
     "DeployTimeToken": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "token": { "type": "string" },
         "valid_values": { "type": "array" },
-        "documentation_link": { "type": ["string", "null"] }
+        "documentation_link": { "type": ["string", "null"] },
+        "file": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"] },
+        "on_alias": { "type": ["string", "null"], "description": "Alias name this deploy-time token applies to (when token is alias-scoped); null otherwise." },
+        "notes": {
+          "type": ["string", "array", "null"],
+          "items": { "type": "string" },
+          "description": "Free-form prose; admitted as either a single string (literal block / scalar) or an array of strings."
+        }
       }
     },
 
@@ -732,10 +750,11 @@
     "Quirk": {
       "type": "object",
       "required": ["id", "summary"],
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
         "file": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"] },
         "summary": { "type": "string" },
         "edge_case_taxon": { "type": ["string", "null"] },
         "rationale": { "type": ["string", "null"] }

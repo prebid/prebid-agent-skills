@@ -451,7 +451,7 @@ deploy_time_tokens:
       - lb            # US_EAST
       - ortb-eu       # EU
       - ortb-apac     # APAC
-    note: "Operator-substituted before deployment per regional datacenter. Rule 15 master sample. The PBS-Java startup will fail if the token remains unresolved AND the alias is enabled (currently disabled-by-default per Rule 45 so the token doesn't block startup)."
+    notes: "Operator-substituted before deployment per regional datacenter. Rule 15 master sample. The PBS-Java startup will fail if the token remains unresolved AND the alias is enabled (currently disabled-by-default per Rule 45 so the token doesn't block startup)."
 
 quirks:
   - id: imp-ext-repack-with-type-tag
