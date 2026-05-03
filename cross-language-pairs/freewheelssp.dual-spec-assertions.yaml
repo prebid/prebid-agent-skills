@@ -1,0 +1,376 @@
+dual_spec_assertion_version: 1
+bidder_name: freewheelssp                      # Phase 5 stretch #1 — matches PHASE_5_PAIRS in scripts/coverage-report.py.
+go_spec: prebid-server-go/read/test-fixtures/freewheelssp.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/freewheelssp.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+cross_name_pair: false                          # Both canonical YAMLs use `freewheelssp` (same name). The hyphenated `freewheel-ssp` form is a Go-only YAML ALIAS-STUB via top-level `aliasOf:` field — NOT the canonical Go-side name. ADR-005 RULE_46_PAIRS lists ('freewheel-ssp', 'freewheelssp', 'hyphen-drop') — empirically the hyphenated form is alias-only, not the canonical. Defer ADR-005 correction to a future commit.
+
+assertions:
+  bidder_params_sha256:
+    go:   7e00f86526faa029f892c0190cc9612df400044dd0d141ecbe39afe6c681f0ed   # 350 bytes (NO trailing newline)
+    java: 5e64e612fccea314ee7625fb7e9e7984522cf84b1c8b2a87f14fe1914034cf10   # 357 bytes (WITH trailing newline)
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only-whitespace-and-trailing-newline
+    divergence_summary: "Whitespace-only divergence + trailing-newline asymmetry. Both schemas declare identical content: `zoneId` flexible-type (`[\"integer\", \"string\"]`, required, draft-04). Go uses inline `[\"zoneId\"]` for required; Java uses multi-line array. Go has blank lines after `description` and before `required`; Java does not. Go file has NO trailing newline; Java file DOES. Schema semantics are identical."
+    severity: warn
+
+  go_dual_yaml_layout:
+    canonical_yaml_sha:    42f84dcf9e5edb07549edefec287a1ce0b46d33bee2c24dfc5025a1096841cf1   # static/bidder-info/freewheelssp.yaml (510B, full config)
+    aliasof_stub_yaml_sha: c5a2bdc547fae6e32b91fea7ec1bb3bcdf296f80266605566795089525c7a9dd   # static/bidder-info/freewheel-ssp.yaml (262B, `aliasOf: freewheelssp` stub)
+    fwssp_yaml_sha:        351c3d08bfaec76f9ab278246cdf7c8506e9bdf1962e7185d489f4cdf347d528   # static/bidder-info/fwssp.yaml (separate top-level bidder)
+    severity: warn
+    note: |
+      Go has THREE bidder-info YAML files for the freewheel ecosystem:
+
+        (1) `freewheelssp.yaml` — canonical full config (endpoint, capabilities,
+            modifyingVastXmlAllowed, gvlVendorID, userSync, openrtb.version, GPP).
+
+        (2) `freewheel-ssp.yaml` — ALIAS-STUB declaring `aliasOf: freewheelssp`
+            as its FIRST top-level field. The Go server reads `aliasOf:` and
+            treats freewheel-ssp as a runtime alias of freewheelssp (sharing
+            endpoint, params schema, and adapter code). This is a NEW corpus
+            pattern, distinct from cadent's full duplication and from vungle's
+            removed-bidder-warning-map. The alias-stub also declares its own
+            gvlVendorID (285, same as parent) and userSync iframe URL (same
+            as parent). NO separate Go bidder constant exists for the
+            hyphenated form — it inherits via `aliasOf:` indirection only.
+
+        (3) `fwssp.yaml` — SEPARATE TOP-LEVEL bidder package at
+            `adapters/fwssp/` with its own Builder. Different upstream
+            endpoint (`https://prebid.v.fwmrm.net/ortb/ssp`), different
+            cookie-family-name (`fwssp`), different uid-macro (`#{user.id}`
+            vs canonical's `{viewerid}`), and `endpoint-compression: gzip`
+            (canonical does NOT use gzip). Two distinct Go bidder constants
+            registered: `BidderFreewheelSSP`=\"freewheelssp\" and
+            `BidderFWSSP`=\"fwssp\".
+
+  bidder_info_capabilities:
+    go:
+      site: [video]
+      app: [video]
+    java:
+      site: [video]
+      app: [video]
+    equivalent: true
+    severity: pass
+    note: "Video-only on both site and app. Banner is NOT in scope. This empirical fact CONTRADICTS ADR-007 F2's claim that freewheelssp is the multi-endpoint-by-mediatype master — there is no `banner` mediatype to switch endpoint for."
+
+  bidder_info_endpoint:
+    go:   "https://ads.stickyadstv.com/openrtb/dsp"
+    java: "https://ads.stickyadstv.com/openrtb/dsp"
+    equivalent: true
+    severity: pass
+    note: "SINGLE endpoint on both sides. No template macros. No per-mediatype URL selection. The fwssp alias has a different endpoint (`https://prebid.v.fwmrm.net/ortb/ssp`) but that's framework-dispatch level, NOT runtime multi-endpoint."
+
+  bidder_info_endpoint_compression:
+    go: null
+    java: null
+    canonical_equivalent: true
+    fwssp_alias_compression: gzip               # The fwssp alias DOES use gzip on both sides — alias-only field
+    severity: pass
+
+  bidder_info_modifying_vast_xml_allowed:
+    go: true
+    java: true
+    equivalent: true
+    severity: pass
+
+  bidder_info_maintainer:
+    go:   prebid-maintainer@freewheel.com
+    java: prebid-maintainer@freewheel.com
+    equivalent: true
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 285
+    java: 285
+    equivalent: true
+    severity: pass
+
+  bidder_info_ortb_version:
+    go:   "2.6"                                  # Declared via `openrtb.version: 2.6` field in Go yaml
+    java: "2.6"                                  # Declared via `ortb-version: "2.6"` field in Java yaml
+    equivalent: true
+    severity: pass
+    note: "Both sides declare ORTB 2.6 — distinct from typical adapters that pin to 2.5 (e.g., adkernelAdn, vungle). Distinct YAML key names: Go uses `openrtb.version`, Java uses `ortb-version`."
+
+  bidder_info_default_enabled:
+    go:   true
+    java: true
+    rule_45_match: alias-only                    # Default-DISABLED applies only to the Java fwssp alias (parent and Go side both fully enabled)
+    severity: pass
+
+  usersync_iframe_url:
+    go:   "https://ads.stickyadstv.com/pbs-user-sync?gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&gpp={{.GPP}}&gpp_sid={{.GPPSID}}&r={{.RedirectURL}}"
+    java: "https://ads.stickyadstv.com/pbs-user-sync?gdpr={{gdpr}}&gdpr_consent={{gdpr_consent}}&us_privacy={{us_privacy}}&gpp={{gpp}}&gpp_sid={{gpp_sid}}&r={{redirect_url}}"
+    equivalent_modulo_macro_syntax: true
+    severity: warn
+    note: "Same URL host/path/query; Go template macros (`{{.GDPR}}`) vs Java plain placeholders (`{{gdpr}}`)."
+
+  usersync_uid_macro:
+    go:   "{viewerid}"
+    java: "{viewerid}"
+    equivalent: true
+    severity: pass
+    note: "Same uid-macro `{viewerid}` on both sides — distinct from typical Java `${UID}` Spring-style. The fwssp alias uses `#{user.id}` on both sides."
+
+  usersync_cookie_family_name:
+    go:   null                                   # Go bidder-info doesn't declare cookie-family-name in YAML
+    java: freewheelssp
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [zoneId]
+    java_required_fields: [zoneId]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types:
+      - { field: zoneId, declared_type: ["integer", "string"], runtime_parse: jsonutil.StringInt, rejection_kind: never }
+    java_flexible_types:
+      - { field: zoneId, declared_type: ["integer", "string"], runtime_parse: String, rejection_kind: never }
+    go_properties: [zoneId]
+    java_properties: [zoneId]
+    equivalent_schema: true
+    severity: warn
+    note: "Both sides declare `zoneId` as a flexible type accepting integer or string. Go uses `jsonutil.StringInt` custom type that unmarshals both forms; Java uses plain `String` with Jackson lenient string coercion. Schema-level identical; runtime native-type divergence is acknowledged. R5 picks this up as a structural runtime divergence — severity downgraded to warn to acknowledge the language-idiom difference (jsonutil.StringInt vs String), which preserves equivalent input acceptance."
+
+  ext_struct_field_count_asymmetry:
+    go_field_count: 1
+    java_field_count: 4
+    go_fields: [ZoneId]
+    java_fields: [zoneId, customSiteSectionId, networkId, profileId]
+    severity: warn
+    note: |
+      REAL CROSS-LANGUAGE BEHAVIORAL ASYMMETRY. Go ImpExtFreewheelSSP has 1
+      field (ZoneId). Java ExtImpFreewheelSSP has 4 fields (zoneId +
+      customSiteSectionId + networkId + profileId).
+
+      A request that includes the extra 3 fields (customSiteSectionId,
+      networkId, profileId) will be:
+        - FORWARDED by Java to the upstream as snake_case wire format
+          (custom_site_section_id, network_id, profile_id) via JacksonMapper
+          PROPERTY_NAMING_STRATEGY.
+        - SILENTLY DROPPED by Go because the Go ext struct doesn't declare
+          these fields.
+
+      Cross-language fidelity gap. Anyone porting params between languages
+      should NOT assume the wire shapes match. Java schema validation only
+      checks `zoneId` (the other 3 are passthrough/optional/unvalidated), so
+      the Java POJO is a SUPERSET of what the schema declares. Go is
+      schema-aligned (POJO matches schema).
+
+  alias_graph:
+    go_aliases: []                                # No YAML aliases under freewheelssp.yaml. The hyphenated freewheel-ssp is a SEPARATE top-level YAML alias-stub. The fwssp is a SEPARATE top-level bidder package.
+    go_three_yaml_layout: true                    # See go_dual_yaml_layout assertion above
+    java_aliases: [fwssp]                         # YAML-internal alias under freewheelssp.yaml (enabled: false default, EXPLICIT endpoint override + compression + own usersync)
+    aliases_match: false
+    rule_33_inversion: true                       # Java has fwssp as YAML-internal alias; Go has fwssp as separate top-level bidder package. Cross-language asymmetric topology on the fwssp sibling.
+    rule_44_empire_flavor: null                   # Not an empire — single alias on Java side
+    rule_45_match: java-alias-only                # default-DISABLED applies to the Java fwssp alias only
+    rule_46_match: false                          # Canonical pair is same-name (`freewheelssp` ↔ `freewheelssp`); Rule 46 hyphen-drop applies only to the Go-only alias-stub `freewheel-ssp` form
+    severity: warn
+    note: |
+      Cross-language asymmetric alias topology. Java has fwssp as a
+      YAML-internal alias under freewheelssp.yaml with EXPLICIT endpoint
+      override (`https://prebid.v.fwmrm.net/ortb/ssp`), endpoint-compression:
+      gzip, own cookie-family-name `fwssp`, own iframe URL (different host
+      `user-sync.fwmrm.net`), and own uid-macro `#{user.id}` (Spring style).
+      Default-disabled (Rule 45 instance).
+
+      Go has fwssp as a SEPARATE TOP-LEVEL bidder package at
+      `adapters/fwssp/` with its own Builder. Two distinct Go bidder
+      constants registered: BidderFreewheelSSP (=\"freewheelssp\") and
+      BidderFWSSP (=\"fwssp\"). On the Go side, fwssp is a fully-enabled
+      core bidder by default, NOT default-disabled.
+
+      Cross-language operator UX divergence: Java operators must explicitly
+      enable `adapters.freewheelssp.aliases.fwssp.enabled=true`; Go
+      operators get fwssp out of the box.
+
+  lifecycle:
+    rename: null                                  # No rename. Pure same-name pair on canonical. The hyphenated freewheel-ssp form is a stable, intentional Go-side alias surface.
+    rename_history: none
+    deprecated_marker: none
+    removed_bidder_entry: none
+    severity: pass
+    note: "No rename, no deprecation, no removed-bidder-warning entry. Distinct from cadent_aperture_mx/emxdigital (lifecycle java-leads), distinct from vungle/liftoff (phantom rename). Both canonical YAMLs use `freewheelssp` — there is no migration in flight."
+
+  naming_asymmetry:
+    rule_46_classification_per_adr_005: hyphen-drop  # ADR-005 RULE_46_PAIRS: ('freewheel-ssp', 'freewheelssp', 'hyphen-drop')
+    rule_46_canonical_form: freewheelssp
+    empirical_canonical_match: true                # BOTH sides use `freewheelssp` (same name) as the canonical bidder name
+    rule_46_applies_to_alias_only: true            # The hyphen-drop transformation applies ONLY between Go's alias-stub `freewheel-ssp` and Go's canonical `freewheelssp`. It does NOT describe the cross-language pairing (which is same-name).
+    adr_005_correction_needed: true
+    go_internal_forms:
+      canonical_yaml: freewheelssp
+      alias_stub_yaml: freewheel-ssp           # `aliasOf: freewheelssp` top-level field — Go-only alias-stub mechanism
+      separate_sibling_yaml: fwssp             # Separate top-level bidder package with own Builder
+      package_dir: freewheelssp
+      bidder_constants: [BidderFreewheelSSP, BidderFWSSP]
+    java_internal_forms:
+      yaml_spring_key: freewheelssp
+      bidder_name_constant: freewheelssp        # SAME case as YAML — distinct from adkerneladn (where YAML key was lowercase but BIDDER_NAME was camelCase)
+      class_names: FreewheelSSP*               # PascalCase preserves uppercase SSP (FreewheelSSPBidder, FreewheelSSPConfiguration, ExtImpFreewheelSSP, FreewheelSSPBidderTest, FreewheelSSPTest)
+      cookie_family_name: freewheelssp
+      params_filename: freewheelssp.json
+      it_class_title_case: FreewheelSSPTest    # PascalCase preserves SSP capital. Distinct from `EmxdigitalTest` (which lost the capital).
+    severity: warn
+    note: |
+      ADR-005 RULE_46_PAIRS classifies this pair as `hyphen-drop` between
+      `freewheel-ssp` (Go yaml key) and `freewheelssp` (Java yaml key). The
+      empirical reality is that BOTH canonical YAMLs use `freewheelssp` —
+      Go's hyphenated `freewheel-ssp.yaml` is an ALIAS-STUB (not the
+      canonical Go form). The hyphen-drop transformation describes Go's
+      INTERNAL alias-to-canonical relationship, NOT the cross-language
+      canonical-to-canonical pairing.
+
+      ADR-005 needs correction: the freewheel pair is NOT a cross-name pair
+      at the canonical level. Both canonical sides match. The hyphenated
+      form is purely a Go-side alias surface. Defer correction to a future
+      commit (precedent: vungle ADR-006, cadent ADR-006 corrections).
+
+      Notably, Java side has UNIFIED naming: BIDDER_NAME constant matches
+      YAML key (both `freewheelssp`), unlike adkerneladn where BIDDER_NAME
+      was camelCase but YAML was lowercase. Class names use PascalCase with
+      preserved uppercase `SSP` (FreewheelSSPBidder etc.) — the IT class
+      `FreewheelSSPTest` matches this PascalCase convention, distinct from
+      `EmxdigitalTest` which lost the capital.
+
+  cross_lang_behavioral:
+    url_format:                          "static (no template macros)"   # Cross-language symmetric
+    bid_type_resolution:                 hardcoded-video                   # Rule 26 master sample. Cross-language symmetric.
+    batching_strategy:                   per-batch                         # Single HTTP request with all imps. Cross-language symmetric.
+    imp_ext_replace_with_inner:          true                              # Both sides drop {"bidder":...} wrapper, write inner ext fields directly to imp.ext
+    response_validation_seatbid_count:   none                              # No seatbid count check on either side (distinct from adkernelAdn's exactly-one-seatbid validation)
+    bid_video_conditional_population:    true                              # PrimaryCategory only when bid.cat non-empty; Duration only when bid.dur > 0. Cross-language symmetric.
+    header_componentid_value:            divergent                         # Go: prebid-go. Java: prebid-java. Intentional byte-level divergence.
+    currency_propagation_level:          divergent                         # Go: response-level (BidderResponse.Currency). Java: per-bid (bidCurrency on each BidderBid).
+    error_message_imp_reference:         divergent                         # Go: imp INDEX (`%d`). Java: imp.getId() (`%s`). Java more debuggable.
+    error_message_misspelling:           preserved-cross-language          # "Infomation" (sic) — both sides verbatim
+    ext_struct_field_count:              divergent                         # Go: 1 field. Java: 4 fields. Real fidelity gap.
+    java_pojo_extra_fields_wire_form:    snake_case-via-jackson-mapper    # Java emits custom_site_section_id, network_id, profile_id; Go drops these
+    severity: warn
+    note: "Five symmetric behaviors and six divergences. The most material divergence is the ext-struct field-count asymmetry (Java forwards 3 extra fields that Go drops). The header value, currency-propagation level, and error-message imp-reference divergences are intentional or stylistic. The misspelling preservation is a quirky symmetry. The cross-language hardcoded-video bid type extends the Rule 26 master-sample family (vungle, cadent partial, adkernelAdn)."
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - adr-007-f2-empirical-correction-needed
+      - adr-005-rule-46-canonical-same-name-correction-needed
+      - alias-of-yaml-stub-go-only-mechanism
+      - fwssp-cross-language-topology-asymmetry
+      - hardcoded-video-bid-type-rule-26-master
+      - ext-struct-field-count-fidelity-gap
+      - currency-propagation-level-divergence
+      - header-componentid-language-divergent
+      - misspelled-infomation-preserved-cross-language
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 6
+  notes: |
+    freewheelssp is the Phase 5 stretch #1 fixture. ADR-007 F2 cited this
+    as the canonical multi-endpoint-by-mediatype master sample. EMPIRICAL
+    EVIDENCE FROM UPSTREAM CONTRADICTS this claim — same precedent as
+    vungle/liftoff (ADR-006 go-leads claim wrong) and cadent_aperture_mx
+    (ADR-006 java-leads partially defensible).
+
+    Empirical state at pinned commits (Go 2fae16f3, Java a1fe64e1):
+
+      - Both canonical YAMLs use `freewheelssp` (same name). No cross-name
+        pair at the canonical level.
+      - Both bidders have a SINGLE endpoint URL (no per-mediatype switching).
+      - Capabilities are video-only on both site and app — banner is not
+        in scope at all.
+      - The fwssp sibling has a different endpoint (`prebid.v.fwmrm.net/ortb/ssp`)
+        but at framework-dispatch level (alias-with-different-endpoint),
+        NOT runtime multi-endpoint-by-mediatype.
+      - Go has THREE YAML files: freewheelssp.yaml (canonical),
+        freewheel-ssp.yaml (alias-stub via NEW `aliasOf:` mechanism),
+        fwssp.yaml (separate top-level bidder package).
+      - Java has ONE YAML file with fwssp as YAML-internal alias.
+      - ADR-007 F2 master-sample claim needs reclassification.
+      - ADR-005 RULE_46_PAIRS classifies as hyphen-drop, but the
+        transformation applies to Go's alias-stub, NOT the canonical pair.
+
+    Patterns captured for the first time in the corpus:
+
+      - GO `aliasOf:` YAML ALIAS-STUB MECHANISM — first corpus example.
+        The hyphenated `freewheel-ssp.yaml` declares `aliasOf: freewheelssp`
+        as its top-level field. Distinct from cadent's full duplication
+        (two byte-identical YAMLs) and from vungle's removed-bidder-warning
+        map. NEW dual-registration variant.
+      - SAME-NAME RULE 46 CANONICAL — first corpus example showing that
+        ADR-005's RULE_46_PAIRS may misclassify cases where the
+        normalization applies INSIDE one language (Go's alias-to-canonical)
+        rather than ACROSS languages (canonical-to-canonical).
+      - EXT STRUCT FIELD COUNT ASYMMETRY — Go ext struct has 1 field
+        (zoneId), Java POJO has 4. Real cross-language fidelity gap.
+        Java forwards 3 extra fields (custom_site_section_id, network_id,
+        profile_id) as snake_case wire format; Go silently drops them.
+      - FWSSP CROSS-LANGUAGE TOPOLOGY ASYMMETRY — Java has fwssp as
+        YAML-internal alias (default-disabled, EXPLICIT endpoint override).
+        Go has fwssp as SEPARATE TOP-LEVEL bidder package with own
+        Builder. Distinct cross-language alias-topology pattern.
+      - MISSPELLED \"INFOMATION\" PRESERVED CROSS-LANGUAGE — first corpus
+        example of a verbatim error-message typo preserved across both
+        implementations.
+      - PER-BID vs PER-RESPONSE CURRENCY PROPAGATION — Java attaches
+        `bidCurrency` to each BidderBid; Go propagates once at
+        BidderResponse.Currency level. Cross-language propagation-level
+        asymmetry.
+
+    Cross-language behavioral asymmetries (6):
+      (1) Header `Componentid` value: Go `prebid-go` vs Java `prebid-java`
+          (intentional byte-level divergence for upstream routing).
+      (2) Currency propagation: Go response-level vs Java per-bid.
+      (3) Error message imp reference: Go index `%d` vs Java imp.getId().
+      (4) Ext struct field count: Go 1 vs Java 4 (real fidelity gap).
+      (5) Java POJO extras emit snake_case via JacksonMapper; Go has no
+          equivalent.
+      (6) fwssp alias topology: Java YAML-internal vs Go separate package.
+
+    Cross-language symmetries (5):
+      - URL static (single endpoint, no template macros)
+      - Hardcoded video bid type (Rule 26 master sample)
+      - Per-batch batching (single HTTP request)
+      - imp.ext replace-with-inner (drops {"bidder":...} wrapper)
+      - BidVideo conditional population (PrimaryCategory + Duration only
+        when fields are non-empty)
+      - Misspelled "Infomation" preserved verbatim
+
+    Coverage progression (post-this-commit):
+
+      - Phase 5: 8 of 9 pairs covered (P1 complete + P2 #1–#3 + P3 + S1).
+      - Lifecycle pairs covered: 3 of 7 (unchanged — freewheelssp has no
+        lifecycle).
+      - Rule 46 pairs covered: 1 of 12 (adkernelAdn↔adkerneladn). The
+        freewheel pair is NOT a cross-language Rule 46 case empirically.
+      - Empire parents (ADR-003 deep-dived): 4 of 5 (only nexx360 remaining).
+      - 38 goldens (19 Go + 19 Java).
+
+    ADR corrections queued (defer to future commits, per precedent):
+      - ADR-007 F2: freewheelssp is NOT the multi-endpoint-by-mediatype
+        master. Single endpoint on both sides. Reclassify; find a different
+        master if F2 is a real pattern (or remove F2 from ADR-007).
+      - ADR-005 RULE_46_PAIRS: freewheel-ssp/freewheelssp is NOT a
+        cross-language Rule 46 pair. Hyphen-drop applies to Go's alias-stub
+        only. Reclassify or remove from RULE_46_PAIRS.
+
+    Phase 5 next: STRETCH #2 — `thetradedesk` (ADR-007 F4 master,
+    bid-post-processing-macro). Note: ADR-007 F4 is also at risk of
+    empirical contradiction per the F2 precedent — the two stretch
+    fixtures will determine whether ADR-007 F2/F4 master-sample claims
+    are sustainable.

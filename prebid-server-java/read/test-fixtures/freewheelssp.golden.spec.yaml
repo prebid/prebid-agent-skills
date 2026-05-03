@@ -1,0 +1,457 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: java-edge-case-19-alternate-naming
+      file: src/main/java/org/prebid/server/bidder/freewheelssp/
+      line: 0
+      summary: "The bidder package contains ONLY one class: `FreewheelSSPBidder.java`. There is NO separate Util/Helper/Model class — Java edge case #19 (alternate naming form: package has only the Bidder-suffix class). Same pattern as emxdigital and adkerneladn."
+    - type: adr-007-f2-empirical-contradiction
+      file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+      line: 43
+      summary: "ADR-007 F2 cites freewheelssp as the canonical master sample for the `multi-endpoint-by-mediatype` pattern. EMPIRICAL EVIDENCE CONTRADICTS this claim: bidder class has ONE `endpointUrl String` field; makeHttpRequests uses `BidderUtil.defaultRequest(...)` with the single endpointUrl, NO per-mediatype URL selection, NO conditional branching. Capabilities declare video-only — banner is not in scope. The `fwssp` alias has a DIFFERENT endpoint at YAML config level (alias-with-different-endpoint pattern), NOT a runtime multi-endpoint switch. ADR-007 F2's master-sample classification needs correction."
+    - type: java-pojo-extra-fields-asymmetry
+      file: src/main/java/org/prebid/server/proto/openrtb/ext/request/freewheelssp/ExtImpFreewheelSSP.java
+      line: 0
+      summary: "ExtImpFreewheelSSP has FOUR fields (zoneId + customSiteSectionId + networkId + profileId). Go ImpExtFreewheelSSP has ONLY 1 (ZoneId). Java forwards the extra fields to upstream as snake_case (`custom_site_section_id`, `network_id`, `profile_id`); Go silently drops them. Real cross-language fidelity gap. Java fields lack @JsonProperty annotations on the 3 extras — relies on JacksonMapper's snake_case PROPERTY_NAMING_STRATEGY for serialization."
+
+meta:
+  bidder_name: freewheelssp                   # Same canonical name on both sides (no hyphen). Cross-language identical.
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - fwssp                                    # YAML-internal alias under freewheelssp.yaml. Default-DISABLED with different endpoint, cookie-family, and uid-macro. Cross-language asymmetric: Go has fwssp as a separate top-level bidder package, NOT as a YAML alias.
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: false               # Only 1 alias — doesn't qualify as empire (typical empire has 3+)
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://ads.stickyadstv.com/openrtb/dsp"   # Single endpoint, no template macros
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    macro_syntax: null
+    placeholders_unresolved: []
+  endpoint_compression: null                  # Canonical freewheelssp does NOT use compression. The fwssp alias DOES (`endpoint-compression: gzip`) — applied per-alias.
+  ortb_version: "2.6"                         # Declared via `ortb-version: "2.6"` field
+  default_enabled: true
+  modifying_vast_xml_allowed: true            # Declared via `modifying-vast-xml-allowed: true`
+  maintainer:
+    email: prebid-maintainer@freewheel.com
+  capabilities:
+    site:
+      mediaTypes:
+        - video
+    app:
+      mediaTypes:
+        - video
+  geoscope: []
+  gvl_vendor_id: 285
+  user_sync:
+    cookie_family_name: freewheelssp
+    iframe:
+      url: "https://ads.stickyadstv.com/pbs-user-sync?gdpr={{gdpr}}&gdpr_consent={{gdpr_consent}}&us_privacy={{us_privacy}}&gpp={{gpp}}&gpp_sid={{gpp_sid}}&r={{redirect_url}}"
+      support_cors: false
+      uid_macro: "{viewerid}"
+  yaml_extra_fields:
+    supported_vendors: null                    # YAML key present with empty value
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "FreewheelSSP Adapter Params",
+    "description": "A schema which validates params accepted by the FreewheelSSP adapter",
+    "type": "object",
+    "properties": {
+      "zoneId": {
+        "type": ["integer", "string"],
+        "description": "Zone ID"
+      }
+    },
+    "required": [
+      "zoneId"
+    ]
+  }
+bidder_params_sha256: 5e64e612fccea314ee7625fb7e9e7984522cf84b1c8b2a87f14fe1914034cf10
+
+params:
+  schema_interpretation:
+    properties:
+      - name: zoneId
+        type: ["integer", "string"]
+        description: "Zone ID"
+        notes:
+          - "FLEXIBLE TYPE — accepts both integer and string. Java uses plain `String zoneId` field; Jackson lenient string coercion handles both forms. Go uses `jsonutil.StringInt` custom type."
+    required_fields:
+      - zoneId
+    flexible_types:
+      - field: zoneId
+        declared_type: ["integer", "string"]
+        runtime_parse: String
+        rejection_kind: never
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.freewheelssp
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/freewheelssp/ExtImpFreewheelSSP.java
+    type_name: ExtImpFreewheelSSP
+    fields:
+      - name: zoneId
+        json_tag: zoneId
+        type_native: String
+        omitempty: true
+        notes:
+          - "Has explicit @JsonProperty(\"zoneId\") annotation — preserves the camelCase JSON tag even if global Jackson PROPERTY_NAMING_STRATEGY is snake_case."
+      - name: customSiteSectionId               # Java-only field; Go ext struct has no equivalent
+        json_tag: custom_site_section_id        # NO @JsonProperty annotation — relies on JacksonMapper PROPERTY_NAMING_STRATEGY (snake_case) for wire form
+        type_native: String
+        omitempty: true
+        notes:
+          - "Java-only field. Wire form `custom_site_section_id` per JacksonMapper snake_case strategy. Go ext struct has no equivalent — Java forwards to upstream, Go drops."
+      - name: networkId                          # Java-only field
+        json_tag: network_id
+        type_native: String
+        omitempty: true
+        notes:
+          - "Java-only field. Wire form `network_id` per JacksonMapper snake_case strategy."
+      - name: profileId                          # Java-only field
+        json_tag: profile_id
+        type_native: String
+        omitempty: true
+        notes:
+          - "Java-only field. Wire form `profile_id` per JacksonMapper snake_case strategy."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: FreewheelSSPBidder
+  directory_name: freewheelssp
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: FreewheelSSPBidder.java          # SOLE class — Java edge case #19
+        role: implementation
+        loc: 137
+  imports:
+    has_jsonutil: false
+    has_template_engine: false
+    has_currency_helper: false
+  make_requests:
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-batch                       # SINGLE outbound HTTP request with all imps. Cross-language symmetric.
+    mutation:
+      mutates_request: true
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+      entity_strategies:
+        Imp: immutable-rebuild                  # impBuilder with ext OVERWRITTEN via mapper.valueToTree(extImpFreewheelSSP) — drops {"bidder":...} wrapper
+        Banner: none
+        Video: none
+        Site: none
+        App: none
+        Source: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpFreewheelSSP
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: literal
+      macros_used: []
+    helpers:
+      - name: parseExtImp
+        signature: "private ExtImpFreewheelSSP parseExtImp(Imp imp)"
+      - name: modifyImp
+        signature: "private Imp modifyImp(Imp imp, ExtImpFreewheelSSP extImpFreewheelSSP)"
+      - name: modifyBidRequest
+        signature: "private BidRequest modifyBidRequest(BidRequest bidRequest, List<Imp> modifiedImps)"
+      - name: headers
+        signature: "private MultiMap headers()"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidResponse bidResponse)"
+      - name: getVideoInfo
+        signature: "private static ExtBidPrebidVideo getVideoInfo(Bid bid)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: hardcoded                     # Rule 26 hardcoded — `BID_TYPE = BidType.video` static constant. Cross-language symmetric.
+          hardcoded_value: BidType.video
+          fallback_action: throw
+      default_value: video
+      multi_format_detection: none
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response   # Java attaches `bidCurrency = bidResponse.getCur()` to EACH BidderBid (per-bid). Go propagates ONCE at BidderResponse.Currency level (per-response). Cross-language asymmetry on propagation level.
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/freewheelssp/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-auction-freewheelssp-request.json
+        bytes: 0
+        role: auction-request
+      - filename: test-auction-freewheelssp-response.json
+        bytes: 0
+        role: auction-response
+      - filename: test-freewheelssp-bid-request.json
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-freewheelssp-bid-response.json
+        bytes: 0
+        role: bidder-bid-response
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: 224
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: FreewheelSSPTest    # PascalCase preserves uppercase SSP. Distinct from `EmxdigitalTest` (which lost the capital).
+  integration_test_pattern: 4-file-split
+
+aliases:
+  - name: fwssp
+    parent: freewheelssp
+    config_form: full_block                  # Alias has EXPLICIT endpoint override + endpoint-compression + own usersync block (cookie-family-name, iframe URL, uid-macro). Distinct from tilde_inherit which inherits parent values. Documented as `full_block` per schema enum.
+    relationship_flavor: registration-only      # Closest existing flavor; this is alias-with-different-upstream rather than empire white-label
+    test_assets:
+      it_class: null                            # No FwsspTest IT class on Java side (alias is enabled:false default)
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false                              # Default-DISABLED (Rule 45 instance) — operators must explicitly opt in via `adapters.freewheelssp.aliases.fwssp.enabled=true`
+
+spring_config:
+  factory_class: FreewheelSSPConfiguration
+  factory_method: freewheelsspBidderDeps
+  property_source_path: classpath:/bidder-config/freewheelssp.yaml
+  bidder_creator_lambda: |
+    config -> new FreewheelSSPBidder(config.getEndpoint(), mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: freewheelsspConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.freewheelssp\")"
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+
+bidder_class:
+  name: FreewheelSSPBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointUrl
+        type: String
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+    arity: 2                                    # 2-arity (no currency service injection)
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: COMPONENT_ID_HEADER_NAME
+      type: String
+      value: "Componentid"
+    - name: COMPONENT_ID_HEADER_VALUE
+      type: String
+      value: "prebid-java"                      # Cross-language divergent: Go uses `prebid-go`. Intentional byte-level difference for upstream routing.
+    - name: BID_TYPE
+      type: BidType
+      value: "BidType.video"                    # Hardcoded video bid type for ALL bids
+    - name: FREEWHEELSSP_EXT_TYPE_REFERENCE
+      type: TypeReference
+      value: "TypeReference<ExtPrebid<?, ExtImpFreewheelSSP>>"
+  helper_classes_co_located: []                  # No co-located helpers — sole file in package (Java edge case #19)
+  helper_classes_in_proto:
+    - ExtImpFreewheelSSP
+
+code_naming: null
+
+lifecycle:
+  rename: null                                # No rename. Pure same-name pair (both canonical YAMLs use `freewheelssp`). The Go-side `freewheel-ssp.yaml` is an alias-stub (`aliasOf:`), not a rename artifact.
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false
+  custom_headers:
+    - name: Componentid                        # Custom header. Java value `prebid-java` — Go emits `prebid-go`. Cross-language byte-level divergence.
+      value: "prebid-java"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: java-edge-case-19-alternate-naming
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/
+    summary: "Bidder package contains ONLY `FreewheelSSPBidder.java`. No Util/Helper/Model classes. Java edge case #19 alternate naming. Same pattern as emxdigital and adkerneladn."
+    edge_case_taxon: yaml-field-name-typo
+  - id: adr-007-f2-claim-contradicted
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "ADR-007 F2 cites freewheelssp as the canonical multi-endpoint-by-mediatype master. EMPIRICALLY WRONG: bidder has SINGLE `endpointUrl String` field; makeHttpRequests uses BidderUtil.defaultRequest with single endpointUrl. No per-mediatype URL switching. Capabilities are video-only. The fwssp alias's different endpoint is at YAML config level, NOT runtime."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: java-pojo-extra-fields-snake-case
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/freewheelssp/ExtImpFreewheelSSP.java
+    summary: "ExtImpFreewheelSSP has 4 fields (zoneId + customSiteSectionId + networkId + profileId). Only `zoneId` has @JsonProperty annotation; the 3 extras rely on JacksonMapper PROPERTY_NAMING_STRATEGY (snake_case). Wire form: `custom_site_section_id`, `network_id`, `profile_id`. Go ext struct has only `zoneId` — Java forwards the extras, Go drops. Cross-language fidelity gap."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: hardcoded-video-bid-type
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "Static `BID_TYPE = BidType.video` constant used for ALL bids regardless of bid signals. Rule 26 hardcoded fallback. Cross-language symmetric — Go uses `bidType := openrtb_ext.BidTypeVideo`."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: imp-ext-replace-with-inner
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "modifyImp OVERWRITES imp.ext with `mapper.valueToTree(extImpFreewheelSSP)` — drops the {\"bidder\":...} wrapper, replaces with inner ext fields directly. Wire-format imp.ext sent to upstream has only the inner ExtImpFreewheelSSP fields. Cross-language symmetric."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: header-componentid-prebid-java
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "Custom header `Componentid: prebid-java` — Go emits `Componentid: prebid-go`. Intentional byte-level divergence used for upstream routing/analytics."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: per-bid-currency-attachment
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "Java attaches `bidCurrency = bidResponse.getCur()` to EACH BidderBid (per-bid attachment). Go propagates ONCE at BidderResponse.Currency level (per-response). Cross-language asymmetry on currency-propagation level. Functionally equivalent for single-currency responses; can diverge on multi-currency seats."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: error-message-misspelling-infomation
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "Error message uses misspelled \"Infomation\" (sic) instead of \"Information\". Cross-language identical: Go side preserves the same misspelling verbatim."
+    edge_case_taxon: yaml-field-name-typo
+  - id: error-message-imp-id-vs-go-index
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "Error message references imp by `imp.getId()` (`%s`). Go side uses imp INDEX (`%d` for `i`). Cross-language behavioral asymmetry on error verbosity — Java is more debuggable (imp.id), Go uses positional index."
+    edge_case_taxon: yaml-field-name-typo
+  - id: bid-video-conditional-population
+    file: src/main/java/org/prebid/server/bidder/freewheelssp/FreewheelSSPBidder.java
+    summary: "videoInfo (PrimaryCategory + Duration) populated conditionally: PrimaryCategory only when bid.cat non-empty; Duration only when bid.dur > 0. Returns null otherwise. Cross-language symmetric — Go has same conditional checks."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: fwssp-alias-with-endpoint-override
+    file: src/main/resources/bidder-config/freewheelssp.yaml
+    line: 6
+    summary: "fwssp alias has EXPLICIT endpoint override (`https://prebid.v.fwmrm.net/ortb/ssp`), endpoint-compression: gzip, own cookie-family-name (`fwssp`), own iframe URL (different host `user-sync.fwmrm.net`), and own uid-macro (`#{user.id}` Spring style). NOT a typical tilde-inherit alias — alias-with-full-override pattern. Cross-language asymmetric: Go has fwssp as a separate top-level bidder package, NOT a YAML alias."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/freewheelssp/
+    package_name: freewheelssp
+    bidder_constant: openrtb_ext.BidderFreewheelSSP
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/freewheelssp/
+    bidder_class: FreewheelSSPBidder
+    config_class: FreewheelSSPConfiguration
+    yaml_path: src/main/resources/bidder-config/freewheelssp.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/freewheelssp/
+  port_concerns:
+    aliases_inverted: true                    # Java has fwssp as YAML-internal alias under freewheelssp. Go has fwssp as TOP-LEVEL separate bidder package. Cross-language asymmetric topology on the fwssp sibling.
+    yaml_unification: false                   # Go has THREE yaml files (freewheelssp + freewheel-ssp aliasOf-stub + fwssp separate). Java has ONE yaml file (freewheelssp with fwssp as YAML alias).
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - adr-007-f2-empirical-correction
+      - adr-005-rule-46-canonical-same-name-correction
+      - alias-of-yaml-stub-mechanism
+      - fwssp-cross-language-topology-asymmetry
+      - hardcoded-video-bid-type
+      - ext-struct-field-count-asymmetry
+      - currency-propagation-level-divergence
+      - header-componentid-language-divergent
+      - misspelled-infomation-preserved
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "Java edge case #19 alternate naming: `FreewheelSSPBidder.java` is the SOLE class in the package. No Util/Helper/Model classes."
+    - "ExtImpFreewheelSSP has 4 fields (zoneId + 3 extras). The 3 extras (customSiteSectionId, networkId, profileId) lack @JsonProperty annotations and rely on JacksonMapper PROPERTY_NAMING_STRATEGY (snake_case). Wire form: snake_case. Go drops these fields entirely — cross-language fidelity gap."
+    - "fwssp alias is a YAML-internal alias under `adapters.freewheelssp.aliases.fwssp` with default-disabled (Rule 45) + EXPLICIT endpoint override (different upstream host). Alias-with-full-override pattern, distinct from typical tilde-inherit. Go has fwssp as a SEPARATE TOP-LEVEL bidder package — cross-language asymmetric topology."
+    - "Currency: Java attaches `bidCurrency` per-BidderBid (per-bid). Go propagates once at BidderResponse.Currency level (per-response). Cross-language propagation-level asymmetry."
+    - "Header `Componentid: prebid-java` — Go emits `prebid-go`. Intentional byte-level divergence."
+    - "Hardcoded BidType.video for ALL bids regardless of bid signals. Rule 26 hardcoded master sample (cross-language symmetric with Go)."
+    - "Error message uses imp.getId() (`%s`). Go uses imp INDEX (`%d`). Java more debuggable; Go uses positional index."
+    - "Misspelled \"Infomation\" (sic) preserved cross-language."
+    - "`AdkernelAdnTest` parallel naming — `FreewheelSSPTest` IT class title-case preserves uppercase SSP throughout. Distinct from EmxdigitalTest naming-case loss."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

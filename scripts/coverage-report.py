@@ -231,13 +231,27 @@ def _build_cross_name_lookup() -> dict[str, tuple[str, str]]:
     return lookup
 
 
-def compute_phase_5_readiness(goldens: dict[str, set[str]]) -> list[dict]:
-    """Map each Phase 5 pair to {bidder, priority, gap}."""
+def compute_phase_5_readiness(goldens: dict[str, set[str]],
+                              duals: dict[str, dict] | None = None) -> list[dict]:
+    """Map each Phase 5 pair to {bidder, priority, gap}.
+
+    Resolution order for Go/Java filenames:
+      1. Dual-spec's go_spec/java_spec paths (most authoritative — handles
+         empirical ADR-005/ADR-006 corrections like freewheelssp same-name
+         canonical or vungle bilateral phantom-rename).
+      2. LIFECYCLE_PAIRS / RULE_46_PAIRS cross-name lookup.
+      3. Bidder name verbatim on both sides (default).
+    """
     cross_name = _build_cross_name_lookup()
     out = []
     for bidder, priority, summary in PHASE_5_PAIRS:
         bidder_lc = bidder.lower()
-        if bidder in cross_name:
+        go_name, java_name = bidder, bidder
+        if duals and bidder in duals:
+            go_name, java_name = _resolve_dual_spec_filenames(bidder, duals[bidder] or {})
+            has_go = go_name in goldens["go"]
+            has_java = java_name in goldens["java"]
+        elif bidder in cross_name:
             go_name, java_name = cross_name[bidder]
             has_go = go_name in goldens["go"] or go_name.lower() in goldens["go"]
             has_java = java_name in goldens["java"] or java_name.lower() in goldens["java"]
@@ -390,7 +404,7 @@ def yn(b: bool) -> str:
 
 
 def render(goldens, duals, rules) -> str:
-    phase5 = compute_phase_5_readiness(goldens)
+    phase5 = compute_phase_5_readiness(goldens, duals)
     r46 = compute_rule_46_coverage(goldens)
     life = compute_lifecycle_coverage(goldens)
     empire = compute_empire_coverage(goldens)
