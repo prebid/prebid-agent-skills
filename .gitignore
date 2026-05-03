@@ -26,3 +26,6 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Teal-flow / one-shot orchestration transient specs (pr-triage prior_source_spec convention)
+.tmp/

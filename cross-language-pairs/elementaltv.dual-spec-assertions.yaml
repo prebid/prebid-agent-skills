@@ -1,18 +1,9 @@
 dual_spec_assertion_version: 1
 bidder_name: elementaltv
-go_spec: null
+go_spec: prebid-server-go/read/test-fixtures/elementaltv.golden.spec.yaml
 java_spec: prebid-server-java/read/test-fixtures/elementaltv.golden.spec.yaml
 go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
 java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
-
-note_on_specs: |
-  Only the Java-source spec is authored under read/test-fixtures/. The Go-side
-  spec is not authored at this resolved_commit — but the Go-side bidder-params
-  file IS present at /tmp/prebid-server-go/static/bidder-params/elementaltv.json,
-  so cross-language assertions on bidder_params_sha256 + schema-interpretation
-  are well-defined. Other cross-language assertions (capabilities, gvl_vendor_id,
-  maintainer) are derivable from the Go-side static/bidder-info/elementaltv.yaml
-  + Java-side bidder-config/elementaltv.yaml; captured below as best-effort.
 
 assertions:
   bidder_params_sha256:

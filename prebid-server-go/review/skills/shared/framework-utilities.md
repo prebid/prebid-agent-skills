@@ -11,7 +11,7 @@ Canonical framework-level reference shared by all four prebid-server-go review s
 
 ## Builder inputs and call signatures
 
-The framework passes these struct values into adapter implementations. Adapters can rely on every field listed here being present in v4 master. Verified at v4.1.0.
+The framework passes these struct values into adapter implementations. Adapters can rely on every field listed here being present in v4 master. Verified at master @2fae16f31693452b62dd2a0924b78e71bbec43ec (2026-05-03).
 
 ### `config.Adapter` (passed into `Builder`)
 
@@ -111,7 +111,7 @@ Source: `adapters/bidder.go` on `prebid/prebid-server` master.
 func Builder(bidderName openrtb_ext.BidderName, config config.Adapter, server config.Server) (adapters.Bidder, error)
 ```
 
-Stable across v3 and v4. Verified current as of v4.1.0.
+Stable across v3 and v4. Verified current at master @2fae16f31693452b62dd2a0924b78e71bbec43ec (2026-05-03).
 
 ## Adapter Struct Convention
 
@@ -368,7 +368,7 @@ Adapters MUST NOT re-implement validation that PBS core enforces upstream. Frequ
 
 Reviewers consistently say "delete this — PBS core does it upstream." Flag re-implementations as **WARN**.
 
-### Additional PBS-enforced validation (verified at v4.1.0)
+### Additional PBS-enforced validation (verified at master @2fae16f31693452b62dd2a0924b78e71bbec43ec, 2026-05-03)
 
 These are checks PBS performs that adapter authors sometimes redundantly re-implement. Flag re-implementations as **WARN**.
 
@@ -476,7 +476,7 @@ A 1-line alias (`aliasOf: parent` only) is acceptable when the alias inherits ev
 
 ## Sources
 
-- `prebid/prebid-server` master branch (verified at v4.1.0 release)
+- `prebid/prebid-server` master at @2fae16f31693452b62dd2a0924b78e71bbec43ec (2026-05-03)
 - `adapters/bidder.go`, `adapters/adapterstest/test_json.go`
 - `util/jsonutil/jsonutil.go`, `util/ptrutil/ptrutil.go`, `util/iterutil/iterutil.go`
 - `errortypes/errortypes.go`

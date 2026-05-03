@@ -1,18 +1,9 @@
 dual_spec_assertion_version: 1
 bidder_name: aax
-go_spec: null
+go_spec: prebid-server-go/read/test-fixtures/aax.golden.spec.yaml
 java_spec: prebid-server-java/read/test-fixtures/aax.golden.spec.yaml
 go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
 java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
-
-note_on_specs: |
-  Only the Java-source spec is authored under read/test-fixtures/. The Go-side
-  spec is not authored at this resolved_commit — but the Go-side bidder-params
-  file IS present at /tmp/prebid-server-go/static/bidder-params/aax.json, so
-  cross-language assertions on bidder_params_sha256 + schema-interpretation are
-  well-defined. Other cross-language assertions (capabilities, gvl_vendor_id,
-  maintainer) are derivable from the Go-side static/bidder-info/aax.yaml +
-  Java-side bidder-config/aax.yaml; these are captured below as best-effort.
 
 assertions:
   bidder_params_sha256:
@@ -58,8 +49,7 @@ assertions:
       app: [banner, video, native]
     equivalent: true
     divergence_summary: |
-      Verified via /tmp/prebid-server-go/static/bidder-info/aax.yaml and
-      Java-source spec bidder_info.capabilities. Both languages list
+      Both Go-source and Java-source specs declare the same capabilities:
       [banner, video, native] for both site and app. Match.
     severity: pass
 
@@ -171,8 +161,9 @@ overall:
     this set with a non-zero blocker_count, and the only pair where the cross-
     language test harness should produce a hard FAIL rather than a WARN.
 
-    No Go-side golden has been authored under
-    prebid-server-go/read/test-fixtures/aax.golden.spec.yaml at this
-    resolved_commit; the Java-side golden at
-    prebid-server-java/read/test-fixtures/aax.golden.spec.yaml DOES record
-    this divergence as a quirk (id: bidder-params-sha-divergence-from-go).
+    Both goldens are authored at the resolved commits and record this
+    divergence: the Java-side golden carries a quirk
+    (id: bidder-params-sha-divergence-from-go) capturing the same minLength
+    omission, and the Go-side golden's `params.schema_interpretation.properties`
+    block carries `constraints: { minLength: 1 }` on both `cid` and `crid`,
+    making the divergence diff-comparable on either side.

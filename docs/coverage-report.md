@@ -99,11 +99,11 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | Bidder | Go | Java | sha256 block | default_enabled block | naming_asymmetry block | Total blocks |
 |---|---|---|---|---|---|---|
 | `152media` | ✓ | ✓ | — | — | — | 9 |
-| `aax` | ✓ | ✓ | — | — | — | 9 |
+| `aax` | ✓ | ✓ | — | — | — | 8 |
 | `adkernelAdn` | ✓ | ✓ | — | — | — | 9 |
 | `adverxo` | ✓ | ✓ | — | — | — | 8 |
 | `appnexus` | ✓ | ✓ | — | — | — | 8 |
-| `elementaltv` | ✓ | ✓ | — | — | — | 9 |
+| `elementaltv` | ✓ | ✓ | — | — | — | 8 |
 | `emxdigital` | ✓ | ✓ | — | — | — | 9 |
 | `freewheelssp` | ✓ | ✓ | — | — | — | 9 |
 | `kobler` | ✓ | ✓ | — | — | — | 8 |
