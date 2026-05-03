@@ -340,7 +340,7 @@ The read-skill suite tests via THREE complementary mechanisms:
 2. **Dual-spec assertions** at `cross-language-pairs/*.dual-spec-assertions.yaml`. Per-bidder cross-language equivalence/divergence declarations consumed by R5-strict and R5-divergent.
 3. **R1–R10 CI rules** at `scripts/round-trip-ci.py`. Schema-driven invariants (file-reachability, sha integrity, custom-quirk pairing, round-trip determinism, cross-language parity, naming consistency, taxa registry, harness flag).
 
-A future addition (Bundle 7c, `scripts/tests/test_schema_contract.py`) augments this with phantom-path detection — verifying every dotted reference in a SKILL.md resolves to a path defined in `adapter-spec.md` or `behavior-taxonomy.md`.
+An additional CI gate at `scripts/tests/test_schema_contract.py` augments this with phantom-path detection — verifying every dotted reference in a SKILL.md resolves to a path defined in `adapter-spec.schema.json` or `behavior-taxonomy.md`.
 
 ### What standard skill-creator uses
 
@@ -399,4 +399,4 @@ Don't translate the R-rules into per-skill `script_eval` entries. The result wou
 - Opt-in hook in pr-triage: [`../../../review/skills/pr-triage/SKILL.md`](../../../review/skills/pr-triage/SKILL.md) — `## Optional: Prior-Spec Comparison (read/ integration)` section.
 - Golden specs cited: [`../../test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml), [`../../test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml), [`../../test-fixtures/msft.golden.spec.yaml`](../../test-fixtures/msft.golden.spec.yaml), [`../../../../prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml), [`../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml), [`../../../../prebid-server-java/read/test-fixtures/rubicon.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/rubicon.golden.spec.yaml).
 - Reference lists: `prebid-server-go/references/new-bid-adapter-prs.md` (Go new-adapter PRs with `Patterns Demonstrated` tags), `prebid-server-java/references/new-bid-adapter-prs.md` (Java new-adapter PRs; `port-from-go` tag identifies port pairs).
-- Phase 2 reconnaissance findings (in master plan): cross-language hypothesis confirmation, 17 Go + 17 Java edge cases, taxonomy refactor (scalar→rules-list), 31+ port-translation rules.
+- Phase 2 reconnaissance findings (in master plan): cross-language hypothesis confirmation, 17 Go + 17 Java edge cases, taxonomy refactor (scalar→rules-list), 46 port-translation rules.

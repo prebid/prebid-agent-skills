@@ -1,6 +1,6 @@
 # Go test fixtures
 
-12 hand-authored Adapter Specification fixtures for the `prebid-server-go` read suite. All fixtures pinned to upstream commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` (`prebid/prebid-server` master, 2026-04-27).
+21 hand-authored Adapter Specification fixtures for the `prebid-server-go` read suite. Phase A-4 fixtures (12) pin to upstream commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` (`prebid/prebid-server` master, 2026-04-27); Phase 5 fixtures (9) pin to `2fae16f31693452b62dd2a0924b78e71bbec43ec` (`prebid/prebid-server` master, 2026-05-02). Per-fixture pin is recorded at `provenance.source.resolved_commit`.
 
 ## Fixtures
 
@@ -10,14 +10,23 @@
 | `33across` | `package ttx` directory mismatch; `Bidder33Across` acronym preservation |
 | `aax` | Cross-language port pair; Java-side params schema omits `minLength: 1` (R5 fail) |
 | `adkernel` | Multi-alias parent (152media, rxnetwork, xapads); composed batching `[grouped-by-key, format-split]` |
+| `adkernelAdn` | (Phase 5) Cross-language port pair (Java: `adkerneladn`); Rule 46 master sample (Go camelCase ↔ Java lowercase); macro-form asymmetry (Go template `{{.X}}` ↔ Java plain `{{X}}`) |
 | `adtonos` | Currency conversion via `reqInfo.ConvertCurrency` helper |
+| `adverxo` | (Phase 5) Cross-language port pair; macro-form asymmetry across multiple URL params |
 | `appnexus` | Custom `UnmarshalJSON` for keywords; pod-grouping batching; multi-imp |
 | `bidstack` | Bearer-token authentication |
+| `cadent_aperture_mx` | (Phase 5) Cross-language port pair (Java: `emxdigital`); ADR-006 dual-core registration (both `cadent_aperture_mx` AND `emx_digital` registered Go-side as fully-enabled core bidders sharing one Builder) |
 | `elementaltv` | Lifecycle rename from Adoppler; cross-language port pair |
+| `freewheelssp` | (Phase 5) Cross-language port pair; ADR-007 F2 master sample (`language_stamped_headers[]`: `Componentid: prebid-go` ↔ `prebid-java`); `aliasOf:` stub for `freewheel-ssp` is Go-only |
 | `kobler` | Phase A acceptance-gate; cross-language port pair; documented R7 bugs (`BidderKargo` in `kobler_test.go:12`, `BidderKrushmedia` in `params_test.go:47`) |
+| `limelightDigital` | (Phase 5) Cross-language port pair; alias-empire master (3 children each side) |
 | `mediasquare` | Custom request body types (`msqResponse`, `msqParameters`); cross-language port pair |
 | `msft` | Bidder-name rebrand (formerly Microsoft); IAB-category data table; dual test root (`test/` + `test-extrainfo/`) |
 | `optidigital` | Phase A acceptance-gate (clean baseline); hardcoded dev-endpoint quirk; cross-language port pair |
+| `smarthub` | (Phase 5) Cross-language port pair; alias-empire parent-canonical case (Attekmi rebrand; Go-side parent functional) |
+| `teqblaze` | (Phase 5) Cross-language port pair; white-label-only-parent case (10 aliases each side; parent non-functional via `whiteLabelOnly: true`) |
+| `thetradedesk` | (Phase 5) Cross-language port pair; ADR-007 F4 master sample (`bid_post_processing.macros[]` AUCTION_PRICE replacement in `bid.NURL`/`bid.AdM`/`bid.BURL`) |
+| `vungle` | (Phase 5) Cross-language port pair; ADR-007 F3 master sample (`entity_strategies.Site: replace-with-app-synthesis`, `App: synthesize-app-replacement`); bilateral lifecycle rename (liftoff→vungle) |
 
 ## Round-trip determinism (R4)
 

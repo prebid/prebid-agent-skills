@@ -1,6 +1,6 @@
 # Java test fixtures
 
-10 hand-authored Adapter Specification fixtures for the `prebid-server-java` read suite. All fixtures pinned to upstream commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a` (`prebid/prebid-server-java` master, 2026-04-22).
+19 hand-authored Adapter Specification fixtures for the `prebid-server-java` read suite. Phase A-4 fixtures (10) pin to upstream commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a` (`prebid/prebid-server-java` master, 2026-04-22); Phase 5 fixtures (9) pin to `a1fe64e1...` (`prebid/prebid-server-java` master, 2026-05-02). Per-fixture pin is recorded at `provenance.source.resolved_commit`.
 
 ## Fixtures
 
@@ -8,14 +8,23 @@
 |---|---|
 | `152media` | Alias-only spec with full `aliases[]` block; identifier rule workaround (`OneFiveTwoMediaTest`); cross-language port pair |
 | `aax` | 3-step `bid_type_resolution.method_chain`; missing `minLength: 1` on `cid`/`crid` (port-fidelity bug vs Go) |
+| `adkerneladn` | (Phase 5) Cross-language port pair (Go: `adkernelAdn`); Rule 46 master sample (Java lowercase form) |
+| `adverxo` | (Phase 5) Cross-language port pair; macro-form asymmetry across multiple URL params |
 | `appnexus` | `mediafuse` parent_alias declaration (Java side only); `json-aliases-present` combinator extension |
 | `elementaltv` | Three-step rename from Adoppler with `lifecycle.rename` block |
+| `emxdigital` | (Phase 5) Cross-language port pair (Go: `cadent_aperture_mx`); legacy EMX brand kept canonical Java-side with `cadent_aperture_mx` as a disabled+geo-restricted alias |
+| `freewheelssp` | (Phase 5) Cross-language port pair; ADR-007 F2 master sample (`language_stamped_headers[]: Componentid: prebid-java` ↔ Go's `prebid-go`) |
 | `generic` | Reference adapter (no bidder-specific quirks) |
 | `huaweiads` | `runtime-region-selection` endpoint with 5 endpoints; HMAC authentication; `retcode-field` application status; 196 unit `@Test` methods; 23 IT subdirectories |
 | `kobler` | Phase A acceptance-gate; cross-language port pair; canonical clean reference (Go and Java SHAs match) |
+| `limelightDigital` | (Phase 5) Cross-language port pair; alias-empire master (3 alias children) |
 | `mediasquare` | `Bidder<MediasquareRequest>` parameterized request type; 9 co-located helper classes; cross-language port pair |
 | `optidigital` | Cross-language port pair; `default_enabled: false` divergence vs Go |
 | `rubicon` | Most ambitious fixture: 13-arg constructor, 145 hand-written test methods, basic-auth pre-built header, `@Validated` Lombok stack, multi-folder integration test pattern, custom `RubiconBidResponse` |
+| `smarthub` | (Phase 5) Cross-language port pair; alias-empire parent-canonical case (Attekmi rebrand) |
+| `teqblaze` | (Phase 5) Cross-language port pair; white-label-only-parent case (10 alias children; parent uses placeholder endpoint) |
+| `thetradedesk` | (Phase 5) Cross-language port pair; ADR-007 F4 master sample (`bid_post_processing.macros[]` AUCTION_PRICE replacement) |
+| `vungle` | (Phase 5) Cross-language port pair; ADR-007 F3 master sample (`entity_strategies` synthesize patterns); bilateral lifecycle rename (liftoff→vungle) |
 
 ## Round-trip determinism (R4)
 

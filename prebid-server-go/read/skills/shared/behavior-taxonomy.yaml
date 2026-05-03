@@ -536,7 +536,7 @@ sources:
   - "Phase 2 reconnaissance findings (in conversation): 17 Go edge cases + 17 Java edge cases identified across `optidigital, kobler, 33across, mediasquare, msft, appnexus, adkernel` (Go) and `kobler, adverxo, ogury, feedad, seedtag, optidigital, mediasquare, elementaltv, 152media` (Java) plus the broader 9-adapter Java behavior taxonomy stress-test (`appnexus, rubicon, generic, aax, adview, kobler, mediasquare, nextmillennium, huaweiads`)."
   - "`prebid/prebid-server` master at v4.1.0 (commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` as of 2026-04-27)."
   - "`prebid/prebid-server-java` master at v3.41.0 (commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a` as of 2026-04-22)."
-  - "`prebid-server-go/references/new-bid-adapter-prs.md` — 92 reference PRs with `Patterns Demonstrated` tags."
+  - "`prebid-server-go/references/new-bid-adapter-prs.md` — 92 reference PRs (44 currently tagged with `Patterns Demonstrated`)."
   - "`prebid-server-java/references/new-bid-adapter-prs.md` — 49 reference PRs with `Patterns Demonstrated` tags."
   - "Sibling shared file: `prebid-server-go/review/skills/shared/framework-utilities.md`."
   - "Sibling shared file: `prebid-server-go/read/skills/shared/adapter-spec.schema.json` (canonical structural contract; Phase 2.0+)."

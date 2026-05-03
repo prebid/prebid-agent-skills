@@ -28,16 +28,16 @@ This directory captures non-obvious decisions made during PR review and planning
 
 | # | Title | Status |
 |---|---|---|
-| [ADR-001](001-phase-2-schema-field-additions.md) | Phase 2 schema field additions: code_naming, injection rename, shared-genesis, schain_movement, lifecycle.rename sub-fields, 22-phantom-path resolutions, SemVer version format | Proposed |
-| [ADR-002](002-bidder-constant-and-bean-dependencies.md) | bidder_constant_referenced semantics & kobler bean_dependencies — reversing Round-2 verdicts | Proposed |
-| [ADR-003](003-rule-44-alias-empire-consolidation.md) | Rule 44: Java alias-empire consolidation pattern | Proposed |
-| [ADR-004](004-rule-45-disabled-by-default-java-alias.md) | Rule 45: Disabled-by-default Java alias pattern | Proposed |
-| [ADR-005](005-rule-46-naming-convention-normalization.md) | Rule 46: Naming-convention normalization (Java lowercases Go camelCase/snake_case) | Proposed |
-| [ADR-006](006-rule-43-sub-categorization.md) | Rule 43 sub-categorization: bilateral / java-leads / go-leads / mirror-topology / inverted-parent lifecycle renames (5 subtypes; refined 2026-05-03 from 3 — `synchronized` renamed to `bilateral` in audit A5; `mirror-topology` and `inverted-parent` added per Phase 5 empirical evidence) | Proposed |
-| [ADR-007](007-novel-pattern-schema-additions.md) | Five new schema fields for novel patterns observed in diversity sample | Proposed |
-| [ADR-008](008-phase-5-pair-fixtures.md) | Phase 5 expanded pair fixtures: 7 new pairs (smarthub, teqblaze, adverxo, limelightDigital, vungle [refined 2026-05-03 from vungle/liftoff cross-name], emxdigital/cadent_aperture_mx, adkernelAdn/adkerneladn) — 9.5 days P1-P3 | Proposed |
+| [ADR-001](001-phase-2-schema-field-additions.md) | Phase 2 schema field additions: code_naming, injection rename, shared-genesis, schain_movement, lifecycle.rename sub-fields, 22-phantom-path resolutions, SemVer version format | Accepted |
+| [ADR-002](002-bidder-constant-and-bean-dependencies.md) | bidder_constant_referenced semantics & kobler bean_dependencies — reversing Round-2 verdicts | Accepted |
+| [ADR-003](003-rule-44-alias-empire-consolidation.md) | Rule 44: Java alias-empire consolidation pattern | Accepted |
+| [ADR-004](004-rule-45-disabled-by-default-java-alias.md) | Rule 45: Disabled-by-default Java alias pattern | Accepted |
+| [ADR-005](005-rule-46-naming-convention-normalization.md) | Rule 46: Naming-convention normalization (Java lowercases Go camelCase/snake_case) | Accepted |
+| [ADR-006](006-rule-43-sub-categorization.md) | Rule 43 sub-categorization: bilateral / java-leads / go-leads / mirror-topology / inverted-parent lifecycle renames (5 subtypes; refined 2026-05-03 from 3 — `synchronized` renamed to `bilateral` in audit A5; `mirror-topology` and `inverted-parent` added per Phase 5 empirical evidence) | Accepted |
+| [ADR-007](007-novel-pattern-schema-additions.md) | Five new schema fields for novel patterns observed in diversity sample | Accepted |
+| [ADR-008](008-phase-5-pair-fixtures.md) | Phase 5 expanded pair fixtures: 7 new pairs (smarthub, teqblaze, adverxo, limelightDigital, vungle [refined 2026-05-03 from vungle/liftoff cross-name], emxdigital/cadent_aperture_mx, adkernelAdn/adkerneladn) — 9.5 days P1-P3 | Accepted |
 
-ADRs marked `Proposed` are pending Phase 2 (schema migration) execution. They become `Accepted` when the corresponding code/schema changes land.
+All 8 ADRs are `Accepted` as of 2026-05-03; corresponding execution is complete (Phase 1 corrections, Phase 2 schema migration, Phase 5 fixture authoring, Wave 3 ADR-007 schema additions, Wave 7 status flips). Per-ADR bodies record individual execution evidence and any post-execution refinements (ADR-005, ADR-006, ADR-007 carry refinement annotations from Phase 5 + 2026-05-03 audit). See CHANGELOG.md for the version-bump history.
 
 ## Pre-execution audit corrections (2026-05-02)
 

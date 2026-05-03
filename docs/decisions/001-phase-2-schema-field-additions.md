@@ -94,7 +94,7 @@ lifecycle:
       - { from: <path>, to: <path> }
     yaml_deletes: []
     yaml_adds: []
-    rename_subtype: bilateral | java-leads | go-leads | mirror-topology | inverted-parent   # ADR-006 (refined 2026-05-03 from 3 to 5 subtypes; was synchronized | java-leads | go-leads — `synchronized` renamed to `bilateral` in audit A5; `mirror-topology` and `inverted-parent` added per Phase 5 empirical evidence)
+    subtype: bilateral | java-leads | go-leads | mirror-topology | inverted-parent   # ADR-006 (refined 2026-05-03 from 3 to 5 subtypes; was synchronized | java-leads | go-leads — `synchronized` renamed to `bilateral` in audit A5; `mirror-topology` and `inverted-parent` added per Phase 5 empirical evidence). Goldens emit at `lifecycle.rename.subtype:` (verified across the 7 lifecycle pairs).
     merged_at: <date>
     release: <version>
 ```
@@ -140,5 +140,5 @@ Affected fields: `adapter_spec_version`, `taxonomy_version`, `port_translation_r
 - Round 3 phantom-field decomposition (this conversation): 36 unique undocumented paths across 22 goldens; D1/D4/D5/D6 collectively resolve all 36
 - Pre-execution audit (this conversation): A3 JSON Schema terminology, A4 phantom-path completeness, B4 SemVer string, C6 null syntax
 - Schema: `prebid-server-go/read/skills/shared/adapter-spec.md` (current), `adapter-spec.schema.json` (planned)
-- Affected goldens: `huaweiads.golden.spec.yaml` (Java, code_naming + registry rename + unit_test_breakdown), `appnexus.golden.spec.yaml` (Go, schain_movement), `elementaltv.golden.spec.yaml` (Java, lifecycle.rename), `rubicon.golden.spec.yaml` (Java, shared-genesis)
+- Affected goldens at original ADR-001 authoring: `huaweiads.golden.spec.yaml` (Java, code_naming + registry rename + unit_test_breakdown), `appnexus.golden.spec.yaml` (Go, schain_movement), `elementaltv.golden.spec.yaml` (Java, lifecycle.rename), `rubicon.golden.spec.yaml` (Java, shared-genesis). Phase 5 added 9 Go + 9 Java pair fixtures (smarthub, teqblaze, adverxo, limelightDigital, vungle, cadent_aperture_mx/emxdigital, adkernelAdn/adkerneladn, freewheelssp, thetradedesk) — all conformed to the post-D2 `delivery_mechanism` field name on initial authoring.
 - All 40 goldens (post-Phase-5 count): `iab_category_storage.injection` rename + `adapter_spec_version`/`taxonomy_version` SemVer additions

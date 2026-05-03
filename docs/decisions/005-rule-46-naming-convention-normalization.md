@@ -102,7 +102,7 @@ Cases that DON'T fit Rule 43 (they belong under Rule 46):
 ## References
 
 - Round 3 lifecycle-naming deep-dive (this conversation): "Naming-convention findings" section
-- 12 verified pairs from inventory analysis
+- 11 verified pairs from inventory analysis (refined 2026-05-03 from 12 — `freewheel-ssp/freewheelssp` removed per Phase 5 empirical verification; both canonical YAMLs use `freewheelssp`, hyphen form is a Go-only alias-stub)
 - PR refs: Java #4285 (boldwinrapid canonical), #3829 (152media digit-leading), #4326 (elementaltv acronym), #4361 (360playvid digit-leading-yaml-only); Go #4211 (underscore-allowed), #4376 (package-name-lowercase)
 - Existing taxa: `tilde-alias-syntax` (`behavior-taxonomy.md:417`), `acronym-case-preservation` (already tagged)
 - Related: `prebid-server-go/read/skills/read-bidder-params/references/schema-interpretation.md:393-413` (TitleCase rule for `BidderName` constants — separate from Rule 46 since `BidderName` constants are case-rich on Go)

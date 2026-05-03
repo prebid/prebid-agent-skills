@@ -13,7 +13,7 @@ A quirk entry is structured as:
   edge_case_taxon: <enum-from-registry>
 ```
 
-Every `custom` value in any enumerated behavioral field REQUIRES a paired quirk (Validation Rule R3). The `edge_case_taxon` MUST be one of the 22 registered values; readers that emit an unregistered taxon fail validation.
+Every `custom` value in any enumerated behavioral field REQUIRES a paired quirk (Validation Rule R3). The `edge_case_taxon` MUST be one of the registered values in [`../../shared/behavior-taxonomy.md#quirks-edge_case_taxon-full-registry`](../../shared/behavior-taxonomy.md#quirks-edge_case_taxon-full-registry); readers that emit an unregistered taxon fail validation.
 
 ---
 

@@ -231,7 +231,7 @@ Most Go adapters do NOT lookup IAB categories. When they do (canonical: msft):
 - `storage_kind: go-data-table` — co-located Go data file (e.g., `iab_categories.go`).
 - `go_data_file: adapters/msft/iab_categories.go` — full path.
 - `table_size: <int>` — number of entries.
-- `injection: static-init` — typically a package-level `var iabCategories = map[string]string{ ... }`.
+- `delivery_mechanism: static-init` — typically a package-level `var iabCategories = map[string]string{ ... }`. (Renamed from `injection` per ADR-001 D2.)
 - `yaml_field: null` — Java-only.
 
 If no lookup is performed: `storage_kind: none` and all other fields null (default).

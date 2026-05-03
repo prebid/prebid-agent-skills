@@ -112,7 +112,7 @@ When adding or changing a field:
 
 1. Edit `adapter-spec.schema.json` (the authoritative contract)
 2. If goldens need to change, edit them and verify with `make audit-goldens`
-3. Run `make ci` to confirm `test_schema_jsonschema.py` passes for all 22 goldens
+3. Run `make ci` to confirm `test_schema_jsonschema.py` passes for all 40 goldens (21 Go + 19 Java post-Phase-5)
 4. Document significant changes in `CHANGELOG.md` (Phase 2.7+)
 5. If the change is breaking, write an ADR and bump the schema version per the policy above
 
@@ -146,7 +146,7 @@ For other canonical examples covering the diversity of the corpus, see:
 | msft | Bidder-rename (formerly Microsoft); IAB-category data table; dual test root (`test/` + `test-extrainfo/`) |
 | optidigital | Phase A acceptance-gate (clean baseline); hardcoded dev-endpoint quirk; canonical `default_enabled` asymmetry (Rule 45) |
 
-The cross-language-pairs dual-spec assertions live at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` (7 pairs as of 2026-05-02).
+The cross-language-pairs dual-spec assertions live at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` (16 pairs post-Phase-5; see `cross-language-pairs/README.md`).
 
 ---
 
@@ -177,9 +177,9 @@ A dual-spec assertion FAIL is a port-fidelity violation that surfaces in the cro
 ## Sources
 
 - Phase 2 reconnaissance findings (this PR): the 17+17 edge-case enumeration across both languages, plus the broader 9-adapter Java behavior taxonomy stress-test.
-- `prebid/prebid-server` master at v4.1.0 (commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` as of 2026-04-27).
-- `prebid/prebid-server-java` master at v3.41.0 (commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a` as of 2026-04-22).
-- [`prebid-server-go/references/new-bid-adapter-prs.md`](../../../references/new-bid-adapter-prs.md) — 92 reference PRs with `Patterns Demonstrated` tags.
+- `prebid/prebid-server` master — Phase A-4 fixtures pin to `d7f8515b86258688304b0d9b6668c6a0e258bc9e` (v4.1.0, 2026-04-27); Phase 5 fixtures pin to `2fae16f31693452b62dd2a0924b78e71bbec43ec` (master, 2026-05-02).
+- `prebid/prebid-server-java` master — Phase A-4 fixtures pin to `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a` (v3.41.0, 2026-04-22); Phase 5 fixtures pin to `a1fe64e1...` (master, 2026-05-02).
+- [`prebid-server-go/references/new-bid-adapter-prs.md`](../../../references/new-bid-adapter-prs.md) — 92 reference PRs (44 currently tagged with `Patterns Demonstrated`).
 - [`prebid-server-java/references/new-bid-adapter-prs.md`](../../../../prebid-server-java/references/new-bid-adapter-prs.md) — 49 reference PRs.
 - Sibling shared file: [`prebid-server-go/review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md).
 - Sibling shared file: [`behavior-taxonomy.md`](behavior-taxonomy.md).

@@ -120,7 +120,7 @@ Each reader's output is independent — no inter-reader coupling. The orchestrat
 
 Assembly steps, in order:
 
-1. Initialize the spec scaffold with `adapter_spec_version: 1`, `spec_kind: prebid-server-adapter`, `source_language: java`.
+1. Initialize the spec scaffold with `adapter_spec_version: "1.0.0"` (SemVer string per ADR-001 D7; or `"1.1.0"` when emitting ADR-007 F1/F3/F4/F5 patterns), `spec_kind: prebid-server-adapter`, `source_language: java`.
 2. Populate `provenance.*` (source, ref, resolved_commit, fetch_method, skill_versions, timestamp_utc, operator).
 3. Populate `meta.*` (bidder_name, alias data from Step 4, java_artifact_version from Step 3, module_path_major: null).
 4. Merge each reader's fragment under its owned section. Resolve overlaps with reader-of-record precedence (e.g., `read-bidder-class` is the sole writer of `make_requests.mutation`; if `read-bidder-config` accidentally produces `mutation` data, the orchestrator drops it and emits `reader-fragment-collision` warning).

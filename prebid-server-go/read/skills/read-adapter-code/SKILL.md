@@ -114,6 +114,9 @@ Locate `func (a [*]adapter) MakeRequests(...)`. Apply rules from [../shared/beha
 5. **`imp_ext_unmarshal.kind`** — `standard-two-phase` (default — `jsonutil.Unmarshal(imp.Ext, &bidderExt)` then `jsonutil.Unmarshal(bidderExt.Bidder, &impExt)`), `direct` (skip framework wrapper), `none` (no params), or `custom`. Set `mechanism_go: jsonutil-two-phase` for the canonical case; `null` for `direct`/`none`. Set `target_type` to the imp ext struct (`openrtb_ext.ExtImpKobler`); set `wrapper_type` only on `direct`.
 6. **`endpoint_resolution.kind`** + **`mechanism_go`** — see the kind/mechanism cross-table in the patterns reference. Mechanism values: `text/template, macros.NewStringIndexBasedReplacer, net/url, string-concat, null`. Populate `macro_field_set[]` with the subset of `macros.EndpointTemplateParams` 18 fields (canonical list at [../../../review/skills/shared/framework-utilities.md#endpoint-template-macros](../../../review/skills/shared/framework-utilities.md#endpoint-template-macros)) actually substituted; `template_params_struct_field_count` records `len(macro_field_set)`.
 7. **`helpers[]`** — every unexported function defined alongside the adapter (excluding the implementation methods). Record `name` and `signature`.
+8. **`headers_constructed.*`** — when `MakeRequests` constructs headers beyond framework defaults. Set `pre_built_in_constructor: true` when a header is pre-computed in the constructor (rare on Go; Java pattern); else false. `per_request_dynamic: true` when headers are computed per-request. `custom_headers[]` lists the literal headers added. `authentication_kind: none | basic-auth | bearer-token | hmac-digest | custom`. `authentication_input[]` lists field paths the auth value derives from.
+
+   **ADR-007 F2 (`language_stamped_headers[]`)**: set `language_stamped: true` and populate `language_stamped_headers[]` with `{ name, go_value, java_value, rationale }` per item when the adapter emits a header whose VALUE differs by language. Master sample: `freewheelssp` emits `Componentid: prebid-go` (Go) ↔ `prebid-java` (Java) — same header name, different value, byte-asymmetric outbound. Both sides record the same `language_stamped_headers[]` (per-side spec carries the full cross-language pair so cross-language consumers can diff). One-sided header additions (Go emits a header Java doesn't, or vice versa) are NOT F2 — record them as quirks instead per ADR-007's footnote on one-sided header mutations.
 
 ### Step 8 — Classify `code.make_bids.*`
 
@@ -149,7 +152,7 @@ For each fixture path in `inputs.files.test_fixtures.*`:
 
 For each unclassifiable pattern observed in any of Steps 4–9, add an entry to `quirks[]`. Every `custom` value in an enumerated field REQUIRES a quirk entry (Validation Rule R3). The `edge_case_taxon` MUST be picked from the registry at [../shared/behavior-taxonomy.md#quirks-edge_case_taxon-full-registry](../shared/behavior-taxonomy.md#quirks-edge_case_taxon-full-registry).
 
-For the comprehensive emission rules with real-adapter examples and decision logic, see [references/quirk-catalog.md](references/quirk-catalog.md). That file documents when to emit each of the 22 registered taxa, with file:line citations and the spec field that cannot capture the pattern.
+For the comprehensive emission rules with real-adapter examples and decision logic, see [references/quirk-catalog.md](references/quirk-catalog.md). That file documents when to emit each registered taxon, with file:line citations and the spec field that cannot capture the pattern.
 
 ### Step 11 — Populate `cross_language.go_specific_concerns[]` and stub `java_specific_concerns[]`
 
@@ -200,7 +203,7 @@ Each Go edge case from the plan maps to specific spec fields owned by this skill
 
 A quirk is a structured free-text bucket entry with a required taxon from the closed registry. Each quirk: `{ id, file, summary, edge_case_taxon }`. See [references/quirk-catalog.md](references/quirk-catalog.md) for the full when-to-emit decision matrix with real-adapter file:line examples for every registered taxon.
 
-The catalog covers all 22 taxa; this skill emits quirks under taxa: `hardcoded-config-as-anti-pattern, json-key-style-mismatch (test side), multi-file-layout-justified, legacy-go-pattern-pre-1.22, incomplete-classification, legacy-encoding-json-direct-usage, legacy-test-helpers-imported, unguarded-currency-overwrite, hardcoded-bid-type, bidder-constant-mismatch (test side), legacy-impext-naming (file-side observation; the type-name observation is shared with read-bidder-params)`. The remaining taxa belong to sibling skills.
+The catalog covers every registered taxon; this skill emits quirks under: `hardcoded-config-as-anti-pattern, json-key-style-mismatch (test side), multi-file-layout-justified, legacy-go-pattern-pre-1.22, incomplete-classification, legacy-encoding-json-direct-usage, legacy-test-helpers-imported, unguarded-currency-overwrite, hardcoded-bid-type, bidder-constant-mismatch (test side), legacy-impext-naming (file-side observation; the type-name observation is shared with read-bidder-params)`. The remaining taxa belong to sibling skills.
 
 ## Verification
 

@@ -60,7 +60,7 @@ Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. 10 fixtures pinn
 
 - The 4 review skills at `prebid-server-go/review/skills/` consume the same `framework-utilities.md` reference and produce review findings; the read suite produces the structured spec they could compare against.
 - The Java parallel suite at `prebid-server-java/read/skills/` shares the canonical `adapter-spec.md` and `port-translation-rules.md` (single source of truth on the Go side; Java side links to the Go-side files until divergence requires a Java-specific schema).
-- `prebid-server-go/references/new-bid-adapter-prs.md` — 90 reference PRs (42 currently tagged with `Patterns Demonstrated`), used as ground truth for behavioral taxonomy and port-translation rule discovery.
+- `prebid-server-go/references/new-bid-adapter-prs.md` — 92 reference PRs (44 currently tagged with `Patterns Demonstrated`), used as ground truth for behavioral taxonomy and port-translation rule discovery.
 
 ## Status
 
