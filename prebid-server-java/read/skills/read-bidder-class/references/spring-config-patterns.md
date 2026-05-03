@@ -171,7 +171,7 @@ configuration_properties_class:
   lombok_annotations: [Data, EqualsAndHashCode, NoArgsConstructor]
 ```
 
-The inlined `iabCategories` map carries 120-ish entries directly in `bidder-config/appnexus.yaml`. Read-bidder-class does NOT inventory the map's contents (that is `read-bidder-config`'s job), but it DOES set `iab_category_storage.storage_kind: yaml-inlined` + `yaml_field: iab-categories` + `table_size: ~120` + `injection: constructor-arg` (because the lambda passes `cfg.getIabCategories()` to the bidder constructor).
+The inlined `iabCategories` map carries 120-ish entries directly in `bidder-config/appnexus.yaml`. Read-bidder-class does NOT inventory the map's contents (that is `read-bidder-config`'s job), but it DOES set `iab_category_storage.storage_kind: yaml-inlined` + `yaml_field: iab-categories` + `table_size: ~120` + `delivery_mechanism: constructor-arg` (because the lambda passes `cfg.getIabCategories()` to the bidder constructor).
 
 #### Huaweiads / NextMillennium — nested ExtraInfo
 

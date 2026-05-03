@@ -185,7 +185,7 @@ Symmetric inverse of §3. The skill consumes a Java-source spec and emits Go ada
 ### 4.3 What `port-java2go` does NOT translate
 
 - Spring DI machinery (`spring_config.*`) is wholly Java-specific. The factory class, factory method, `@PropertySource` annotation, `BidderConfigurationProperties` subclass — all dropped. Go uses the `Builder` function pattern which the porter generates from the spec.
-- `iab_category_storage.injection: constructor-arg` (Java) translates to Go's `static-init` — the Go data file is package-level static, not constructor-injected.
+- `iab_category_storage.delivery_mechanism: constructor-arg` (Java) translates to Go's `static-init` — the Go data file is package-level static, not constructor-injected.
 - `tests.unit_test_methods_count` (Java JUnit `@Test` count) does NOT translate — Go uses JSON-fixture-driven tests via `RunJSONBidderTest`. The hand-written test methods are Java-only.
 - Java-only `cross_language.java_specific_concerns[]` entries — porter surfaces TODOs.
 
@@ -324,7 +324,7 @@ Example: msft's `iab_categories.go` has a 95-entry hardcoded map with custom cur
 
 The Adapter Specification is the unidirectional contract between `read/` and four downstream consumers. Each consumer reads the spec independently; no consumer talks to another consumer through the spec. Determinism (R4) and cross-language structural parity (R5) are the two correctness guarantees that survive the contract — everything else is a hint, a TODO, or a quirk for human judgment.
 
-The 46 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 12 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
+The 46 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 15 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
 
 The opt-in `pr-triage` hook is the only reverse-direction integration: review/ reads a spec to detect regressions on PR diffs. It is purely additive — review/ continues to function without read/.
 

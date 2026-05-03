@@ -33,7 +33,7 @@
 
 **Decision**: **Rename `iab_category_storage.injection` → `iab_category_storage.delivery_mechanism`** during Phase 2 migration.
 
-**Rationale**: `injection` is more idiomatic for `currency_conversion` (DI-pattern naming) than for `iab_category_storage` (which is really about how the category table is delivered to the adapter — constructor-arg vs static-init). The rename clarifies intent. Migrate the 22 goldens' `iab_category_storage.injection` → `delivery_mechanism` (mostly `null` values, one `static-init`, one `constructor-arg`).
+**Rationale**: `injection` is more idiomatic for `currency_conversion` (DI-pattern naming) than for `iab_category_storage` (which is really about how the category table is delivered to the adapter — constructor-arg vs static-init). The rename clarifies intent. Migrated all 40 goldens' `iab_category_storage.injection` → `delivery_mechanism` in Phase 2.7. Final value distribution: 37 × `null`, 2 × `static-init` (Go appnexus, Go msft), 1 × `constructor-arg` (Java appnexus). (Original ADR projected 22 goldens; Phase 5 fixture authoring added more pairs before Phase 2.7 ran.)
 
 ### D3 — `port_lineage.source_language: shared-genesis`
 
@@ -141,4 +141,4 @@ Affected fields: `adapter_spec_version`, `taxonomy_version`, `port_translation_r
 - Pre-execution audit (this conversation): A3 JSON Schema terminology, A4 phantom-path completeness, B4 SemVer string, C6 null syntax
 - Schema: `prebid-server-go/read/skills/shared/adapter-spec.md` (current), `adapter-spec.schema.json` (planned)
 - Affected goldens: `huaweiads.golden.spec.yaml` (Java, code_naming + registry rename + unit_test_breakdown), `appnexus.golden.spec.yaml` (Go, schain_movement), `elementaltv.golden.spec.yaml` (Java, lifecycle.rename), `rubicon.golden.spec.yaml` (Java, shared-genesis)
-- All 22 goldens: `iab_category_storage.injection` rename + `adapter_spec_version`/`taxonomy_version` SemVer additions
+- All 40 goldens (post-Phase-5 count): `iab_category_storage.injection` rename + `adapter_spec_version`/`taxonomy_version` SemVer additions

@@ -17,7 +17,7 @@ It owns these top-level spec keys (all dense on Java-source specs):
 - `code.*` — `package_or_class` (Java class name), `directory_name`, `package_directory_mismatch`, `file_layout`, `imports`, `make_requests.*`, `make_bids.*`. The `adapter_struct` and `builder` siblings are null on Java specs.
 - `bidder_class.*` — Java-specific shape (Go uses `code.adapter_struct` instead): `name`, `parameterized_request_type`, `parameterized_response_type`, `override_methods[]`, `constructor.{arity, parameters[]}`, `static_fields[]`, `helper_classes_co_located[]`, `helper_classes_in_proto[]`.
 - `spring_config.*` — `factory_class`, `factory_method`, `bidder_creator_lambda` (verbatim), `property_source_path`, `configuration_properties_class.{name, extends, extra_fields[], nested_classes[], lombok_annotations[]}`, `bean_dependencies[]`.
-- `iab_category_storage.*` — `storage_kind`, `yaml_field`, `table_size`, `injection`. `go_data_file` stays null on Java specs.
+- `iab_category_storage.*` — `storage_kind`, `yaml_field`, `table_size`, `delivery_mechanism`. `go_data_file` stays null on Java specs.
 - `ext_pojo_construction.*` — `framework_choice`, `flexible_extension_used`, `custom_unmarshal.{kind, accepts_shapes, where_branched}`.
 - `currency_conversion.*` — `used`, `helper.java_signature`, `injection`, `bid_request_passed_for_context`. `helper.go_signature` stays null on Java specs.
 - `headers_constructed.*` — `pre_built_in_constructor`, `per_request_dynamic`, `custom_headers[]`, `authentication_kind`, `authentication_input[]`.

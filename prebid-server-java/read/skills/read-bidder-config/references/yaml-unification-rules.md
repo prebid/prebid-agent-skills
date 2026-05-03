@@ -227,7 +227,7 @@ Operator-supplied custom YAML fields (the keys outside the canonical Java set) a
 |---|---|---|---|
 | `dev-endpoint` | Kobler | `KoblerConfigurationProperties.devEndpoint` (`@NotBlank private String`) | Promoted from Go-side hardcoded const into Java YAML config. Surfaces as `dev-endpoint-config-promotion` quirk (cross-language win). Port Translation Rule 35. |
 | `platform-id` | Appnexus | `AppnexusConfigurationProperties.platformId` | Mapped to a typed field for validation. |
-| `iab-categories` | Appnexus | `AppnexusConfigurationProperties.iabCategories` (`Map<String, String>`) | 120-entry inlined map. Cross-skill correlation: `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: 120, injection: constructor-arg}`. Go's equivalent is a separate `iab_categories.go` data file (storage_kind: go-data-table). |
+| `iab-categories` | Appnexus | `AppnexusConfigurationProperties.iabCategories` (`Map<String, String>`) | 120-entry inlined map. Cross-skill correlation: `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: 120, delivery_mechanism: constructor-arg}`. Go's equivalent is a separate `iab_categories.go` data file (storage_kind: go-data-table). |
 | `extra-info` | Huaweiads, NextMillennium | nested static class `ExtraInfo` with typed fields | Java pattern for opaque-config: typed nested class instead of Go's stringified-JSON `extra_info`. |
 
 For each known custom field, the skill emits an INFO-level entry under `quirks[]` to surface the cross-language asymmetry to porters:
