@@ -654,7 +654,16 @@ def deep_eq(a: Any, b: Any) -> bool:
 # When dual-spec says severity:pass but runtime disagrees → FAIL (stale-pass).
 R5_STRICT_KEYS = (
     ("bidder_info.capabilities",                "bidder_info_capabilities"),
-    ("params.schema_interpretation",            "params_schema_interpretation"),
+    # params.schema_interpretation is decomposed into runtime-invariant
+    # subfields only. The whole block contains prose-bearing fields
+    # (properties[].description, properties[].notes) that legitimately
+    # differ across languages — Java may reference Pattern.matches semantics,
+    # Go may reference regexp substring semantics, etc. Comparing the whole
+    # block via deep_eq fired stale-pass FAILs on dual-spec assertions that
+    # were correctly capturing semantic equivalence (e.g., thetradedesk).
+    ("params.schema_interpretation.required_fields",  "params_schema_interpretation"),
+    ("params.schema_interpretation.combinators_used", "params_schema_interpretation"),
+    ("params.schema_interpretation.flexible_types",   "params_schema_interpretation"),
     ("bidder_info.gvl_vendor_id",               "bidder_info_gvl_vendor_id"),
     ("bidder_info.endpoint_compression",        "bidder_info_endpoint_compression"),
     ("bidder_info.geoscope",                    "bidder_info_geoscope"),

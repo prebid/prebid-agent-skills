@@ -46,7 +46,7 @@ jobs:
           # Exit 0 = clean; 1 = fail (real drift requiring update); 2 = warn-only.
           # Always upload the report; only block the workflow on EXIT=1.
           echo "exit=$EXIT" >> $GITHUB_OUTPUT
-          if [ "$EXIT" -le 2 ]; then exit 0; else exit "$EXIT"; fi
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
 
       - name: Upload drift-report artifact
         if: always()

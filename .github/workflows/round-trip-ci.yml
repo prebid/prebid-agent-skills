@@ -65,11 +65,17 @@ jobs:
       - name: Schema-contract test (dotted paths in registry)
         run: python3 scripts/tests/test_schema_contract.py
 
-      - name: Schema validation — all 22 goldens
+      - name: Schema validation — all goldens
         run: python3 -m unittest scripts.tests.test_schema_jsonschema -v
 
       - name: Audit goldens vs upstream signatures
-        run: python3 scripts/audit-golden.py --all
+        run: |
+          set +e
+          python3 scripts/audit-golden.py --all
+          EXIT=$?
+          set -e
+          # Exit codes: 0=all pass, 1=fail, 2=warn-only.
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
 
       - name: Unit tests (full harness)
         run: python3 -m unittest discover -s scripts/tests -v
@@ -82,7 +88,7 @@ jobs:
           EXIT=$?
           set -e
           # Exit codes: 0=all pass, 1=fail, 2=warn-only.
-          if [ "$EXIT" -le 2 ]; then exit 0; else exit "$EXIT"; fi
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
 
       - name: Mechanizable port-rule lints (Phase 2.6)
         run: |
@@ -90,7 +96,7 @@ jobs:
           python3 scripts/lib/lint-port-rules.py
           EXIT=$?
           set -e
-          if [ "$EXIT" -le 2 ]; then exit 0; else exit "$EXIT"; fi
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
 
       - name: Description-length lint (informational)
         run: |
