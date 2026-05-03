@@ -43,11 +43,20 @@ def _normalize(node: Any) -> Any:
     return node
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCHEMA_PATH = REPO_ROOT / "prebid-server-go" / "read" / "skills" / "shared" / "adapter-spec.schema.json"
+SHARED_DIR = REPO_ROOT / "prebid-server-go" / "read" / "skills" / "shared"
+SCHEMA_PATH = SHARED_DIR / "adapter-spec.schema.json"
+
+# All shared JSON Schemas in the repo. Each must be a well-formed
+# Draft 2020-12 schema. Add new schemas here as they're authored
+# (e.g., port-report.schema.json landed in Wave 8).
+SHARED_SCHEMAS = (
+    ("adapter-spec", SHARED_DIR / "adapter-spec.schema.json"),
+    ("port-report", SHARED_DIR / "port-report.schema.json"),
+)
 
 
-def _load_schema() -> dict:
-    with open(SCHEMA_PATH) as fp:
+def _load_schema(path: Path = SCHEMA_PATH) -> dict:
+    with open(path) as fp:
         return json.load(fp)
 
 
@@ -57,12 +66,20 @@ def _load_golden(rel_path: str) -> Any:
 
 
 class TestSchemaSelfValidity(unittest.TestCase):
-    """The schema itself must be a valid JSON Schema 2020-12 document."""
+    """Every shared JSON Schema must be a well-formed Draft 2020-12 document."""
 
     def test_meta_schema_valid(self):
-        schema = _load_schema()
-        # check_schema raises if schema is not itself a valid 2020-12 schema
-        Draft202012Validator.check_schema(schema)
+        """All schemas in SHARED_SCHEMAS pass the meta-schema check.
+
+        Parameterized over `SHARED_SCHEMAS` via subTest so a typo in any
+        schema fails its own subTest with a clear message.
+        """
+        for name, path in SHARED_SCHEMAS:
+            with self.subTest(schema=name, path=str(path.relative_to(REPO_ROOT))):
+                self.assertTrue(path.is_file(), f"schema file missing: {path}")
+                schema = _load_schema(path)
+                # check_schema raises if schema is not itself a valid 2020-12 schema
+                Draft202012Validator.check_schema(schema)
 
 
 class TestKoblerGoldensAgainstSchema(unittest.TestCase):

@@ -70,7 +70,12 @@ The fork PR MUST update every artifact above atomically. Stragglers (e.g., a SKI
 
 ## Schema (machine-readable)
 
-The structural contract is in [`adapter-spec.schema.json`](adapter-spec.schema.json) — a JSON Schema 2020-12 document with `$defs` for each top-level block (Provenance, Meta, BidderInfo, Params, Code, Tests, IabCategoryStorage, ExtPojoConstruction, CurrencyConversion, HeadersConstructed, DeployTimeToken, Alias, Quirk, CrossLanguage). Every required field, allowed enum value, and nullability marker is encoded there.
+The structural contract is in [`adapter-spec.schema.json`](adapter-spec.schema.json) — a JSON Schema 2020-12 document with `$defs` for each top-level block:
+
+- **Top-level `$ref`-wired**: `Provenance`, `Meta`, `BidderInfo`, `Params`, `Code`, `Tests`, `IabCategoryStorage`, `ExtPojoConstruction`, `CurrencyConversion`, `HeadersConstructed`, `DeployTimeToken`, `Alias`, `Quirk`, `CrossLanguage` — these are the canonical 14 top-level structural blocks. The schema's `properties` block points each `$ref` at the matching `$def`.
+- **Code sub-block `$defs`** (added at `adapter_spec_version 1.1.0` per ADR-007): `EndpointResolution` (F1), `EntityStrategy` (F3), `BidPostProcessing` (F4), `ImpExtUnmarshal` (F5). These are NOT yet `$ref`-wired into the `Code` `$def` — the parent `Code` is `additionalProperties: true` so Wave 3 added the sub-block `$defs` as documentation + future-tightening targets without breaking 1.0.0 goldens. Phase 2.8 will tighten and `$ref`-wire them. F2 (`headers_constructed.language_stamped_headers[]`) shipped earlier and IS already wired into `HeadersConstructed`.
+
+Every required field, allowed enum value, and nullability marker is encoded there.
 
 **Validate a spec**:
 

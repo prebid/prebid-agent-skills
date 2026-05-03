@@ -18,10 +18,11 @@ Agent skills, reference documentation, golden test fixtures, and a CI harness fo
 | Phase | Description | Status |
 |---|---|---|
 | A | Acceptance-gate goldens | complete |
-| B | Go read-skill suite | complete (PR #1) |
-| C | Java read-skill suite | complete (PR #1) |
-| D | Porting skills (Go ↔ Java) | next |
-| E | Review-skill expansion + cross-skill integration | planned |
+| B | Go read-skill suite | complete |
+| C | Java read-skill suite | complete |
+| D | Porting skills (Go ↔ Java) | next; design landed in this PR (`docs/methodology/port-skills-design.md`) |
+| E | Review-skill expansion + cross-skill integration | partially shipped (`prior_source_spec` slot, `.tmp/full-loop` convention); rest future |
+| F | Reflection loop (port-report → SKILL/rules amendments) | design landed in this PR (`docs/methodology/reflection-loop.md`); implementation future |
 
 See [`ROADMAP.md`](ROADMAP.md) for details.
 

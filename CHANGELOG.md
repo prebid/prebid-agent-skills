@@ -72,15 +72,29 @@ stays at `0.2.0` (no rule additions or semantic changes).
 
 ---
 
-## Unreleased — ADR corrections (no version bump) — 2026-05-03
+## Unreleased — Process / tooling hardening (no version bump) — 2026-05-03
 
-ADR amendments and reference-data corrections from Phase 5 fixture-authoring
-empirical evidence (commits `d9742a7` vungle, `3523009` cadent/emxdigital,
-`f11b2ba` freewheelssp, `ea0a37a` thetradedesk) plus follow-up empirical
-verification of all 7 lifecycle pairs. **No SemVer bump on schema, taxonomy,
-or port-rules artifacts** per `docs/methodology/schema-versioning.md` —
-ADR text refinements and Python data-table updates are out of the SemVer
-perimeter. No migration script required.
+Out-of-SemVer-perimeter changes per `docs/methodology/schema-versioning.md` —
+ADR text refinements, Python data-table updates, CI gate hardening, drift
+cleanup, doc-count gates, file-role enum alignment, framework-utilities SHA
+pin, and ADR status flips. No SemVer bump on schema, taxonomy, or port-rules
+artifacts; no migration script required.
+
+Two distinct origins of work in this section:
+
+1. **Phase 5 fixture-authoring empirical evidence** (commits `d9742a7`
+   vungle, `3523009` cadent/emxdigital, `f11b2ba` freewheelssp, `ea0a37a`
+   thetradedesk) plus follow-up empirical verification of all 7 lifecycle
+   pairs — drove the ADR-005/006/007/008 refinements + tooling updates
+   below.
+2. **PR #1 hardening waves 1, 2, 4, 5, 6, 7, 9a** (commits `859feff` →
+   `e91970f`) — drove the CI gates / drift cleanup / Java SKILL alignment /
+   cross-language port infrastructure / doc-count gate / ADR status-flip
+   sub-sections below.
+
+The Wave 8 forward-looking design landed under a separate Unreleased
+section below, since design-only contracts for future phases are a distinct
+genre from process/tooling housekeeping.
 
 ### ADR-005 (Rule 46 — Naming-Convention Normalization)
 
@@ -212,6 +226,90 @@ perimeter. No migration script required.
   this corrections commit. Empirical evidence sections preserved verbatim
   as the source-of-truth.
 
+### CI gates (Waves 1 + 6)
+
+- **Wave 1 (`859feff`)** — exit-code wrapper inversion fixed across
+  `Makefile:35,38`, `.github/workflows/round-trip-ci.yml:88,96`,
+  `.github/workflows/upstream-sync.yml:49`. Prior wrappers used `[ -le 2 ]`
+  which silently masked exit-1 (real fail) as success; replaced with
+  `[ -eq 0 ] || [ -eq 2 ]`. Plus wrapped previously-unwrapped
+  `audit-golden.py` invocations and dropped daily-drift-causing
+  `date.today().isoformat()` from `coverage-report.py:427`. Plus R5 design
+  fix: decomposed `params.schema_interpretation` from a whole-block
+  `deep_eq` strict-key into three runtime-invariant sub-fields
+  (`required_fields, combinators_used, flexible_types`) — the prose-bearing
+  `properties[].notes`/`description` fields legitimately differ across
+  languages and were causing false `stale-pass` FAILs (canonical: thetradedesk).
+- **Wave 6 (`aacc8d0`)** — added `scripts/tests/test_doc_count_claims.py`
+  drift gate watching live count claims (rule count, enumeration count) in
+  5 doc sites, catching the kind of drift that surfaced as "12 enumerated
+  behavioral fields" stale claim in `cross-skill-integration.md` (canonical:
+  15). Wave 9b generalized this into a discovery-based gate.
+
+### Drift cleanup (Waves 2 + 9a)
+
+- **Wave 2 (`601d917`)** — finished the `iab_category_storage.injection`
+  → `delivery_mechanism` rename (Wave 2 ripple-finish for ADR-001 D2):
+  `port-translation-rules.yaml` Rule 42 + 5 SKILL/reference sites.
+  `cross-skill-integration.md:327` count fix 12 → 15 enumerated fields.
+  README rule count 43 → 46. Dropped 146 lines of dead code from
+  `test_schema_contract.py` (the `_DEPRECATED_PRE_PHASE_2_3_EXTRAS` block
+  + `SCHEMA_REGISTRY_EXTRAS` empty placeholder; both unused since Phase 2.3
+  derived the registry from `adapter-spec.schema.json` `$defs`).
+- **Wave 9a (`e91970f`)** — pre-review polish pass after comprehensive
+  audit. ~25 stale claims and Wave 2/4/7 incomplete ripples corrected:
+  ADR README index 8 status flips (Wave 7 missed the meta-table), ADR-001
+  D5 `rename_subtype` → `subtype`, ADR-005 "12 verified pairs" → "11"
+  (internal contradiction), Java SKILL test-unit/test-it parenthetical
+  drops (Wave 4 miss), Go reference doc `injection: static-init` →
+  `delivery_mechanism: static-init` (Wave 2 miss),
+  `adapter_spec_version: 1` integer-literal → `"1.0.0"` (Java orchestrator
+  + pr-triage manifest), 22 → 40 goldens / 7 → 16 pairs / 89-90 → 92 PR
+  count corrections, dropped hardcoded "22 taxa" counts, two read SKILLs
+  gained ADR-007 F2 (`language_stamped_headers[]`) population
+  instructions, test-fixtures READMEs (Go + Java) updated 12/10 → 21/19
+  with Phase 5 row additions, cross-language-pairs README updated 7 → 16
+  pairs (aax + elementaltv now show "yes" Go fixture per Wave 5).
+
+### Java SKILL alignment (Wave 4)
+
+- **Wave 4 (`41f3a77`)** — fixed a SKILL-vs-goldens contradiction at
+  `read-bidder-class/SKILL.md:72`: the documented file-role enum was
+  `bidder, configuration, configuration-properties, proto-ext,
+  proto-helper, deserializer, test-unit, test-it` (8 values) but ALL 19
+  Java goldens emit `implementation, models, parsers, types, utils`
+  (5 values, zero overlap). Aligned SKILL to reality. Authored
+  `references/file-role-heuristics.md` (Java mirror of Go's heuristics
+  doc) + `scripts/lib/lint-java-roles.py` gating the enum at CI
+  (`--include-go` flag covers Go's 6-value variant).
+
+### Cross-language port infrastructure (Wave 5)
+
+- **Wave 5 (`efa3de6`)** — re-derived `aax` and `elementaltv` dual-spec
+  assertions: `go_spec: null` → real fixture path, dropped obsolete
+  `note_on_specs` blocks (Go fixtures DO exist post-2026-05-02). Added
+  `prior_source_spec` slot to pr-triage SKILL for cross-language port-
+  fidelity comparison (canonical case: Go-PR vs Java-source spec). Added
+  `.tmp/full-loop/{run-id}/{lang}/{bidder}.yaml` convention for the
+  one-shot Teal-flow orchestration (gitignored). Pinned
+  `framework-utilities.md` 4 sites from `Verified at v4.1.0` to canonical
+  Phase 5 SHA `2fae16f31693452b62dd2a0924b78e71bbec43ec`.
+
+### ADR status flips (Wave 7)
+
+- **Wave 7 (`a69812b`)** — flipped 8 ADRs `Proposed` → `Accepted` in their
+  per-ADR files (ADR-001 was schema-migration-driven → `adapter_spec_version
+  1.0.0` shipped; ADR-002 → Phase 1.4/1.5 corrections applied; ADR-003/4/5
+  → Rules 44/45/46 in port-translation-rules.yaml; ADR-006 →
+  `lifecycle.rename.subtype` 5-value enum shipped; ADR-008 → Phase 5 corpus
+  complete at 9/9). Plus past-tense rewrite of ADR-002's 8 future-tense
+  decision-narrative lines. Plus Java aliases mechanism correction in
+  `prebid-server-java/references/new-bid-adapter-prs.md:182`
+  (`aliasOf:` field claim → `aliases: { <child>: ~ }` parent-side block
+  with explicit Go-vs-Java inversion note). The Wave 7 commit missed
+  flipping the meta-table at `docs/decisions/README.md`; Wave 9a
+  corrected that.
+
 ### Acknowledgments
 
 - Per `docs/methodology/rollback.md:54-57`, ADR corrections used in-place
@@ -219,8 +317,107 @@ perimeter. No migration script required.
   existing "audit A5" precedent). Original `Refined 2026-05-02` date stamps
   preserved.
 - Per `docs/methodology/schema-versioning.md:18-62`, no SemVer bump
-  triggered — ADR text refinements and Python data-table updates are out
-  of the perimeter.
+  triggered for any of the work in this section — ADR text refinements,
+  Python data-table updates, CI tooling, drift cleanup, ADR status flips,
+  and SHA-pin updates are all out of the perimeter.
+- Wave 1 surfaced a real R5 design flaw masked by the `[ -le 2 ]` exit-code
+  wrapper bug. The R5 prose-key decomposition is the cleanest fix and
+  preserved cross-language-pair semantic-equivalence checks intact.
+
+---
+
+## Unreleased — Forward-looking design (Phase D / E / F, no implementation in this PR) — 2026-05-03
+
+Wave 8 (`8d21cfc`) ships design contracts for future phases — they document
+the shapes Phase D port skills will emit, Phase F reflection consumes, and
+how the Teal flow integrates D + E + F. No phase-D/F implementation lands
+in this PR; the design-only artifacts let the next wave of agents start
+against a fixed contract instead of a blank canvas.
+
+This is a new genre in this CHANGELOG (prior entries documented shipped
+runtime / data / tooling). Future versioned releases that bundle Phase D
+implementation will reference these design docs.
+
+### New: port-report.schema.json (Phase D ↔ Phase F contract)
+
+- `prebid-server-go/read/skills/shared/port-report.schema.json` — JSON
+  Schema (181 lines, draft 2020-12). Contract: Phase D port skills emit
+  port reports against this; Phase F reflection consumes them. Top-level:
+  `port_report_version` (SemVer 0.1.0 initial), `port_run.{run_id,
+  source_lang, target_lang, source_spec_sha, target_branch}`,
+  `rules_consumed[]` (per-rule verdict: applied | skipped-not-applicable
+  | skipped-source-side-only | applied-with-warning), `quirks_emitted[]`
+  (mirrors `adapter-spec.schema.json` `$defs/Quirk`), `r5_check.{state,
+  byte_equal_fields, warn_fields, fail_fields, summary}`, `human_todos[]`
+  (8-value category enum), `unresolved_translations[]` (5-value reason
+  enum), `port_translation_rules_version` (cross-version replay key).
+
+### New: Phase D / E / F design docs
+
+- `docs/methodology/port-skills-design.md` (234 lines) — Phase D pipeline:
+  load → discover family → apply rules → author destination spec → emit
+  artifacts → R5-strict check → emit port-report. Conflict resolution
+  (Rule 11 vs 35; Rule 38 byte-eq vs language-formatting; ADR-007
+  F-pattern handling at adapter_spec_version 1.1.0 via open-map
+  permissiveness). Novel-pattern handling. 3 worked examples: kobler clean
+  port, vungle ADR-007 F3 port, aax R5-fail-semantic port.
+- `docs/methodology/reflection-loop.md` (99 lines) — Phase F design.
+  Three triggers (post-port, post-merge, periodic sweep). 9-row triage
+  matrix mapping issue type → fix location: novel pattern needing schema
+  → ADR-007-style $def addition; existing rule wrong direction → rules.yaml
+  body edit OR ADR amendment; rule conflict / ambiguity → tightening; R5
+  byte-only → Rule 38 amendment OR upstream PR; R5 semantic → upstream PR
+  (NOT this repo); read-skill missed field → SKILL.md amendment; lint
+  missed bug → new lint check; ADR drifted from execution → status flip.
+  ADR amendment protocol with refinement annotations. Cross-version replay
+  mechanic.
+- `docs/methodology/end-to-end-flow.md` (158 lines) — Teal flow design,
+  ties Phase D + E + F together. CLI: one-shot via orchestrator OR 4
+  explicit steps. Run-scoped artifact layout under `.tmp/full-loop/{run-id}/`.
+  Five documented failure modes with detection signal + remediation +
+  fix-forward path.
+
+### Anti-pattern taxonomy (Option α — minimal renderer change)
+
+- `behavior-taxonomy.yaml` — added `category: anti-pattern` field to 5
+  `quirks_taxa` entries (clear DESIGN anti-patterns, not bugs/typos):
+  `hardcoded-config-as-anti-pattern`, `legacy-encoding-json-direct-usage`,
+  `unguarded-currency-overwrite`, `hardcoded-bid-type`, `redundant-work`.
+- `scripts/render-taxonomy.py` — added category-prefix logic: when a taxon
+  has `category: <c>`, the rendered description gets a `**[<c>]**` prefix.
+  Future categories may be added in future waves; same mechanism surfaces
+  them.
+
+### Methodology README updates
+
+- `docs/methodology/README.md` — added the 3 new design docs to the table
+  + 2 new "How to use these docs" entries (port-skills-design + Teal-flow
+  consultation guidance).
+
+### Wave 9b structural alignment (this commit)
+
+- `ROADMAP.md` rewrite — added Phase F section (was A-E only); rewrote
+  Phase E to acknowledge Wave 5 partially-shipped prerequisites
+  (`prior_source_spec`, `.tmp/full-loop`); dropped circular "complete in
+  PR #1" framing; added comprehensive Phase numbering map reconciling
+  A-F + 2.X + 4.X + Wave-N coexisting schemes.
+- `README.md` Phase status table — same rewrite (Phase F row added; Phase
+  E rephrased; "complete (PR #1)" → "complete").
+- `CHANGELOG.md` Unreleased section — split from single
+  "ADR corrections" into "Process / tooling hardening" (this section,
+  absorbs Waves 1, 2, 4, 5, 6, 7, 9a + the original ADR corrections) and
+  "Forward-looking design" (the section you are reading, Wave 8 + Wave 9b
+  structural).
+- `scripts/tests/test_doc_count_claims.py` — generalized from 5-entry
+  enumeration to canonical-phrase regex + source-fn dict (catches future
+  drift on goldens count, dual-spec count, taxa count, etc.).
+- `scripts/tests/test_schema_jsonschema.py` `TestSchemaSelfValidity`
+  parameterized to validate BOTH `adapter-spec.schema.json` AND
+  `port-report.schema.json` against the draft 2020-12 meta-schema.
+- `prebid-server-go/read/skills/shared/adapter-spec.md` — added a section
+  describing the 4 Wave 3 `$defs` (EndpointResolution, EntityStrategy,
+  BidPostProcessing, ImpExtUnmarshal) so the companion markdown isn't
+  silently incomplete relative to the JSON Schema's $defs enumeration.
 
 ---
 
