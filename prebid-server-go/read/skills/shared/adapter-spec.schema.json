@@ -378,11 +378,11 @@
             "notes": { "type": ["array", "null"], "items": { "type": "string" } }
           }
         },
-        "imports": { "type": ["object", "null"] },
-        "adapter_struct": { "type": ["object", "null"] },
-        "builder": { "type": ["object", "null"] },
-        "make_requests": { "type": ["object", "null"] },
-        "make_bids": { "type": ["object", "null"] }
+        "imports": { "$ref": "#/$defs/CodeImports" },
+        "adapter_struct": { "$ref": "#/$defs/AdapterStruct" },
+        "builder": { "$ref": "#/$defs/CodeBuilder" },
+        "make_requests": { "$ref": "#/$defs/MakeRequests" },
+        "make_bids": { "$ref": "#/$defs/MakeBids" }
       }
     },
 
@@ -966,13 +966,174 @@
       }
     },
 
+    "CodeImports": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "has_currency_helper": { "type": ["boolean", "null"] },
+        "has_jsonutil": { "type": ["boolean", "null"] },
+        "has_template_engine": { "type": ["boolean", "null"] },
+        "third_party": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "AdapterStruct": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "type_name": { "type": "string" },
+        "type_visibility": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "CodeBuilder": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "errors_returned": {
+          "type": ["array", "null"],
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "condition": { "type": "string" },
+                  "source": { "type": "string" }
+                }
+              }
+            ]
+          }
+        },
+        "extra_adapter_info_used": { "type": ["boolean", "null"] },
+        "signature_canonical": { "type": ["boolean", "null"] },
+        "template_parsed_at_build": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "MakeRequests": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed at top-level in Phase 2.8 / Wave 11b round-2 sweep. Sub-object contents (batching.rules[*], endpoint_resolution, mutation, etc.) remain implicit-open per Draft 2020-12 default; future waves may tighten.",
+      "properties": {
+        "batching": { "type": ["object", "null"] },
+        "endpoint_resolution": { "type": ["object", "null"] },
+        "helpers": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "signature": { "type": "string" }
+            }
+          }
+        },
+        "imp_ext_unmarshal": { "type": ["object", "null"] },
+        "mutation": { "type": ["object", "null"] },
+        "request_body": { "type": ["object", "null"] }
+      }
+    },
+
+    "MakeBids": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed at top-level in Phase 2.8 / Wave 11b round-2 sweep. Sub-object contents remain implicit-open; future waves may tighten.",
+      "properties": {
+        "application_status_handling": { "type": ["object", "null"] },
+        "bid_pointer_go_sibling": { "type": ["string", "null"] },
+        "bid_pointer_pattern": { "type": ["string", "null"] },
+        "bid_type_resolution": { "type": ["object", "null"] },
+        "currency_overwrite_safety": { "type": ["string", "null"] },
+        "custom_response_type": { "type": ["string", "null"] },
+        "http_status_handling": { "type": ["object", "null"] },
+        "response_type": { "type": ["string", "null"] },
+        "notes_currency": { "type": ["array", "null"], "items": { "type": "string" } },
+        "helpers": {
+          "description": "Parity with code.make_requests.helpers[] — currently no goldens emit this on the make_bids side, but the read-adapter-code SKILL.md references the path for forward-compat (parsers/utils helpers can attach to either caller).",
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "signature": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "GoArtifacts": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep. Universal keys (bidder_constant, bidder_dir, package_name) plus per-bidder file-path artifacts (152media-Java emits 9 additional path keys describing its port artifacts).",
+      "properties": {
+        "bidder_constant": { "type": ["string", "null"] },
+        "bidder_dir": { "type": ["string", "null"] },
+        "package_name": { "type": ["string", "null"] },
+        "alias_yaml_path": { "type": ["string", "null"] },
+        "bidder_info_yaml": { "type": ["string", "null"] },
+        "bidder_params_json": { "type": ["string", "null"] },
+        "ext_struct_file": { "type": ["string", "null"] },
+        "ext_struct_type": { "type": ["string", "null"] },
+        "impl_file": { "type": ["string", "null"] },
+        "params_test_file": { "type": ["string", "null"] },
+        "test_file": { "type": ["string", "null"] },
+        "test_fixtures_dir": { "type": ["string", "null"] }
+      }
+    },
+
+    "JavaArtifacts": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "bidder_class": { "type": ["string", "null"] },
+        "bidder_dir": { "type": ["string", "null"] },
+        "config_class": { "type": ["string", "null"] },
+        "proto_dir": { "type": ["string", "null"] },
+        "yaml_path": { "type": ["string", "null"] },
+        "declared_in": { "type": ["string", "null"] }
+      }
+    },
+
+    "PortConcerns": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep. All values boolean; each flag captures a known cross-language port concern category.",
+      "properties": {
+        "aliases_inverted": { "type": ["boolean", "null"] },
+        "custom_unmarshaljson_present": { "type": ["boolean", "null"] },
+        "multi_file_layout": { "type": ["boolean", "null"] },
+        "mutation_idiom_divergence": { "type": ["boolean", "null"] },
+        "package_directory_mismatch": { "type": ["boolean", "null"] },
+        "yaml_unification": { "type": ["boolean", "null"] }
+      }
+    },
+
     "CrossLanguage": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "go_artifacts": { "type": ["object", "null"] },
-        "java_artifacts": { "type": ["object", "null"] },
-        "port_concerns": { "type": ["object", "null"] },
+        "go_artifacts": { "$ref": "#/$defs/GoArtifacts" },
+        "java_artifacts": { "$ref": "#/$defs/JavaArtifacts" },
+        "port_concerns": { "$ref": "#/$defs/PortConcerns" },
         "port_lineage": {
           "type": ["object", "null"],
           "additionalProperties": false,
