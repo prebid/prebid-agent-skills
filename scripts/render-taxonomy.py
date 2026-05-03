@@ -17,10 +17,9 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import os
 import sys
 from pathlib import Path
-from typing import Any, List
+from typing import List
 
 import yaml
 
@@ -114,6 +113,14 @@ def render(taxonomy: dict) -> str:
         if isinstance(si, list):
             si = ", ".join(si)
         desc = taxon["description"].replace("&#58;", ":")
+        # Wave 8 / Option α: optional `category: anti-pattern` field surfaces
+        # as an inline marker on the description so reviewers can scan for
+        # design anti-patterns without consulting the YAML directly. Other
+        # categories may be added in future waves; the renderer surfaces any
+        # value via the same `**[<category>]**` prefix.
+        category = taxon.get("category")
+        if category:
+            desc = f"**[{category}]** {desc}"
         si_str = str(si).replace("&#58;", ":")
         out.append(f"| `{taxon['id']}` | {desc} | {si_str} |")
     out.append("")

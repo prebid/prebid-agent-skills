@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/prebid/prebid-agent-skills/prebid-server-go/read/skills/shared/port-report.schema.json",
+  "title": "Port Report",
+  "description": "Output schema emitted by Phase D port skills (port-go2java, port-java2go) and consumed by the Phase F reflection loop. Captures the provenance of one port run, the rules applied, the quirks emitted, the R5-strict cross-language equivalence result, and human-attention items. The destination spec lives at .tmp/full-loop/{run-id}/{target_lang}/{bidder}.yaml (Wave 5 convention) when running as part of the Teal flow; otherwise wherever the orchestrator writes it. The port report itself lives next to the destination spec at .tmp/full-loop/{run-id}/port-report.json. Versioning per ADR-001 D7 (SemVer string).",
+
+  "type": "object",
+  "required": [
+    "port_report_version",
+    "port_run",
+    "port_translation_rules_version"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "port_report_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Schema version this port report conforms to. SemVer string per ADR-001 D7. Initial release: 0.1.0."
+    },
+
+    "port_run": {
+      "type": "object",
+      "description": "Provenance of this port run.",
+      "required": ["run_id", "source_lang", "target_lang", "source_spec_sha"],
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "Run identifier — typically an ISO-like timestamp + short hash (e.g., '2026-05-03T1430Z-a3f9'). Used for the .tmp/full-loop/{run-id}/ orchestration handoff per pr-triage SKILL.md (Wave 5 convention)."
+        },
+        "source_lang": {
+          "type": "string",
+          "enum": ["go", "java"]
+        },
+        "target_lang": {
+          "type": "string",
+          "enum": ["go", "java"]
+        },
+        "source_spec_sha": {
+          "type": "string",
+          "description": "SHA-256 of the source spec YAML, computed over the canonical bytes (yaml.safe_dump → sort_keys=True for invariance). Provenance: lets Phase F detect when the source spec has changed since this port ran."
+        },
+        "target_branch": {
+          "type": ["string", "null"],
+          "description": "Git branch name where the ported code was emitted. null when the port is dry-run / spec-only (no code emitted)."
+        }
+      }
+    },
+
+    "rules_consumed": {
+      "type": "array",
+      "description": "Port-translation rules applied during this run. Logical (declaration) order; not lex-sorted (per ADR-007 array ordering policy). One entry per rule, even when the rule was inapplicable — the verdict carries the reason.",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "verdict"],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Numeric rule id from port-translation-rules.yaml."
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["applied", "skipped-not-applicable", "skipped-source-side-only", "applied-with-warning"]
+          },
+          "summary": {
+            "type": ["string", "null"],
+            "description": "Free-text summary of the application. Examples: 'extracted 120 IAB cat entries from Java YAML, emitted iab_categories.go data file with delivery_mechanism: static-init' (Rule 42 applied); 'Java IT class assets generated' (Rule 33 applied); 'no Site mutation needed (entity_strategies.Site == null on source)' (Rule 5 skipped-not-applicable)."
+          }
+        }
+      }
+    },
+
+    "quirks_emitted": {
+      "type": "array",
+      "description": "Quirks the port skill recorded on the destination spec (mirroring adapter-spec.schema.json $defs/Quirk shape). Forwarded here so the reflection loop can detect novel or recurring quirks across runs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "summary": { "type": "string" },
+          "edge_case_taxon": {
+            "type": ["string", "null"],
+            "description": "Reference to behavior-taxonomy.yaml quirks_taxa.id when the quirk matches a known taxon; null when novel."
+          }
+        }
+      }
+    },
+
+    "r5_check": {
+      "type": "object",
+      "description": "Result of R5-strict cross-language equivalence check at port time. The destination spec is loaded as if it were a fresh read of the ported code; compared field-by-field against the source spec. The check uses the same R5_STRICT_KEYS / R5_DIVERGENT_KEYS partitioning as scripts/round-trip-ci.py.",
+      "required": ["state"],
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["pass", "warn-byte-only-divergence", "fail-semantic-divergence", "skipped-no-pair-fixture"]
+        },
+        "byte_equal_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Spec fields whose values are byte-identical across source and destination (canonical: bidder_params_sha256 when the SHAs match)."
+        },
+        "warn_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Spec fields with byte-only or semantically-equivalent divergence (e.g., bidder_params_sha256 byte-only-whitespace per Rule 38)."
+        },
+        "fail_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Spec fields with semantic divergence (canonical: aax bidder_params_sha256 semantic — Java omits minLength:1 that Go enforces)."
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "description": "Free-text explanation when state != pass."
+        }
+      }
+    },
+
+    "human_todos": {
+      "type": "array",
+      "description": "Items requiring human review/approval before merging the port. Each entry is a single actionable concern. Categories partition the universe of port-time judgment calls.",
+      "items": {
+        "type": "object",
+        "required": ["category", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["novel-pattern", "byte-divergence-warning", "upstream-confirmation", "alias-graph-inversion", "framework-asymmetry", "language-stamped-header", "cross-package-pojo-placement", "other"]
+          },
+          "summary": { "type": "string" },
+          "evidence_path": {
+            "type": ["string", "null"],
+            "description": "Optional file path or URL pointing to the evidence (e.g., a specific source file:line, an upstream PR url)."
+          }
+        }
+      }
+    },
+
+    "unresolved_translations": {
+      "type": "array",
+      "description": "Patterns where the port skill could not apply a deterministic translation (no matching rule, ambiguous match, or conflicting rules). Each entry is escalated to the reflection loop in Phase F as a candidate for either: a new port-translation-rule, an existing-rule amendment, or a taxonomy update. See docs/methodology/reflection-loop.md for the triage matrix.",
+      "items": {
+        "type": "object",
+        "required": ["pattern_summary", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "pattern_summary": { "type": "string" },
+          "reason": {
+            "type": "string",
+            "enum": ["no-matching-rule", "ambiguous-rule-match", "conflicting-rules", "novel-quirk", "novel-pattern-needs-schema-addition"]
+          },
+          "candidate_rule_id": {
+            "type": ["integer", "null"],
+            "description": "If proposing a new rule, this is the next available id (current rule count + N)."
+          },
+          "ambiguous_rule_ids": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "When reason=ambiguous-rule-match, the rule ids that all matched the pattern."
+          },
+          "evidence_path": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    },
+
+    "port_translation_rules_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Which port-translation-rules.yaml version was used. Matches the rules_version field in port-translation-rules.yaml. Critical for reflection — Phase F can replay an old report against a newer rules version to surface what would now be different."
+    }
+  }
+}

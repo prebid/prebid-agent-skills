@@ -408,7 +408,7 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 
 | Taxon | Description | Surfaces in |
 |---|---|---|
-| `hardcoded-config-as-anti-pattern` | Adapter hardcodes a value that should live in YAML config. Canonical: Kobler `devBidderEndpoint` constant. | quirks |
+| `hardcoded-config-as-anti-pattern` | **[anti-pattern]** Adapter hardcodes a value that should live in YAML config. Canonical: Kobler `devBidderEndpoint` constant. | quirks |
 | `json-key-style-mismatch` | JSON tag uses a different style than surrounding adapter. Canonical: msft `pubclick` vs `pub_click`. | quirks + ext_struct.fields[].notes |
 | `port-fidelity-divergence` | Java port differs from Go source in load-bearing way. Canonical: Kobler currency-conversion bidRequest context. | quirks + cross_language.port_concerns |
 | `bidder-constant-mismatch` | Test/builder references the wrong bidder constant. Canonical: kobler_test.go `BidderKargo`, params_test.go `BidderKrushmedia`. | quirks + provenance.warnings |
@@ -424,10 +424,10 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `mutation-idiom-tobuilder` | Java uses `lombok-tobuilder` where Go uses pointer-mutation. Cross-language port concern. | quirks |
 | `dev-endpoint-config-promotion` | Java port moves a Go-side hardcoded constant into YAML config (Kobler `devEndpoint`). | quirks (cross-language win) |
 | `incomplete-classification` | Reader could not classify a behavioral field with affirmative evidence. | quirks (read-time warning) |
-| `legacy-encoding-json-direct-usage` | Go adapter uses `encoding/json` `Marshal`/`Unmarshal` directly instead of `jsonutil`. | quirks + provenance.warnings |
+| `legacy-encoding-json-direct-usage` | **[anti-pattern]** Go adapter uses `encoding/json` `Marshal`/`Unmarshal` directly instead of `jsonutil`. | quirks + provenance.warnings |
 | `legacy-test-helpers-imported` | Adapter test imports `OrtbMockService`, `BidOnTags`, etc. — should migrate to JSON harness. | quirks + provenance.warnings |
-| `unguarded-currency-overwrite` | Adapter sets `bidResponse.Currency = response.Cur` without guarding against empty string. Canonical: Optidigital. | quirks + code.make_bids.currency_overwrite_safety |
-| `hardcoded-bid-type` | `MakeBids` returns a fixed BidType regardless of upstream response. Canonical: Optidigital always returns BidTypeBanner. | quirks + code.make_bids.bid_type_resolution.method_chain |
+| `unguarded-currency-overwrite` | **[anti-pattern]** Adapter sets `bidResponse.Currency = response.Cur` without guarding against empty string. Canonical: Optidigital. | quirks + code.make_bids.currency_overwrite_safety |
+| `hardcoded-bid-type` | **[anti-pattern]** `MakeBids` returns a fixed BidType regardless of upstream response. Canonical: Optidigital always returns BidTypeBanner. | quirks + code.make_bids.bid_type_resolution.method_chain |
 | `legacy-impext-naming` | Imp ext struct uses legacy `ImpExt{Bidder}` pattern instead of canonical `ExtImp{Bidder}`. Canonical: Optidigital `ImpExtOptidigital`. | quirks + params.ext_struct.type_name |
 | `cross-language-byte-divergence` | `bidder_params_json` bytes differ between Go and Java sides; sha256 mismatch breaks the port-fidelity contract (Rule 1). Canonical: 4 Java goldens (elementaltv, mediasquare, appnexus, huaweiads) detect divergence vs Go. | quirks + provenance.warnings |
 | `alias-yaml-only` | Java alias declared in a parent YAML's `aliases:` block but with no dedicated bidder class or IT fixtures (yet). Canonical: Appnexus parent's tilde-aliases pre-IT-class. | quirks + aliases[] |
@@ -439,7 +439,7 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `nested-configuration-properties` | `XyzConfigurationProperties` declares a nested non-trivial inner sub-class with multiple fields. Canonical: huaweiads `ExtraInfo` (6 fields nested inside `HuaweiAdsConfigurationProperties`). | quirks + spring_config.configuration_properties_class.nested_classes |
 | `parameterized-request-type` | Java bidder class declares `Bidder<CustomType>` with a non-default request body type. Canonical: huaweiads (`Bidder<HuaweiAdsRequest>`), mediasquare (`Bidder<MediasquareRequest>`). | quirks + bidder_class.parameterized_request_type |
 | `per-request-cryptographic-auth` | Adapter computes per-request HMAC/signature for the Authorization header (not pre-built basic auth or static bearer). Canonical: huaweiads HMAC-SHA-256 Digest. | quirks + headers_constructed.authentication_kind |
-| `redundant-work` | Adapter performs duplicate work without caching (e.g., parses `imp.ext` twice per request cycle). Canonical: huaweiads `parseImpExt` called once in `makeHttpRequests` and again in `makeBids`. | quirks |
+| `redundant-work` | **[anti-pattern]** Adapter performs duplicate work without caching (e.g., parses `imp.ext` twice per request cycle). Canonical: huaweiads `parseImpExt` called once in `makeHttpRequests` and again in `makeBids`. | quirks |
 | `runtime-polymorphism-bidder-class` | Java bidder class delegates to a runtime-selected helper based on request shape. Canonical: appnexus video adpod runtime branch. | quirks + bidder_class |
 | `runtime-region-selection` | Endpoint URL chosen at runtime based on geographic context (country code → region). Same value as `endpoint_resolution.kind: runtime-region-selection`. Canonical: huaweiads (5 region endpoints + EUROPEAN allowlist). | quirks + endpoint_resolution |
 | `schema-undocumented-runtime-field` | Runtime POJO field that is NOT declared in the `bidder-params/{bidder}.json` schema (silently accepted, undocumented). Canonical: huaweiads `ExtImpHuaweiAds.isTestAuthorization`. | quirks + params |

@@ -368,6 +368,7 @@ enumerations:
 
 quirks_taxa:
   - id: hardcoded-config-as-anti-pattern
+    category: anti-pattern
     description: Adapter hardcodes a value that should live in YAML config. Canonical&#58; Kobler `devBidderEndpoint` constant.
     surfaces_in: [quirks]
   - id: json-key-style-mismatch
@@ -416,15 +417,18 @@ quirks_taxa:
     description: Reader could not classify a behavioral field with affirmative evidence.
     surfaces_in: ["quirks (read-time warning)"]
   - id: legacy-encoding-json-direct-usage
+    category: anti-pattern
     description: Go adapter uses `encoding/json` `Marshal`/`Unmarshal` directly instead of `jsonutil`.
     surfaces_in: ["quirks + provenance.warnings"]
   - id: legacy-test-helpers-imported
     description: Adapter test imports `OrtbMockService`, `BidOnTags`, etc. — should migrate to JSON harness.
     surfaces_in: ["quirks + provenance.warnings"]
   - id: unguarded-currency-overwrite
+    category: anti-pattern
     description: Adapter sets `bidResponse.Currency = response.Cur` without guarding against empty string. Canonical&#58; Optidigital.
     surfaces_in: ["quirks + code.make_bids.currency_overwrite_safety"]
   - id: hardcoded-bid-type
+    category: anti-pattern
     description: '`MakeBids` returns a fixed BidType regardless of upstream response. Canonical&#58; Optidigital always returns BidTypeBanner.'
     surfaces_in: ["quirks + code.make_bids.bid_type_resolution.method_chain"]
   - id: legacy-impext-naming
@@ -461,6 +465,7 @@ quirks_taxa:
     description: Adapter computes per-request HMAC/signature for the Authorization header (not pre-built basic auth or static bearer). Canonical&#58; huaweiads HMAC-SHA-256 Digest.
     surfaces_in: ["quirks + headers_constructed.authentication_kind"]
   - id: redundant-work
+    category: anti-pattern
     description: Adapter performs duplicate work without caching (e.g., parses `imp.ext` twice per request cycle). Canonical&#58; huaweiads `parseImpExt` called once in `makeHttpRequests` and again in `makeBids`.
     surfaces_in: [quirks]
   - id: runtime-polymorphism-bidder-class
