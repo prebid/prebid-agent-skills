@@ -1,6 +1,7 @@
 ---
 name: adapter-code-pr-review
 description: Reviews changes to adapter Go code, adapter tests, JSON test fixtures (exemplary/supplemental/amp/video/videosupplemental), and bidder registration entries. USE WHEN a PR touches adapters/{bidder}/*.go (excluding params_test.go), any {bidder}test/**/*.json, exchange/adapter_builders.go, or openrtb_ext/bidders.go. Do NOT use for static/bidder-info/*.yaml, static/bidder-params/*.json, openrtb_ext/imp_*.go, or params_test.go — those are owned by sibling skills.
+version: 1.0.0
 ---
 
 # Adapter Code PR Review

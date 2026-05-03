@@ -1,6 +1,7 @@
 ---
 name: pr-triage
 description: Triages every prebid/prebid-server pull request before reviewer skills run. USE WHEN any PR for prebid/prebid-server is being reviewed; this skill always runs first. Fetches PR data once, checks CI, runs drift checks (including go.mod module-path major-version), categorizes files by skill ownership, detects PR type, surfaces cross-skill concerns, and emits a routing manifest for downstream skills. Do NOT use for prebid-js, prebid-server-java, or non-PR tasks.
+version: 1.0.0
 ---
 
 # PR Triage

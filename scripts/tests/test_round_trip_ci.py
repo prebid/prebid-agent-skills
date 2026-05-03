@@ -66,7 +66,15 @@ def details(findings):
 # ---------------------------------------------------------------------------
 
 def _provenance(file_path: str) -> dict:
-    """Build a minimal provenance block carrying a single file ref."""
+    """Build a minimal provenance block carrying a single file ref.
+
+    The pinned SHA below is the Phase A-4 commit (`d7f8515b...`, 2026-04-27).
+    Phase 5 fixtures pin to a newer SHA (`2fae16f31693...`, 2026-05-02); this
+    test fixture intentionally uses the older pin since the assertions don't
+    depend on which Phase the SHA represents — they only need a syntactically
+    valid 40-char hex SHA. Either SHA would pass; the older one is preserved
+    for stability of test snapshots.
+    """
     return {
         "source": {
             "repo": "prebid/prebid-server",

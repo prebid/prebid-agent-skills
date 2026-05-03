@@ -16,7 +16,7 @@ Produces a markdown matrix at docs/coverage-report.md that shows:
    from 3).
 6. Java empire parents — 5 deep-dived in ADR-003 + the 32-parent total target;
    which have Java goldens, which have child goldens.
-7. Per-rule master-sample mentions — for each of the 46 rules in
+7. Per-rule master-sample mentions — for each rule in
    port-translation-rules.yaml, regex-scan the body for bidder names and
    report which of those mentions are covered by goldens.
 
@@ -540,7 +540,7 @@ def render(goldens, duals, rules) -> str:
     # Section 7: Per-rule mentions
     out.append("## 7. Per-rule master-sample coverage")
     out.append("")
-    out.append("For each of the 46 rules, scan the rule body for bidder names and check whether the corpus has a golden for them. Rules with no specific bidder mentions (general patterns) show empty.")
+    out.append(f"For each of the {len(rules)} rules, scan the rule body for bidder names and check whether the corpus has a golden for them. Rules with no specific bidder mentions (general patterns) show empty.")
     out.append("")
     rows = []
     rules_with_uncovered = 0
@@ -586,7 +586,7 @@ def render(goldens, duals, rules) -> str:
     out.append("")
     out.append(f"- Goldens: `prebid-server-{{go,java}}/read/test-fixtures/*.golden.spec.yaml` ({len(goldens['go']) + len(goldens['java'])} files).")
     out.append(f"- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` ({len(duals)} files).")
-    out.append("- Port-translation rules (46 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.")
+    out.append(f"- Port-translation rules ({len(rules)} rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.")
     out.append("- ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).")
     out.append("")
     return "\n".join(out)

@@ -1,6 +1,7 @@
 ---
 name: bidder-info-pr-review
 description: Reviews changes to bidder-info YAML files at static/bidder-info/*.yaml. USE WHEN a PR adds/modifies/removes any of these files. Verifies endpoint reachability, alias parent existence and inheritance, GVL vendor lookups, user-sync URL macros, white-label policy compliance, capability declarations, and SSL certificate validity. Do NOT use for static/bidder-params/*.json, openrtb_ext/imp_*.go, or adapter Go code.
+version: 1.0.0
 ---
 
 # Bidder Info PR Review

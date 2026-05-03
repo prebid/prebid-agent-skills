@@ -1,6 +1,7 @@
 ---
 name: bidder-params-pr-review
 description: Reviews changes to bidder parameter schemas (static/bidder-params/*.json), impression extension Go structs (openrtb_ext/imp_*.go), and parameter validation tests (adapters/*/params_test.go). USE WHEN any of those files are added/modified/removed. Verifies JSON Schema draft-04 correctness, Go struct alignment, reserved-OpenRTB-field exclusions, jsonutil.StringInt usage for flexible types, and test coverage. Do NOT use for adapters/{bidder}/{bidder}.go (adapter implementation), static/bidder-info/*.yaml, or non-imp_*.go files in openrtb_ext/.
+version: 1.0.0
 ---
 
 # Bidder Params PR Review
