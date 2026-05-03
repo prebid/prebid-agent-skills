@@ -25,6 +25,14 @@ Rules covered:
 Each finding is a tuple of (rule_id, severity, bidder, message).
 Severities: `pass` | `warn` | `fail`.
 
+NOTE on severity (Wave 11b will tighten): no rule currently emits the
+`fail` severity in default mode — every violation is a `warn`. The exit-1
+"always blocking" branch below activates only when `--strict` is passed
+or if a future rule is promoted to fail-severity. CI does NOT pass
+`--strict` by default. Wave 11b plan B5 finding-8 promotes Rule 38
+(sha-equality, contractual) and Rule 33 (alias inversion structural
+correctness) to fail-severity.
+
 Usage:
     python3 scripts/lib/lint-port-rules.py
     python3 scripts/lib/lint-port-rules.py --bidder kobler
@@ -33,7 +41,8 @@ Usage:
 
 Exit codes:
     0 — no warns, no fails
-    1 — at least one fail (always blocking) OR warns with --strict
+    1 — `--strict` mode AND any warns, OR any fails (currently no rule
+        emits fail; pre-positioned for Wave 11b promotions)
     2 — warns only, treated as success by Makefile (matches round-trip-ci.py)
 """
 

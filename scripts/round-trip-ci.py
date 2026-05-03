@@ -1231,16 +1231,34 @@ def render_text(
         f"Goldens checked: {spec_count} ({pair_count} port pairs, {dual_count} dual-spec assertions)"
     )
     lines.append("")
+    # Rule labels are short for table-formatting; documented enforcement
+    # caveats below. Wave 11b will tighten the actual checks; until then,
+    # readers should treat the labels as advisory:
+    #
+    # R3 — labeled "custom-quirk pairing" but in DEFAULT mode (no
+    #      --strict-r3) treats ANY non-empty quirks[] list as paired for
+    #      every `custom` enum value. Pass --strict-r3 for keyword-pairing
+    #      enforcement (CI does NOT pass --strict-r3 by default).
+    # R5 — labeled "cross-language structural parity" but Wave 1's
+    #      prose-key decomposition only covers `params.schema_interpretation`.
+    #      Other R5_STRICT_KEYS entries (geoscope list-order,
+    #      maintainer alt-fields, capabilities set-equality) may emit
+    #      stale-FAIL on legitimate divergence. See Wave 11b plan B5.
+    # R8 — labeled "endpoint placeholder unresolved" but checks ONLY
+    #      `bidder_info.endpoint`. ADR-007 F1 multi-endpoints
+    #      (`code.make_requests.endpoint_resolution.endpoints[*]`) and
+    #      dynamic-template URLs in headers are NOT walked. See Wave 11b
+    #      plan B5 finding-7.
     rule_descriptions = {
         "R1": "file-reachability",
         "R2": "sha integrity",
-        "R3": "custom-quirk pairing",
+        "R3": "custom-quirk pairing (advisory; --strict-r3 to enforce)",
         "R3b": "quirk taxa registered",
         "R4": "round-trip determinism",
-        "R5": "cross-language structural parity",
+        "R5": "cross-language structural parity (subset; see Wave 11b)",
         "R6": "bidder_name / package / constant",
         "R7": "bidder-constant-mismatch surfaces",
-        "R8": "endpoint placeholder unresolved",
+        "R8": "endpoint placeholder (bidder_info.endpoint only)",
         "R9": "legacy encoding/json direct usage",
         "R10": "canonical-harness flag",
     }

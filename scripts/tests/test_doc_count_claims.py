@@ -5,11 +5,12 @@ The gate catches stale numeric claims like "12 enumerated behavioral fields"
 they reach main.
 
 Wave 9b generalized the gate from a 5-entry hardcoded `CLAIMS` tuple to a
-discovery-based design:
+discovery-based design over the 4 currently-tracked claim phrases:
 
-1. `CANONICAL_SOURCES` maps claim phrases → source-of-truth functions.
-2. `DISCOVERY_REGEX` is a single multi-alternation pattern matching every
-   tracked claim phrase.
+1. `CANONICAL_SOURCES` maps the 4 tracked phrases (port-translation rules,
+   enumerated behavioral fields, registered taxa, dual-spec files/pairs) to
+   source-of-truth functions.
+2. `DISCOVERY_REGEX` is a multi-alternation pattern matching those 4 phrases.
 3. The gate walks every `*.md` under `INCLUDED_DIRS` (excluding
    `EXCLUDED_PATHS`), runs the regex, and asserts each numeric capture
    matches the canonical source for that phrase.
@@ -17,6 +18,22 @@ discovery-based design:
 To add a new tracked claim phrase: add it to `DISCOVERY_REGEX` AND
 `CANONICAL_SOURCES` (with a backing counter function). New claim SITES are
 auto-discovered — no manifest update needed.
+
+## Known untracked phrases (Wave 11b plan B5 finding-5 will add)
+
+The discovery regex does NOT track:
+- "N goldens" (canonical: `canonical_goldens_count` — already exists in
+  this file but not wired to the regex)
+- "N reference PRs" (canonical: count from
+  `prebid-server-{go,java}/references/new-bid-adapter-prs.md`; the Java
+  reference doesn't separately track tagged-vs-total — needs disambiguation)
+- "N empire parents" (canonical: `INVENTORY_TOTALS["java_empire_parents"]`
+  in `coverage-report.py`, currently a hardcoded 32)
+- "N fixtures" (canonical: `canonical_goldens_count`, equivalent)
+
+Wave 11b will extend the regex with these alternations and wire each to a
+canonical-source function. Until then, drift on these phrases (e.g., README
+saying "20 reference PRs" when canonical is 92) ships silently.
 
 Files NOT gated (intentional):
 - `CHANGELOG.md` — version-history snapshots; counts there are frozen.

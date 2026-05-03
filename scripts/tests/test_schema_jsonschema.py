@@ -184,24 +184,48 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
         )
 
     def test_no_truly_invented_keys_outside_open_maps(self):
-        """Phase 2.3 phantom-path detector for goldens.
+        """Phase 2.3 phantom-path detector for goldens — DOCUMENTED GAPS.
 
         jsonschema's `iter_errors` accepts any key under blocks declared as
         `additionalProperties: true` (open maps), so a typo'd field there
-        wouldn't fail validation. This test catches that case by
+        wouldn't fail validation. This test attempts to catch that case by
         cross-referencing every dotted path in every golden against the
-        schema's vocabulary.
+        schema's vocabulary — but it has TWO load-bearing gaps that future
+        Wave 11b work will close.
 
-        A path is INVENTED when:
+        ## Detection logic
+
+        A path is INVENTED when ALL of:
         - It's not declared anywhere in the schema's $defs
         - AND it's not under an open-map prefix (additionalProperties:true)
-        - AND its leaf key is not a property name mentioned anywhere in the schema
+        - AND its leaf key is not a property name mentioned anywhere in the
+          schema's $defs.*.properties
 
-        The third clause is permissive — a property name mentioned in any
-        $def's properties block is "known to the schema" even if its
-        appearance at this specific path is unconventional. Phase 2.4
-        will tighten by adding $defs for BidderClass / SpringConfig /
-        Lifecycle / CodeNaming.
+        ## Gap #1 — open-map prefix bypass (28 prefixes)
+
+        Same gap as `test_schema_contract.py`'s phantom-path detector:
+        anything under one of the 28 open-map prefixes
+        (`code.*, tests.*, quirks.*, aliases.*, cross_language.*, lifecycle.*,
+        spring_config.*, code_naming.*, iab_category_storage.*,
+        headers_constructed.*, deploy_time_tokens.*, bidder_class.*, registry.*`,
+        plus 15 nested ones) is silently allowed. Wave 11b / Phase 2.8 closes
+        17 of these accidentally-open sites; 4 are extension-slots; 7 are
+        legitimately keyed-by-arbitrary-name. See the test_schema_contract.py
+        module docstring for the full list and closure tiers.
+
+        ## Gap #2 — leaf-key permissive escape (this test only)
+
+        The `if k in known_keys` branch at lines 271-273 below admits ANY
+        key whose name happens to appear anywhere in any $def.*.properties
+        block. So `code.builder = "request_body"` (a real property name from
+        a totally unrelated $def) is accepted unconditionally — `request_body`
+        IS a known key (under `$defs/Code.make_requests`), so it slips
+        through even at a wildly wrong path. Wave 11b will delete this
+        branch.
+
+        Phase 2.4 was supposed to tighten by adding $defs for BidderClass /
+        SpringConfig / Lifecycle / CodeNaming; that promise carries forward
+        as Tier C in Wave 11b's plan.
         """
         # Collect every property name mentioned anywhere in the schema
         schema = _load_schema()
@@ -268,7 +292,13 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
                 if isinstance(node, dict):
                     for k, v in node.items():
                         path = f"{prefix}.{k}" if prefix else k
-                        # Skip keys that are well-known property names
+                        # Skip keys that are well-known property names.
+                        # GAP #2 (Wave 11b will delete this branch): admits
+                        # ANY key whose name appears in any $defs.*.properties
+                        # block, even at totally wrong paths. E.g.,
+                        # `code.builder = "request_body"` slips through
+                        # because `request_body` is a known property name on
+                        # a different $def.
                         if k in known_keys:
                             yield from walk(v, path)
                             continue

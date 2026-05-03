@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 """scripts/lib/lint-java-roles.py — Wave 4 file-role enum gate.
 
-Validates that every `code.file_layout.files[].role` value emitted by every
-Java golden matches the closed 5-value enum:
+Validates `code.file_layout.files[].role` values match the closed 5-value
+enum:
 
     implementation, models, parsers, types, utils
 
-Cross-language note: Go's enum is the same 5 values plus `data-table`. The
-extra Go value reflects the Go-side IAB-category-table file (e.g.,
+Walks ONLY top-level `code.file_layout.files[]` — does NOT recurse into
+hypothetical nested file lists (e.g., `code.file_layout.subdirectories[*].files[]`).
+The 40-golden corpus does not currently emit nested file lists; if a future
+fixture introduces them, this lint will silently miss those entries until
+Wave 11b plan B5 finding-4 lands the recursive walker.
+
+By default the lint covers Java goldens only. Pass `--include-go` to also
+lint Go goldens against the 6-value Go enum (the 5 above + `data-table`).
+The extra Go value reflects the Go-side IAB-category-table file (e.g.,
 `adapters/msft/iab_categories.go`); Java records the same data as
 `iab_category_storage.storage_kind: yaml-inlined` per ADR-001 D2 and never
-ships a separate file. Use `--include-go` to also lint Go goldens against
-the 6-value Go enum.
+ships a separate file. `make ci` and `.github/workflows/round-trip-ci.yml`
+both invoke with `--include-go`, so CI does cover both languages — but
+ad-hoc invocations without the flag silently skip Go (Wave 11b will flip
+the default to on, with `--java-only` as the opt-out).
 
 Aliases (`meta.is_alias: true`) are exempt — alias goldens may legitimately
 have empty `code.file_layout` because the layout is inherited from the parent.

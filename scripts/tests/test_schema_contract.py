@@ -1,27 +1,71 @@
 #!/usr/bin/env python3
-"""Schema contract test.
+"""Schema contract test — phantom-path detector with documented gaps.
 
 Every dotted path used in any SKILL.md under prebid-server-{go,java}/read/skills/
-must resolve to a defined property in either:
-- prebid-server-go/read/skills/shared/adapter-spec.schema.json (Phase 2.0+ canonical), or
-- prebid-server-go/read/skills/shared/behavior-taxonomy.md (taxonomy enums, still in markdown).
+is checked against the canonical schema vocabulary derived from:
+- prebid-server-go/read/skills/shared/adapter-spec.schema.json (Phase 2.0+ canonical)
+- prebid-server-go/read/skills/shared/behavior-taxonomy.md (taxonomy enums, still markdown)
 
-Catches "phantom field" bugs: a SKILL claims a field that does not exist in
-the canonical schema. This bug class drove most Wave 2 fixes in PR #1.
+The test catches "phantom field" bugs (a SKILL claims a field that does not
+exist in the canonical schema) BUT only for paths under CLOSED schema blocks.
 
-Phase 2.3 (2026-05-02): the schema registry is now derived from the JSON
-Schema at `adapter-spec.schema.json` rather than parsed from markdown
-pseudo-code. The 180-entry hand-curated SCHEMA_REGISTRY_EXTRAS is gone —
-the JSON Schema is the source of truth. Open-map points (paths admitting
-`additionalProperties: true`) are also derived automatically.
+## Coverage
+
+Caught: phantom paths under closed top-level blocks — `bidder_info`
+(non-`{capabilities,user_sync,yaml_extra_fields,yaml_field_name_quirks}`),
+`provenance`, `meta`, `params.{ext_struct,schema_interpretation}` non-leaf,
+`ext_pojo_construction` non-`custom_unmarshal`, `currency_conversion`.
+Concretely: `bidder_info.fakey_fake` and `provenance.read.NOT_REAL` are
+caught.
+
+NOT caught: paths under any of the 28 open-map prefixes the schema
+declares with `additionalProperties: true`. Concretely:
+`code.this_does_not_exist`, `tests.fakey`, `quirks.fake`, etc. all pass.
+
+## Documented gaps (Wave 11b will close)
+
+The 28 open-map prefixes (auto-derived from schema's `additionalProperties:
+true` plus the static `OPEN_MAP_POINTS` set):
+
+  Top-level (13): aliases, bidder_class, code, code_naming, cross_language,
+  deploy_time_tokens, headers_constructed, iab_category_storage, lifecycle,
+  quirks, registry, spring_config, tests
+
+  Nested (15): bidder_info.{capabilities, user_sync, yaml_extra_fields,
+  yaml_field_name_quirks}, code.file_layout, code.file_layout.files,
+  ext_pojo_construction.custom_unmarshal, headers_constructed.custom_headers,
+  params.{ext_struct, params_test, schema_interpretation,
+  schema_interpretation.properties}, tests.fixture_inventory,
+  aliases.{test_application_properties_entries, test_assets}
+
+Of these 28: 4 are EXTENSION-SLOTS (ADR-007 F1/F3/F4/F5 `$defs`,
+intentionally open until $ref-wired in Phase 2.8); 7 are LEGITIMATELY-OPEN
+(keyed by arbitrary user/upstream name — `tests.fixture_inventory`
+keyed by category, `params.schema_interpretation.properties` keyed by
+property name, `bidder_info.yaml_extra_fields` capturing arbitrary upstream
+YAML, etc.); 17 are ACCIDENTALLY-OPEN (Phase 2.0/2.4/2.7 punts that this
+PR did not close). Wave 11b / Phase 2.8 closes the 17 accidentally-open
+sites — see `/Users/quantum/.claude/plans/wiggly-spinning-curry.md` for
+the closure-tier breakdown (Tier A zero-risk, Tier B additive, Tier C
+lift-to-$defs, Tier D corpus-coupled).
+
+A second documented gap lives in the sibling phantom-path test in
+`test_schema_jsonschema.py:test_no_truly_invented_keys_outside_open_maps`:
+its leaf-key permissive branch (line 271-273) admits ANY key whose name
+appears anywhere in any `$defs.*.properties` block. Wave 11b will delete
+that branch.
+
+Phase 2.3 note (2026-05-02): the schema registry is derived from
+`adapter-spec.schema.json`; the legacy 180-entry hand-curated
+SCHEMA_REGISTRY_EXTRAS is gone (Wave 2 deleted the dead block).
 
 Usage (from repo root):
     python3 scripts/tests/test_schema_contract.py
     python3 scripts/tests/test_schema_contract.py --verbose
 
 Exit codes:
-    0  every dotted path resolves
-    1  one or more phantom paths detected
+    0  every dotted path resolves under the coverage rules above
+    1  one or more phantom paths detected (under closed blocks)
     2  schema/taxonomy could not be parsed (sanity-check failure)
 """
 
