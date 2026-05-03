@@ -1,0 +1,369 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: removed-bidder-warning-map-entry
+      file: exchange/adapter_util.go
+      line: 0
+      summary: "`liftoff` has a removed-bidder warning entry redirecting operators to `vungle`. The message reads: \"Bidder 'liftoff' is no longer available in Prebid Server. If you're looking to use the Vungle Exchange adapter, please rename it to 'vungle' in your configuration.\" This is the Go-side alias-back mechanism (clean-delete pattern) for the phantom liftoff/vungle rename."
+
+meta:
+  bidder_name: vungle
+  is_alias: false
+  alias_of: null
+  parent_aliases: []                          # Go side has NO parent_aliases declared on vungle (the legacy `liftoff` alias-back lives in the removed-bidder warning map, NOT as a child YAML).
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+  empire_canonical_master: false
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://rtb.ads.vungle.com/bid/t/c770f32"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    macro_syntax: null
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: true            # Vungle is one of the few adapters that modifies VAST XML
+  maintainer:
+    email: vxssp@liftoff.io                  # Maintainer email reflects post-acquisition Liftoff parent company; bidder name remains vungle
+  capabilities:
+    site:
+      mediaTypes:
+        - video
+    app:
+      mediaTypes:
+        - video
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |-
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Vungle Adapter Params",
+    "description": "A schema which validates params accepted by the Vungle adapter",
+    "type": "object",
+    "properties": {
+      "app_store_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Pub App Store ID"
+      },
+      "placement_reference_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Placement Reference ID"
+      }
+    },
+    "required": [
+      "app_store_id",
+      "placement_reference_id"
+    ]
+  }
+bidder_params_sha256: 437c5b5b81115bca701113d4324392e04a539b2119919d4f33b8e1a13dfb6308
+
+params:
+  schema_interpretation:
+    properties:
+      - name: app_store_id
+        type: string
+        minLength: 1
+        description: "Pub App Store ID"
+      - name: placement_reference_id
+        type: string
+        minLength: 1
+        description: "Placement Reference ID"
+    required_fields:
+      - app_store_id
+      - placement_reference_id
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_vungle.go
+    type_name: ImpExtVungle                   # Legacy ImpExt* form
+    fields:
+      - name: BidToken
+        json_tag: bid_token
+        type_native: string
+        omitempty: false
+        notes:
+          - "Populated at runtime from request.User.BuyerUID — buyer-UID-promotion pattern (NOT supplied by publisher in imp.ext)"
+      - name: PubAppStoreID
+        json_tag: app_store_id
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: PlacementRefID
+        json_tag: placement_reference_id
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/vungle/param_test.go       # FILENAME QUIRK: singular `param_test.go` not canonical `params_test.go`. Ogury-style filename — same as Ogury PR #4082.
+    valid_cases_count: 1
+    invalid_cases_count: 4
+    bidder_constant_referenced: openrtb_ext.BidderVungle
+
+code:
+  package_or_class: vungle
+  directory_name: vungle
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: vungle.go
+        role: implementation
+        loc: 175
+  imports:
+    has_template_engine: false                # Static endpoint
+    has_currency_helper: true                 # requestInfo.ConvertCurrency
+    has_jsonutil: true                        # util/jsonutil
+    third_party:
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: Endpoint
+        type: string                          # Exported field (capital E)
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place                         # imp value-copy from range loop, then BidFloor + Ext + TagID mutated in-place
+        Site: replace-with-app-synthesis      # If request has Site (not App), Site is set to nil and a synthetic App is constructed with the publisher's app_store_id
+        App: synthesize-app-replacement       # If request has App, copy and override App.ID with pub_app_store_id; if request has Site, synthesize fresh App
+        Cur: none
+        Source: none
+        Banner: none
+        Device: none
+        User: none
+      go_idiom: shallow-copy
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtVungle
+      wrapper_type: vungleImpressionExt       # Custom wrapper struct: embeds *adapters.ExtImpBidder PLUS adds an `Ext openrtb_ext.ImpExtVungle "vungle"` field. Wire-format imp.ext after repack has the ExtImpBidder fields PLUS a `vungle` key.
+    endpoint_resolution:
+      kind: static
+      mechanism_go: literal
+      mechanism_java: null
+      macros_used: []
+    helpers: []
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: hardcoded                   # Rule 26 — every bid is BidTypeVideo regardless of bid.mtype or imp media type
+          hardcoded_value: BidTypeVideo
+          fallback_action: throw
+      default_value: video
+      multi_format_detection: none
+    bid_pointer_pattern: indexed-iteration    # for i := range seatBid.Bid { ... &seatBid.Bid[i] ... }
+    bid_pointer_go_sibling: range-index
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: vungletest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true                # vungle_test.go calls adapterstest.RunJSONBidderTest
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+aliases: []                                   # Go side has NO aliases YAML for vungle. The legacy `liftoff` operator-name lives in the removed-bidder warning map (clean-delete pattern), not as a child YAML.
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+lifecycle:
+  rename:
+    old_name: liftoff
+    new_name: vungle
+    subtype: bilateral                        # ADR-006 sub-type. Both sides ended at vungle as canonical, with each side's own backward-compat for liftoff. NOT go-leads as ADR-006 originally claimed (operator-facing migration guidance only; the bidder name was never actually renamed in code).
+    alias_back: false                         # Go side does NOT use an alias YAML for liftoff; the legacy name lives in the removed-bidder warning map.
+    alias_back_form: removed-bidder-warning-map
+    package_moves: []
+    fixture_dir_moves: []
+    yaml_deletes: []
+    yaml_adds: []
+    merged_at: null                           # No discrete rename PR; the bidder always was vungle. Liftoff appeared in operator configs based on the 2021 Liftoff/Vungle acquisition news; backward-compat surfaces handle that.
+    release: null
+    notes:
+      - "Liftoff acquired Vungle in 2021. The acquisition was a parent-company-name change; the SSP/exchange product remained `Vungle Exchange`."
+      - "Some operators configured `liftoff` based on the acquisition news (treating it as a rename). Both prebid-server-go and prebid-server-java handle this with backward-compat: Go via the removed-bidder warning map; Java via tilde_inherit alias `aliases: { liftoff: { enabled: false } }` in vungle.yaml."
+      - "Maintainer email is `vxssp@liftoff.io` (Liftoff parent company) on both sides."
+      - "ADR-006 originally classified this as go-leads with `liftoff (Go) ↔ vungle (Java)`. Upstream evidence (this fixture) shows the actual state is bilateral with phantom-rename history. ADR-006 needs follow-up correction; deferred to future commit."
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: "requestInfo.ConvertCurrency(value, from, to) (float64, error)"
+    java_signature: null
+  injection: function-arg
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: Accept
+      value: "application/json"
+    - name: X-OpenRTB-Version
+      value: "2.5"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: site-to-app-synthesis
+    file: vungle.go
+    line: 90
+    summary: "If request has Site (no App), MakeRequests SYNTHESIZES a fake App with `App.ID = pub_app_store_id` and removes Site (`requestCopy.Site = nil`). If request has App, copies App and overrides App.ID with pub_app_store_id. ADR-007 F3 mediatype-context-rewrite-site-to-app master sample (first corpus example). The wire-format outgoing request to Vungle ALWAYS has app context, never site."
+    edge_case_taxon: mediatype-context-rewrite-site-to-app
+  - id: buyer-uid-promotion-to-imp-ext
+    file: vungle.go
+    line: 70
+    summary: "BidToken in imp.ext is sourced from `requestCopy.User.BuyerUID` at runtime (line 70: `bidderImpExt.BidToken = requestCopy.User.BuyerUID`). This is publisher-context promotion: a request-level field becomes an imp-level ext field. Distinct from publisher-supplied imp ext fields. Java side performs the same promotion."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: imp-ext-repack-with-vungle-key
+    file: vungle.go
+    line: 75
+    summary: "MakeRequests repacks imp.ext with a custom shape: vungleImpressionExt embeds *adapters.ExtImpBidder PLUS adds an `Ext openrtb_ext.ImpExtVungle \"vungle\"` field tagged `vungle`. Wire-format imp.ext after repack has the ExtImpBidder.bidder fields preserved AND a new `vungle` key added carrying the same params (with bid_token populated from buyerUID). Distinct from teqblaze's REPACK (which strips and rewrites) — vungle ADDS a parallel key alongside `bidder`. Java side mirrors this via VungleImpressionExt with `prebid + bidder + vungle` keys."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: hardcoded-video-bid-type
+    file: vungle.go
+    line: 130
+    summary: "MakeBids sets BidType = openrtb_ext.BidTypeVideo for ALL bids regardless of bid.mtype or imp media type (line 130). Rule 26 hardcoded fallback master sample (first time captured). The capabilities block declares only video on both site and app, so this is consistent with the bidder's declared scope, but it skips bid validation."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: param-test-go-singular-filename
+    file: adapters/vungle/param_test.go
+    summary: "Test file is `param_test.go` (SINGULAR) instead of canonical `params_test.go` (plural). Same filename quirk as Ogury (PR #4082). The Go test runner accepts either name; readers of the params section must tolerate both forms."
+    edge_case_taxon: yaml-field-name-typo
+  - id: removed-bidder-warning-for-liftoff
+    file: exchange/adapter_util.go
+    summary: "`liftoff` is in the removed-bidder warning map redirecting to `vungle`. Backward-compat for operators who configured `liftoff` based on the 2021 Liftoff/Vungle parent-company-name change. The bidder was never actually renamed in code — Vungle stayed canonical throughout."
+    edge_case_taxon: bidder-rename-three-step
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/vungle/
+    package_name: vungle
+    bidder_constant: openrtb_ext.BidderVungle
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/vungle/
+    bidder_class: VungleBidder
+    config_class: VungleConfiguration
+    yaml_path: src/main/resources/bidder-config/vungle.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/vungle/
+  port_concerns:
+    aliases_inverted: true                    # Java declares `aliases: { liftoff: { enabled: false } }` under vungle parent (alias-back via tilde). Go declares NO alias YAML — uses removed-bidder warning map instead. Cross-language asymmetry on the alias-back mechanism (Rule 33-adjacent).
+    yaml_unification: false
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: prebid/prebid-server-java#1819
+    destination_language: null
+    destination_pr: prebid/prebid-server#3024
+    fidelity_review_themes:
+      - port-fidelity
+      - mediatype-context-rewrite-site-to-app
+      - buyer-uid-promotion
+      - hardcoded-video-bid-type
+      - phantom-rename-liftoff-vungle
+  go_specific_concerns:
+    - "vungleImpressionExt struct embeds *adapters.ExtImpBidder anonymously AND adds an `Ext openrtb_ext.ImpExtVungle \"vungle\"` field (line 25). Wire-format imp.ext after repack carries ExtImpBidder.bidder fields verbatim AND a new `vungle` key with the publisher's app_store_id, placement_reference_id, and bid_token (populated from request.User.BuyerUID)."
+    - "Site-to-App synthesis (line 90-99): if request has Site object (no App), MakeRequests sets requestCopy.Site = nil and synthesizes a fresh App `{ID: pub_app_store_id}`. If request has App, copies and overrides App.ID. The outgoing request to Vungle ALWAYS has app context. ADR-007 F3 mediatype-context-rewrite-site-to-app master sample."
+    - "All bids are classified as BidTypeVideo regardless of bid.mtype or imp media type (line 130). Hardcoded video — Rule 26 master sample. The capabilities block declares only video, so the hardcoded fallback is consistent — but no validation against bid.mtype."
+    - "param_test.go is singular (NOT plural params_test.go). Ogury-style filename quirk; same as Ogury PR #4082."
+    - "X-OpenRTB-Version: 2.5 header (line 116). Pinned to 2.5 — distinct from adapters that pin to 2.6 or omit the header. Vungle's upstream may not yet support 2.6 features."
+    - "Liftoff/Vungle phantom rename: `liftoff` appears in exchange/adapter_util.go's removed-bidder warning map redirecting to `vungle`. Backward-compat for operators configuring liftoff based on the 2021 acquisition. The bidder name was never actually renamed in code — vungle stayed canonical."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

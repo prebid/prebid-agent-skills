@@ -1,0 +1,428 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: vungle
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - liftoff                                 # Single tilde_inherit alias for backward-compat (alias-back-via-tilde for the phantom rename)
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: false
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://rtb.ads.vungle.com/bid/t/c770f32"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    macro_syntax: null
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: true            # Vungle is one of the few adapters that modifies VAST XML
+  maintainer:
+    email: vxssp@liftoff.io
+  capabilities:
+    site:
+      mediaTypes:
+        - video
+    app:
+      mediaTypes:
+        - video
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Vungle Adapter Params",
+    "description": "A schema which validates params accepted by the Vungle adapter",
+    "type": "object",
+    "properties": {
+      "app_store_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Pub App Store ID"
+      },
+      "placement_reference_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Placement Reference ID"
+      }
+    },
+    "required": [
+      "app_store_id",
+      "placement_reference_id"
+    ]
+  }
+bidder_params_sha256: 750a278d0720e87af2dc2ec5f46986a0675b1f78ba199a556cc11215676dc6fe
+
+params:
+  schema_interpretation:
+    properties:
+      - name: app_store_id
+        type: string
+        minLength: 1
+        description: "Pub App Store ID"
+      - name: placement_reference_id
+        type: string
+        minLength: 1
+        description: "Placement Reference ID"
+    required_fields:
+      - app_store_id
+      - placement_reference_id
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.vungle
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/vungle/ExtImpVungle.java
+    type_name: ExtImpVungle
+    fields:
+      - name: bidToken
+        json_tag: bid_token                   # Note: Java field is bidToken (camelCase) but JSON tag is bid_token (snake_case) — non-standard for Lombok @Value, would need @JsonProperty BUT the source has NO @JsonProperty annotation. This means the field is NOT correctly serialized to bid_token at output. Possible upstream defect.
+        type_native: String
+        omitempty: true
+        notes:
+          - "Lombok @Value with default Jackson naming → camelCase JSON output (`bidToken`). But schema field is `bid_token` (snake_case). The auto-conversion may rely on Jackson's PROPERTY_NAMING_STRATEGY setting at the JacksonMapper level."
+      - name: appStoreId
+        json_tag: app_store_id
+        type_native: String
+        omitempty: true
+        notes: []
+      - name: placementReferenceId
+        json_tag: placement_reference_id
+        type_native: String
+        omitempty: true
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: VungleBidder
+  directory_name: vungle
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: VungleBidder.java
+        role: implementation
+        loc: 200
+  imports:
+    has_jsonutil: false
+    has_template_engine: false
+    has_currency_helper: true
+  make_requests:
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp
+    mutation:
+      mutates_request: true
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+      entity_strategies:
+        Imp: immutable-rebuild
+        Site: replace-with-app-synthesis      # If request has Site (no App), Java synthesizes an App via builder and removes Site
+        App: synthesize-app-replacement       # If request has App, override App.ID with pub_app_store_id; if Site, synthesize fresh App
+        Source: none
+        Banner: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpVungle
+      wrapper_type: VungleImpressionExt       # Co-located helper class in `bidder/vungle/model/` package. Wraps `prebid + bidder + vungle` keys.
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: literal
+      macros_used: []
+    helpers:
+      - name: parseExtImp
+        signature: "private ExtImpVungle parseExtImp(Imp imp)"
+      - name: modifyImp
+        signature: "private Imp modifyImp(Imp imp, BidRequest bidRequest, ExtImpVungle extImp, String buyerUid)"
+      - name: resolveImpExt
+        signature: "private ObjectNode resolveImpExt(Imp imp, ExtImpVungle extImp, String buyerUid)"
+      - name: resolveBidFloor
+        signature: "private Price resolveBidFloor(Imp imp, BidRequest bidRequest)"
+      - name: resolveApp
+        signature: "private static App resolveApp(BidRequest bidRequest, ExtImpVungle extImp)"
+      - name: resolveSite
+        signature: "private static Site resolveSite(BidRequest bidRequest)"
+      - name: makeBid
+        signature: "private static BidderBid makeBid(Bid bid, String currency)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: hardcoded                   # Rule 26 — hardcoded video on Java side, matching Go
+          hardcoded_value: BidType.video
+          fallback_action: throw
+      default_value: video
+      multi_format_detection: none
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/vungle/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-vungle-bid-request.json
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-vungle-bid-response.json
+        bytes: 0
+        role: bidder-bid-response
+      - filename: test-auction-vungle-request.json
+        bytes: 0
+        role: auction-request
+      - filename: test-auction-vungle-response.json
+        bytes: 0
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 17
+  unit_test_loc: 419
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: VungleTest
+  integration_test_pattern: 4-file-split
+
+aliases:
+  - name: liftoff
+    parent: vungle
+    config_form: tilde_inherit                # `aliases: { liftoff: { enabled: false } }` — minimal alias-back form. Inherits parent's endpoint, capabilities, etc. Default-disabled.
+    relationship_flavor: registration-only    # NOT an empire alias; this is a phantom-rename alias-back. Closest existing flavor.
+    test_assets:
+      it_class: LiftoffTest                    # Java-side legacy IT class — tests the alias-back path. Distinct: most aliases without elaborated config either have no IT class OR mirror parent. Liftoff has its own IT class even though config is minimal.
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/liftoff/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false                             # Default-disabled (Rule 45 instance — operators must opt in)
+
+spring_config:
+  factory_class: VungleConfiguration
+  factory_method: vungleBidderDeps
+  property_source_path: classpath:/bidder-config/vungle.yaml
+  bidder_creator_lambda: |
+    config -> new VungleBidder(config.getEndpoint(), currencyConversionService, mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: vungleConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.vungle\")"
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: currencyConversionService
+      type: CurrencyConversionService
+      source: "@Autowired"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+
+bidder_class:
+  name: VungleBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointUrl
+        type: String
+        annotations: []
+      - name: currencyConversionService
+        type: CurrencyConversionService
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+    arity: 3
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: BIDDER_CURRENCY
+      type: String
+      value: "USD"
+    - name: X_OPENRTB_VERSION
+      type: String
+      value: "2.5"
+  helper_classes_co_located:
+    - VungleImpressionExt                     # In `bidder/vungle/model/` subpackage. Wraps prebid + bidder + vungle keys.
+  helper_classes_in_proto:
+    - ExtImpVungle
+
+code_naming: null
+
+lifecycle:
+  rename:
+    old_name: liftoff
+    new_name: vungle
+    subtype: bilateral                        # Same classification as Go-side spec: phantom rename, both sides canonical at vungle, with backward-compat for liftoff.
+    alias_back: true                          # Java side DOES use alias-back (tilde_inherit form via aliases: { liftoff: { enabled: false } }).
+    alias_back_form: tilde_inherit
+    package_moves: []
+    fixture_dir_moves: []
+    yaml_deletes: []
+    yaml_adds: []
+    merged_at: null
+    release: null
+    notes:
+      - "Liftoff acquired Vungle in 2021 (parent-company-name change; the SSP/exchange product remained Vungle Exchange)."
+      - "Java handles legacy `liftoff` operator-config via tilde-inherit alias under vungle.yaml's `aliases:` block (default-disabled). LiftoffTest IT class exercises this alias-back path (fixture dir openrtb2/liftoff/)."
+      - "ADR-006 originally classified liftoff/vungle as `go-leads`. Upstream evidence (this fixture pair) shows the actual state is `bilateral` with phantom-rename history. ADR-006 needs follow-up correction; deferred to future commit."
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: null
+    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
+  injection: dependency
+  bid_request_passed_for_context: true
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: X-OpenRTB-Version
+      value: "2.5"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: site-to-app-synthesis
+    file: src/main/java/org/prebid/server/bidder/vungle/VungleBidder.java
+    summary: "If bidRequest has Site object (no App), VungleBidder synthesizes an App with `App.ID = extImp.appStoreId` and removes Site. If request has App, copies and overrides App.ID. The outgoing request to Vungle ALWAYS has app context. ADR-007 F3 mediatype-context-rewrite-site-to-app master sample (cross-language symmetric with Go side)."
+    edge_case_taxon: mediatype-context-rewrite-site-to-app
+  - id: buyer-uid-promotion-to-imp-ext
+    file: src/main/java/org/prebid/server/bidder/vungle/VungleBidder.java
+    summary: "VungleBidder promotes `bidRequest.user.buyerUid` into the imp.ext.vungle.bid_token field at request-build time. Distinct from publisher-supplied imp ext fields. Cross-language symmetric — Go side does the same promotion (line 70)."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: imp-ext-three-key-wrapper
+    file: src/main/java/org/prebid/server/bidder/vungle/model/VungleImpressionExt.java
+    summary: "VungleImpressionExt wraps imp.ext with THREE keys: `prebid` (ExtImpPrebid), `bidder` (ExtImpVungle), `vungle` (ExtImpVungle). The `vungle` key carries the same ExtImpVungle as `bidder` but with bid_token populated from buyerUid. Wire-format imp.ext after build has both `bidder` AND `vungle` keys with overlapping content. Cross-language symmetric — Go side does the same via vungleImpressionExt struct embedding."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: hardcoded-video-bid-type
+    file: src/main/java/org/prebid/server/bidder/vungle/VungleBidder.java
+    summary: "All bids classified BidType.video regardless of bid.mtype. Rule 26 hardcoded fallback (cross-language symmetric with Go)."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: bid-token-snake-case-divergence
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/vungle/ExtImpVungle.java
+    summary: "Java field `bidToken` (camelCase) has NO @JsonProperty annotation, but the wire-format JSON tag should be `bid_token` (snake_case) per the JSON schema. Lombok @Value defaults to Jackson's PROPERTY_NAMING_STRATEGY (likely set globally on JacksonMapper). If the strategy is not snake_case, the field would serialize as `bidToken` and break wire-format parity with Go side (which has explicit `bid_token` JSON tag). Verify the JacksonMapper config — possible cross-language fidelity gap."
+    edge_case_taxon: yaml-field-name-typo
+  - id: liftoff-alias-back-via-tilde
+    file: src/main/resources/bidder-config/vungle.yaml
+    summary: "Java handles the phantom liftoff/vungle rename via tilde_inherit alias `aliases: { liftoff: { enabled: false } }`. Operators with `liftoff` config get the vungle adapter (default-disabled, must opt in). LiftoffTest IT class tests this path. Distinct from Go's removed-bidder warning map (which forces operators to update config)."
+    edge_case_taxon: bidder-rename-three-step
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/vungle/
+    package_name: vungle
+    bidder_constant: openrtb_ext.BidderVungle
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/vungle/
+    bidder_class: VungleBidder
+    config_class: VungleConfiguration
+    yaml_path: src/main/resources/bidder-config/vungle.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/vungle/
+  port_concerns:
+    aliases_inverted: true                    # Java declares alias `liftoff` under vungle.aliases[]; Go declares NO alias YAML — uses removed-bidder warning map instead. Cross-language asymmetry on alias-back mechanism.
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: prebid/prebid-server-java#1819
+    destination_language: null
+    destination_pr: prebid/prebid-server#3024
+    fidelity_review_themes:
+      - port-fidelity
+      - mediatype-context-rewrite-site-to-app
+      - buyer-uid-promotion
+      - hardcoded-video-bid-type
+      - phantom-rename-liftoff-vungle
+      - bid-token-snake-case-jackson-mapping
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "VungleImpressionExt (in `bidder/vungle/model/` subpackage) wraps imp.ext with three keys: prebid + bidder + vungle. The `vungle` key carries the same ExtImpVungle as `bidder` but with bidToken populated from request.user.buyerUid. Wire-format imp.ext has overlapping content under bidder vs vungle keys."
+    - "Site-to-App synthesis: resolveSite returns null + resolveApp synthesizes (line 130). The outgoing request to Vungle ALWAYS has App.ID = publisher's app_store_id. ADR-007 F3 mediatype-context-rewrite-site-to-app cross-language symmetric with Go."
+    - "Hardcoded BidType.video for all bids — Rule 26 master sample. Cross-language symmetric with Go."
+    - "ExtImpVungle.bidToken has no @JsonProperty annotation; relies on JacksonMapper's PROPERTY_NAMING_STRATEGY for snake_case conversion to bid_token. Potential cross-language fidelity gap if the global strategy isn't set."
+    - "X-OpenRTB-Version: 2.5 header (line 130) — pinned to 2.5; Vungle's upstream may not yet support 2.6 features."
+    - "liftoff alias is tilde_inherit + default-disabled (Rule 45 instance + alias-back-via-tilde for the phantom liftoff/vungle rename). Java's LiftoffTest IT class exercises this alias-back path (fixture dir openrtb2/liftoff/). Cross-language asymmetric alias-back: Java tilde-inherit vs Go removed-bidder warning map."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

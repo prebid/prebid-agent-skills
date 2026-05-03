@@ -9,10 +9,10 @@ Tracks per-rule, per-empire, per-pair coverage of the goldens corpus against ADR
 
 ## 1. Golden inventory
 
-- **Go goldens**: 16 (152media, 33across, aax, adkernel, adtonos, adverxo, appnexus, bidstack, elementaltv, kobler, limelightDigital, mediasquare, msft, optidigital, smarthub, teqblaze)
-- **Java goldens**: 14 (152media, aax, adverxo, appnexus, elementaltv, generic, huaweiads, kobler, limelightDigital, mediasquare, optidigital, rubicon, smarthub, teqblaze)
-- **Paired goldens** (both languages): 11 (152media, aax, adverxo, appnexus, elementaltv, kobler, limelightDigital, mediasquare, optidigital, smarthub, teqblaze)
-- **Dual-spec assertion files**: 11
+- **Go goldens**: 17 (152media, 33across, aax, adkernel, adtonos, adverxo, appnexus, bidstack, elementaltv, kobler, limelightDigital, mediasquare, msft, optidigital, smarthub, teqblaze, vungle)
+- **Java goldens**: 15 (152media, aax, adverxo, appnexus, elementaltv, generic, huaweiads, kobler, limelightDigital, mediasquare, optidigital, rubicon, smarthub, teqblaze, vungle)
+- **Paired goldens** (both languages): 12 (152media, aax, adverxo, appnexus, elementaltv, kobler, limelightDigital, mediasquare, optidigital, smarthub, teqblaze, vungle)
+- **Dual-spec assertion files**: 12
 
 Reconnaissance totals (Round 3 inventory, ADR-003):
 
@@ -34,13 +34,13 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `teqblaze` | P1 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (white-label-saas, 9 aliases) |
 | `adverxo` | P1 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (registration-only, 3 aliases — smallest clean canonical) |
 | `limelightDigital` | P2 | ✓ | ✓ | ✓ covered | ADR-003 Rule 44 (endpoint-macro-substitution, 15 aliases) |
-| `vungle` | P2 | — | — | missing | ADR-006 Rule 43 go-leads (liftoff/vungle cross-name pair) |
+| `vungle` | P2 | ✓ | ✓ | ✓ covered | ADR-006 Rule 43 go-leads (liftoff/vungle cross-name pair) |
 | `emxdigital` | P2 | — | — | missing | ADR-006 Rule 43 java-leads (cadent_aperture_mx/emxdigital cross-name) |
 | `adkernelAdn` | P3 | — | — | missing | ADR-005 Rule 46 naming-normalization master (adkernelAdn → adkerneladn) |
 | `freewheelssp` | Stretch | — | — | missing | ADR-007 F2 master (multi-endpoint-by-mediatype) |
 | `thetradedesk` | Stretch | — | — | missing | ADR-007 F4 master (bid-post-processing-macro) |
 
-**Phase 5 status**: 4 of 9 pairs covered. 5 remaining (matches ADR-008's 9-pair plan).
+**Phase 5 status**: 5 of 9 pairs covered. 4 remaining (matches ADR-008's 9-pair plan).
 
 ---
 
@@ -74,7 +74,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `conversant` | `epsilon` | `java-leads` | — | — | Publicis Epsilon acquired Conversant |
 | `magnite` | `rubicon` | `java-leads` | — | ✓ | Magnite/Rubicon merger |
 | `intenze` | `gothamads` | `java-leads` | — | — | acquisition |
-| `liftoff` | `vungle` | `go-leads` | — | — | Liftoff acquired Vungle 2021 |
+| `liftoff` | `vungle` | `go-leads` | — | ✓ | Liftoff acquired Vungle 2021 |
 | `equativ` | `smartadserver` | `go-leads` | — | — | Smart AdServer rebrand 2022 |
 
 **Rule 43 coverage**: 1 of 7 pairs fully covered (`elementaltv` is the only `bilateral` master in the corpus today).
@@ -110,6 +110,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `optidigital` | ✓ | ✓ | — | — | — | 8 |
 | `smarthub` | ✓ | ✓ | — | — | — | 8 |
 | `teqblaze` | ✓ | ✓ | — | — | — | 8 |
+| `vungle` | ✓ | ✓ | — | — | — | 8 |
 
 `naming_asymmetry` is a Phase 2.7 dual-spec block (ADR-005). Existing assertions don't have it because none of the 7 covered pairs hit Rule 46. Phase 5's `adkernelAdn`/`adkerneladn` pair will populate it for the first time.
 
@@ -164,7 +165,7 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 | Rule 45 | Disabled-by-default Java alias | `audienceNetwork`*, `mgidX`*, `optidigital` | 1 | 2 |
 | Rule 46 | Naming-convention normalization | `adkernel`, `adkernelAdn`*, `adkerneladn`*, `audienceNetwork`*, `audiencenetwork`*, `boldwin_rapid`*, `boldwinrapid`*, `e_volution`*, `elementaltv`, `emx_digital`*, `emxdigital`*, `evolution`*, `freewheel-ssp`*, `freewheelssp`*, `lm_kiviads`*, `lmkiviads`*, `mgidX`*, `mgidx`*, `sa_lunamedia`*, `salunamedia`*, `sspBC`*, `sspbc`*, `stroeerCore`*, `stroeercore`*, `triplelift_native`*, `tripleliftnative`* | 2 | 24 |
 | Rule 42 | IAB-categories storage cross-language translation | `appnexus`, `msft` | 2 | 0 |
-| Rule 43 | Bidder-rename three-step lifecycle | `appnexus`, `cadent_aperture_mx`*, `conversant`*, `elementaltv`, `emxdigital`*, `epsilon`*, `equativ`*, `gothamads`*, `intenze`*, `liftoff`*, `magnite`*, `rubicon`, `smartadserver`*, `vungle`* | 3 | 11 |
+| Rule 43 | Bidder-rename three-step lifecycle | `appnexus`, `cadent_aperture_mx`*, `conversant`*, `elementaltv`, `emxdigital`*, `epsilon`*, `equativ`*, `gothamads`*, `intenze`*, `liftoff`*, `magnite`*, `rubicon`, `smartadserver`*, `vungle` | 4 | 10 |
 | Rule 36 | Go httpCalls array vs Java 4-file split | `kobler` | 1 | 0 |
 | Rule 37 | Per-alias IT class requirement (Java-only) | (generic) | 0 | 0 |
 
@@ -174,7 +175,6 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 
 ## 8. Top gaps to close (sorted by impact)
 
-- Phase 5 P2: pair `vungle` — ADR-006 Rule 43 go-leads (liftoff/vungle cross-name pair)
 - Phase 5 P2: pair `emxdigital` — ADR-006 Rule 43 java-leads (cadent_aperture_mx/emxdigital cross-name)
 - Phase 5 P3: pair `adkernelAdn` — ADR-005 Rule 46 naming-normalization master (adkernelAdn → adkerneladn)
 - Phase 5 Stretch: pair `freewheelssp` — ADR-007 F2 master (multi-endpoint-by-mediatype)
@@ -191,7 +191,7 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 
 ## Sources
 
-- Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (30 files).
-- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (11 files).
+- Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (32 files).
+- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (12 files).
 - Port-translation rules (46 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.
 - ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).
