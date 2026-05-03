@@ -1,0 +1,277 @@
+dual_spec_assertion_version: 1
+bidder_name: adkernelAdn                       # Phase 5 key — matches PHASE_5_PAIRS in scripts/coverage-report.py. Note: Java-side filename uses `adkerneladn` (cross-name pair via Rule 46 lowercase).
+go_spec: prebid-server-go/read/test-fixtures/adkernelAdn.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/adkerneladn.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+cross_name_pair: true                          # Go bidder name `adkernelAdn` (camelCase) ≠ Java bidder YAML/Spring key `adkerneladn` (lowercase). Pure ADR-005 Rule 46 naming-normalization case (lowercase + drop non-[a-z0-9]).
+
+assertions:
+  bidder_params_sha256:
+    go:   2264b66d4b4f56eff24c381e5941f7b02029a0754d602319757ad56396bbe3ed   # 377 bytes
+    java: 9e1a7d940698082d00922618710331010c8316735c4da6b71d9a34039e620120   # 374 bytes
+    byte_equal: false
+    semantically_equal: true                   # Both: pubId integer (min 1, required), draft-04, same title, same description.
+    divergence_kind: byte-only-whitespace
+    divergence_summary: "Whitespace-only divergence. Go uses 6-space indent for properties + inline `required: [\"pubId\"]` + a blank line after description (377B). Java uses 4-space indent + multi-line `required: [\\n  \"pubId\"\\n]` (374B). Both files have identical schema semantics; canonical-JSON SHA-256 (sort_keys + minimal separators) would be byte-equal."
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video]
+      app: [banner]
+    java:
+      site: [banner, video]
+      app: [banner]
+    equivalent: true
+    severity: pass
+    note: "Asymmetric capabilities (app banner-only, site banner+video) — cross-language symmetric. Distinct from the parent `adkernel` bidder which supports app+site banner/video/audio/native (4×4 grid)."
+
+  bidder_info_endpoint:
+    go:   "https://pbs2.adksrv.com/rtbpub?account={{.PublisherID}}"   # Go template dot-syntax
+    java: "https://pbs2.adksrv.com/rtbpub?account={{PublisherID}}"     # Plain placeholder (no dot)
+    equivalent_modulo_macro_syntax: true
+    severity: warn
+    note: "Same URL host/path/query params; macro syntax differs (Go template engine `{{.PublisherID}}` resolved via `macros.ResolveMacros` vs Java plain `{{PublisherID}}` resolved via `String.replace`). Effective URL identical after resolution."
+
+  bidder_info_endpoint_compression:
+    go: null
+    java: null
+    equivalent: true
+    severity: pass
+
+  bidder_info_modifying_vast_xml_allowed:
+    go: false
+    java: false
+    equivalent: true
+    severity: pass
+
+  bidder_info_maintainer:
+    go:   prebid-dev@adkernel.com
+    java: prebid-dev@adkernel.com
+    equivalent: true
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 14
+    java: 14
+    equivalent: true
+    severity: pass
+
+  bidder_info_default_enabled:
+    go:   true
+    java: true
+    rule_45_match: n/a                          # Both default-enabled; no Rule 45 (disabled-by-default) instance
+    severity: pass
+
+  usersync_redirect_url:
+    go:   "https://tag.adkernel.com/syncr?gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&r={{.RedirectURL}}"
+    java: "https://tag.adkernel.com/syncr?gdpr={{gdpr}}&gdpr_consent={{gdpr_consent}}&us_privacy={{us_privacy}}&r={{redirect_url}}"
+    equivalent_modulo_macro_syntax: true
+    severity: warn
+    note: "Same URL; Go template macros (`{{.GDPR}}` etc.) vs Java plain placeholders (`{{gdpr}}` etc.)."
+
+  usersync_uid_macro:
+    go:   "{UID}"
+    java: "${UID}"
+    equivalent: false
+    severity: warn
+    note: "Cross-language uid-macro syntax divergence. Java uses Spring `${UID}` syntax (consistent across the Java codebase). Go uses plain `{UID}`. Same intent; identical resolution."
+
+  usersync_cookie_family_name:
+    go:   null                                  # Go bidder-info doesn't declare cookie-family-name in YAML (set elsewhere in code)
+    java: adkernelAdn                           # CAMELCASE — deliberately matches BIDDER_NAME constant, not the lowercase YAML/Spring key
+    severity: pass
+    note: "Java's cookie-family-name is the camelCase form (matches BIDDER_NAME / Go registry key). This is a CROSS-LANGUAGE IDENTITY BOUNDARY: the Java codebase uses lowercase for Spring property keys but camelCase for the public bidder-name contract."
+
+  params_schema_interpretation:
+    go_required_fields: [pubId]
+    java_required_fields: [pubId]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [pubId]
+    java_properties: [pubId]
+    equivalent: true
+    severity: pass
+    note: "Pure integer pubId, min 1, required on both sides. No flexible types (distinct from cadent's stringified bidfloor). Java uses Lombok @Builder @Value with explicit @JsonProperty(\"pubId\") annotation — Go uses native struct field PublisherID with json tag `pubId`."
+
+  alias_graph:
+    go_aliases: []
+    java_aliases: []
+    aliases_match: true
+    rule_33_inversion: false
+    rule_44_empire_flavor: null                 # Not an empire — both sides are independent bidders with no aliases
+    rule_45_match: null
+    rule_46_match: true                         # PRIMARY ASSERTION — adkernelAdn ↔ adkerneladn is a Rule 46 lowercase normalization
+    severity: pass
+    note: "No aliases on either side. The pair is purely a naming-convention divergence."
+
+  lifecycle:
+    rename: null                                # No rename history. Pure Rule 46 naming-convention case.
+    rename_history: none
+    deprecated_marker: none
+    removed_bidder_entry: none
+    severity: pass
+    note: "No rename, no deprecation, no removed-bidder-warning entry. The pair has always been independently named on each side. Distinct from cadent_aperture_mx/emxdigital (lifecycle java-leads with rename), distinct from vungle/liftoff (phantom rename with backward-compat surfaces)."
+
+  naming_asymmetry:
+    rule_46_classification: lowercase           # ADR-005 RULE_46_PAIRS: ('adkernelAdn', 'adkerneladn', 'lowercase')
+    rule_46_canonical_form: adkerneladn         # Both forms reduce under `lowercase + drop non-[a-z0-9]`
+    rule_46_simple_label_holds: true            # The ADR's `lowercase` label IS correct for the package/yaml-key normalization
+    rule_46_multi_form_reality: true            # BUT both sides use multiple forms internally (see below)
+    go_internal_forms:
+      package_and_dir: adkernelAdn              # CamelCase: package, main file, yaml filename, struct name, registry constant, ext file (imp_adkernelAdn.go)
+      test_fixture_root: adkerneladntest        # LOWERCASE — internal Go asymmetry (test driver references this lowercase form)
+      registry_key: adkernelAdn                 # CamelCase via BidderName constant
+    java_internal_forms:
+      yaml_spring_key: adkerneladn              # LOWERCASE: package directory, ext-request package, bidder-config yaml filename + key, IT fixture dir, @PropertySource path, @ConfigurationProperties prefix, @Bean qualifier, wiremock URL path
+      bidder_name_constant: adkernelAdn         # CAMELCASE — registers the camelCase form with BidderCatalog (matches Go registry key)
+      class_names: AdkernelAdn*                 # PascalCase (preserves inner Adn capital): AdkernelAdnBidder, AdkernelAdnConfiguration, AdkernelAdnBidderTest, AdkernelAdnTest, ExtImpAdkernelAdn
+      cookie_family_name: adkernelAdn           # CAMELCASE — matches BIDDER_NAME, NOT the lowercase YAML key
+      params_filename: adkernelAdn.json         # CAMELCASE — matches Go (lowercase variant returns 404)
+      imp_ext_key_in_fixtures: adkernelAdn      # CAMELCASE — matches BIDDER_NAME
+      it_class_title_case: AdkernelAdnTest      # PascalCase preserves inner Adn capital. Distinct from `EmxdigitalTest` (which lost the capital).
+    rule_46_within_java: true                   # `adkernelAdn` (camelCase, BIDDER_NAME) ↔ `adkerneladn` (lowercase, YAML/Spring) — same intra-language Rule 46 normalization as emxdigital
+    severity: warn
+    note: |
+      ADR-005 RULE_46_PAIRS classifies this pair as `lowercase`. The label is
+      directionally correct for the Java YAML/Spring property key vs Go camelCase
+      convention. However, empirical reality is multi-form: BOTH sides use 2-3
+      naming forms internally.
+
+      Most striking deviation from the simple ADR claim: **the Java
+      bidder-params filename is `adkernelAdn.json` (CAMELCASE) — the lowercase
+      `adkerneladn.json` returns 404**. This breaks "Java is lowercase
+      everywhere" as a heuristic. The audit-golden.py cookie_family_name
+      fallback (introduced for emxdigital) handles this case automatically:
+      the Java cookie-family-name `adkernelAdn` matches the actual params
+      filename.
+
+      Internal Go asymmetry: package and main filenames use camelCase
+      `adkernelAdn`, but the test fixture root directory is `adkerneladntest/`
+      (LOWERCASE). Mirrors cadent's `cadent_aperture_mxtest/` pattern.
+
+      Java's `BIDDER_NAME` constant in AdkernelAdnConfiguration.java is the
+      CAMELCASE form `adkernelAdn`. This is what gets registered with
+      BidderCatalog and is the public bidder-name contract. The lowercase form
+      lives only in Spring property keys and bean qualifiers.
+
+  cross_lang_behavioral:
+    url_format:                          "{endpoint}?account={publisher_id}"      # Cross-language symmetric (different macro syntax, same effective URL)
+    bid_type_resolution:                 "imp-id-correlation; banner if matching imp had banner, else video"   # Cross-language symmetric
+    batching_strategy:                   "per-pubId grouping (Map<ExtImpAdkernelAdn, List<Imp>>)"             # Cross-language symmetric
+    imp_ext_strip_after_extraction:      true                                                                  # Both sides: imp.Ext = nil / impBuilder.ext(null)
+    response_validation_one_seatbid:     true                                                                  # Both sides require exactly one seatbid; otherwise BadServerResponse / PreBidException
+    site_publisher_and_domain_cleared:   true                                                                  # Both sides clear publisher AND domain on Site
+    app_publisher_only_cleared:          true                                                                  # Both sides clear ONLY publisher on App (domain preserved)
+    banner_format_lift_first:            true                                                                  # Both sides lift Format[0] into W/H and slice
+    headers_x_openrtb_version_2_5:       true                                                                  # Both sides hardcode 2.5
+    currency_propagated:                 java_only                                                             # Java forwards bidResponse.getCur(); Go does not (BidderResponse.Currency left empty)
+    empty_seatbid_tolerance:             java_lenient_go_strict                                                # Java null-checks; Go would error on count != 1
+    url_macro_engine:                    divergent                                                             # Go text/template via macros.ResolveMacros vs Java String.replace (same effective output)
+    uid_macro_syntax:                    divergent                                                             # Go `{UID}` plain vs Java `${UID}` Spring style
+    x_openrtb_version_header_casing:     divergent                                                             # Go lowercase `x-openrtb-version` vs Java mixed-case `X-OpenRTB-Version`
+    severity: warn
+    note: "Three behavioral divergences (currency, empty-seatbid tolerance, header casing) and ten symmetries. Currency is the only material asymmetry — empty-seatbid tolerance and header casing are wire-compatible (HTTP headers are case-insensitive; both null/zero seatbid leads to no bids). The url_macro_engine and uid_macro_syntax divergences are implementation-level, not behavioral."
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - rule-46-naming-normalization-master
+      - rule-46-multi-form-internal-reality
+      - bidder-params-camelcase-filename-java
+      - currency-propagation-java-only
+      - bid-type-imp-id-correlation
+      - per-pubid-grouped-batching
+      - cookie-family-name-camelcase-deliberate
+      - x-openrtb-version-header-casing-divergence
+      - uid-macro-syntax-divergence
+      - independent-bidder-shared-vendor-naming-coincidence
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 5
+  notes: |
+    adkernelAdn (Go) ↔ adkerneladn (Java) is the Phase 5 P3 fixture, the
+    canonical ADR-005 Rule 46 naming-normalization MASTER SAMPLE.
+
+    Empirical state at pinned commits (Go 2fae16f3, Java a1fe64e1):
+
+      - Both sides are INDEPENDENT bidders. No alias relationship; no rename
+        history; no deprecation. The pair shares only a vendor (AdKernel,
+        prebid-dev@adkernel.com) and a name prefix; the schemas (`pubId` vs
+        adkernel's `zoneId`), endpoints (`pbs2.adksrv.com/rtbpub` vs
+        adkernel's `pbs.adksrv.com/hb`), and capabilities differ.
+      - Naming-convention divergence is by design, NOT by historical migration.
+      - Go side: package/file/yaml/struct/registry-key all use camelCase
+        `adkernelAdn`; ONLY the test fixture root dir uses lowercase
+        `adkerneladntest/` (internal Go asymmetry, mirrors cadent pattern).
+      - Java side: package/yaml/Spring property/bean qualifier use lowercase
+        `adkerneladn`; BUT the BIDDER_NAME constant (registered with
+        BidderCatalog), cookie-family-name, params filename, and IT class
+        camelCase argument all use camelCase `adkernelAdn`. Multi-form
+        reality despite ADR-005's simple `lowercase` label.
+
+    Patterns captured for the first time in the corpus:
+
+      - RULE 46 LOWERCASE NAMING NORMALIZATION MASTER SAMPLE — first corpus
+        pair explicitly testing the camelCase ↔ lowercase form pairing.
+        ADR-005's `lowercase` label is directionally correct but understates
+        the multi-form internal reality on both sides.
+      - JAVA BIDDER-PARAMS FILENAME CAMELCASE QUIRK — first corpus example
+        where the Java params filename is camelCase, NOT lowercase. The
+        lowercase variant returns 404. The audit-golden.py
+        cookie_family_name fallback (introduced for emxdigital) handles this
+        case automatically.
+      - INDEPENDENT BIDDERS SHARING NAME PREFIX AND VENDOR — first corpus
+        documentation of the `adkernel` ↔ `adkerneladn` (sibling-but-not-shared)
+        relationship. Demonstrates that vendor-prefix similarity does not imply
+        alias/parent-child relationship.
+      - RULE_46_PAIRS cross-name handling in coverage-report.py — extended
+        `_build_cross_name_lookup` to consult RULE_46_PAIRS in addition to
+        LIFECYCLE_PAIRS, with LIFECYCLE precedence (via setdefault) to avoid
+        conflicts when names appear in both.
+
+    Cross-language behavioral asymmetries:
+
+      (1) Currency propagation: Java forwards `bidResponse.getCur()`; Go
+          drops it. Same pattern as emxdigital — likely a generic Go-side
+          gap rather than a per-bidder bug. Material for high-CPM
+          multi-currency endpoints; immaterial for AdKernel which appears
+          USD-only.
+      (2) Empty-seatbid tolerance: Java null-checks gracefully; Go would
+          error on count-check failure. Wire-compatible (no bids in either
+          case) but semantically divergent.
+      (3) URL macro engine: Go uses text/template (`{{.PublisherID}}`); Java
+          uses String.replace (`{{PublisherID}}`). Same effective URL.
+      (4) uid-macro syntax: Go `{UID}` vs Java `${UID}`. Spring-style
+          divergence consistent across the Java codebase.
+      (5) X-OpenRTB-Version header casing: Go `x-openrtb-version` (lowercase)
+          vs Java `X-OpenRTB-Version` (mixed). HTTP headers case-insensitive
+          over the wire; byte-level comparison would diverge.
+
+    Coverage progression (post-this-commit):
+
+      - Phase 5: 7 of 9 pairs covered (P1 complete + P2 #1–#3 + P3:
+        adkernel-Adn).
+      - Rule 46 pairs covered: 1 of 12 (adkernelAdn↔adkerneladn). The other
+        11 are not yet master-sampled but the pattern is now well-documented.
+      - 36 goldens (18 Go + 18 Java).
+      - Empire parents (ADR-003 deep-dived): 4 of 5 (only nexx360 remaining).
+
+    Phase 5 next: STRETCH — `freewheelssp` (ADR-007 F2 master,
+    multi-endpoint-by-mediatype) AND `thetradedesk` (ADR-007 F4 master,
+    bid-post-processing-macro). Both are stretch goals; corpus-completeness
+    threshold has effectively been met.

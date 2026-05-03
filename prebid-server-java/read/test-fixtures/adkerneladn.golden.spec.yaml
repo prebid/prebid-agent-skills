@@ -1,0 +1,431 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: java-edge-case-19-alternate-naming
+      file: src/main/java/org/prebid/server/bidder/adkerneladn/
+      line: 0
+      summary: "The bidder package contains ONLY one class: `AdkernelAdnBidder.java`. There is NO separate Util/Helper/Model class — Java edge case #19 (alternate naming form: package has only the Bidder-suffix class). Same pattern as emxdigital."
+    - type: rule-46-multi-form-naming
+      file: src/main/resources/bidder-config/adkerneladn.yaml
+      line: 0
+      summary: "ADR-005 RULE_46_PAIRS classifies adkernelAdn↔adkerneladn as `lowercase` (Go-camelCase → Java-lowercase). Empirical reality: Java side uses MULTIPLE forms simultaneously. (1) BIDDER_NAME constant `adkernelAdn` (CAMELCASE — registered with BidderCatalog, matches Go registry key). (2) YAML/Spring property key `adkerneladn` (lowercase — used in @PropertySource and @ConfigurationProperties). (3) Class names PascalCase `AdkernelAdn*`. (4) bidder-params filename is `adkernelAdn.json` (CAMELCASE — same as Go!) — the lowercase variant returns 404. (5) cookie-family-name `adkernelAdn` (camelCase, deliberately matches BIDDER_NAME). The simple `lowercase` ADR label is correct for the package/yaml-key but understates the per-aspect reality."
+
+meta:
+  bidder_name: adkerneladn                    # YAML/Spring key (lowercase). The BIDDER_NAME constant in spring config is `adkernelAdn` (camelCase) — the registry key.
+  is_alias: false
+  alias_of: null
+  parent_aliases: []                          # No aliases declared (distinct from sibling `adkernel.yaml` which has rxnetwork, 152media, xapads)
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: false
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://pbs2.adksrv.com/rtbpub?account={{PublisherID}}"   # Plain placeholder (no Go template dot-syntax). Resolved via String.replace at request-build time. Same URL host/path/query as Go side; macro syntax differs.
+  endpoint_construction:
+    kind: template-macro
+    macros_used: ["PublisherID"]
+    macro_syntax: java-string-replace
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: prebid-dev@adkernel.com
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+    app:
+      mediaTypes:
+        - banner                              # Asymmetric: app banner-only, site banner+video. Cross-language symmetric.
+  geoscope: []
+  gvl_vendor_id: 14
+  user_sync:
+    cookie_family_name: adkernelAdn           # CAMELCASE — deliberately matches BIDDER_NAME constant. Differs from the lowercase YAML/Spring key. Cross-language identity boundary.
+    redirect:
+      url: "https://tag.adkernel.com/syncr?gdpr={{gdpr}}&gdpr_consent={{gdpr_consent}}&us_privacy={{us_privacy}}&r={{redirect_url}}"
+      support_cors: false
+      uid_macro: "${UID}"                    # Spring `${UID}` style — Go uses plain `{UID}`. Cross-language uid-macro syntax divergence.
+  yaml_extra_fields:
+    supported_vendors: null                   # YAML key present but empty (`supported-vendors:` with no value)
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "AdkernelAdn Adapter Params",
+    "description": "A schema which validates params accepted by the AdkernelAdn adapter",
+    "type": "object",
+    "properties": {
+      "pubId": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Publisher Id to use."
+      }
+    },
+    "required": [
+      "pubId"
+    ]
+  }
+bidder_params_sha256: 9e1a7d940698082d00922618710331010c8316735c4da6b71d9a34039e620120
+
+params:
+  schema_interpretation:
+    properties:
+      - name: pubId
+        type: integer
+        minimum: 1
+        description: "Publisher Id to use."
+        notes:
+          - "Required field; minimum 1. Matches Go-side schema semantically. Java POJO uses Integer (boxed) with @JsonProperty(\"pubId\") annotation — distinct from the typical Lombok-only pattern."
+    required_fields:
+      - pubId
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.adkerneladn
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/adkerneladn/ExtImpAdkernelAdn.java
+    type_name: ExtImpAdkernelAdn
+    fields:
+      - name: pubId
+        json_tag: pubId
+        type_native: Integer
+        omitempty: true
+        notes:
+          - "Lombok @Builder + @Value with @JsonProperty(\"pubId\") annotation explicit. Javadoc: `Defines the contract for bidrequest.imp[i].ext.adkernelAdn` — note the camelCase imp.ext key reference."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: AdkernelAdnBidder
+  directory_name: adkerneladn                 # Lowercase Java package directory
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: AdkernelAdnBidder.java          # SOLE class in the package — Java edge case #19 alternate naming
+        role: implementation
+        loc: 280
+  imports:
+    has_jsonutil: false
+    has_template_engine: false                # No template engine; plain String.replace for endpoint URL
+    has_currency_helper: false
+  make_requests:
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-key                       # Map<ExtImpAdkernelAdn, List<Imp>> grouping by full ext POJO (effectively per-pubId since pubId is the sole field). Cross-language symmetric with Go.
+          group_key: imp.ext.bidder.pubId
+    mutation:
+      mutates_request: true
+      go_idiom: null
+      java_idiom: lombok-tobuilder            # impBuilder.toBuilder() chained calls; immutable rebuild pattern
+      entity_strategies:
+        Imp: immutable-rebuild                # impBuilder with ext(null), modified banner/video, secure(...) etc.
+        Banner: immutable-rebuild             # bannerBuilder with W/H from format[0] if missing, format(emptyList()) or format(subList(1, ...))
+        Video: immutable-rebuild
+        Site: immutable-rebuild               # siteBuilder.publisher(null).domain("")
+        App: immutable-rebuild                # appBuilder.publisher(null) only
+        Source: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid       # mapper.mapper().convertValue(imp.getExt(), TypeReference<ExtPrebid<?, ExtImpAdkernelAdn>>{}).getBidder()
+      target_type: ExtImpAdkernelAdn
+      wrapper_type: null
+    endpoint_resolution:
+      kind: template-macro
+      mechanism_go: null
+      mechanism_java: string-replace
+      macros_used: ["PublisherID"]
+    helpers:
+      - name: extractImpExt
+        signature: "private ExtImpAdkernelAdn extractImpExt(Imp imp)"
+      - name: dispatchImpressions
+        signature: "private Map<ExtImpAdkernelAdn, List<Imp>> dispatchImpressions(List<Imp> imps, List<BidderError> errors)"
+      - name: compatImpression
+        signature: "private static Imp compatImpression(Imp imp)"
+      - name: compatBannerImpression
+        signature: "private static Imp.ImpBuilder compatBannerImpression(Imp.ImpBuilder impBuilder, Imp imp)"
+      - name: compatBanner
+        signature: "private static Banner compatBanner(Banner banner)"
+      - name: compatSite
+        signature: "private static Site compatSite(Site site)"
+      - name: compatApp
+        signature: "private static App compatApp(App app)"
+      - name: makeUrl
+        signature: "private String makeUrl(ExtImpAdkernelAdn extImp)"
+      - name: getType
+        signature: "private static BidType getType(String impId, List<Imp> imps)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: imp-id-correlation          # Iterate source imps; if matching imp had banner → BidType.banner, else BidType.video. Cross-language symmetric with Go.
+          hardcoded_value: null
+          fallback_action: classify-as-video
+      default_value: video
+      multi_format_detection: none
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response   # Java forwards `bidResponse.getCur()` per-bid via BidderBid.of(bid, type, bidResponse.getCur()). Go does NOT propagate. Cross-language asymmetry.
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/adkerneladn/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-adkerneladn-bid-request.json
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-adkerneladn-bid-response.json
+        bytes: 0
+        role: bidder-bid-response
+      - filename: test-auction-adkerneladn-request.json
+        bytes: 0
+        role: auction-request
+      - filename: test-auction-adkerneladn-response.json
+        bytes: 0
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: 453
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: AdkernelAdnTest     # PascalCase — preserves the inner Adn capital. Distinct from `EmxdigitalTest` (which loses the capital). Naming-case divergence patterns vary across Java IT classes.
+  integration_test_pattern: 4-file-split
+
+aliases: []
+
+spring_config:
+  factory_class: AdkernelAdnConfiguration
+  factory_method: adkerneladnBidderDeps
+  property_source_path: classpath:/bidder-config/adkerneladn.yaml
+  bidder_creator_lambda: |
+    config -> new AdkernelAdnBidder(config.getEndpoint(), mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: adkerneladnConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.adkerneladn\")"
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+
+bidder_class:
+  name: AdkernelAdnBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointUrl
+        type: String
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+    arity: 2                                  # 2-arity (no currency service injection — same as emxdigital)
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: BIDDER_NAME                       # camelCase value `adkernelAdn` — registers the camelCase form with BidderCatalog. Note: this lives in AdkernelAdnConfiguration.java, not the Bidder class itself.
+      type: String
+      value: "adkernelAdn"
+    - name: URL_PUBLISHER_ID_MACRO
+      type: String
+      value: "{{PublisherID}}"
+    - name: ADKERNELADN_EXT_TYPE_REFERENCE
+      type: TypeReference
+      value: "TypeReference<ExtPrebid<?, ExtImpAdkernelAdn>>"
+  helper_classes_co_located: []                # No co-located helpers — sole file in package
+  helper_classes_in_proto:
+    - ExtImpAdkernelAdn
+
+code_naming: null
+
+lifecycle:
+  rename: null                                # Pure Rule 46 naming-convention case. No rename history, no deprecation, no alias. The Java codebase uses lowercase YAML/Spring keys but registers the camelCase BIDDER_NAME with BidderCatalog — naming-convention divergence by design, not by historical migration.
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-builder
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+    - name: X-OpenRTB-Version                 # Mixed-case via HttpUtil.X_OPENRTB_VERSION_HEADER constant. Go uses lowercase `x-openrtb-version`. Wire-level case-insensitive but byte comparison would diverge.
+      value: "2.5"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: rule-46-multi-form-naming
+    file: src/main/resources/bidder-config/adkerneladn.yaml
+    summary: "ADR-005 RULE_46_PAIRS classifies adkernelAdn↔adkerneladn as `lowercase`. Java reality is multi-form: BIDDER_NAME constant `adkernelAdn` (camelCase, registers with BidderCatalog matching Go); YAML/Spring property key `adkerneladn` (lowercase); class names PascalCase `AdkernelAdn*`; bidder-params filename `adkernelAdn.json` (CAMELCASE — lowercase variant 404s); cookie-family-name `adkernelAdn` (camelCase). Spring property naming convention diverges from public bidder-name contract."
+    edge_case_taxon: yaml-field-name-typo
+  - id: bidder-params-camelcase-filename
+    file: src/main/resources/static/bidder-params/adkernelAdn.json
+    summary: "Java bidder-params filename is `adkernelAdn.json` (CAMELCASE) — NOT lowercase. The lowercase variant `adkerneladn.json` returns 404. This breaks the simple \"Java uses lowercase\" assumption. The audit-golden.py cookie_family_name fallback handles this case (cookie-family-name=adkernelAdn matches the actual params filename)."
+    edge_case_taxon: yaml-field-name-typo
+  - id: java-edge-case-19-alternate-naming
+    file: src/main/java/org/prebid/server/bidder/adkerneladn/
+    summary: "Bidder package contains ONLY `AdkernelAdnBidder.java`. No `AdkernelAdnUtil`, no separate request/response model classes. Java edge case #19 alternate naming. Same pattern as emxdigital."
+    edge_case_taxon: yaml-field-name-typo
+  - id: per-pubid-grouped-batching
+    file: src/main/java/org/prebid/server/bidder/adkerneladn/AdkernelAdnBidder.java
+    summary: "MakeHttpRequests groups imps by `Map<ExtImpAdkernelAdn, List<Imp>>` (effectively per-pubId since pubId is the sole field). One outbound HTTP request per group. Cross-language symmetric with Go's `dispatchImpressions` returning the same map shape."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: imp-ext-strip-after-extraction
+    file: src/main/java/org/prebid/server/bidder/adkerneladn/AdkernelAdnBidder.java
+    summary: "After extracting ExtImpAdkernelAdn, adapter sets `impBuilder.ext(null)` to suppress forwarding the prebid wrapper to AdKernel's platform. Cross-language symmetric — Go does `imp.Ext = nil`."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: response-validation-exactly-one-seatbid
+    file: src/main/java/org/prebid/server/bidder/adkerneladn/AdkernelAdnBidder.java
+    summary: "extractBids requires `bidResponse.getSeatbid().size() == 1` exactly. More than one OR zero seatbids → PreBidException. Cross-language symmetric on Go side."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: empty-seatbid-tolerance-asymmetry
+    file: src/main/java/org/prebid/server/bidder/adkerneladn/AdkernelAdnBidder.java
+    summary: "Java tolerates `bidResponse == null || bidResponse.getSeatbid() == null` (null-check returns empty list). Go would error on count-check failure. Subtle empty-handling divergence."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: currency-propagation-from-response
+    file: src/main/java/org/prebid/server/bidder/adkerneladn/AdkernelAdnBidder.java
+    summary: "extractBids forwards `bidResponse.getCur()` per-bid via `BidderBid.of(bid, type, bidResponse.getCur())`. Go side does NOT propagate (BidderResponse.Currency left empty). Cross-language behavioral asymmetry — Java-only currency propagation. Same pattern as emxdigital."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: bid-type-imp-id-correlation-default-video
+    file: src/main/java/org/prebid/server/bidder/adkerneladn/AdkernelAdnBidder.java
+    summary: "getType(impId, imps) iterates source imps. Match has banner → BidType.banner. Otherwise → BidType.video (HARDCODED fallback). NO bid.MType lookup, NO native classification. Cross-language symmetric. Note: Go has a native-impression supplemental fixture, but native bids would be miscategorized as video by this method chain."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: cookie-family-name-camelcase-deliberate
+    file: src/main/resources/bidder-config/adkerneladn.yaml
+    line: 14
+    summary: "`cookie-family-name: adkernelAdn` uses CAMELCASE deliberately — matches BIDDER_NAME constant and Go's registry key. Distinct from the lowercase YAML/Spring property key. Cross-language identity boundary, leveraged by audit-golden.py's cookie_family_name fallback for the params filename mismatch."
+    edge_case_taxon: yaml-field-name-typo
+  - id: uid-macro-spring-style
+    file: src/main/resources/bidder-config/adkerneladn.yaml
+    line: 18
+    summary: "`uid-macro: '${UID}'` uses Spring `${...}` syntax. Go side uses plain `{UID}`. Cross-language uid-macro syntax divergence (consistent across the Java codebase)."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/adkernelAdn/
+    package_name: adkernelAdn
+    bidder_constant: openrtb_ext.BidderAdkernelAdn
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/adkerneladn/
+    bidder_class: AdkernelAdnBidder
+    config_class: AdkernelAdnConfiguration
+    yaml_path: src/main/resources/bidder-config/adkerneladn.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/adkerneladn/
+  port_concerns:
+    aliases_inverted: false                   # No aliases on either side
+    yaml_unification: false
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - rule-46-naming-normalization-master
+      - rule-46-multi-form-internal
+      - currency-propagation-java-only
+      - bid-type-imp-id-correlation
+      - per-pubid-grouped-batching
+      - bidder-params-camelcase-filename
+      - x-openrtb-version-header-casing
+      - cookie-family-name-camelcase-deliberate
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "Tri-form Java naming: BIDDER_NAME constant `adkernelAdn` (camelCase, registers with BidderCatalog matching Go); YAML/Spring property key `adkerneladn` (lowercase); class names PascalCase `AdkernelAdn*`. Spring property naming convention diverges from public bidder-name contract."
+    - "Bidder-params filename `adkernelAdn.json` (CAMELCASE — lowercase variant 404s). The audit-golden.py cookie_family_name fallback handles this case automatically (cookie-family-name=adkernelAdn matches the actual params filename)."
+    - "cookie-family-name `adkernelAdn` (camelCase) deliberately matches BIDDER_NAME, not the lowercase YAML key. Cross-language identity boundary leveraged by the audit fallback."
+    - "Currency: Java forwards `bidResponse.getCur()` per-bid; Go does NOT propagate. Cross-language asymmetry — Java-only currency propagation (same pattern as emxdigital)."
+    - "Constructor 2-arity (endpointUrl, mapper) — no currency service injection."
+    - "Empty-seatbid tolerance: Java null-checks before iteration; Go would error. Subtle empty-handling divergence."
+    - "ExtImpAdkernelAdn uses Lombok @Builder + @Value with EXPLICIT @JsonProperty(\"pubId\") annotation — distinct from the typical Lombok-only pattern (where @Value defaults to Jackson PROPERTY_NAMING_STRATEGY)."
+    - "`uid-macro: '${UID}'` uses Spring placeholder syntax. Go uses plain `{UID}`. Cross-language uid-macro syntax divergence (consistent across the Java codebase)."
+    - "X-OpenRTB-Version header is mixed-case via HttpUtil.X_OPENRTB_VERSION_HEADER constant. Go uses lowercase `x-openrtb-version`. Wire-level case-insensitive but byte comparison would diverge."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

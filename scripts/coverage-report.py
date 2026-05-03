@@ -210,15 +210,24 @@ def extract_mentioned_bidders(text: str) -> set[str]:
 # ─── Per-section computations ─────────────────────────────────────────────
 
 def _build_cross_name_lookup() -> dict[str, tuple[str, str]]:
-    """Cross-name pairs from LIFECYCLE_PAIRS where Go name != Java name.
+    """Cross-name pairs from LIFECYCLE_PAIRS and RULE_46_PAIRS where Go ≠ Java.
     Both names map to the same (go_name, java_name) tuple so Phase 5 entries
-    keyed by either side resolve correctly."""
+    keyed by either side resolve correctly. LIFECYCLE entries take precedence
+    when a name appears in both (e.g., `emxdigital` is in LIFECYCLE_PAIRS as
+    java side of cadent pair AND in RULE_46_PAIRS as java side of emx_digital
+    pair — LIFECYCLE wins because lifecycle pairs include rename/parent-child
+    relationships, while Rule 46 pairs are pure naming normalizations)."""
     lookup = {}
     for entry in LIFECYCLE_PAIRS:
         go, java = entry[0], entry[1]
         if go != java:
             lookup[go] = (go, java)
             lookup[java] = (go, java)
+    for entry in RULE_46_PAIRS:
+        go, java = entry[0], entry[1]
+        if go != java:
+            lookup.setdefault(go, (go, java))
+            lookup.setdefault(java, (go, java))
     return lookup
 
 
