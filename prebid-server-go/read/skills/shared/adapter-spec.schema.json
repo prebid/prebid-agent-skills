@@ -68,25 +68,15 @@
       "items": { "$ref": "#/$defs/Alias" },
       "description": "Rich alias metadata block. Per-alias entry on Java goldens; can be empty list on Go goldens that don't list aliases."
     },
-    "spring_config": {
-      "type": ["object", "null"],
-      "additionalProperties": true,
-      "description": "Java-only Spring DI block. Phase 2.0/2.1 declares as open-map; Phase 2.4 will add a proper $defs/SpringConfig with factory_class, factory_method, property_source_path, bidder_creator_lambda, configuration_properties_class.extra_fields[], bean_dependencies[]."
-    },
-    "bidder_class": {
-      "type": ["object", "null"],
-      "additionalProperties": true,
-      "description": "Java-only class hierarchy block. Phase 2.0/2.1 open-map; Phase 2.4 adds $defs/BidderClass with name, parameterized_request_type, parameterized_response_type, override_methods, constructor.parameters[], static_fields[], helper_classes_co_located[], helper_classes_in_proto[]."
-    },
+    "spring_config": { "$ref": "#/$defs/SpringConfig" },
+    "bidder_class": { "$ref": "#/$defs/BidderClass" },
     "code_naming": {
-      "type": ["object", "null"],
-      "additionalProperties": true,
-      "description": "ADR-001 D1: top-level Java-only block (NOT nested under code.naming). Phase 2.0/2.1 open-map; Phase 2.4 adds $defs/CodeNaming with class_name_root, yaml_name, preserves_acronym_case, notes."
+      "$ref": "#/$defs/CodeNaming",
+      "description": "ADR-001 D1: top-level Java-only block (NOT nested under code.naming)."
     },
     "lifecycle": {
-      "type": ["object", "null"],
-      "additionalProperties": true,
-      "description": "ADR-001 D5: top-level lifecycle.rename block on post-rename specs. Phase 2.0/2.1 open-map; Phase 2.4 adds $defs/Lifecycle with full lifecycle.rename.{old_name, new_name, subtype, alias_back, alias_back_form, package_moves[], fixture_dir_moves[], yaml_deletes[], yaml_adds[], merged_at, release}."
+      "$ref": "#/$defs/Lifecycle",
+      "description": "ADR-001 D5: top-level lifecycle block. Currently only `rename` is emitted; future lifecycle event kinds (merge, split, etc.) would slot in alongside."
     },
     "iab_category_storage": { "$ref": "#/$defs/IabCategoryStorage" },
     "ext_pojo_construction": { "$ref": "#/$defs/ExtPojoConstruction" },
@@ -758,6 +748,221 @@
         "summary": { "type": "string" },
         "edge_case_taxon": { "type": ["string", "null"] },
         "rationale": { "type": ["string", "null"] }
+      }
+    },
+
+    "SpringConfig": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; Java-only Spring DI block.",
+      "properties": {
+        "factory_class": { "type": "string" },
+        "factory_method": { "type": "string" },
+        "property_source_path": { "type": ["string", "null"] },
+        "bidder_creator_lambda": { "type": ["string", "null"] },
+        "configuration_properties_class": {
+          "description": "Either a class name (string, when bidder needs no structured properties), null (no SCP class), or a structured ConfigurationPropertiesClass.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" },
+            { "$ref": "#/$defs/ConfigurationPropertiesClass" }
+          ]
+        },
+        "bean_dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BeanDependency" }
+        },
+        "factory_class_package": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertiesClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "extends": { "type": ["string", "null"] },
+        "visibility": { "type": ["string", "null"] },
+        "declared_in": { "type": ["string", "null"] },
+        "extra_fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConfigurationPropertyField" }
+        },
+        "nested_classes": {
+          "type": ["array", "null"],
+          "items": { "$ref": "#/$defs/ConfigurationPropertyNestedClass" }
+        },
+        "lombok_annotations": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertyField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "validations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "default_value": { "type": ["string", "null"] },
+        "yaml_field": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertyNestedClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Nested static class within a ConfigurationPropertiesClass. `visibility` (rubicon) and `access` (huaweiads) are golden-author variants for the same concept; both admitted. Same for `annotations` vs `lombok_annotations`.",
+      "properties": {
+        "name": { "type": "string" },
+        "visibility": { "type": ["string", "null"] },
+        "access": { "type": ["string", "null"] },
+        "annotations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "lombok_annotations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConfigurationPropertyNestedClassField" }
+        },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertyNestedClassField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "validations": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "BeanDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" },
+        "type": { "type": "string" },
+        "validations": { "type": ["array", "null"] }
+      }
+    },
+
+    "BidderClass": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; Java-only class hierarchy block.",
+      "properties": {
+        "name": { "type": "string" },
+        "parameterized_request_type": { "type": ["string", "null"] },
+        "parameterized_response_type": { "type": ["string", "null"] },
+        "override_methods": { "type": ["array", "null"], "items": { "type": "string" } },
+        "constructor": { "$ref": "#/$defs/BidderClassConstructor" },
+        "static_fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BidderClassStaticField" }
+        },
+        "helper_classes_co_located": { "type": ["array", "null"], "items": { "type": "string" } },
+        "helper_classes_in_proto": { "type": ["array", "null"], "items": { "type": "string" } },
+        "helper_classes_in_model": { "type": ["array", "null"], "items": { "type": "string" } },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "BidderClassConstructor": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "arity": { "type": "integer" },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BidderClassConstructorParameter" }
+        }
+      }
+    },
+
+    "BidderClassConstructorParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "source": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
+        "annotations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "BidderClassStaticField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "value": { "type": ["string", "integer", "null"] }
+      }
+    },
+
+    "CodeNaming": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b.",
+      "properties": {
+        "class_name_root": { "type": "string" },
+        "yaml_name": { "type": "string" },
+        "preserves_acronym_case": { "type": "boolean" },
+        "identifier_workaround": { "type": ["string", "null"] },
+        "package_name": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "Lifecycle": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b. Currently only `rename` event kind is emitted; round-1 audit confirmed no other event kinds in corpus.",
+      "properties": {
+        "rename": { "$ref": "#/$defs/LifecycleRename" }
+      }
+    },
+
+    "LifecycleRename": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "ADR-001 D5: lifecycle rename metadata.",
+      "properties": {
+        "old_name": { "type": "string" },
+        "new_name": { "type": "string" },
+        "subtype": { "type": ["string", "null"] },
+        "release": { "type": ["string", "null"] },
+        "merged_at": { "type": ["string", "null"] },
+        "yaml_deletes": { "type": "array", "items": { "type": "string" } },
+        "yaml_adds": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } },
+        "alias_back": { "type": ["boolean", "null"] },
+        "alias_back_form": { "type": ["string", "null"] },
+        "alias_back_yaml_path": { "type": ["string", "null"] },
+        "alias_back_yaml_line": { "type": ["integer", "null"] },
+        "pr": { "type": ["string", "null"] },
+        "package_moves": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LifecycleMove" }
+        },
+        "fixture_dir_moves": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LifecycleMove" }
+        }
+      }
+    },
+
+    "LifecycleMove": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" }
       }
     },
 
