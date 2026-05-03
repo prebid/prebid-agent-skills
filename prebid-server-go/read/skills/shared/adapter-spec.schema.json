@@ -107,10 +107,12 @@
     {
       "if": { "properties": { "source_language": { "const": "go" } }, "required": ["source_language"] },
       "then": {
-        "description": "Go-source spec invariants per ADR-001: Java-only blocks must be null. spring_config and bidder_class are wholly Java-specific (Spring DI / class hierarchy). lifecycle.rename and code_naming are bilateral — Go side records them when present (e.g., elementaltv-Go has lifecycle.rename for the Adoppler→ElementalTV rename).",
+        "description": "Go-source spec invariants per ADR-001: Java-only blocks must be null. spring_config and bidder_class are wholly Java-specific (Spring DI / class hierarchy). code_naming and registry are also Java-only — Go corpus walk confirms zero non-null emissions for either. lifecycle.rename remains bilateral (e.g., elementaltv-Go has lifecycle.rename for the Adoppler→ElementalTV rename).",
         "properties": {
           "spring_config": { "type": "null" },
-          "bidder_class": { "type": "null" }
+          "bidder_class": { "type": "null" },
+          "code_naming": { "type": "null" },
+          "registry": { "type": "null" }
         }
       }
     },
@@ -128,9 +130,11 @@
             }
           },
           {
-            "description": "Alias Java spec (meta.is_alias=true): spring_config / bidder_class are inherited from parent and may be null.",
+            "description": "Alias Java spec (meta.is_alias=true): spring_config and bidder_class MUST be null (inherited from parent; never emitted on the alias spec itself). 152media-Java is the canonical example.",
             "properties": {
-              "meta": { "properties": { "is_alias": { "const": true } } }
+              "meta": { "properties": { "is_alias": { "const": true } } },
+              "spring_config": { "type": "null" },
+              "bidder_class": { "type": "null" }
             }
           }
         ]

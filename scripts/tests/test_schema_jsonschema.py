@@ -167,13 +167,18 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
             self.fail("\n".join(lines))
 
     def test_go_specs_have_null_java_only_blocks(self):
-        """if/then/else discrimination: Go-source specs must null spring_config + bidder_class."""
+        """if/then/else discrimination: Go-source specs must null all Java-only blocks.
+
+        Wave 11b B4 C5 expanded the invariant from {spring_config, bidder_class}
+        to also include {code_naming, registry}. Corpus walk confirmed all 21
+        Go specs emit null for all four fields; the schema's allOf now enforces.
+        """
         violations = []
         for p in _discover_goldens():
             if "prebid-server-go" not in str(p):
                 continue
             golden = _load_golden(str(p.relative_to(REPO_ROOT)))
-            for field in ("spring_config", "bidder_class"):
+            for field in ("spring_config", "bidder_class", "code_naming", "registry"):
                 value = golden.get(field)
                 if value is not None:
                     violations.append(f"{p.name} has non-null {field}")
@@ -182,6 +187,58 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
             "Go-source goldens must null Java-only blocks (ADR-001):\n"
             + "\n".join(f"  {v}" for v in violations),
         )
+
+    def test_java_alias_specs_null_inheritable_blocks(self):
+        """Wave 11b B4 C5: Java alias specs (meta.is_alias=true) must null
+        spring_config and bidder_class — those fields are inherited from the
+        parent and are never emitted on the alias spec itself. 152media-Java
+        is the canonical alias example."""
+        violations = []
+        for p in _discover_goldens():
+            if "prebid-server-java" not in str(p):
+                continue
+            golden = _load_golden(str(p.relative_to(REPO_ROOT)))
+            meta = golden.get("meta") or {}
+            if not meta.get("is_alias"):
+                continue
+            for field in ("spring_config", "bidder_class"):
+                value = golden.get(field)
+                if value is not None:
+                    violations.append(f"{p.name} has non-null {field} on alias spec")
+        self.assertEqual(
+            violations, [],
+            "Java alias specs must null spring_config + bidder_class:\n"
+            + "\n".join(f"  {v}" for v in violations),
+        )
+
+    def test_if_then_invariants_reject_synthetic_violations(self):
+        """Wave 11b B4 C5 enforcement: schema's allOf if/then clauses MUST
+        reject synthetic violations (not just observe passive corpus
+        compliance). Injects four bad-data variants and asserts each fails
+        validation."""
+        from copy import deepcopy
+        from jsonschema import Draft202012Validator
+        with open(SCHEMA_PATH) as f:
+            schema = json.load(f)
+        validator = Draft202012Validator(schema)
+
+        # Load a clean Go golden as baseline
+        go_baseline = _load_golden("prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml")
+        # Load a clean Java alias golden as baseline
+        alias_baseline = _load_golden("prebid-server-java/read/test-fixtures/152media.golden.spec.yaml")
+
+        cases = [
+            ("Go spec with non-null code_naming", deepcopy(go_baseline) | {"code_naming": {"class_name_root": "Kobler"}}),
+            ("Go spec with non-null registry", deepcopy(go_baseline) | {"registry": {"test_application_properties": {}}}),
+            ("Java alias spec with non-null spring_config", deepcopy(alias_baseline) | {"spring_config": {"factory_class": "Foo"}}),
+            ("Java alias spec with non-null bidder_class", deepcopy(alias_baseline) | {"bidder_class": {"name": "Foo"}}),
+        ]
+        for label, bad_spec in cases:
+            errors = list(validator.iter_errors(bad_spec))
+            self.assertGreater(
+                len(errors), 0,
+                f"Schema FAILED to reject: {label} — if/then enforcement is broken",
+            )
 
     def test_no_truly_invented_keys_outside_open_maps(self):
         """Phase 2.3 phantom-path detector for goldens — DOCUMENTED GAPS.
