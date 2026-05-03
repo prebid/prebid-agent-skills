@@ -1,0 +1,415 @@
+dual_spec_assertion_version: 1
+bidder_name: thetradedesk                      # Phase 5 stretch #2 — matches PHASE_5_PAIRS in scripts/coverage-report.py.
+go_spec: prebid-server-go/read/test-fixtures/thetradedesk.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/thetradedesk.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+cross_name_pair: false                          # Same canonical name on both sides.
+
+assertions:
+  bidder_params_sha256:
+    go:   769d92e699416dc3e30f16c8383f9c21dfb568adb323b9f9d953fe6968818845   # 538 bytes (Go uses TABS for indent)
+    java: bfcf096812d26af3b4c039c31182862277989f965f0c26bf71afe286996e72b9   # 571 bytes (Java uses 2-space indent)
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only-tabs-vs-spaces
+    divergence_summary: "Same JSON Schema content (same $schema, properties, required, types, minLength). Go uses TABS for indent; Java uses 2-space. Otherwise identical content. Both files have a `\"type\":\"string\"` (no space after colon) on supplySourceId only — this typo is preserved verbatim cross-language. Rule 38 byte-divergence WARN; not a port-fidelity violation in the strict semantic sense."
+    severity: warn
+
+  bidder_info_capabilities:
+    go:   { site: [banner, video, native], app: [banner, video, native] }
+    java: { site: [banner, video, native], app: [banner, video, native] }
+    equivalent: true
+    severity: pass
+
+  bidder_info_endpoint:
+    go:   "https://direct.adsrvr.org/bid/bidder/{{.SupplyId}}"
+    java: "https://direct.adsrvr.org/bid/bidder/{{SupplyId}}"
+    equivalent_modulo_macro_syntax: true
+    severity: warn
+    note: "Same URL host/path/query; macro syntax differs. Go uses Go-template form `{{.SupplyId}}` (resolved via macros.ResolveMacros with EndpointTemplateParams.SupplyId). Java uses plain placeholder `{{SupplyId}}` (resolved via String.replace). Java additionally URL-encodes the substituted value via HttpUtil.encodeUrl while Go uses raw substitution; for lowercase-only supplyIds (the regex constraint) URL-encoding is a no-op so resolved URLs are byte-equal."
+
+  bidder_info_endpoint_compression:
+    go: null
+    java: null
+    equivalent: true
+    severity: pass
+
+  bidder_info_modifying_vast_xml_allowed:
+    go: false
+    java: false
+    equivalent: true
+    severity: pass
+
+  bidder_info_maintainer:
+    go: Prebid-Maintainers@thetradedesk.com
+    java: Prebid-Maintainers@thetradedesk.com
+    equivalent: true
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 21
+    java: 21
+    equivalent: true
+    severity: pass
+
+  bidder_info_default_enabled:
+    go:   true
+    java: true
+    rule_45_match: n/a                          # No disabled-by-default; ttd alias also defaults enabled
+    severity: pass
+
+  usersync_iframe_url:
+    go:   null                                  # Go YAML declares `userSync.supports: [redirect, iframe]` only — NO actual URL
+    java: null                                  # Java YAML has no usersync block
+    equivalent: true
+    severity: pass
+    note: "Both sides defer user-sync URL configuration to the host. Embedded comment in Go YAML: 'TheTradeDesk supports user syncing, but requires configuration by the host. Contact a technical account manager...'"
+
+  bidder_info_gpp_supported:
+    go:   true                                  # Go declares `openrtb.gpp-supported: true` in YAML
+    java: null                                  # Java handles GPP centrally per OrtbVersion; no per-bidder YAML declaration
+    equivalent_runtime_behavior: true           # Both sides actually do propagate GPP at runtime
+    severity: warn
+    note: "YAML declaration divergence — Go declares per-bidder, Java handles centrally. Both sides do propagate GPP at runtime; the YAML declarations are the divergence, not the behavior."
+
+  params_schema_interpretation:
+    go_required_fields: [publisherId]
+    java_required_fields: [publisherId]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [publisherId, supplySourceId]
+    java_properties: [publisherId, supplySourceId]
+    equivalent: true
+    severity: pass
+
+  alias_graph:
+    go_aliases: []
+    java_aliases:
+      - name: ttd
+        config_form: tilde_inherit
+        enabled: true                            # Default-enabled (no explicit `enabled: false`)
+    aliases_match: false
+    rule_33_inversion: true                      # Java has ttd alias; Go has no ttd registration whatsoever
+    rule_44_empire_flavor: null
+    rule_45_match: n/a
+    rule_46_match: false
+    severity: warn
+    note: |
+      Java declares `aliases.ttd: ~` tilde-stub alias of thetradedesk. Go has
+      no corresponding `static/bidder-info/ttd.yaml` entry. Hosts using
+      `bidders=ttd` succeed against Java but receive an unknown-bidder
+      error against Go. Rule-33-style asymmetric alias declaration —
+      Java parent→child block; Go would need a separate aliasOf-child YAML
+      which doesn't exist.
+
+      Note: this is a Java-only abbreviation alias for the bidder name
+      ("ttd" abbreviates "thetradedesk"). Distinct from the freewheelssp/
+      fwssp pattern (where Go has fwssp as separate top-level package and
+      Java as YAML alias) — here, Go has nothing on its side.
+
+  bid_type_resolution:
+    go:
+      method: bid_mtype_only
+      audio_supported: false
+      error_on_unrecognized: terminal_aborts_makebids
+      error_message_template: "unsupported mtype: %d"
+    java:
+      method: bid_mtype_only
+      audio_supported: false
+      error_on_unrecognized: per_bid_filter
+      error_message_template: "could not define media type for impression: <impid>"
+    severity: warn
+    note: |
+      Both sides resolve bid type from bid.mtype only (1=banner, 2=video,
+      4=native), with audio (3) NOT supported. Material asymmetries:
+
+      (1) Error semantics: Go aborts the entire MakeBids on first
+          unrecognized mtype, dropping all bids in the response. Java
+          filters the bad bid via per-bid error append and continues
+          processing. Different observable behavior on partial-bad
+          responses.
+
+      (2) Error message wording: Go reports the integer mtype value
+          (`unsupported mtype: 5`); Java reports the bid's impid
+          (`could not define media type for impression: bid-123`).
+          Different debugging information.
+
+  currency_propagation:
+    go: response_level_passthrough               # bidderResponse.Currency = bidResponse.Cur
+    java: per_bid_passthrough                    # BidderBid.of(bid, type, bidResponse.getCur()) per bid
+    semantically_equivalent: true
+    severity: pass
+    note: "Functionally equivalent for single-currency responses. Java's per-bid attachment is more flexible if multi-currency seats appear, but TheTradeDesk responses appear to be single-currency."
+
+  bid_post_processing:
+    pattern_taxon: bid-post-processing-macro
+    pattern_flavor: single-macro-three-field
+    adr_007_f4_canonical_master_sample: true
+    go:
+      mechanism: resolveAuctionPriceMacros(bid *openrtb2.Bid)
+      target_fields: [bid.NURL, bid.AdM, bid.BURL]
+      macros: ["${AUCTION_PRICE}"]
+      number_formatting: "strconv.FormatFloat(bid.Price, 'f', -1, 64)"
+      replace_function: strings.ReplaceAll
+      mutation_idiom: in-place-pointer
+      order_vs_bidtype: before
+      null_price_handling: "implicit-float64-zero-value"
+    java:
+      mechanism: resolvePriceMacros(Bid bid)
+      target_fields: [bid.nurl, bid.adm, bid.burl]
+      macros: ["${AUCTION_PRICE}"]
+      number_formatting: "BigDecimal.toPlainString() (or '0' if null)"
+      replace_function: org.apache.commons.lang3.StringUtils.replace
+      mutation_idiom: immutable-rebuild-via-toBuilder
+      order_vs_bidtype: after
+      null_price_handling: "explicit-null-check"
+    semantically_equivalent: true
+    divergence_kind: number-formatting-and-mutation-idiom-and-order
+    severity: warn
+    note: |
+      ADR-007 F4 CONFIRMED with high confidence. thetradedesk is the
+      canonical comprehensive master sample for bid-post-processing-macro.
+
+      Both sides implement single-macro-three-field substitution: only
+      `${AUCTION_PRICE}` substituted, only into NURL+AdM+BURL (LURL
+      intentionally not touched). Cross-language identical on:
+        - Macro string `${AUCTION_PRICE}`
+        - Three target fields (NURL/AdM/BURL)
+        - Replace-all semantics (every occurrence)
+        - Raw substitution (NOT URL-encoded)
+        - Source value: bid.Price
+
+      Cross-language divergent on:
+        - Number formatting: Go `'f' -1 64` drops trailing zeros, ~16 sig
+          digits precision; Java `BigDecimal.toPlainString()` preserves
+          source scale, arbitrary precision. For typical 2-3 decimal
+          prices, semantically equivalent. For high-precision (>15 sig
+          digits like `123456789.123456789`), Go and Java produce
+          DIFFERENT result strings.
+        - Mutation idiom: Go in-place via pointer; Java immutable rebuild
+          via Lombok toBuilder. Rule 5 idiom divergence.
+        - Order vs bid-type resolution: Go runs macros BEFORE getBidType;
+          Java runs AFTER. Functionally equivalent because Go aborts on
+          bad mtype anyway, but the ordering is a Rule 5 mutation-flow
+          asymmetry.
+
+      Test coverage: Go has 1 dedicated supplemental fixture
+      `auction-price-macro-replacement.json` (self-documenting marker).
+      Java has 8 dedicated unit tests covering null-price, zero-price,
+      multi-occurrence, high-precision (`123456789.123456789`),
+      nurl-only, adm-only, burl-only, no-macro-present cases.
+
+      Compared to adverxo and vungle: those bidders have F4 as side-quirks
+      (adverxo's primary feature is empire-flavor registration-only;
+      vungle's primary feature is phantom-rename + buyer-uid promotion).
+      For thetradedesk, F4 IS the bidder's identity — the dedicated helper
+      function, dedicated test fixture, and dedicated 8-test Java test
+      suite all foreground the macro-substitution mechanism.
+
+  mutation_strategy:
+    go: shallow_copy_pointer_inplace
+    java: lombok_tobuilder_immutable_rebuild
+    rule_5_idiom_divergence: true
+    severity: pass
+
+  imp_ext_handling:
+    go: read_only
+    java: read_only
+    equivalent: true
+    severity: pass
+
+  headers:
+    go:   ["Content-Type: application/json;charset=utf-8", "Accept: application/json"]
+    java: ["Content-Type: application/json;charset=utf-8", "Accept: application/json"]
+    equivalent: true
+    severity: pass
+
+  batching:
+    go: single_request                            # All imps in one HTTP request body
+    java: single_request
+    equivalent: true
+    severity: pass
+
+  supplyid_validation_regex:
+    go_pattern: "([a-z]+)$"
+    go_match_function: "regexp.Match (substring match — returns true if pattern matches anywhere in input)"
+    java_pattern: "([a-z]+)$"
+    java_match_function: "Pattern.matcher(input).matches() (FULL-input match — returns true only if whole input matches)"
+    divergence_kind: regex-match-semantics
+    severity: warn
+    note: |
+      Same regex pattern string but different match semantics. For input
+      `"abcdef"` (all lowercase), both pass. For input `"abc123"` (mixed),
+      Go's substring search would find no `[a-z]+$` since `$` anchors end
+      and trailing chars are digits — both reject. For input `"ABCabc"`
+      (mixed-case with trailing lowercase), Go's `regexp.Match` returns
+      true (matches trailing `abc`); Java's `matches()` returns false
+      (whole input must match). Real cross-language correctness divergence
+      with potentially material implications for hosts configuring
+      ExtraAdapterInfo / extra-info.supplyId with mixed content.
+
+  supplyid_validation_error_message:
+    go: "ExtraAdapterInfo must be a simple string provided by TheTradeDesk"
+    java: "SupplyId must be a simple string provided by TheTradeDesk"
+    divergence_kind: error-message-style-naming-asymmetry
+    severity: warn
+    note: "Same error template structure; first word divergent. Go uses host-config-field name `ExtraAdapterInfo` (the config.go field). Java uses bidder-concept name `SupplyId` (matches the static SUPPLY_ID_MACRO and the typed extra-info.supplyId Spring property). Naming-convention asymmetry — Java picks bidder-facing concept, Go picks host-config-facing field name."
+
+  supplyid_config_field:
+    go: "config.ExtraAdapterInfo (plain string)"
+    java: "config.getExtraInfo().getSupplyId() (typed inner class)"
+    severity: pass
+    note: "Different per-language config conventions. Java's typed ExtraInfo inner class is more structured. Same logical input."
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - bid-post-processing-macro              # F4 master sample — CONFIRMED
+      - mutation-idiom-tobuilder               # Rule 5
+      - macro-form-divergence                  # Rule 11 (endpoint URL macro syntax)
+      - alias-presence-divergence              # Rule 33-style ttd asymmetry (Java-only)
+      - error-message-style                    # Rule 41 (ExtraAdapterInfo vs SupplyId; mtype error wording)
+      - regex-match-semantics-divergence       # Go substring vs Java full-input match
+      - number-formatting-precision-divergence # strconv.FormatFloat 'f' -1 vs BigDecimal.toPlainString
+      - bid-type-error-handling-divergence     # Go terminal vs Java per-bid filter
+      - cross-language-byte-divergence         # Rule 38 (tabs vs 2-space)
+      - gpp-supported-yaml-declaration-go-only
+      - typed-extra-info-supplyid-java
+      - macro-replace-order-divergence
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 8
+  notes: |
+    thetradedesk is the canonical Phase 5 stretch #2 fixture for ADR-007 F4
+    `bid-post-processing-macro`. UNLIKE the F2 precedent (freewheelssp
+    contradicted ADR-007 F2's multi-endpoint-by-mediatype claim), F4 is
+    EMPIRICALLY CONFIRMED with high confidence. thetradedesk IS the
+    canonical comprehensive master sample.
+
+    Empirical state at pinned commits (Go 2fae16f3, Java a1fe64e1):
+
+      - Both sides have a dedicated price-macro helper function:
+        - Go: `resolveAuctionPriceMacros(bid)` at line 239
+        - Java: `resolvePriceMacros(bid)` (called from `makeBid`)
+      - Single-macro-three-field flavor: `${AUCTION_PRICE}` ONLY,
+        substituted into NURL+AdM+BURL (LURL not touched).
+      - Test coverage:
+        - Go has dedicated supplemental fixture
+          `auction-price-macro-replacement.json` (self-documenting
+          marker — only one of its kind in the corpus)
+        - Java has 8 dedicated unit tests covering null/zero/
+          multi-occurrence/high-precision cases
+      - Cross-language symmetric on the SUBSTITUTION MECHANISM
+        (macro, target fields, replace-all semantics, raw — no URL-
+        encoding, source value bid.Price).
+      - Cross-language divergent on number formatting (Go drops trailing
+        zeros + ~16 sig digit precision via `strconv.FormatFloat 'f' -1`;
+        Java preserves source scale + arbitrary precision via
+        `BigDecimal.toPlainString()`), on mutation idiom (Go in-place
+        pointer; Java toBuilder immutable rebuild), and on order vs
+        bid-type resolution (Go BEFORE; Java AFTER).
+
+    This is the THIRD corpus fixture documenting F4 patterns:
+      - adverxo: F4 as side-quirk; primary feature is empire-flavor
+        registration-only.
+      - vungle: F4 partial; primary feature is phantom-rename and
+        buyer-uid promotion.
+      - thetradedesk: F4 IS the bidder's identity — dedicated helper
+        function, fixture file, and 8-test suite.
+
+    Patterns captured for the first time in the corpus:
+
+      - ADR-007 F4 EMPIRICAL CONFIRMATION — first explicit master-sample
+        fixture confirming F4. Distinct from F2 (contradicted) — both
+        F4 patterns are real and well-documented in upstream code.
+      - SINGLE-MACRO-THREE-FIELD FLAVOR — explicit sub-classification
+        of F4. Distinguishes from multi-macro variants that may emerge
+        in future fixtures.
+      - HIGH-PRECISION NUMBER FORMATTING DIVERGENCE — Go's
+        `strconv.FormatFloat 'f' -1 64` vs Java's `BigDecimal.toPlainString()`
+        produce different result strings for high-precision inputs.
+        First documented cross-language fidelity gap on macro substitution
+        result strings.
+      - REGEX MATCH-SEMANTICS DIVERGENCE — Go `regexp.Match` (substring)
+        vs Java `matches()` (full-input). First documented subtle
+        cross-language correctness divergence on validator behavior.
+      - TTD ALIAS JAVA-ONLY — Java has `aliases.ttd: ~` tilde-stub; Go
+        has no equivalent. Rule-33-style asymmetric alias declaration
+        with no Go-side equivalent (distinct from freewheelssp/fwssp
+        pattern where Go has separate top-level package).
+      - GPP-SUPPORTED YAML-DECLARATION GO-ONLY — Go declares
+        `openrtb.gpp-supported: true`; Java handles GPP centrally
+        per OrtbVersion config. Both runtime-equivalent.
+      - TYPED EXTRA-INFO SUPPLYID — Java uses typed `ExtraInfo` inner
+        class with `String supplyId` field. Go uses flat string
+        `config.ExtraAdapterInfo`. Different per-language config
+        conventions captured.
+      - MACRO-REPLACE ORDER DIVERGENCE — Go runs macro BEFORE
+        getBidType; Java runs AFTER. Functionally equivalent due to
+        Go's terminal-error semantics on bad mtype, but ordering is
+        a Rule 5 mutation-flow asymmetry.
+
+    Eight warn-level divergences:
+      (1) bidder-params sha256 byte-only (tabs vs 2-space)
+      (2) endpoint URL macro-form (Go-template `{{.SupplyId}}` vs
+          Java-string-replace `{{SupplyId}}` + URL-encoding asymmetry)
+      (3) ttd alias graph (Java-only)
+      (4) gpp-supported declared on Go YAML, absent on Java
+      (5) bid-type error semantics (Go terminal-aborts whole MakeBids;
+          Java filters per-bid) + error message wording
+      (6) macro substitution number formatting (Go drops trailing zeros;
+          Java preserves source scale)
+      (7) supplyId validation regex match semantics (Go substring;
+          Java full-input)
+      (8) supplyId validation error message (Go ExtraAdapterInfo vs
+          Java SupplyId)
+
+    No port direction signal (shared-genesis). No removed-bidder history.
+    No `adsby` references in either repo at pinned commits — the
+    "adsby was renamed to thetradedesk" claim is unsubstantiated by
+    upstream source.
+
+    Coverage progression (post-this-commit):
+
+      - Phase 5: 9 of 9 pairs covered (P1 complete + P2 #1–#3 + P3 + S1
+        + S2). PHASE 5 CORPUS COMPLETE.
+      - Lifecycle pairs covered: 3 of 7 (unchanged — thetradedesk has
+        no lifecycle).
+      - Rule 46 pairs covered: 1 of 12 (unchanged — thetradedesk is
+        not a Rule 46 case).
+      - Empire parents (ADR-003 deep-dived): 4 of 5 (only nexx360
+        remaining — and nexx360 is NOT in PHASE_5_PAIRS, so this is
+        a non-Phase-5 gap).
+      - 40 goldens (20 Go + 20 Java).
+
+    ADR corrections queued (defer to future commits, per precedent):
+
+      - None for this fixture. ADR-007 F4 confirmed; no corrections
+        needed for this pair. (Earlier ADR-007 F2 contradiction from
+        freewheelssp remains queued for follow-up.)
+
+    Phase 5 next: NONE — corpus is at 9/9. Phase 5 is complete.
+    Recommended follow-up commits:
+      - ADR-007 F2 correction (reclassify or remove F2 pattern, since
+        freewheelssp contradicted it)
+      - ADR-005 RULE_46_PAIRS correction for freewheel-ssp/freewheelssp
+        (canonical pair is same-name; hyphen-drop applies to Go's alias
+        stub only)
+      - ADR-006 correction for liftoff/vungle (bilateral phantom-rename,
+        not go-leads)
+      - ADR-006 correction for cadent_aperture_mx/emxdigital (defensible
+        java-leads, but topology is more nuanced than the simple label)
