@@ -1,0 +1,595 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: 2026-05-02T00:00:00Z
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: limelightDigital                # Java YAML name (camelCase, single-cap D — matches Go)
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - filmzie
+    - iionads
+    - evtech
+    - adsyield
+    - greedygame
+    - appstock
+    - xtrmqb
+    - embimedia
+    - tgm
+    - streamlyn
+    - streamvision
+    - orangeclickmedia
+    - velonium
+    - adtg_org
+    - performist
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: true
+  empire_parent_flavor: endpoint-macro-substitution
+
+bidder_info:
+  endpoint: "http://ads-pbs.ortb.net/openrtb/{{PublisherID}}?host={{Host}}"
+  endpoint_construction:
+    kind: multi-token-substitution
+    macros_used:
+      - PublisherID
+      - Host
+    macro_syntax: java-string-replace
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "engineering@project-limelight.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Limelight Digital Adapter Params",
+    "description": "A schema which validates params accepted by the Limelight Digital adapter",
+    "type": "object",
+    "properties": {
+      "host": {
+        "type": "string",
+        "description": "Ad network's RTB host",
+        "format": "hostname",
+        "pattern": "^.+\\..+$"
+      },
+      "publisherId": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "description": "Publisher ID",
+        "minimum": 1,
+        "pattern": "^[1-9][0-9]*$"
+      }
+    },
+    "required": [
+      "host",
+      "publisherId"
+    ]
+  }
+bidder_params_sha256: b72e79654cfa5afe7105855d7cdaa67d93340a69dfc96d49ae95e7965b1c468f
+
+params:
+  schema_interpretation:
+    properties:
+      - name: host
+        type: string
+        description: "Ad network's RTB host"
+        format: hostname
+        pattern: '^.+\..+$'
+      - name: publisherId
+        type: ["integer", "string"]
+        description: "Publisher ID"
+        minimum: 1
+        pattern: '^[1-9][0-9]*$'
+    required_fields:
+      - host
+      - publisherId
+    flexible_types:
+      - publisherId
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.limelightdigital
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/limelightdigital/ExtImpLimeLightDigital.java
+    type_name: ExtImpLimeLightDigital          # CamelCase double-cap (LimeLight) — distinct from YAML name (camelCase single-cap `limelightDigital`) and from package name (lowercase `limelightdigital`)
+    fields:
+      - name: host
+        json_tag: host
+        type_native: String
+        omitempty: true
+        notes: []
+      - name: publisherId
+        json_tag: publisherId
+        type_native: Integer                    # Java uses Integer (NOT flexible) — schema accepts integer-OR-string but Java's deserializer would fail on a string-form input. Cross-language fidelity gap vs Go's json.Number.
+        omitempty: true
+        notes:
+          - "@JsonProperty(\"publisherId\") explicit"
+          - "Schema accepts publisherId as integer OR string but Java types as Integer only — would fail to deserialize a string-form publisherId. Go uses json.Number for full flexibility."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: LimeLightDigitalBidder      # CamelCase double-cap class name
+  directory_name: limelightdigital               # Lowercase package directory — multi-form naming asymmetry with class name
+  package_directory_mismatch: false              # Standard Java convention: lowercase package + CamelCase class
+  file_layout:
+    kind: single-file
+    files:
+      - name: LimeLightDigitalBidder.java
+        role: implementation
+        loc: 220
+  imports:
+    has_jsonutil: false
+    has_template_engine: false
+    has_currency_helper: true                    # CurrencyConversionService injected
+  make_requests:
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp
+    mutation:
+      mutates_request: true
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+      entity_strategies:
+        Imp: immutable-rebuild                    # imp.toBuilder().ext(null).build()
+        Site: none
+        App: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpLimeLightDigital
+      wrapper_type: null
+    endpoint_resolution:
+      kind: multi-token-substitution
+      mechanism_go: null
+      mechanism_java: string-replace
+      macros_used:
+        - PublisherID
+        - Host
+    helpers:
+      - name: parseExtImp
+        signature: "private ExtImpLimeLightDigital parseExtImp(Imp imp)"
+      - name: resolveEndpoint
+        signature: "private String resolveEndpoint(ExtImpLimeLightDigital extImp)"
+      - name: modifyImp
+        signature: "private Imp modifyImp(Imp imp, BidRequest request)"
+      - name: resolveBidFloor
+        signature: "private Price resolveBidFloor(Imp imp, BidRequest bidRequest)"
+      - name: convertBidFloor
+        signature: "private Price convertBidFloor(Price bidFloorPrice, BidRequest bidRequest)"
+      - name: modifyRequest
+        signature: "private static BidRequest modifyRequest(BidRequest request, Imp imp)"
+      - name: createHttpRequest
+        signature: "private HttpRequest<BidRequest> createHttpRequest(BidRequest request, String endpointUri)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: by-imp-mediatype                 # Rule 22 — same as Go side
+          field: imp.banner|video|audio|native
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/limelightdigital/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-limelightDigital-bid-request.json
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-limelightDigital-bid-response.json
+        bytes: 0
+        role: bidder-bid-response
+      - filename: test-auction-limelightDigital-request.json
+        bytes: 0
+        role: auction-request
+      - filename: test-auction-limelightDigital-response.json
+        bytes: 0
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 17
+  unit_test_loc: 373
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: LimeLightDigitalTest
+  integration_test_pattern: 4-file-split
+
+aliases:
+  - name: filmzie
+    parent: limelightDigital
+    config_form: tilde_inherit                   # NO endpoint override — pure inheritance
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: FilmzieTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/filmzie/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: iionads
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: IionadsTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/iionads/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: evtech
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: null                              # NO IT class for evtech (most-elaborated alias with usersync — but no IT coverage)
+      fixture_dir: null
+      fixture_file_count: 0
+    test_application_properties_entries: []
+    enabled: false
+  - name: adsyield
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: AdsyieldTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/adsyield/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: greedygame
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: GreedyGameTest                    # CamelCase IT class name (`GreedyGame`) for lowercase alias name (`greedygame`)
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/greedygame/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: appstock
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: AppStockSspTest                   # IT class adds `Ssp` suffix (`AppStockSsp`) — diverges from alias name `appstock`. Fixture dir is `appstockssp/` not `appstock/`.
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/appstockssp/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: xtrmqb
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: XtrmqbTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/xtrmqb/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: embimedia
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: EmbimediaTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/embimedia/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: tgm
+    parent: limelightDigital
+    config_form: tilde_inherit                    # NO endpoint override
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: TgmTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/tgm/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: streamlyn
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: StreamlynTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/streamlyn/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: streamvision
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: StreamvisionTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/streamvision/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: orangeclickmedia
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: OrangeClickMediaTest               # CamelCase IT class for lowercase alias
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/orangeclickmedia/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: velonium
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: VeloniumTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/velonium/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: adtg_org                                  # UNDERSCORE in alias name — Java identifier-rule workaround applies to IT class
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: AdtgorgTest                         # IT class collapses underscore: `Adtgorg` (no underscore). Fixture dir KEEPS the underscore: `adtg_org/`. Java identifier-rule workaround.
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/adtg_org/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: performist
+    parent: limelightDigital
+    config_form: full_block
+    relationship_flavor: endpoint-macro-substitution
+    test_assets:
+      it_class: PerformistTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/performist/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false                                  # ALSO: performist endpoint omits the `?host={{Host}}` query param — only `/openrtb/{{PublisherID}}`. Distinct from sibling aliases. Recorded as `performist-endpoint-truncated` quirk.
+
+spring_config:
+  factory_class: LimeLightDigitalConfiguration   # CamelCase double-cap class name
+  factory_method: limeLightDigitalBidderDeps     # camelCase double-cap bean name
+  property_source_path: classpath:/bidder-config/limelightDigital.yaml   # camelCase single-cap YAML name
+  bidder_creator_lambda: |
+    config -> new LimeLightDigitalBidder(config.getEndpoint(), currencyConversionService, mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: limelightDigitalConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.limelightdigital\")"   # NOTE: lowercase `limelightdigital` — does NOT match the camelCase YAML/bean key. Multi-form naming asymmetry within Java alone.
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: currencyConversionService
+      type: CurrencyConversionService
+      source: "@Autowired"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+
+bidder_class:
+  name: LimeLightDigitalBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointUrl
+        type: String
+        annotations: []
+      - name: currencyConversionService
+        type: CurrencyConversionService
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+    arity: 3
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: LIME_LIGHT_EXT_TYPE_REFERENCE
+      type: "TypeReference<ExtPrebid<?, ExtImpLimeLightDigital>>"
+    - name: BIDDER_CURRENCY
+      type: String
+      value: "USD"
+    - name: URL_HOST_MACRO
+      type: String
+      value: "{{Host}}"
+    - name: URL_PUBLISHER_ID_MACRO
+      type: String
+      value: "{{PublisherID}}"
+  helper_classes_co_located: []
+  helper_classes_in_proto:
+    - ExtImpLimeLightDigital
+
+code_naming:
+  yaml_name: limelightDigital                  # camelCase single-cap (Go-aligned)
+  class_name_root: LimeLightDigital            # CamelCase DOUBLE-cap (LimeLight) — distinct from yaml_name single-cap
+  package_name: limelightdigital               # Lowercase
+  preserves_acronym_case: true                 # `LimeLight` is a marketing-style branding (compound word with both halves capitalized) — NOT a real acronym but treated as one
+  identifier_workaround: null
+  notes:
+    - "Multi-form naming: YAML `limelightDigital` (single-cap), package `limelightdigital` (lowercase), class root `LimeLightDigital` (double-cap), @ConfigurationProperties key `adapters.limelightdigital` (lowercase). Four distinct casings for one bidder."
+    - "The class root's `LimeLight` (with capital L mid-word) reflects the brand's marketing typography; the YAML/Go side normalizes to `Limelight` (single-cap). Adjacent to Java edge case #27 acronym-case-preservation."
+
+lifecycle: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: null
+    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
+  injection: dependency
+  bid_request_passed_for_context: true
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true                   # BidderUtil.defaultRequest invokes HttpUtil.headers() per request
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: imp-ext-strip-post-extraction
+    file: src/main/java/org/prebid/server/bidder/limelightdigital/LimeLightDigitalBidder.java
+    line: 95
+    summary: "modifyImp uses `imp.toBuilder().ext(null).build()` — strips imp.ext after extraction. Cross-language symmetric (Go side does `imp.Ext = nil`). ADR-007 F5 imp-ext-strip-post-extraction master sample."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: multi-form-naming-four-variants
+    file: src/main/resources/bidder-config/limelightDigital.yaml
+    summary: "Four distinct naming forms for one bidder on the Java side: YAML `limelightDigital` (camelCase single-cap), package `limelightdigital` (lowercase), class root `LimeLightDigital` (CamelCase double-cap), @ConfigurationProperties key `adapters.limelightdigital` (lowercase). Adjacent to Java edge cases #19 (config-class naming variance) + #27 (acronym-case preservation) — combined in one fixture."
+    edge_case_taxon: acronym-case-preservation
+  - id: configuration-properties-key-mismatch
+    file: src/main/java/org/prebid/server/spring/config/bidder/LimeLightDigitalConfiguration.java
+    line: 24
+    summary: "@ConfigurationProperties(\"adapters.limelightdigital\") uses LOWERCASE while the YAML key is `adapters.limelightDigital` (camelCase). Spring's relaxed binding handles the case-insensitive match — a known Spring Boot feature — but the discrepancy reads as a bug. Cross-references @Bean name `limelightDigitalConfigurationProperties` (camelCase) for the bean, but the property-source key path is lowercase."
+    edge_case_taxon: yaml-field-name-typo
+  - id: integer-only-publisher-id
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/limelightdigital/ExtImpLimeLightDigital.java
+    summary: "publisherId typed as `Integer` — schema declares `[\"integer\", \"string\"]` flexible-type. Java side would FAIL to deserialize a string-form publisherId; Go side uses `json.Number` which handles both. Cross-language fidelity gap; the wire-format publisherId for upstream consumers must always be integer-form to avoid breaking the Java side."
+    edge_case_taxon: incomplete-classification
+  - id: alias-it-class-missing-evtech
+    file: src/main/resources/bidder-config/limelightDigital.yaml
+    summary: "evtech alias is the most-elaborated (own endpoint + usersync iframe + redirect) but does NOT have an IT class. Other 14 aliases (filmzie, iionads, etc.) all have IT classes."
+    edge_case_taxon: incomplete-classification
+  - id: alias-it-class-name-divergence-appstock
+    file: src/main/resources/bidder-config/limelightDigital.yaml
+    summary: "appstock alias's IT class is `AppStockSspTest` and fixture dir is `appstockssp/` — both add `Ssp` suffix that's NOT in the alias name. Possibly a copy from a different bidder's IT setup. Distinct from the Java identifier-rule workaround (which strips characters); this APPENDS a suffix."
+    edge_case_taxon: incomplete-classification
+  - id: alias-underscore-name-adtg-org
+    file: src/main/resources/bidder-config/limelightDigital.yaml
+    summary: "adtg_org alias has UNDERSCORE in name. Java IT class is `AdtgorgTest` (underscore stripped — Java identifier-rule workaround similar to Java edge case #26 digit-leading-rename but applied to underscores). Fixture dir KEEPS the underscore: `adtg_org/`."
+    edge_case_taxon: identifier-rule-workaround
+  - id: performist-endpoint-truncated
+    file: src/main/resources/bidder-config/limelightDigital.yaml
+    summary: "performist alias endpoint is `http://ads-pbs.performserv.com/openrtb/{{PublisherID}}` — OMITS the `?host={{Host}}` query param that all 14 sibling aliases include. Probably an upstream bug; performist would receive requests without the host context other aliases pass through."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/limelightDigital/
+    package_name: limelightDigital
+    bidder_constant: openrtb_ext.BidderLimelightDigital
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/limelightdigital/
+    bidder_class: LimeLightDigitalBidder
+    config_class: LimeLightDigitalConfiguration
+    yaml_path: src/main/resources/bidder-config/limelightDigital.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/limelightdigital/
+  port_concerns:
+    aliases_inverted: true
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: prebid/prebid-server-java#2228
+    destination_language: null
+    destination_pr: prebid/prebid-server#2539
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-endpoint-macro-substitution
+      - imp-ext-strip-post-extraction
+      - flexible-type-publisher-id
+      - multi-form-naming-asymmetry
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "Four-form naming asymmetry: YAML camelCase + package lowercase + class CamelCase + @ConfigurationProperties lowercase. Spring's relaxed binding makes this work but is a code-organization smell."
+    - "publisherId typed Integer not String/json.Number — cross-language fidelity gap with Go's json.Number. String-form publisherId from publisher would fail on Java but succeed on Go. Schema is more permissive than the Java type system."
+    - "imp.toBuilder().ext(null).build() strips imp.ext (line 95). Cross-language symmetric with Go's `imp.Ext = nil`. ADR-007 F5 master sample on both sides."
+    - "URL macros are URL-ENCODED via HttpUtil.encodeUrl on both substitutions (line 89). Go side does NOT URL-encode (uses macros.ResolveMacros which substitutes verbatim). Cross-language asymmetry — could surface as wire-format URL divergence for hosts containing reserved URL characters (rare in practice since aliases use clean hostnames)."
+    - "Currency conversion uses 4-arg form with bidRequest for time-context (Rule 32 Java side). Go uses 3-arg form."
+    - "BidderUtil.defaultRequest constructs the HttpRequest (Rule 8 Java side; Go expands the boilerplate inline)."
+    - "15 aliases with various Java identifier-rule workarounds: AdtgorgTest (underscore stripped from adtg_org), AppStockSspTest (Ssp suffix added on appstock), GreedyGameTest + OrangeClickMediaTest (CamelCase from lowercase alias names). evtech alias (most-elaborated config) MISSING IT class. performist alias has truncated endpoint (no ?host= query)."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
