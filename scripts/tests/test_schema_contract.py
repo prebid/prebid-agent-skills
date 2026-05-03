@@ -279,13 +279,15 @@ def _walk_schema(schema: dict, node, prefix: str, registry: Set[str], open_maps:
     if not isinstance(node, dict):
         return
 
-    # additionalProperties: True at this level -> open map keyed by `prefix`
-    addl = node.get("additionalProperties")
+    # additionalProperties open at this level -> open map keyed by `prefix`.
+    # Per JSON Schema Draft 2020-12, omitted additionalProperties defaults to
+    # true (open). Treat both explicit `true` and omitted as open.
+    addl = node.get("additionalProperties", True)
     types = node.get("type")
     if isinstance(types, str):
         types = [types]
     is_object = isinstance(types, list) and "object" in types
-    if addl is True and is_object and prefix:
+    if (addl is True or (isinstance(addl, dict) and addl)) and is_object and prefix:
         open_maps.add(prefix)
 
     # Walk explicit properties

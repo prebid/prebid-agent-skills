@@ -254,10 +254,12 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
                 return
             t = node_resolved.get("type")
             if isinstance(t, str): t = [t]
-            # Two open-map flavors:
+            # Three open-map flavors (Draft 2020-12: omitted additionalProperties
+            # defaults to true, so absence is equivalent to explicit true):
             # 1. additionalProperties: true (any key, any value)
-            # 2. additionalProperties: <subschema> (any key, value matches schema)
-            addl = node_resolved.get("additionalProperties")
+            # 2. additionalProperties omitted (any key, any value — spec default)
+            # 3. additionalProperties: <subschema> (any key, value matches schema)
+            addl = node_resolved.get("additionalProperties", True)
             is_open_map = (
                 addl is True
                 or (isinstance(addl, dict) and addl)  # non-empty schema

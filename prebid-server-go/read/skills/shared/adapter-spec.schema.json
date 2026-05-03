@@ -357,8 +357,8 @@
 
     "Code": {
       "type": "object",
-      "additionalProperties": true,
-      "description": "Open map for Phase 2.0; Phase 2.1 will tighten with full enums and required fields per language.",
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; declared properties cover all corpus emissions.",
       "properties": {
         "package_or_class": { "type": ["string", "null"] },
         "directory_name": { "type": ["string", "null"] },
@@ -375,7 +375,7 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "additionalProperties": true,
+                "additionalProperties": false,
                 "properties": {
                   "name": { "type": "string" },
                   "role": { "type": "string" },
@@ -622,7 +622,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "additionalProperties": true,
+            "additionalProperties": false,
             "properties": {
               "name": { "type": "string" },
               "value": { "type": "string" }
@@ -688,7 +688,7 @@
         },
         "test_assets": {
           "type": ["object", "null"],
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
             "it_class": { "type": ["string", "null"] },
             "it_class_file": { "type": ["string", "null"] },
@@ -709,7 +709,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "additionalProperties": true,
+            "additionalProperties": false,
             "properties": {
               "key": { "type": "string" },
               "value": { "type": ["string", "boolean", "integer", "null"] },
@@ -744,7 +744,7 @@
 
     "CrossLanguage": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "go_artifacts": { "type": ["object", "null"] },
         "java_artifacts": { "type": ["object", "null"] },
