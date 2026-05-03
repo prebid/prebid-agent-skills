@@ -14,6 +14,64 @@ Every entry references the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 1.1.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-03
+
+ADR-007 (novel-pattern schema additions): F1, F3, F4, F5 admitted to the schema
+as `$defs`. NOT `$ref`-wired into top-level `Code` yet — adapter_spec_version
+1.1.0 admits the new shapes via the existing `Code` / `Code.make_requests` /
+`Code.make_bids` open-map permissiveness (`additionalProperties: true`); Phase 2.8
+will tighten and wire. ADR-007 status flipped Proposed → Accepted (2026-05-03).
+F2 (`language_stamped_headers`) was already shipped; this release rounds out the
+remaining four ADR-007 patterns.
+
+### Added (schema)
+
+- `EndpointResolution` `$def` — admits multi-endpoint adapters (F1; master
+  sample beachfront with banner + video endpoints). `kind` enum includes the
+  pre-existing 9 single-endpoint forms plus the new `multi-endpoint-by-mediatype`
+  and `multi-endpoint-by-shape`. New `endpoints[]` array carries
+  `{ name, role, value, mechanism }` per dispatch target; ordering is logical
+  (declaration), not lex-sorted, per the ADR-007 array ordering policy.
+- `EntityStrategy` `$def` — admits the
+  `Site=replace-with-app-synthesis` / `App=synthesize-app-replacement` pattern
+  (F3; master sample vungle). Each Site/App/User slot independently typed with
+  the union of currently-emitted golden values plus the F3 additions
+  (`replace-with-app-synthesis`, `synthesize-app-replacement`,
+  `synthesize-from-site`).
+- `BidPostProcessing` `$def` — admits post-decode macro replacement on bid
+  fields (F4; master sample thetradedesk AUCTION_PRICE substitution into
+  `bid.NURL`/`bid.AdM`/`bid.BURL`). `macros[]` array carries
+  `{ macro, fields[], source, mechanism }` per substitution.
+- `ImpExtUnmarshal` `$def` — admits the `strip_post_extraction: bool` flag (F5;
+  master sample beintoo zeroes out `imp.Ext` after parsing). `kind` enum
+  includes the currently-emitted golden values (`none`, `standard-two-phase`)
+  plus forward-looking variants (`shared-prebid-imp`, `custom-typed`,
+  `passthrough`) reserved for Phase 2.8.
+
+### Changed (schema prose)
+
+- Top-level `description` updated to reflect post-Phase-5 reality (40 goldens
+  validated; was "Phase 2.0 milestone: covers the kobler-Go and kobler-Java
+  goldens" + "Phase 2.1 will expand to cover all 22 goldens").
+- `adapter_spec_version` field `description` updated to mention the 1.0.0/1.1.0
+  semantics and the not-yet-`$ref`-wired posture of the new `$defs` (was
+  "all 22 goldens migrated to '1.0.0'").
+
+### Goldens posture
+
+The 40 existing goldens stay at `adapter_spec_version: "1.0.0"`; none reference
+the new patterns at the pinned upstream commits. Future fixtures using F1/F3/F4/F5
+shapes will declare `adapter_spec_version: "1.1.0"`. Both versions are admitted
+because `Code` is an open map; strict per-shape validation is deferred to Phase 2.8
+(when `$ref` wiring lands).
+
+### Unchanged
+
+`taxonomy_version` stays at `1.0.0` (no behavior-taxonomy changes); `port_translation_rules_version`
+stays at `0.2.0` (no rule additions or semantic changes).
+
+---
+
 ## Unreleased — ADR corrections (no version bump) — 2026-05-03
 
 ADR amendments and reference-data corrections from Phase 5 fixture-authoring

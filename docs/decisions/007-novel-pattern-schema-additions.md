@@ -1,7 +1,7 @@
 # ADR-007: Five New Schema Fields for Novel Patterns
 
 **Date**: 2026-05-02 (refined 2026-05-02 audit C7 — added array ordering policy for round-trip determinism; refined 2026-05-03 — F1 Java-side wording tightened; F2 footnote on one-sided header mutations added per Phase 5 empirical verification)
-**Status**: Proposed (Phase 2 execution adds to schema)
+**Status**: Accepted (2026-05-03 — schema additions landed at `adapter_spec_version 1.1.0`; F1/F3/F4/F5 `$defs` are `additionalProperties: true` and NOT `$ref`-wired into `Code` yet, deferred to Phase 2.8)
 
 **Note on array ordering and R4 round-trip determinism**: The new fields F1 (`endpoints[]`), F2 (`language_stamped_headers[]`), and F4 (`bid_post_processing.macros[]`) are arrays. To preserve R4 round-trip-determinism (`yaml.safe_dump → load → dump` byte-equality), arrays in the schema MUST have a deterministic ordering policy:
 

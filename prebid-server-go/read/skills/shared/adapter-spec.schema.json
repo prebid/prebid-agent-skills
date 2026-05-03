@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/prebid/prebid-agent-skills/prebid-server-go/read/skills/shared/adapter-spec.schema.json",
   "title": "Adapter Specification",
-  "description": "Schema for the language-neutral Adapter Specification YAML emitted by the read-skill suite. Phase 2.0 milestone: covers the kobler-Go and kobler-Java goldens. Phase 2.1 will expand to cover all 22 goldens.",
+  "description": "Schema for the language-neutral Adapter Specification YAML emitted by the read-skill suite. Validated against all 40 goldens (21 Go + 19 Java) in `prebid-server-{go,java}/read/test-fixtures/`. Versioned independently from behavior-taxonomy.yaml and port-translation-rules.yaml; see CHANGELOG.md.",
 
   "type": "object",
   "required": [
@@ -22,7 +22,7 @@
 
   "properties": {
     "adapter_spec_version": {
-      "description": "Schema version this spec conforms to. SemVer string per ADR-001 D7. Phase 2.7 dropped the legacy integer form once all 22 goldens migrated to '1.0.0'.",
+      "description": "Schema version this spec conforms to. SemVer string per ADR-001 D7. The 40 existing goldens declare '1.0.0'; '1.1.0' admits the ADR-007 F1/F3/F4/F5 $defs (EndpointResolution, EntityStrategy, BidPostProcessing, ImpExtUnmarshal) — those $defs are NOT $ref-wired into Code yet (Phase 2.8 will tighten + wire), so 1.1.0 fixtures are admitted via the existing Code/make_requests/make_bids open-map permissiveness.",
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
     },
@@ -390,6 +390,116 @@
         "builder": { "type": ["object", "null"] },
         "make_requests": { "type": ["object", "null"] },
         "make_bids": { "type": ["object", "null"] }
+      }
+    },
+
+    "EndpointResolution": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F1: endpoint resolution mechanism for `code.make_requests.endpoint_resolution`. NOT $ref-wired into `Code` yet — adapter_spec_version 1.1.0 admits the `multi-endpoint-by-mediatype` / `multi-endpoint-by-shape` kinds and the `endpoints[]` array via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample: beachfront (banner + video endpoints).",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "static", "literal",
+            "single-token-substitution", "multi-token-substitution",
+            "query-parameter-augmentation", "template-macro", "dynamic-template-string",
+            "dev-prod-toggle", "runtime-region-selection",
+            "multi-endpoint-by-mediatype", "multi-endpoint-by-shape"
+          ]
+        },
+        "mechanism_go": { "type": ["string", "null"] },
+        "mechanism_java": { "type": ["string", "null"] },
+        "endpoints": {
+          "description": "Populated when kind = multi-endpoint-*. Logical (declaration) order; not lex-sorted (per ADR-007 array ordering policy).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "role": { "type": "string", "description": "Free-text role tag (canonical: banner, video, adm, nurl)." },
+              "value": { "type": "string", "description": "URL or template." },
+              "mechanism": { "type": "string", "description": "Per-endpoint construction/dispatch mechanism." }
+            }
+          }
+        }
+      }
+    },
+
+    "EntityStrategy": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F3: per-entity (Site/App/User) mutation strategy under `code.make_requests.mutation.entity_strategies`. NOT $ref-wired yet — adapter_spec_version 1.1.0 admits `replace-with-app-synthesis` / `synthesize-app-replacement` / `synthesize-from-site` via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample: vungle (Site=replace-with-app-synthesis, App=synthesize-app-replacement).",
+      "properties": {
+        "Site": {
+          "type": ["string", "null"],
+          "enum": [
+            "none", "in-place", "copy-then-mutate", "deep-copy-then-mutate",
+            "immutable-rebuild", "replace-with-null",
+            "replace-with-app-synthesis", "synthesize-app-replacement",
+            null
+          ]
+        },
+        "App": {
+          "type": ["string", "null"],
+          "enum": [
+            "none", "in-place", "copy-then-mutate", "deep-copy-then-mutate",
+            "immutable-rebuild", "replace-with-null",
+            "synthesize-app-replacement", "synthesize-from-site",
+            null
+          ]
+        },
+        "User": {
+          "type": ["string", "null"],
+          "enum": [
+            "none", "in-place", "copy-then-mutate", "deep-copy-then-mutate",
+            "immutable-rebuild", "replace-with-null",
+            null
+          ]
+        }
+      }
+    },
+
+    "BidPostProcessing": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F4: post-decode mutation of bid fields (e.g., AUCTION_PRICE macro replacement in bid.NURL / bid.AdM / bid.BURL). Lives at `code.make_bids.bid_post_processing`. NOT $ref-wired yet — adapter_spec_version 1.1.0 admits the shape via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample: thetradedesk.",
+      "properties": {
+        "macros": {
+          "description": "Logical (declaration) order; not lex-sorted (per ADR-007 array ordering policy).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "macro": { "type": "string", "description": "Macro name (e.g., AUCTION_PRICE, AUCTION_BID_ID)." },
+              "fields": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Bid-field paths the macro substitutes into (e.g., bid.NURL, bid.AdM, bid.BURL)."
+              },
+              "source": { "type": "string", "description": "Where the substitution value comes from at runtime (e.g., bid.Price)." },
+              "mechanism": { "type": "string", "description": "How the substitution is performed (regex / token-replace / etc.)." }
+            }
+          }
+        }
+      }
+    },
+
+    "ImpExtUnmarshal": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F5: imp.ext unmarshal pattern + post-extraction strip flag. Lives at `code.make_requests.imp_ext_unmarshal`. NOT $ref-wired yet — adapter_spec_version 1.1.0 admits the `strip_post_extraction` flag via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample for strip_post_extraction: beintoo (zeroes out imp.Ext after parsing).",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["none", "standard-two-phase", "shared-prebid-imp", "custom-typed", "passthrough"]
+        },
+        "strip_post_extraction": {
+          "type": "boolean",
+          "description": "ADR-007 F5: true when adapter zeroes out imp.Ext after parsing."
+        }
       }
     },
 
