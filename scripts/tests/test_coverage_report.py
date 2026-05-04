@@ -93,6 +93,97 @@ class TestCoverageComputations(unittest.TestCase):
                          "compute_per_rule_mentions must produce one row per loaded rule")
 
 
+class TestRuleAppliedCounts(unittest.TestCase):
+    """Phase D4.2: compute_rule_applied_counts() aggregates per-rule
+    verdict counts across discovered port-report.json archives. Synthetic
+    inputs prove the counting logic; production data flows in once
+    operator-side port runs persist their reports."""
+
+    def setUp(self):
+        self.rules = cr.load_rules()
+
+    def test_empty_reports_yields_zero_counts(self):
+        rows = cr.compute_rule_applied_counts(self.rules, [])
+        self.assertEqual(len(rows), len(self.rules))
+        for row in rows:
+            self.assertEqual(row["applied"], 0)
+            self.assertEqual(row["applied_with_warning"], 0)
+            self.assertEqual(row["skipped_not_applicable"], 0)
+            self.assertEqual(row["skipped_source_side_only"], 0)
+            self.assertEqual(row["exercised"], 0)
+            self.assertEqual(row["total_runs_seen"], 0)
+
+    def test_single_report_increments_counts(self):
+        synthetic_report = {
+            "port_report_version": "0.2.0",
+            "rules_consumed": [
+                {"rule_id": 1, "verdict": "applied", "summary": "x"},
+                {"rule_id": 33, "verdict": "applied-with-warning", "summary": "y"},
+                {"rule_id": 38, "verdict": "applied", "summary": "byte-copy"},
+                {"rule_id": 42, "verdict": "skipped-not-applicable", "summary": ""},
+                {"rule_id": 46, "verdict": "skipped-source-side-only", "summary": ""},
+            ],
+        }
+        rows = cr.compute_rule_applied_counts(self.rules, [synthetic_report])
+        by_id = {r["id"]: r for r in rows}
+        self.assertEqual(by_id[1]["applied"], 1)
+        self.assertEqual(by_id[1]["exercised"], 1)
+        self.assertEqual(by_id[33]["applied_with_warning"], 1)
+        self.assertEqual(by_id[33]["exercised"], 1)
+        self.assertEqual(by_id[38]["applied"], 1)
+        self.assertEqual(by_id[42]["skipped_not_applicable"], 1)
+        self.assertEqual(by_id[42]["exercised"], 0)
+        self.assertEqual(by_id[46]["skipped_source_side_only"], 1)
+        for row in rows:
+            self.assertEqual(row["total_runs_seen"], 1)
+
+    def test_multiple_reports_aggregate(self):
+        rep1 = {
+            "port_report_version": "0.2.0",
+            "rules_consumed": [{"rule_id": 38, "verdict": "applied"}],
+        }
+        rep2 = {
+            "port_report_version": "0.2.0",
+            "rules_consumed": [{"rule_id": 38, "verdict": "applied"}],
+        }
+        rep3 = {
+            "port_report_version": "0.2.0",
+            "rules_consumed": [{"rule_id": 38, "verdict": "applied-with-warning"}],
+        }
+        rows = cr.compute_rule_applied_counts(self.rules, [rep1, rep2, rep3])
+        rule38 = next(r for r in rows if r["id"] == 38)
+        self.assertEqual(rule38["applied"], 2)
+        self.assertEqual(rule38["applied_with_warning"], 1)
+        self.assertEqual(rule38["exercised"], 3)
+        self.assertEqual(rule38["total_runs_seen"], 3)
+
+    def test_unknown_rule_ids_silently_ignored(self):
+        """A port report referencing a rule_id not in the rules YAML
+        (e.g., from an older rules version) is ignored rather than crashing."""
+        synthetic = {
+            "port_report_version": "0.2.0",
+            "rules_consumed": [
+                {"rule_id": 9999, "verdict": "applied"},  # nonexistent rule
+            ],
+        }
+        rows = cr.compute_rule_applied_counts(self.rules, [synthetic])
+        # No crash, no row created for 9999.
+        self.assertEqual(len(rows), len(self.rules))
+        self.assertNotIn(9999, [r["id"] for r in rows])
+
+    def test_malformed_verdict_silently_ignored(self):
+        synthetic = {
+            "port_report_version": "0.2.0",
+            "rules_consumed": [
+                {"rule_id": 38, "verdict": None},  # malformed; not a string
+                {"rule_id": 38, "verdict": "bogus-verdict"},  # unknown enum
+            ],
+        }
+        rows = cr.compute_rule_applied_counts(self.rules, [synthetic])
+        rule38 = next(r for r in rows if r["id"] == 38)
+        self.assertEqual(rule38["exercised"], 0)
+
+
 class TestReportRender(unittest.TestCase):
     def test_render_produces_expected_sections(self):
         goldens = cr.discover_goldens()
@@ -107,6 +198,7 @@ class TestReportRender(unittest.TestCase):
             "## 5. Java alias-empire parents",
             "## 6. Dual-spec assertion coherency",
             "## 7. Per-rule master-sample coverage",
+            "## 7b. Port-translation rule applied-counts (per Phase D4.2)",
             "## 8. Top gaps to close",
         ):
             self.assertIn(header, out, f"Report missing required section: {header!r}")

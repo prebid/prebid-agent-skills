@@ -176,6 +176,63 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 
 ---
 
+## 7b. Port-translation rule applied-counts (per Phase D4.2)
+
+_No port-report.json files discovered yet — the table below renders all-zero counts. The format is stable across operator validation (D2.8 / D3.8 runs); once port runs persist their reports, this table reflects per-rule exercise rates._
+
+| # | Title | Exercised | Applied | Applied⚠ | Skipped (N/A) | Skipped (src-only) |
+|---|---|---|---|---|---|---|
+| Rule 38 | bidder_params_json byte-fidelity contract | 0 | 0 | 0 | 0 | 0 |
+| Rule 39 | params.schema_interpretation is a derived view, not translated | 0 | 0 | 0 | 0 | 0 |
+| Rule  1 | Standard ExtPrebid two-phase wrapper | 0 | 0 | 0 | 0 | 0 |
+| Rule  2 | Direct unmarshal to custom wrapper | 0 | 0 | 0 | 0 | 0 |
+| Rule  3 | Free-form (no proto) | 0 | 0 | 0 | 0 | 0 |
+| Rule  4 | Imp.toBuilder rebuild ↔ imp value-mutation | 0 | 0 | 0 | 0 | 0 |
+| Rule  5 | Site/App copy-then-mutate ↔ Site/App toBuilder rebuild | 0 | 0 | 0 | 0 | 0 |
+| Rule  6 | Source schain manipulation | 0 | 0 | 0 | 0 | 0 |
+| Rule  7 | Banner format dimension promotion | 0 | 0 | 0 | 0 | 0 |
+| Rule  8 | BidderUtil.defaultRequest passthrough ↔ standard RequestData | 0 | 0 | 0 | 0 | 0 |
+| Rule  9 | Custom-typed body via Bidder<T> generic | 0 | 0 | 0 | 0 | 0 |
+| Rule 10 | Per-imp split with macro substitution | 0 | 0 | 0 | 0 | 0 |
+| Rule 11 | Single-token substitution | 0 | 0 | 0 | 0 | 0 |
+| Rule 12 | Query parameter augmentation | 0 | 0 | 0 | 0 | 0 |
+| Rule 13 | Dev-prod toggle | 0 | 0 | 0 | 0 | 0 |
+| Rule 14 | Region from country (runtime-region-selection) | 0 | 0 | 0 | 0 | 0 |
+| Rule 15 | Deploy-time tokens | 0 | 0 | 0 | 0 | 0 |
+| Rule 16 | max-imps-per-request split | 0 | 0 | 0 | 0 | 0 |
+| Rule 17 | Pod-grouping by imp.id prefix | 0 | 0 | 0 | 0 | 0 |
+| Rule 18 | Multi-format split (one request per media type) | 0 | 0 | 0 | 0 | 0 |
+| Rule 19 | Standard headers via HttpUtil.headers / hand-rolled http.Header | 0 | 0 | 0 | 0 | 0 |
+| Rule 20 | Pre-built basic-auth header in constructor | 0 | 0 | 0 | 0 | 0 |
+| Rule 21 | Per-request HMAC digest | 0 | 0 | 0 | 0 | 0 |
+| Rule 41 | Bearer-token authentication header | 0 | 0 | 0 | 0 | 0 |
+| Rule 22 | by-imp-mediatype (default) | 0 | 0 | 0 | 0 | 0 |
+| Rule 23 | by-bid-mtype (canonical OpenRTB 2.6) | 0 | 0 | 0 | 0 | 0 |
+| Rule 24 | by-bid-ext-typed-field with chain | 0 | 0 | 0 | 0 | 0 |
+| Rule 25 | by-response-payload-shape | 0 | 0 | 0 | 0 | 0 |
+| Rule 26 | hardcoded fallback | 0 | 0 | 0 | 0 | 0 |
+| Rule 40 | by-imp-id-suffix and imp-prefix-lookup | 0 | 0 | 0 | 0 | 0 |
+| Rule 27 | BadInput (publisher-fault errors) | 0 | 0 | 0 | 0 | 0 |
+| Rule 28 | BadServerResponse (bidder-fault errors) | 0 | 0 | 0 | 0 | 0 |
+| Rule 29 | FailedToMarshal / FailedToUnmarshal | 0 | 0 | 0 | 0 | 0 |
+| Rule 30 | Canonical 204+4xx framework helpers | 0 | 0 | 0 | 0 | 0 |
+| Rule 31 | Application-layer retcode field | 0 | 0 | 0 | 0 | 0 |
+| Rule 32 | reqInfo.ConvertCurrency vs CurrencyConversionService.convertCurrency | 0 | 0 | 0 | 0 | 0 |
+| Rule 33 | Aliases inversion (child→parent vs parent→children) | 0 | 0 | 0 | 0 | 0 |
+| Rule 34 | YAML unification (Go split vs Java unified) | 0 | 0 | 0 | 0 | 0 |
+| Rule 35 | Custom property subclass for extra YAML fields | 0 | 0 | 0 | 0 | 0 |
+| Rule 44 | Java alias-empire consolidation | 0 | 0 | 0 | 0 | 0 |
+| Rule 45 | Disabled-by-default Java alias | 0 | 0 | 0 | 0 | 0 |
+| Rule 46 | Naming-convention normalization | 0 | 0 | 0 | 0 | 0 |
+| Rule 42 | IAB-categories storage cross-language translation | 0 | 0 | 0 | 0 | 0 |
+| Rule 43 | Bidder-rename three-step lifecycle | 0 | 0 | 0 | 0 | 0 |
+| Rule 36 | Go httpCalls array vs Java 4-file split | 0 | 0 | 0 | 0 | 0 |
+| Rule 37 | Per-alias IT class requirement (Java-only) | 0 | 0 | 0 | 0 | 0 |
+
+Reflection loop (Phase F) consumes this section once port runs land. An always-zero column means the rule's spec_field_driver hasn't matched any source spec — a hint to amend the driver or add a fixture pair that exercises it.
+
+---
+
 ## 8. Top gaps to close (sorted by impact)
 
 - Rule 43 sub-type `inverted-parent`: pair `conversant/epsilon` (Publicis Epsilon acquired Conversant — Go parent=conversant, Java parent=epsilon (refined 2026-05-03 from java-leads))
@@ -191,4 +248,5 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 - Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (40 files).
 - Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (16 files).
 - Port-translation rules (46 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.
+- Port reports (0 discovered): `prebid-server-go/port-java2go/output/*/port-report.json, prebid-server-java/port-go2java/output/*/port-report.json, .tmp/full-loop/*/port-report.json` (Phase D4.2 — sourced when port skills run).
 - ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).

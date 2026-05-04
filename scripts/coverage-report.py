@@ -380,6 +380,86 @@ def compute_dual_spec_coherency(goldens: dict[str, set[str]],
     return out
 
 
+PORT_REPORT_GLOB_PATHS = (
+    # Persisted output (operator-controlled; gitignored by default).
+    "prebid-server-go/port-java2go/output/*/port-report.json",
+    "prebid-server-java/port-go2java/output/*/port-report.json",
+    # Transient run-scoped (gitignored; only present mid-Teal-flow).
+    ".tmp/full-loop/*/port-report.json",
+)
+
+
+def discover_port_reports() -> list[dict]:
+    """Discover any port-report.json files emitted by the port skills.
+
+    Returns parsed dicts for files that schema-validate as v0.x port reports
+    (any non-trivially-malformed file is silently skipped — the harness is
+    tolerant since `.tmp/` artifacts may be partial). For Phase D4.2 the
+    file count is typically 0 (no port skill runs yet have happened in the
+    repo); the report still emits the per-rule table with all-zero counts
+    so the format is stable across operator validation.
+    """
+    import json
+    from pathlib import Path
+    repo_root = Path(__file__).resolve().parent.parent
+    out = []
+    for pattern in PORT_REPORT_GLOB_PATHS:
+        for path in sorted(repo_root.glob(pattern)):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            if "port_report_version" not in data:
+                continue
+            data["_path"] = str(path.relative_to(repo_root))
+            out.append(data)
+    return out
+
+
+def compute_rule_applied_counts(rules: list[dict],
+                                port_reports: list[dict]) -> list[dict]:
+    """Per-rule applied-verdict count across all discovered port reports.
+
+    For each rule in `port-translation-rules.yaml`, count how many port runs
+    emitted `verdict: applied | applied-with-warning` (the two "the rule
+    actually fired" verdicts; `skipped-not-applicable` and
+    `skipped-source-side-only` are not counted as exercised). Surfaces over-
+    and under-exercised rules so Phase F (reflection loop) can prioritize.
+
+    Output rows: {id, title, applied, applied_with_warning,
+    skipped_not_applicable, skipped_source_side_only, total_runs_seen}.
+    """
+    by_id: dict[int, dict] = {
+        rule["id"]: {
+            "id": rule["id"],
+            "title": rule.get("title", ""),
+            "applied": 0,
+            "applied_with_warning": 0,
+            "skipped_not_applicable": 0,
+            "skipped_source_side_only": 0,
+        }
+        for rule in rules
+    }
+    runs_seen = len(port_reports)
+    for report in port_reports:
+        for entry in report.get("rules_consumed") or []:
+            rid = entry.get("rule_id")
+            verdict = entry.get("verdict")
+            if rid not in by_id or not isinstance(verdict, str):
+                continue
+            key = verdict.replace("-", "_")
+            if key in by_id[rid]:
+                by_id[rid][key] += 1
+    out = list(by_id.values())
+    for row in out:
+        row["total_runs_seen"] = runs_seen
+        row["exercised"] = row["applied"] + row["applied_with_warning"]
+    return out
+
+
 def compute_per_rule_mentions(rules: list[dict],
                               goldens: dict[str, set[str]]) -> list[dict]:
     """For each rule, extract bidder names from body and check golden coverage."""
@@ -433,6 +513,8 @@ def render(goldens, duals, rules) -> str:
     empire = compute_empire_coverage(goldens)
     dual_coh = compute_dual_spec_coherency(goldens, duals)
     per_rule = compute_per_rule_mentions(rules, goldens)
+    port_reports = discover_port_reports()
+    rule_applied = compute_rule_applied_counts(rules, port_reports)
 
     out = []
     out.append("# Coverage Report")
@@ -574,6 +656,53 @@ def render(goldens, duals, rules) -> str:
     out.append("---")
     out.append("")
 
+    # Section 7b (Phase D4.2): Port-report rule applied-counts.
+    out.append("## 7b. Port-translation rule applied-counts (per Phase D4.2)")
+    out.append("")
+    if port_reports:
+        out.append(f"Counted across **{len(port_reports)}** port-report.json files discovered at the canonical paths "
+                   f"({', '.join(f'`{p}`' for p in PORT_REPORT_GLOB_PATHS)}).")
+    else:
+        out.append(
+            "_No port-report.json files discovered yet — the table below renders all-zero counts. "
+            "The format is stable across operator validation (D2.8 / D3.8 runs); "
+            "once port runs persist their reports, this table reflects per-rule exercise rates._"
+        )
+    out.append("")
+    rows = []
+    for r in rule_applied:
+        rows.append([
+            f"Rule {r['id']:2d}",
+            r["title"],
+            r["exercised"],
+            r["applied"],
+            r["applied_with_warning"],
+            r["skipped_not_applicable"],
+            r["skipped_source_side_only"],
+        ])
+    out.append(md_table(
+        ["#", "Title", "Exercised", "Applied", "Applied⚠", "Skipped (N/A)", "Skipped (src-only)"],
+        rows,
+    ))
+    out.append("")
+    if port_reports:
+        unexercised = sum(1 for r in rule_applied if r["exercised"] == 0)
+        out.append(
+            f"**{unexercised} of {len(rule_applied)} rules unexercised** in the corpus. "
+            "Reflection loop (Phase F) prioritizes shrinking this set: "
+            "either find a new pair that exercises the rule, or amend the rule's "
+            "spec_field_driver if the corpus consistently fails to trigger it."
+        )
+    else:
+        out.append(
+            "Reflection loop (Phase F) consumes this section once port runs land. "
+            "An always-zero column means the rule's spec_field_driver hasn't matched "
+            "any source spec — a hint to amend the driver or add a fixture pair that exercises it."
+        )
+    out.append("")
+    out.append("---")
+    out.append("")
+
     # Section 8: Top gaps
     out.append("## 8. Top gaps to close (sorted by impact)")
     out.append("")
@@ -602,6 +731,7 @@ def render(goldens, duals, rules) -> str:
     out.append(f"- Goldens: `prebid-server-{{go,java}}/read/test-fixtures/*.golden.spec.yaml` ({len(goldens['go']) + len(goldens['java'])} files).")
     out.append(f"- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` ({len(duals)} files).")
     out.append(f"- Port-translation rules ({len(rules)} rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.")
+    out.append(f"- Port reports ({len(port_reports)} discovered): `{', '.join(PORT_REPORT_GLOB_PATHS)}` (Phase D4.2 — sourced when port skills run).")
     out.append("- ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).")
     out.append("")
     return "\n".join(out)
