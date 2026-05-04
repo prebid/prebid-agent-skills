@@ -1,0 +1,67 @@
+{# Java cross-package POJO template — emits
+src/main/java/org/prebid/server/proto/openrtb/ext/request/{bidder}/ExtImp{Bidder}.java
+
+Inputs:
+  ctx.bidder_name        : str  — Java YAML / package name (lowercase + drop non-[a-z0-9])
+  ctx.bidder_class_root  : str  — PascalCase class root (e.g., "Kobler", "AdkernelAdn"); via lookup table or Rule 46 + Java edge case #26-27
+  ctx.fields             : list[dict]  — per-field translation; each:
+      java_name      : str  — Java field name (camelCase, matches the JSON property name in most cases)
+      json_property  : str  — wire-format JSON property name (passed to @JsonProperty)
+      java_type      : str  — fully-resolved Java type ("String", "Integer", "List<String>", "ExtImp{Bidder}Nested", etc.)
+      omit_when_null : bool — whether to add @JsonInclude(JsonInclude.Include.NON_NULL) (rare; default false)
+      notes          : str|null  — single-line comment to emit ABOVE the field; null → no comment
+  ctx.has_builder        : bool — emit @Builder(toBuilder = true) annotation (most adapters: false; appnexus/adverxo style: true)
+  ctx.imports_extra      : list[str]  — extra imports beyond the canonical four; one fully-qualified import per entry; ALPHABETICALLY SORTED by caller
+  ctx.javadoc_summary    : str|null  — class-level Javadoc summary (1-3 lines); null → no Javadoc
+
+Canonical Lombok set: @Value(staticConstructor = "of") for immutable; +@Builder for
+builder-style (Java edge case). @AllArgsConstructor is the upstream-canonical companion
+when @Builder is present.
+
+ImportOrder strict 3-group per checkstyle: java.* (none in canonical case),
+javax.* (none in canonical case), then com.* + lombok.* + org.* alphabetically.
+
+This template emits ASCII-only source — see references/java-artifact-shapes.md §4-6
+for the LineLength≤120 + EmptyLineSeparator + ImportOrder constraints.
+#}
+package org.prebid.server.proto.openrtb.ext.request.{{ ctx.bidder_name }};
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+{% if ctx.fields | selectattr('omit_when_null', 'equalto', true) | list %}
+import com.fasterxml.jackson.annotation.JsonInclude;
+{% endif %}
+{% for imp in ctx.imports_extra %}
+import {{ imp }};
+{% endfor %}
+{% if ctx.has_builder %}
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+{% endif %}
+import lombok.Value;
+
+{% if ctx.javadoc_summary %}
+/**
+ * {{ ctx.javadoc_summary }}
+ */
+{% endif %}
+{% if ctx.has_builder %}
+@AllArgsConstructor
+@Builder(toBuilder = true)
+{% endif %}
+@Value(staticConstructor = "of")
+public class ExtImp{{ ctx.bidder_class_root }} {
+
+{% for field in ctx.fields %}
+{% if field.notes %}
+    // {{ field.notes }}
+{% endif %}
+{% if field.omit_when_null %}
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+{% endif %}
+    @JsonProperty({{ field.json_property | tojson }})
+    {{ field.java_type }} {{ field.java_name }};
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+}

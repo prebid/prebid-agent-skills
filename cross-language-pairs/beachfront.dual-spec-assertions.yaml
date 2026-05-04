@@ -1,0 +1,170 @@
+dual_spec_assertion_version: 1
+bidder_name: beachfront
+go_spec: prebid-server-go/read/test-fixtures/beachfront.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/beachfront.golden.spec.yaml
+go_resolved_commit: 615e5dfa5fd9a9925a607e1f0e80591f21d41778
+java_resolved_commit: 2ebf4216c4bc6127ef180643a0b91ed9e7087e88
+
+assertions:
+  bidder_params_sha256:
+    go: 8bb5485afd62744d46625253b49058a58dcdbb00f43b9f04c6ef9b06c1a46311
+    java: 9b142b7299a127c2155adea14b11c4e34c0fb35a915051fdd83b3b989bb67fe0
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only-whitespace-and-key-ordering
+    divergence_summary: |
+      bidder-params JSON diverges across languages on whitespace + member ordering, NOT
+      on validation semantics. Specific differences (verified via diff):
+        - Java drops a single space inside `"type" : "object"` → `"type": "object"` (3 sites)
+        - Java's `bidfloor.description` omits the trailing "Always in USD..." sentence the
+          Go version carries (one-sentence shorter; pure documentation, NOT a constraint)
+        - `oneOf` block reordering: Go emits [{appIds}, {appId}]; Java emits [{appId}, {appIds}]
+        - Trailing whitespace on `]` after `anyOf` (Go has trailing space; Java does not)
+      All differences are documentation/whitespace; the validation surface (required fields,
+      oneOf semantics, type constraints) is identical. Both schemas validate the same
+      runtime payloads. Port-fidelity verdict: byte-only divergence acceptable.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video]
+      app: [banner, video]
+    java:
+      site: [banner, video]
+      app: [banner, video]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 335
+    java: 335
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: prebid@beachfront.com
+    java: prebid@beachfront.com
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_endpoint:
+    go: "https://display.bfmio.com/prebid_display"
+    java: "https://display.bfmio.com/prebid_display"
+    equivalent: true
+    divergence_summary: |
+      Top-level `endpoint` (the banner/display endpoint) is byte-equal across languages.
+      The video endpoint diverges intentionally and is captured under
+      `bidder_info_endpoint_construction` below — Go stores it opaquely in
+      ExtraAdapterInfo JSON; Java stores it as a typed top-level YAML field.
+    severity: pass
+
+  bidder_info_endpoint_construction:
+    go:
+      kind: custom
+      detail: "Banner endpoint inline in YAML; video endpoint stored opaquely in `extra_info` JSON string parsed by Builder."
+    java:
+      kind: custom
+      detail: "Banner endpoint inline in YAML; video endpoint as separate top-level YAML field `video-endpoint` exposed via @NotBlank typed config subclass."
+    equivalent: false
+    divergence_summary: |
+      ADR-007 F1 master sample: multi-endpoint-by-mediatype. Banner endpoint and video
+      endpoint are two distinct URLs:
+        - banner:  https://display.bfmio.com/prebid_display
+        - video:   https://reachms.bfmio.com/bid.json?exchange_id (Go) /
+                   https://reachms.bfmio.com/bid.json?exchange_id= (Java; trailing `=`)
+      Encoding diverges by design — Go's opaque ExtraAdapterInfo JSON string is the
+      Rule 35 lossy-direction form; Java's typed BeachfrontConfigurationProperties
+      subclass with @NotBlank private String videoEndpoint is the structurally-richer
+      form. A future Go→Java re-port from the Java side would lose the typing;
+      Java→Go round-trip preserves the URL string but loses the typed-bean structure.
+    severity: warn
+
+  bidder_info_endpoint_compression:
+    go: null
+    java: null
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_modifying_vast_xml_allowed:
+    go: false
+    java: false
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: []
+    java_required_fields: []
+    go_combinators_used: [oneOf, anyOf]
+    java_combinators_used: [oneOf, anyOf]
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [appId, appIds, bidfloor, videoResponseType]
+    java_properties: [appId, appIds, bidfloor, videoResponseType]
+    equivalent: true
+    severity: pass
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - rule-9-custom-request-type
+      - rule-35-typed-config-subclass
+      - adr-007-f1-multi-endpoint-by-mediatype
+      - currency-aware-bidfloor-resolver
+      - nurl-vs-adm-video-response-type
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: null
+
+overall:
+  cross_language_state: aligned-with-documented-divergences
+  blocker_count: 0
+  warning_count: 2
+  notes: |
+    Beachfront is the ADR-007 F1 multi-endpoint-by-mediatype master sample plus the
+    Rule 35 typed-config-subclass master sample plus the Rule 9 custom-request-type
+    (parameterized_request_type=Void) master sample — three load-bearing patterns in
+    one bidder. Cross-language status:
+
+    R5-strict pass: capabilities (banner+video for both site+app), gvl_vendor_id (335),
+    maintainer email, geoscope (both empty), modifying_vast_xml_allowed (false),
+    bidder_info.endpoint (banner endpoint byte-equal), schema_interpretation
+    (semantically equal — same combinators_used, same property set, same required_fields
+    semantics).
+
+    Documented warnings:
+      - bidder_params_sha256: byte-only-whitespace-and-key-ordering divergence. Java
+        drops one space, reorders oneOf, omits one description sentence. Validation
+        semantics identical.
+      - bidder_info_endpoint_construction: kind=custom on both sides but the encoding
+        of the second (video) endpoint differs by design — Go opaque ExtraAdapterInfo
+        JSON vs Java typed subclass field. ADR-007 F1 expected divergence; not a
+        port-fidelity violation. Round-Trip Safety section flags Rule 35 inverse
+        (Java→Go demotion) as lossy.
+
+    Porter advice: when porting Java→Go, the Java's typed `videoEndpoint` field demotes
+    to Go's `ExtraAdapterInfo` JSON string per Rule 35 inverse + emit
+    `quirks[]: hardcoded-config-as-anti-pattern` on the Go destination. When porting
+    Go→Java, the Go ExtraAdapterInfo string parses to extract `video_endpoint`, then
+    a typed BeachfrontConfigurationProperties subclass with @NotBlank private String
+    videoEndpoint emerges — the Java side is the structurally-richer form. The two
+    custom request body types (BeachfrontBannerRequest + BeachfrontVideoRequest) are
+    direct cross-language translations using the corresponding language idioms (Go
+    structs with json tags ↔ Lombok @Value with @JsonProperty); Rule 9 covers the
+    request-type customization.

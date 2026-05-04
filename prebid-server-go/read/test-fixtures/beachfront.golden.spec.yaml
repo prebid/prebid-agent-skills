@@ -1,0 +1,408 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 615e5dfa5fd9a9925a607e1f0e80591f21d41778
+    fetch_method: gh-cli
+  read:
+    skill_versions:
+      orchestrator: 1.1.0
+    timestamp_utc: "2026-05-04T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: beachfront
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://display.bfmio.com/prebid_display"
+  endpoint_construction:
+    kind: custom
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@beachfront.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+    app:
+      mediaTypes:
+        - banner
+        - video
+  geoscope: []
+  gvl_vendor_id: 335
+  user_sync:
+    iframe:
+      url: "https://sync.bfmio.com/sync_s2s?gdpr={{.GDPR}}&us_privacy={{.USPrivacy}}&url={{.RedirectURL}}"
+      userMacro: "[io_cid]"
+  yaml_extra_fields:
+    extra_info: '{"video_endpoint":"https://reachms.bfmio.com/bid.json?exchange_id"}'
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Beachfront Adapter Params",
+    "description": "A schema which validates params accepted by the Beachfront adapter",
+    "type": "object",
+    "properties": {
+      "appId": {
+        "type": "string",
+        "description": "The id of an inventory target. This can only be used in requests that contain one media type. It will be applied to all imps in the request."
+      },
+      "appIds": {
+        "type" : "object",
+        "description": "An object that specifies appIds for specific media types. This can be used for either single media type requests or multiple.",
+        "properties": {
+          "video" : {
+            "type": "string",
+            "title": "Video appId",
+            "description": "An appId string that will be applied to video requests in this imp."
+          },
+          "banner" : {
+            "type": "string",
+            "title": "Banner appId",
+            "description": "An appId string that will be applied to banner requests in this imp."
+          }
+        },
+        "anyOf":[
+          {"required":["video"]},
+          {"required":["banner"]}
+        ]
+      },
+      "bidfloor": {
+        "type": "number",
+        "description": "The price floor for the bid. Will override the bidfloor set for the impression. Always in USD, regardless of the value of the currency set for the impression."
+      },
+      "videoResponseType": {
+        "type": "string",
+        "description": "By default the video response will be an AdM element containing VAST 3.0 markup including tracking, click through, and mediafile elements pointing to mp4, webm or other playable media files or Vpaid media as configured for the exchange at beachfront.io. Optionally, set this to 'nurl' to receive a URI pointing to VAST 3.0 markup which will contain a mediafile pointing to a beachfront neptune javascript video player which will load your video and take care of tracking, etc. Regardless of which format is selected, the id of the returned impression will be the provided impression id (imp[{'id'...},...] in the request) with the format appended. The impression id will be returned unchanged as 'impid'. So if you indicate 'nurl', and an impression id 'someImp', the returned impression will have an 'impid' value of 'someImpNurlVideo'. This is to differentiate the object in the case that a request includes both video and banner elements. Setting videoResponseType to any other string will have no effect and the default format (AdM) will be returned."
+      }
+    },
+
+    "oneOf": [
+      { "required": ["appIds"] },
+      { "required": ["appId"] }
+    ]
+  }
+bidder_params_sha256: 8bb5485afd62744d46625253b49058a58dcdbb00f43b9f04c6ef9b06c1a46311
+
+params:
+  schema_interpretation:
+    properties:
+      - name: appId
+        type: string
+        description: "Single appId — used when all imps share one media type."
+      - name: appIds
+        type: object
+        description: "Per-mediatype appIds object with optional video and banner string fields. anyOf-required on at least one. Used for multi-mediatype requests."
+      - name: bidfloor
+        type: number
+        description: "Override price floor. Always in USD."
+      - name: videoResponseType
+        type: string
+        description: "Video response format selector — 'adm' (default) returns inline VAST; 'nurl' returns a Beachfront-hosted neptune player URL."
+    required_fields: []
+    flexible_types: []
+    combinators_used:
+      - oneOf
+      - anyOf
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_beachfront.go
+    type_name: ExtImpBeachfront
+    fields:
+      - name: AppId
+        json_tag: appId
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: AppIds
+        json_tag: appIds
+        type_native: ExtImpBeachfrontAppIds
+        omitempty: false
+        notes:
+          - "Sub-struct with Video + Banner string fields, both omitempty."
+      - name: BidFloor
+        json_tag: bidfloor
+        type_native: float64
+        omitempty: false
+        notes: []
+      - name: VideoResponseType
+        json_tag: videoResponseType
+        type_native: string
+        omitempty: true
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/beachfront/params_test.go
+    valid_cases_count: 5
+    invalid_cases_count: 7
+    bidder_constant_referenced: openrtb_ext.BidderBeachfront
+
+code:
+  package_or_class: beachfront
+  directory_name: beachfront
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: beachfront.go
+        role: implementation
+        loc: 808
+  imports:
+    has_template_engine: false
+    has_currency_helper: true
+    has_jsonutil: true
+    third_party:
+      - github.com/prebid/openrtb/v20/adcom1
+      - github.com/prebid/prebid-server/v4/util/ptrutil
+  adapter_struct:
+    type_name: BeachfrontAdapter
+    type_visibility: exported
+    fields:
+      - name: bannerEndpoint
+        type: string
+      - name: extraInfo
+        type: ExtraInfo
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: true
+    template_parsed_at_build: false
+    errors_returned:
+      - "extra-info-malformed: ExtraAdapterInfo string is non-empty but fails json.Unmarshal into ExtraInfo struct"
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: format-split
+          formats:
+            - banner
+            - video
+        - kind: per-imp
+          notes: "video imps emit one request per imp; banner imps batch into a single beachfrontBannerRequest with all banner slots aggregated."
+    request_body:
+      kind: custom
+      custom_body_type: beachfrontRequests
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Device: in-place
+        User: in-place
+        Imp: copy-then-mutate
+        Cur: append-if-missing
+      go_idiom: shallow-copy
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImpBeachfront
+      wrapper_type: null
+    endpoint_resolution:
+      kind: multi-endpoint-by-mediatype
+      mechanism_go: struct-field-lookup
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: preprocess
+        signature: "func preprocess(request *openrtb2.BidRequest, reqInfo *adapters.ExtraRequestInfo) (beachfrontReqs beachfrontRequests, errs []error)"
+      - name: getAppId
+        signature: "func getAppId(ext openrtb_ext.ExtImpBeachfront, media openrtb_ext.BidType) (string, error)"
+      - name: getBannerRequest
+        signature: "func getBannerRequest(request *openrtb2.BidRequest, reqInfo *adapters.ExtraRequestInfo) (beachfrontBannerRequest, []error)"
+      - name: getVideoRequests
+        signature: "func getVideoRequests(request *openrtb2.BidRequest, reqInfo *adapters.ExtraRequestInfo) ([]beachfrontVideoRequest, []error)"
+      - name: setBidFloor
+        signature: "func setBidFloor(ext *openrtb_ext.ExtImpBeachfront, imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) (bool, error)"
+      - name: getExtraInfo
+        signature: "func getExtraInfo(v string) (ExtraInfo, error)"
+      - name: getDefaultExtraInfo
+        signature: "func getDefaultExtraInfo() ExtraInfo"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: '[]beachfrontResponseSlot (banner) | openrtb2.BidResponse (video)'
+    http_status_handling:
+      kind: legacy-raw-go
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-request-uri-suffix
+          field: externalRequest.Uri ends with bannerEndpoint vs videoEndpoint
+          fallback_action: next
+        - method: hardcoded
+          hardcoded_value: BidTypeBanner
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: by-request-uri
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: beachfronttest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: adm-video-app.json
+        sha256: pending-operator-fetch
+        bytes: 0
+      - filename: adm-video.json
+        sha256: pending-operator-fetch
+        bytes: 0
+      - filename: banner.json
+        sha256: pending-operator-fetch
+        bytes: 0
+      - filename: nurl-video.json
+        sha256: pending-operator-fetch
+        bytes: 0
+    supplemental:
+      - filename: '40 supplemental fixtures (error paths + edge cases — operator fetches SHAs at sync time)'
+        sha256: pending-operator-fetch
+        bytes: 0
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods:
+    - "TestExtraInfoDefaultWhenEmpty (beachfront_test.go) — Builder defaults extraInfo.VideoEndpoint when ExtraAdapterInfo is empty."
+    - "TestExtraInfoDefaultWhenNotSpecified (beachfront_test.go) — Builder defaults extraInfo.VideoEndpoint when ExtraAdapterInfo is JSON {video_endpoint:''}."
+    - "TestExtraInfoMalformed (beachfront_test.go) — Builder returns error when ExtraAdapterInfo is non-JSON string."
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: "reqInfo.ConvertCurrency(value, from, to) (float64, error)"
+    java_signature: null
+  injection: function-arg
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: multi-endpoint-by-mediatype
+    file: beachfront.go
+    summary: "Banner imps route to bannerEndpoint (`https://display.bfmio.com/prebid_display`); video imps route to videoEndpoint sourced from ExtraAdapterInfo (`https://reachms.bfmio.com/bid.json?exchange_id`). Master sample for ADR-007 F1 endpoint_resolution.kind: multi-endpoint-by-mediatype."
+    edge_case_taxon: multi-endpoint-by-mediatype
+  - id: hardcoded-config-via-extra-adapter-info
+    file: beachfront.go
+    summary: "videoEndpoint stored opaquely in ExtraAdapterInfo JSON string rather than exposed as a typed config field. Builder json.Unmarshals into ExtraInfo struct; default fallback when empty/missing. Java side uses the typed BeachfrontConfigurationProperties subclass with @NotBlank private String videoEndpoint — Rule 35 lossy-direction: Go is the lossy form."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: custom-request-body-banner
+    file: beachfront.go
+    summary: "Banner endpoint receives beachfrontBannerRequest custom struct (slots[], domain, page, deviceOs, etc.) — NOT the OpenRTB2 BidRequest. Rule 9 master sample for the banner direction."
+    edge_case_taxon: custom-request-response-shape
+  - id: custom-request-body-video
+    file: beachfront.go
+    summary: "Video endpoint receives []beachfrontVideoRequest array of custom structs (appId, videoResponseType, request) — NOT the OpenRTB2 BidRequest. Rule 9 master sample for the video direction."
+    edge_case_taxon: custom-request-response-shape
+  - id: nurl-vs-adm-video-response-type
+    file: beachfront.go
+    summary: "videoResponseType param ('nurl' | 'adm') controls bid response format. Default 'adm' returns inline VAST; 'nurl' returns Beachfront-hosted player URL with `&prebidserver` suffix appended to videoEndpoint. The two video sub-types route through the same endpoint but with different payload structure."
+    edge_case_taxon: vendor-specific-protocol-quirk
+  - id: legacy-raw-status-checks
+    file: beachfront.go
+    summary: "MakeBids uses raw responseData.StatusCode == 204 / != 200 checks (lines 525-534) instead of canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors helpers."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/beachfront/
+    package_name: beachfront
+    bidder_constant: openrtb_ext.BidderBeachfront
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/beachfront/
+    bidder_class: BeachfrontBidder
+    config_class: BeachfrontConfiguration
+    yaml_path: src/main/resources/bidder-config/beachfront.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/beachfront/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - rule-9-custom-request-type
+      - rule-35-typed-config-subclass
+      - adr-007-f1-multi-endpoint-by-mediatype
+      - currency-aware-bidfloor-resolver
+  go_specific_concerns:
+    - "ExtraInfo struct is package-exported and Builder accepts ExtraAdapterInfo string config; opaque JSON-string config is the Go-side anti-pattern Rule 35 inverse demotes Java's typed config TO."
+    - "Per-imp processing in preprocess() splits imps into bannerImps + videoImps slices BEFORE building per-mediatype request payloads. Multi-mediatype imps appear in BOTH slices (one banner request + one or more video requests)."
+    - "fakeIP constant (255.255.255.255) is sent in the device.ip field when the framework's BidRequest.Device is null — Rule 27-adjacent quirk specific to Beachfront's expected payload shape."
+    - "BeachfrontAdapterName + BeachfrontAdapterVersion constants are stamped into the banner request payload (adapterName + adapterVersion fields) — bidder-side identification not present in OpenRTB."
+    - "BidCapacity = 5 — apparently a per-request bid limit on response parsing (only the first 5 bids per seatbid are processed)."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: null

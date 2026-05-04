@@ -12,7 +12,7 @@ a structural diff.
 
 | Rule | Description | Source of truth | Last verified |
 |---|---|---|---|
-| YAML name = directory name | `static/bidder-info/{X}.yaml` ↔ `adapters/{X}/` | implicit (file system) | v4.1.0 (2026-04-27) |
+| YAML name = directory name | `static/bidder-info/{X}.yaml` ↔ `adapters/{X}/` | implicit (file system) | v4.1.0 (re-verified 2026-05-04) |
 | Bidder constant = `Bidder<TitleCase>` | `openrtb_ext/bidders.go` declares `Bidder<X> BidderName = "<x>"` | `openrtb_ext/bidders.go` | v4.1.0 |
 | TitleCase preserves brand acronyms | `BidderAJA`, `BidderMX`, `BidderTV`, `Bidder33Across` (NOT `Bidder33across`) | upstream maintainer convention | v4.1.0 |
 | Underscore in YAML name allowed | `boldwin_rapid`, `e_volution`, `lm_kiviads`, `cadent_aperture_mx`, `triplelift_native` | PR #4211 (formal acceptance) | v4.1.0 |
@@ -28,7 +28,7 @@ the canonical lookup procedure.
 
 | Rule | Description | Source of truth | Last verified |
 |---|---|---|---|
-| YAML parent name = `lowercase + drop non-[a-z0-9]` of Go name | per ADR-005 Rule 46 mechanical formula | derived rule | v3.41.0 (2026-04-22) |
+| YAML parent name = `lowercase + drop non-[a-z0-9]` of Go name | per ADR-005 Rule 46 mechanical formula | derived rule | v3.41.0 (re-verified 2026-05-04) |
 | Class root preserves brand acronyms | `ElementalTV`, `FeedAd`, `BidsCube`, `BidTheatre` | per Java edge case #27 | v3.41.0 |
 | Class root capitalizes first letter after digit-leading prefix | `33across → Thirtythree`, `152media → OneFiveTwoMedia`, `360playvid → 360Playvid` | per Java edge case #26 | v3.41.0 |
 | Configuration-class naming: `<Name>Configuration` OR `<Name>BidderConfiguration` | both forms accepted (Kobler vs Adverxo) | per Java edge case #19 | v3.41.0 |
@@ -119,9 +119,28 @@ the policy was last re-confirmed.
 
 ## Sources
 
-- Go upstream: `prebid/prebid-server` master at v4.1.0 (commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`, 2026-04-27).
-- Java upstream: `prebid/prebid-server-java` master at v3.41.0 (commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a`, 2026-04-22).
+- Go upstream: `prebid/prebid-server` master at v4.1.0 (release commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`); re-verified 2026-05-04 against master HEAD `2fae16f31693`.
+- Java upstream: `prebid/prebid-server-java` master at v3.41.0 (release commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a`); re-verified 2026-05-04 against master HEAD `a1fe64e123d6`.
 - ADR-005 (Rule 46 naming): the mechanical transformation table + 11 verified pairs (refined 2026-05-03 from 12 — `freewheel-ssp/freewheelssp` removed; see ADR-005 "Excluded cases").
 - ADR-003 (Rule 44 alias-empire): 32-parent / 95-alias inventory.
 - ADR-004 (Rule 45 disabled-by-default): 78 disabled-asymmetric pairs.
 - Java edge cases #18–#34: `prebid-server-java/references/java-edge-cases.md`.
+
+## In-flight upstream changes (tracked; not yet landed)
+
+When upstream PRs that affect bidder-config / bidder-params shape are
+in-flight, track them here so that Phase D port skills can pre-submit
+rebase against the most current `master`. Phase D2/D3 emit MUST rebase
+the target branch against upstream `master` HEAD immediately before
+opening the PR; if any of the listed PRs land between port-emit and
+PR-open, regenerate the affected goldens.
+
+- **`prebid/prebid-server-java#4126` — "Bidder Configuration Fixes & URL Validation"** (state: OPEN as of 2026-05-04; baseRef=`master`, headRef=`bidder-configs-fixes`). Adds URL-validation gates that may reject port-emitted endpoint formats. D2 pre-submit rebase MUST verify post-rebase emission still passes upstream Java `mvn -B compile`. URL: <https://github.com/prebid/prebid-server-java/pull/4126>.
+
+## Known data-only drifts (operator-ack pending)
+
+Drifts surfaced by `scripts/sync-from-upstream.py` that are real but not
+schema-breaking. Operator may ack them into the affected goldens at any
+time; they don't block Phase D execution.
+
+- **`adkernel` (go) — `bidder_info.endpoint_compression`** changed value upstream. WARN-severity per drift detector; ack into the golden when the next adkernel-touching PR lands.

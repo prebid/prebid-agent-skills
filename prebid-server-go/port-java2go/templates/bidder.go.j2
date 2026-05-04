@@ -1,0 +1,286 @@
+{# Go {bidder}.go template — emits adapters/{bidder}/{bidder}.go
+
+The main Go adapter file. Implements the adapters.Bidder interface
+(Builder + MakeRequests + MakeBids). Mirror of the Java
+bidder.java.j2 template's conditional matrix, with Go-specific idiom:
+
+- Explicit `http.Header` headers (Rule 19 inverse — Java helper expansion)
+- Explicit `adapters.IsResponseStatusCodeNoContent` + `CheckResponseStatusCodeForErrors`
+  helpers (Rule 30 inverse — Java framework-default expansion)
+- Composite literals instead of Lombok @Builder (Rule 8 inverse)
+- `jsonutil.Marshal` / `Unmarshal` instead of JacksonMapper
+
+The post-emit `gofmt -s -w` step canonicalizes formatting; this
+template emits code that's already gofmt-clean for the canonical case.
+
+Inputs (mirror of bidder.java.j2 ctx):
+  ctx.package_name            : str  — Go package name (e.g., "kobler", "adkernelAdn")
+  ctx.bidder_class_root       : str  — PascalCase root used in Builder + helpers
+  ctx.uses_currency_conversion: bool — currency_conversion.used (Rule 28)
+  ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref
+  ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct"
+  ctx.batching_kind           : str  — "single-batched" | "per-imp" | "max-imps-per-request"
+                                        | "format-split" | "pod-grouping"
+  ctx.batching_max_imps       : int|null
+  ctx.endpoint_resolution_kind: str  — "static" | "single-token-substitution" |
+                                        "query-parameter-augmentation" | "dev-prod-toggle"
+                                        | "multi-token-substitution"
+  ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw"
+  ctx.bid_type_resolution     : str  — "imp-mediatype-introspection" |
+                                        "ext-prebid-video-placement" | "constant-banner"
+                                        | "method-chain-fallback"
+  ctx.has_extra_info          : bool — true when source has ExtraAdapterInfo (Rule 35
+                                        inverse demoted Java typed config to Go opaque
+                                        JSON string); imports + struct fields adjust.
+  ctx.module_version          : str  — Go module major version per upstream go.mod
+                                        (current "v4"; v3→v4 PR #4710 merged 2026-03-05).
+                                        See bidder-constant-table.yaml::upstream_source.module_version
+                                        for the canonical pin.
+  ctx.imports_extra           : list[str] — caller-collected; one fully-qualified import
+                                            per entry; alphabetical.
+  ctx.javadoc_summary         : str|null — // doc comment above package var or struct
+#}
+package {{ ctx.package_name }}
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/prebid/openrtb/v20/openrtb2"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/config"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/util/jsonutil"
+{% for imp in ctx.imports_extra %}
+	"{{ imp }}"
+{% endfor %}
+)
+
+{% if ctx.javadoc_summary %}
+// {{ ctx.javadoc_summary }}
+{% endif %}
+type adapter struct {
+	endpoint string
+{% if ctx.has_extra_info %}
+	extraInfo extraInfo
+{% endif %}
+}
+
+{% if ctx.has_extra_info %}
+type extraInfo struct {
+	// TODO[port-java2go]: operator fills fields from the Java typed-config
+	// subclass per Rule 35 inverse. Each Java field becomes a Go field with
+	// `json:"X"` tag matching the upstream YAML key.
+}
+
+{% endif %}
+func Builder(_ openrtb_ext.BidderName, cfg config.Adapter, _ config.Server) (adapters.Bidder, error) {
+	a := &adapter{endpoint: cfg.Endpoint}
+{% if ctx.has_extra_info %}
+	if cfg.ExtraAdapterInfo != "" {
+		if err := json.Unmarshal([]byte(cfg.ExtraAdapterInfo), &a.extraInfo); err != nil {
+			return nil, fmt.Errorf("invalid extra info: %w", err)
+		}
+	}
+{% endif %}
+	return a, nil
+}
+
+func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.ExtraRequestInfo) ([]*adapters.RequestData, []error) {
+	var errors []error
+{% if ctx.batching_kind == "single-batched" %}
+	for i := range request.Imp {
+		if _, err := parseImpExt(&request.Imp[i]); err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	body, err := jsonutil.Marshal(request)
+	if err != nil {
+		return nil, append(errors, err)
+	}
+
+	return []*adapters.RequestData{
+		{
+			Method:  http.MethodPost,
+			Uri:     a.resolveEndpoint(request),
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(request.Imp),
+		},
+	}, errors
+{% elif ctx.batching_kind == "per-imp" %}
+	requests := make([]*adapters.RequestData, 0, len(request.Imp))
+	for i := range request.Imp {
+		if _, err := parseImpExt(&request.Imp[i]); err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		perImp := *request
+		perImp.Imp = []openrtb2.Imp{request.Imp[i]}
+		body, err := jsonutil.Marshal(&perImp)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     a.resolveEndpoint(&perImp),
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perImp.Imp),
+		})
+	}
+	return requests, errors
+{% elif ctx.batching_kind == "max-imps-per-request" %}
+	const maxImpsPerRequest = {{ ctx.batching_max_imps }}
+	chunks := chunkImps(request.Imp, maxImpsPerRequest)
+	requests := make([]*adapters.RequestData, 0, len(chunks))
+	for _, chunk := range chunks {
+		for i := range chunk {
+			if _, err := parseImpExt(&chunk[i]); err != nil {
+				errors = append(errors, err)
+			}
+		}
+		chunkRequest := *request
+		chunkRequest.Imp = chunk
+		body, err := jsonutil.Marshal(&chunkRequest)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     a.resolveEndpoint(&chunkRequest),
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp),
+		})
+	}
+	return requests, errors
+{% else %}
+	// TODO[port-java2go]: batching_kind={{ ctx.batching_kind }} not yet
+	// template-mapped. Operator hand-fills MakeRequests body. See
+	// port-report.json::unresolved_translations[].
+	_ = errors
+	return nil, []error{fmt.Errorf("batching_kind={{ ctx.batching_kind }} not yet implemented")}
+{% endif %}
+}
+
+func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData, responseData *adapters.ResponseData) (*adapters.BidderResponse, []error) {
+{% if ctx.http_status_kind == "canonical-helpers" %}
+	if adapters.IsResponseStatusCodeNoContent(responseData) {
+		return nil, nil
+	}
+	if err := adapters.CheckResponseStatusCodeForErrors(responseData); err != nil {
+		return nil, []error{err}
+	}
+{% else %}
+	if responseData.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+	if responseData.StatusCode != http.StatusOK {
+		return nil, []error{fmt.Errorf("unexpected status code: %d", responseData.StatusCode)}
+	}
+{% endif %}
+
+	var bidResponse openrtb2.BidResponse
+	if err := jsonutil.Unmarshal(responseData.Body, &bidResponse); err != nil {
+		return nil, []error{err}
+	}
+
+	bidderResponse := adapters.NewBidderResponse()
+	bidderResponse.Currency = bidResponse.Cur
+	for _, seatBid := range bidResponse.SeatBid {
+		for i := range seatBid.Bid {
+			bid := &seatBid.Bid[i]
+			bidderResponse.Bids = append(bidderResponse.Bids, &adapters.TypedBid{
+				Bid:     bid,
+				BidType: getBidType(bid, request.Imp),
+			})
+		}
+	}
+	return bidderResponse, nil
+}
+
+func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}, error) {
+{% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
+	var bidderExt adapters.ExtImpBidder
+	if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil {
+		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
+	}
+	var ext openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}
+	if err := jsonutil.Unmarshal(bidderExt.Bidder, &ext); err != nil {
+		return nil, fmt.Errorf("imp %s: failed parsing imp.ext.bidder: %w", imp.ID, err)
+	}
+	return &ext, nil
+{% else %}
+	var ext openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}
+	if err := jsonutil.Unmarshal(imp.Ext, &ext); err != nil {
+		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
+	}
+	return &ext, nil
+{% endif %}
+}
+
+func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
+{% if ctx.endpoint_resolution_kind == "static" %}
+	return a.endpoint
+{% elif ctx.endpoint_resolution_kind == "dev-prod-toggle" %}
+	// Dev-prod toggle: when imp.ext.test (or similar) signals test mode,
+	// substitute a dev URL. Operator wires the toggle per Rule 13.
+	return a.endpoint
+{% else %}
+	// TODO[port-java2go]: endpoint_resolution_kind={{ ctx.endpoint_resolution_kind }}
+	// requires per-bidder customization (Rule 11/12/14).
+	return a.endpoint
+{% endif %}
+}
+
+func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
+{% if ctx.bid_type_resolution == "constant-banner" %}
+	return openrtb_ext.BidTypeBanner
+{% elif ctx.bid_type_resolution == "imp-mediatype-introspection" %}
+	for i := range imps {
+		if imps[i].ID == bid.ImpID {
+			if imps[i].Video != nil {
+				return openrtb_ext.BidTypeVideo
+			}
+			if imps[i].Native != nil {
+				return openrtb_ext.BidTypeNative
+			}
+			if imps[i].Audio != nil {
+				return openrtb_ext.BidTypeAudio
+			}
+			return openrtb_ext.BidTypeBanner
+		}
+	}
+	return openrtb_ext.BidTypeBanner
+{% else %}
+	// TODO[port-java2go]: bid_type_resolution={{ ctx.bid_type_resolution }}
+	// requires per-bidder customization (Rule 23-25).
+	return openrtb_ext.BidTypeBanner
+{% endif %}
+}
+
+func standardHeaders() http.Header {
+	headers := http.Header{}
+	headers.Add("Content-Type", "application/json;charset=utf-8")
+	headers.Add("Accept", "application/json")
+	return headers
+}
+{% if ctx.batching_kind == "max-imps-per-request" %}
+
+func chunkImps(imps []openrtb2.Imp, chunkSize int) [][]openrtb2.Imp {
+	chunks := make([][]openrtb2.Imp, 0)
+	for i := 0; i < len(imps); i += chunkSize {
+		end := i + chunkSize
+		if end > len(imps) {
+			end = len(imps)
+		}
+		chunks = append(chunks, imps[i:end])
+	}
+	return chunks
+}
+{% endif %}

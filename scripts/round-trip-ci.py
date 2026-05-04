@@ -40,6 +40,51 @@ except ImportError:  # pragma: no cover
     sys.exit(3)
 
 
+# Make the sibling `lib/` package importable when this file is run as a
+# script (`python3 scripts/round-trip-ci.py`) or loaded via importlib (the
+# unit-test pattern in scripts/tests/test_round_trip_ci.py). Python adds
+# the script's dir to sys.path automatically only in the script case.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+# R5 logic was lifted to scripts/lib/r5_check.py in Phase D0.1 so that the
+# port skills (port-go2java / port-java2go) can compute R5 from the same
+# source of truth as this harness. Module-level re-exports below keep
+# test_round_trip_ci.py imports unchanged. The names listed in __all__ are
+# the load-bearing re-exports; they are imported here precisely so that
+# `import round_trip_ci as rtci; rtci.R5_STRICT_KEYS` resolves the way
+# scripts/tests/test_round_trip_ci.py expects.
+from lib.r5_check import (  # noqa: E402  (after sys.path setup)
+    R5_ADVISORY_DIVERGENT_KEYS,
+    R5_FORM_DIVERGENT_KEYS,
+    R5_STRICT_KEYS,
+    R5Diagnostic,
+    R5Result,
+    SpecView,
+    _list_set_eq,
+    _maintainer_eq,
+    compare_pair as _r5_compare_pair,
+    deep_eq,
+    normalize_endpoint_macros,
+)
+
+# Public re-export surface for downstream tests + the port skills.
+# Pyright's reportUnused* respects __all__ presence here.
+__all__ = (
+    "R5_ADVISORY_DIVERGENT_KEYS",
+    "R5_FORM_DIVERGENT_KEYS",
+    "R5_STRICT_KEYS",
+    "R5Diagnostic",
+    "R5Result",
+    "SpecView",
+    "_list_set_eq",
+    "_maintainer_eq",
+    "deep_eq",
+    "normalize_endpoint_macros",
+)
+
+
 # ---------------------------------------------------------------------------
 # Repo layout (paths are absolute and stable; the repo lives under prebid-agent-skills)
 # ---------------------------------------------------------------------------
@@ -696,6 +741,237 @@ def normalize_for_determinism(spec_raw: Dict[str, Any]) -> Dict[str, Any]:
     return copy
 
 
+def _load_lossy_field_paths() -> Dict[str, Dict[str, bool]]:
+    """Phase D4.1: parse `Round-Trip Safety` section of port-translation-rules.yaml.
+
+    Returns mapping ``{field_path: {direction: True}}`` where ``direction``
+    is one of ``go-to-java`` or ``java-to-go``. ``r_port_round_trip`` consults
+    this map: a divergence on a field flagged as lossy in the relevant
+    direction is recorded as expected (no FAIL), per
+    docs/methodology/port-skills-design.md Round-Trip Safety semantics.
+    """
+    rules_path = os.path.join(
+        REPO_ROOT, "prebid-server-go", "read", "skills", "shared",
+        "port-translation-rules.yaml",
+    )
+    try:
+        with open(rules_path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    out: Dict[str, Dict[str, bool]] = {}
+    for section in data.get("sections") or []:
+        if section.get("kind") != "round_trip_safety":
+            continue
+        table = section.get("verdict_table") or {}
+        for row in table.get("rows") or []:
+            if not isinstance(row, list) or len(row) < 4:
+                continue
+            field_path = (row[0] or "").strip().strip("`")
+            lossy_direction = (row[2] or "").strip().lower()
+            verdict = (row[3] or "").strip().lower()
+            if "lossy" not in verdict:
+                continue
+            if not field_path:
+                continue
+            entry = out.setdefault(field_path, {})
+            # Direction column shapes: "Go→Java→Go" (Go is source-of-truth,
+            # round-trip via Java loses info) or "Java→Go→Java".
+            if "go→java→go" in lossy_direction or "go-to-java-to-go" in lossy_direction:
+                entry["go-to-java"] = True
+            if "java→go→java" in lossy_direction or "java-to-go-to-java" in lossy_direction:
+                entry["java-to-go"] = True
+    return out
+
+
+def _round_trip_artifact_path(bidder: str, language: str) -> Optional[str]:
+    """Phase D4.1: locate a round-trip artifact for a given bidder + target language.
+
+    Looks under (in precedence order):
+      1. ``.tmp/full-loop/*/round-trip/{language}/{bidder}.yaml`` (Teal flow transient)
+      2. ``prebid-server-{language}/port-{source}2{target}/output/{bidder}/round-trip/{bidder}.spec.yaml``
+
+    Returns the first matching path, or None when no artifact exists yet
+    (the common case in the corpus today; round-trip CI gates surface
+    findings only when operator runs persist artifacts).
+    """
+    other = "go" if language == "java" else "java"
+    candidates = [
+        os.path.join(REPO_ROOT, ".tmp", "full-loop", "*", "round-trip", language, f"{bidder}.yaml"),
+        os.path.join(REPO_ROOT, f"prebid-server-{language}", f"port-{other}2{language}",
+                     "output", bidder, "round-trip", f"{bidder}.spec.yaml"),
+    ]
+    for pattern in candidates:
+        matches = sorted(glob.glob(pattern))
+        if matches:
+            return matches[-1]  # most-recent run-id when multiple
+    return None
+
+
+def r_port_round_trip(go_spec: Optional[Spec], java_spec: Optional[Spec],
+                       lossy_paths: Optional[Dict[str, Dict[str, bool]]] = None) -> List[Finding]:
+    """Phase D4.1: port-side round-trip determinism.
+
+    For each paired bidder (go_spec + java_spec both present), check
+    whether round-trip artifacts exist at canonical paths and validate
+    them. The full round-trip path is:
+
+      original Go spec → port-go2java → Java spec at .tmp → port-java2go →
+      Go spec at .tmp/round-trip/go/{bidder}.yaml
+
+    The harness compares the ORIGINAL Go spec to the round-tripped Go
+    spec. Differences on fields flagged as lossy in
+    port-translation-rules.yaml's Round-Trip Safety section are
+    recorded as expected (no FAIL). Other differences emit WARN.
+
+    When no round-trip artifact exists (the common state today —
+    operator-side runs haven't landed any), emits SKIP with reason
+    "no round-trip artifact". The framework is in place for when
+    operator runs persist artifacts.
+
+    Inverse direction (Java spec → port-java2go → Go intermediate →
+    port-go2java → Java round-tripped) is symmetric; the helper checks
+    both directions when artifacts are present.
+    """
+    primary = go_spec or java_spec
+    if primary is None:
+        return []
+    bidder = primary.bidder
+    if go_spec is None or java_spec is None:
+        return [Finding("R11", f"pair/{bidder}", SEV_SKIP,
+                        "round-trip requires paired Go + Java goldens (one side missing)")]
+
+    if lossy_paths is None:
+        lossy_paths = _load_lossy_field_paths()
+
+    findings: List[Finding] = []
+    for direction in ("go-to-java", "java-to-go"):
+        # The "round-trip" artifact lives in the SAME language as the source —
+        # round trip = source → other → back to source.
+        rt_lang = "go" if direction == "go-to-java" else "java"
+        rt_path = _round_trip_artifact_path(bidder, rt_lang)
+        if not rt_path:
+            findings.append(Finding(
+                "R11", f"pair/{bidder}/{direction}", SEV_SKIP,
+                f"no round-trip artifact (looked for {rt_lang}/{bidder}.yaml under .tmp/full-loop/ and port-*/output/)",
+            ))
+            continue
+        try:
+            with open(rt_path, "r", encoding="utf-8") as fh:
+                rt_raw = yaml.safe_load(fh) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            findings.append(Finding(
+                "R11", f"pair/{bidder}/{direction}", SEV_FAIL,
+                f"could not load round-trip artifact at {rt_path}: {exc}",
+            ))
+            continue
+        original_spec = go_spec if direction == "go-to-java" else java_spec
+        diffs = _round_trip_diff(original_spec.raw, rt_raw, lossy_paths, direction)
+        if not diffs:
+            findings.append(Finding(
+                "R11", f"pair/{bidder}/{direction}", SEV_PASS,
+                "round-trip lossless (modulo expected lossy-direction fields)",
+            ))
+        else:
+            for diff in diffs:
+                findings.append(Finding(
+                    "R11", f"pair/{bidder}/{direction}", SEV_WARN,
+                    f"unexpected round-trip divergence at {diff['path']}: "
+                    f"original={diff['original']!r} round-tripped={diff['round_tripped']!r}",
+                ))
+    return findings
+
+
+def _round_trip_diff(
+    original: Dict[str, Any],
+    round_tripped: Dict[str, Any],
+    lossy_paths: Dict[str, Dict[str, bool]],
+    direction: str,
+) -> List[Dict[str, Any]]:
+    """Walk original vs round-tripped spec; collect fields that diverge AND
+    are NOT flagged as lossy in the relevant direction. Returns a list of
+    {path, original, round_tripped} dicts for unexpected divergences.
+
+    keys_to_check is intentionally minimal — limited to the R5-strict
+    subset whose divergence is meaningful regardless of direction. The
+    Round-Trip Safety table at port-translation-rules.yaml lists many
+    paths flagged lossy that are NOT in this set (e.g., code.builder.*,
+    spring_config.*, tests.unit_test_methods_count); the lossy_paths
+    loader is forward-looking — a future expansion of keys_to_check
+    can add those without re-shaping the diff loop. Today, none of the
+    paths in keys_to_check appear in the Round-Trip Safety lossy list,
+    so the lossy_paths intersection is empty by design (the gate is in
+    place against future schema additions).
+
+    Per Phase D4.1 follow-up: bidder_info.endpoint compares via
+    normalize_endpoint_macros so macro-form equivalent endpoints
+    (Go {{.X}} vs Java ${X}) don't fire false WARNs — same canonical
+    form R5 uses for the form-divergent comparison.
+    """
+    out: List[Dict[str, Any]] = []
+    keys_to_check = (
+        # R5-strict subset — divergences here are unexpected even given
+        # lossy-direction asymmetries elsewhere.
+        "bidder_info.endpoint",
+        "bidder_info.maintainer",
+        "bidder_info.gvl_vendor_id",
+        "bidder_info.geoscope",
+        "bidder_info.modifying_vast_xml_allowed",
+        "bidder_info.endpoint_compression",
+        "bidder_info.capabilities",
+        "bidder_params_sha256",
+    )
+    for path in keys_to_check:
+        if _is_lossy_in_direction(path, direction, lossy_paths):
+            continue
+        orig_val = _walk_dotted(original, path)
+        rt_val = _walk_dotted(round_tripped, path)
+        # bidder_info.endpoint may use language-specific macro syntax;
+        # canonicalize before comparing so {{.Host}} ≡ ${host} ≡ {{Host}}.
+        if path == "bidder_info.endpoint":
+            orig_val = normalize_endpoint_macros(orig_val) if isinstance(orig_val, str) else orig_val
+            rt_val = normalize_endpoint_macros(rt_val) if isinstance(rt_val, str) else rt_val
+        if not _values_equivalent(orig_val, rt_val):
+            out.append({
+                "path": path,
+                "original": orig_val,
+                "round_tripped": rt_val,
+            })
+    return out
+
+
+def _is_lossy_in_direction(
+    path: str,
+    direction: str,
+    lossy_paths: Dict[str, Dict[str, bool]],
+) -> bool:
+    """Check whether a field path is flagged lossy in the given direction
+    in the Round-Trip Safety table."""
+    entry = lossy_paths.get(path) or {}
+    return bool(entry.get(direction))
+
+
+def _walk_dotted(node: Any, dotted: str) -> Any:
+    for part in dotted.split("."):
+        if isinstance(node, dict) and part in node:
+            node = node[part]
+        else:
+            return None
+    return node
+
+
+def _values_equivalent(a: Any, b: Any) -> bool:
+    """JSON-stable equivalence (lists order-insensitive when set-equality
+    is the natural semantic; falls back to deep equality)."""
+    if isinstance(a, list) and isinstance(b, list):
+        try:
+            return sorted(json.dumps(x, sort_keys=True, default=str) for x in a) == \
+                   sorted(json.dumps(x, sort_keys=True, default=str) for x in b)
+        except TypeError:
+            pass
+    return json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
+
+
 def r4_check(spec: Spec) -> List[Finding]:
     """Round-trip determinism: load → normalize → dump three times; assert
     dump2 == dump3 (idempotent under round-trip).
@@ -731,314 +1007,31 @@ def r4_check(spec: Spec) -> List[Finding]:
 # ---------------------------------------------------------------------------
 
 
-def deep_eq(a: Any, b: Any) -> bool:
-    """Order-insensitive equality for lists where order is unstable (e.g. combinators_used)."""
-    return json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
-
-
-def _list_set_eq(a: Any, b: Any) -> bool:
-    """Set-equality for list-valued runtime fields where order is not
-    semantically load-bearing. Wave 11b B5 #2: corrects the false-positive
-    class where Go's `sort.Strings()` and Java's `LinkedHashSet` produce
-    legitimately different iteration orders for the same set.
-
-    Both None → equal. Both lists → set-equal (compared via JSON-serialized
-    member representations to admit nested dicts/lists). Mixed types or
-    non-lists fall through to deep_eq."""
-    if a is None and b is None:
-        return True
-    if not isinstance(a, list) or not isinstance(b, list):
-        return deep_eq(a, b)
-    return sorted(json.dumps(x, sort_keys=True, default=str) for x in a) == \
-           sorted(json.dumps(x, sort_keys=True, default=str) for x in b)
-
-
-def _maintainer_eq(a: Any, b: Any) -> bool:
-    """Maintainer-block equality: only the email is the runtime invariant.
-    Wave 11b B5 #2: prevents stale-FAILs when one language adds extra
-    maintainer fields (phone, team, slack handle) the other doesn't carry.
-    Both None → equal. Compares case-insensitive email after stripping
-    whitespace; missing email on either side compares as empty string."""
-    em_a = (a or {}).get("email") if isinstance(a, dict) else None
-    em_b = (b or {}).get("email") if isinstance(b, dict) else None
-    return (em_a or "").strip().lower() == (em_b or "").strip().lower()
-
-
-# Wave 11b B5 #2: R5_STRICT_KEYS refactored from flat (spec_field, dual_key)
-# tuples to (spec_field, dual_key, comparator) three-tuples. Per-key
-# comparator selection prevents false positives:
-# - LIST-VALUED keys (capabilities, geoscope, schema_interpretation.*)
-#   use _list_set_eq (order-independent set equality).
-# - PROSE-BEARING keys (maintainer) use _maintainer_eq (compares only the
-#   runtime-invariant subfield, not advisory fields).
-# - PURE-DATA keys (gvl_vendor_id, endpoint_compression, modifying_vast_xml_allowed)
-#   use deep_eq (scalar equality).
-#
-# When the dual-spec assertion says severity:warn, downgrade to WARN.
-# When dual-spec says severity:pass but runtime disagrees → FAIL (stale-pass).
-R5_STRICT_KEYS = (
-    ("bidder_info.capabilities",                       "bidder_info_capabilities",                _list_set_eq),
-    # params.schema_interpretation is decomposed into runtime-invariant
-    # subfields only. The whole block contains prose-bearing fields
-    # (properties[].description, properties[].notes) that legitimately
-    # differ across languages — Java may reference Pattern.matches semantics,
-    # Go may reference regexp substring semantics, etc. Comparing the whole
-    # block via deep_eq fired stale-pass FAILs on dual-spec assertions that
-    # were correctly capturing semantic equivalence (e.g., thetradedesk).
-    ("params.schema_interpretation.required_fields",   "params_schema_interpretation",            _list_set_eq),
-    ("params.schema_interpretation.combinators_used",  "params_schema_interpretation",            _list_set_eq),
-    ("params.schema_interpretation.flexible_types",    "params_schema_interpretation",            _list_set_eq),
-    ("bidder_info.gvl_vendor_id",                      "bidder_info_gvl_vendor_id",               deep_eq),
-    ("bidder_info.endpoint_compression",               "bidder_info_endpoint_compression",        deep_eq),
-    ("bidder_info.geoscope",                           "bidder_info_geoscope",                    _list_set_eq),
-    ("bidder_info.maintainer",                         "bidder_info_maintainer",                  _maintainer_eq),
-    ("bidder_info.modifying_vast_xml_allowed",         "bidder_info_modifying_vast_xml_allowed",  deep_eq),
-)
-# Wave 11b B4 C1: R5 divergent keys split into two buckets.
-#
-# R5_FORM_DIVERGENT_KEYS: macro form differs by language but the URL/value
-# after normalization MUST be equal. normalize_endpoint_macros() canonicalizes
-# Go's `{{.X}}` template form, Java's `${X}` printf, Spring EL `#{X}`, and
-# raw `{{X}}` to a single `{{X}}` form. Real semantic divergence (different
-# macro names, different URL paths) surfaces as FAIL after normalization.
-# Absence of dual-spec assertion when normalized values DIFFER → FAIL
-# `assertion_missing` (Wave 11b strictness; aax's bidder_info_endpoint
-# assertion was added as prerequisite to land this gate).
-R5_FORM_DIVERGENT_KEYS = (
-    ("bidder_info.endpoint",                    "bidder_info_endpoint"),
-)
-
-# R5_ADVISORY_DIVERGENT_KEYS: cross-language-metadata that legitimately
-# diverges per-language; honor only the assertion's severity (no runtime
-# FAIL on divergence; absence of assertion is silent — these are
-# documentation-only checks). bidder_info.endpoint_construction stays here
-# because the divergence is SEMANTIC (different macro NAMES per language,
-# e.g., adverxo Go uses `AdUnit` / Java uses `adUnitId`) not just macro
-# syntax — normalization can't paper that over and the dual-spec is the
-# right surface to document the per-language idiom.
-R5_ADVISORY_DIVERGENT_KEYS = (
-    ("bidder_info.endpoint_construction",       "bidder_info_endpoint_construction"),
-    ("bidder_info.default_enabled",             "bidder_info_default_enabled"),
-    ("meta.alias_metadata",                     "alias_metadata"),
-    (None,                                      "lifecycle_rename"),
-    (None,                                      "port_lineage"),
-    (None,                                      "reviewer_cohort"),
-    (None,                                      "test_fixture_cost"),
-)
-
-
-def normalize_endpoint_macros(s: Any) -> Any:
-    """Normalize endpoint URL macro syntax across languages to canonical
-    `{{X}}` form. Used by R5_FORM_DIVERGENT_KEYS check so that pure-syntax
-    divergence (Go template vs Java property reference) doesn't fire false
-    structural-parity FAILs.
-
-    Recognized forms:
-      - `{{.X}}`     → `{{X}}`   (Go html/text template)
-      - `${X}`       → `{{X}}`   (Java property reference / shell-style)
-      - `#{X}`       → `{{X}}`   (Spring Expression Language)
-      - `{{X}}`      → `{{X}}`   (already canonical)
-
-    `%s` (printf positional) is intentionally NOT normalized — it has no
-    name to canonicalize against, so any pair using `%s` on one side and
-    `{{X}}` on the other will surface as a real divergence (and should be
-    documented in dual-spec or fixed in the corpus).
-    """
-    if not isinstance(s, str):
-        return s
-    s = re.sub(r"\{\{\.(\w+)\}\}", r"{{\1}}", s)   # Go {{.X}} → {{X}}
-    s = re.sub(r"\$\{(\w+)\}",      r"{{\1}}", s)   # Java ${X} → {{X}}
-    s = re.sub(r"#\{([^}]+)\}",     r"{{\1}}", s)   # Spring EL #{X} → {{X}}
-    return s
-
-
 def r5_check(go_spec: Optional[Spec], java_spec: Optional[Spec],
              dual_specs: Dict[str, Dict[str, Any]]) -> List[Finding]:
-    """Cross-language structural parity. Runtime values are the source of truth;
-    the dual-spec assertion is an EXPECTATION verified against runtime, not a
-    free pass.
+    """Cross-language structural parity. Thin adapter over
+    ``scripts.lib.r5_check.compare_pair``.
 
-    Polarity contract: runtime takes precedence. When dual-spec says severity:pass
-    but runtime values disagree, FAIL — the assertion is stale. Always run
-    deep_eq; never short-circuit on the assertion's own claim.
+    Runtime values are the source of truth; the dual-spec assertion is an
+    EXPECTATION verified against runtime, not a free pass. Polarity contract:
+    when dual-spec says severity:pass but runtime values disagree, FAIL —
+    the assertion is stale.
     """
-    # Determine bidder name from whichever side has a spec.
     primary = go_spec or java_spec
     if primary is None:
         return []
     bidder = primary.bidder
-    findings: List[Finding] = []
-
     dual = dual_specs.get(bidder) or {}
     raw_assertions = dual.get("assertions") if isinstance(dual.get("assertions"), dict) else {}
     assertions: Dict[str, Any] = raw_assertions if isinstance(raw_assertions, dict) else {}
     overall = dual.get("overall") or {}
-
-    # Honor overall.cross_language_state + blocker_count.
-    cls_state = (overall.get("cross_language_state") or "").lower()
-    blocker_count = overall.get("blocker_count") or 0
-    if cls_state == "divergent-semantic" and isinstance(blocker_count, int) and blocker_count > 0:
-        findings.append(Finding(
-            "R5", f"pair/{bidder}", SEV_FAIL,
-            f"overall.cross_language_state=divergent-semantic with {blocker_count} blocker(s)",
-        ))
-    elif cls_state.startswith("divergent") and isinstance(blocker_count, int) and blocker_count > 0:
-        findings.append(Finding(
-            "R5", f"pair/{bidder}", SEV_WARN,
-            f"overall.cross_language_state={cls_state} with {blocker_count} blocker(s)",
-        ))
-
-    # bidder_params_sha256 — load-bearing R5 contract.
-    go_sha = go_spec.raw.get("bidder_params_sha256") if go_spec else None
-    java_sha = java_spec.raw.get("bidder_params_sha256") if java_spec else None
-    sha_assert = assertions.get("bidder_params_sha256") if isinstance(assertions, dict) else None
-
-    if go_spec is not None and java_spec is not None:
-        if go_sha == java_sha and go_sha is not None:
-            findings.append(Finding("R5", f"pair/{bidder}", SEV_PASS,
-                f"bidder_params_sha256 equal ({go_sha[:12]})"))
-        else:
-            # Runtime SHAs disagree. Determine severity from the dual-spec
-            # assertion if present.
-            severity = SEV_WARN
-            explanation = "differs"
-            if isinstance(sha_assert, dict):
-                sev = (sha_assert.get("severity") or "").lower()
-                if sev in ("fail", "error"):
-                    severity = SEV_FAIL
-                elif sev == "pass":
-                    # POLARITY INVERSION: runtime says different but dual-spec
-                    # claims byte_equal — the assertion is stale. FAIL.
-                    severity = SEV_FAIL
-                    explanation = "stale-pass-assertion (dual-spec claims byte_equal but runtime SHAs differ)"
-                elif sev in ("warn", "warning"):
-                    severity = SEV_WARN
-                if explanation == "differs":
-                    kind = sha_assert.get("divergence_kind") or ""
-                    if sha_assert.get("semantically_equal") is True:
-                        explanation = f"byte-only divergence ({kind})" if kind else "byte-only divergence"
-                    elif sha_assert.get("semantically_equal") is False:
-                        explanation = f"semantic divergence ({kind})" if kind else "semantic divergence"
-                    else:
-                        explanation = kind or explanation
-            else:
-                # Heuristic fallback: scan quirks for byte-vs-semantic signals.
-                blobs = [
-                    " ".join(str(q.get(k, "")) for k in ("id", "summary", "edge_case_taxon")).lower()
-                    for q in (go_spec.raw.get("quirks") or []) + (java_spec.raw.get("quirks") or [])
-                    if isinstance(q, dict)
-                ]
-                byte_divergence = any("byte" in b and "divergen" in b for b in blobs)
-                semantic_divergence = any(
-                    "semantic" in b and "divergen" in b
-                    and "semantically identical" not in b
-                    and "semantic match" not in b
-                    for b in blobs
-                )
-                if semantic_divergence:
-                    severity = SEV_FAIL
-                    explanation = "semantic divergence (per quirk)"
-                elif byte_divergence:
-                    severity = SEV_WARN
-                    explanation = "whitespace/byte divergence (per quirk)"
-            findings.append(Finding("R5", f"pair/{bidder}", severity,
-                f"bidder_params_sha256 {explanation}: go={go_sha or 'none'} java={java_sha or 'none'}"))
-    elif sha_assert is not None:
-        # One side missing a fixture; surface the asymmetry (PASS — informational).
-        findings.append(Finding("R5", f"pair/{bidder}", SEV_PASS,
-            f"only-one-side fixture; dual-spec sha-assertion noted (severity={sha_assert.get('severity', '?') if isinstance(sha_assert, dict) else '?'})"))
-
-    # R5-strict keys: runtime divergence FAILs unless dual-spec downgrades to WARN.
-    # Wave 11b B5 #2: per-key comparator selection (set-equality for list-valued
-    # keys, email-only for maintainer, deep_eq for pure-data scalars).
-    for spec_field, dual_key, eq_fn in R5_STRICT_KEYS:
-        if go_spec is None or java_spec is None:
-            continue
-        a = go_spec.get(spec_field)
-        b = java_spec.get(spec_field)
-        if a is None and b is None:
-            continue
-        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
-        if not eq_fn(a, b):
-            severity = SEV_FAIL
-            stale = False
-            if isinstance(dual_assert, dict):
-                sev = (dual_assert.get("severity") or "").lower()
-                if sev in ("warn", "warning"):
-                    severity = SEV_WARN
-                elif sev == "pass":
-                    stale = True
-            if stale:
-                findings.append(Finding(
-                    "R5", f"pair/{bidder}", SEV_FAIL,
-                    f"{spec_field} runtime divergence but dual-spec claims pass — stale",
-                ))
-            else:
-                findings.append(Finding("R5", f"pair/{bidder}", severity,
-                    f"{spec_field} differs across languages"))
-
-    # R5_FORM_DIVERGENT keys: normalize macro syntax + deep_eq. Real
-    # divergence (different macro names, different URLs) FAILs unless the
-    # dual-spec assertion documents it; absence of assertion when normalized
-    # values differ → FAIL assertion_missing (Wave 11b B4 C1 strictness).
-    for spec_field, dual_key in R5_FORM_DIVERGENT_KEYS:
-        if go_spec is None or java_spec is None:
-            continue
-        a = go_spec.get(spec_field)
-        b = java_spec.get(spec_field)
-        if a is None and b is None:
-            continue
-        a_norm = normalize_endpoint_macros(a) if isinstance(a, str) else a
-        b_norm = normalize_endpoint_macros(b) if isinstance(b, str) else b
-        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
-        if a_norm == b_norm:
-            # Normalized forms agree; emit per assertion if present.
-            if isinstance(dual_assert, dict):
-                sev = (dual_assert.get("severity") or "").lower()
-                if sev in ("fail", "error"):
-                    findings.append(Finding(
-                        "R5", f"pair/{bidder}", SEV_FAIL,
-                        f"{spec_field}: dual-spec claims divergence but normalized forms equal — stale-fail-assertion",
-                    ))
-                # severity=pass or warn with normalized-equal: no finding (correct).
-            continue
-        # Normalized forms still differ — real divergence beyond macro syntax.
-        if not isinstance(dual_assert, dict):
-            findings.append(Finding(
-                "R5", f"pair/{bidder}", SEV_FAIL,
-                f"{spec_field}: assertion_missing — normalized forms differ but no dual-spec entry "
-                f"under '{dual_key}' (Wave 11b B4 C1: FORM_DIVERGENT keys require explicit assertion)",
-            ))
-            continue
-        sev = (dual_assert.get("severity") or "").lower()
-        summary = dual_assert.get("divergence_summary") or "divergent per dual-spec"
-        if sev in ("fail", "error"):
-            findings.append(Finding("R5", f"pair/{bidder}", SEV_FAIL, f"{spec_field}: {summary}"))
-        elif sev in ("warn", "warning"):
-            findings.append(Finding("R5", f"pair/{bidder}", SEV_WARN, f"{spec_field}: {summary}"))
-        elif sev == "pass":
-            # Polarity inversion: assertion claims pass but normalized forms differ.
-            findings.append(Finding(
-                "R5", f"pair/{bidder}", SEV_FAIL,
-                f"{spec_field}: stale-pass-assertion — normalized forms differ "
-                f"(assertion claims equivalent: {summary})",
-            ))
-
-    # R5_ADVISORY_DIVERGENT keys: honor only the assertion severity. No
-    # runtime FAIL on divergence; silent on absence (these are
-    # cross-language metadata where divergence is documentation, not contract).
-    for spec_field, dual_key in R5_ADVISORY_DIVERGENT_KEYS:
-        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
-        if not isinstance(dual_assert, dict):
-            continue
-        sev = (dual_assert.get("severity") or "").lower()
-        summary = dual_assert.get("divergence_summary") or "divergent per dual-spec"
-        if sev in ("fail", "error"):
-            findings.append(Finding("R5", f"pair/{bidder}", SEV_FAIL, f"{dual_key}: {summary}"))
-        elif sev in ("warn", "warning"):
-            findings.append(Finding("R5", f"pair/{bidder}", SEV_WARN, f"{dual_key}: {summary}"))
-
-    return findings
+    result: R5Result = _r5_compare_pair(
+        go_spec, java_spec, assertions=assertions, overall=overall,
+    )
+    return [
+        Finding("R5", f"pair/{bidder}", d.severity, d.detail)
+        for d in result.diagnostics
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -1509,7 +1502,7 @@ def load_dual_specs() -> Dict[str, Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-RULE_ORDER = ["R1", "R2", "R3", "R3b", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
+RULE_ORDER = ["R1", "R2", "R3", "R3b", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11"]
 
 
 def aggregate(findings: List[Finding]) -> Dict[str, Dict[str, int]]:
@@ -1566,6 +1559,7 @@ def render_text(
         "R8": "endpoint placeholder (recursive walker — endpoint + user_sync + static_fields)",
         "R9": "legacy encoding/json direct usage",
         "R10": "canonical-harness flag",
+        "R11": "port-side round-trip determinism (Phase D4.1)",
     }
     for rule in RULE_ORDER:
         bucket = counts.get(rule, {})
@@ -1785,6 +1779,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                         f"rule crashed: {type(exc).__name__}: {exc}",
                     ))
 
+        # Load R-T safety table once for the full per-pair sweep.
+        lossy_paths = _load_lossy_field_paths()
         for bidder in all_r5_bidders:
             go_spec = by_lang_bidder.get(("go", bidder))
             java_spec = by_lang_bidder.get(("java", bidder))
@@ -1795,6 +1791,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             except Exception as exc:  # noqa: BLE001
                 findings.append(Finding(
                     "R5", f"pair/{bidder}", SEV_FAIL,
+                    f"rule crashed: {type(exc).__name__}: {exc}",
+                ))
+            # R11: port-side round-trip determinism (Phase D4.1).
+            try:
+                findings.extend(r_port_round_trip(go_spec, java_spec, lossy_paths))
+            except Exception as exc:  # noqa: BLE001
+                findings.append(Finding(
+                    "R11", f"pair/{bidder}", SEV_FAIL,
                     f"rule crashed: {type(exc).__name__}: {exc}",
                 ))
     except GhApiUnreachable as exc:

@@ -55,6 +55,41 @@ When in doubt, prefer a higher bump — version migrations are easier to reason 
 - Each rule lists Go ↔ Java translation, at least one worked example, and a lossy/lossless flag.
 - Update the rule count in the doc's intro.
 
+## Adding a port skill or port fixture
+
+Phase D introduced two port skills (`port-go2java`, `port-java2go`) plus their supporting infrastructure. When extending or adding to that surface:
+
+### Adding a new port skill (e.g., `port-go2js`, future)
+
+1. Create the skill directory under the **artifact-language** tree (port-go2java lives at `prebid-server-java/port-go2java/` because it produces Java; port-go2js would live at `prebid-server-js/port-go2js/`).
+2. Author `SKILL.md` with frontmatter `version: 0.1.0` and a description that explicitly names the source-vs-artifact-language inversion.
+3. Author the 7-step pipeline body following [`docs/methodology/port-skills-design.md`](docs/methodology/port-skills-design.md) §3 with TODO placeholders for the language-specific Steps 3 and 4.
+4. Add per-skill `references/` and `templates/` subdirectories. Per-skill is the convention — these are NOT shared `/templates/`.
+5. Author the emission references for the new target language (artifact shapes, registration rules, PR shape, porting guide if no upstream equivalent exists). Mirror the structure at `prebid-server-{go,java}/port-{source}2{target}/references/`.
+6. Wire the skill into [`prebid-server-go/read/skills/shared/cross-skill-integration.md`](prebid-server-go/read/skills/shared/cross-skill-integration.md) as a new top-level section parallel to §3 + §4.
+7. Bump [`ROADMAP.md`](ROADMAP.md) Phase D section to list the new skill.
+
+### Adding a port fixture (test corpus expansion)
+
+Port fixtures live alongside the cross-language pair fixtures at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml`. To add coverage for a new bidder pair:
+
+1. Run the Go-side and Java-side read orchestrators; persist the goldens at `prebid-server-{go,java}/read/test-fixtures/{bidder}.golden.spec.yaml`.
+2. Author the dual-spec assertions file mapping cross-language equivalence + divergence (severity: pass/warn/fail per dual-spec convention).
+3. Verify `python3 scripts/round-trip-ci.py` passes the new pair (R5 strict + form-divergent + advisory-divergent keys).
+4. Add the bidder to the relevant MVP corpus when applicable (per [`docs/execution-plan-phase-d.md`](docs/execution-plan-phase-d.md) §D2.3 / §D3.3 acceptance tables).
+
+### Authoring a port-engine helper
+
+[`scripts/lib/port_engine.py`](scripts/lib/port_engine.py) hosts the small set of mechanical helpers the port skills consume. New helpers join when a port-translation rule or a cross-language operation is structurally mechanical (NOT prose-driven). Contract:
+
+- **Pure function with dependency-injection hooks**. State that varies (filesystem paths, subprocess invocations, upstream API responses) is accepted as keyword arguments so tests can mock it. Existing precedent: `gofmt_post_process(file_paths, *, runner=None)`, `prefix_uniqueness_check(target_lang, bidder_name, *, existing_names=None, table_path=None)`.
+- **Return type captures the helper's contract**, not just success/failure. Existing precedent: `byte_copy → bool`, `prefix_uniqueness_check → (bool, List[str])`, `r5_check_at_port_time → R5Result` (rich dataclass).
+- **Tests in [`scripts/tests/test_port_engine.py`](scripts/tests/test_port_engine.py)**. One test class per helper; cover happy path, edge cases, and invalid-input rejection (`ValueError` / `TypeError`). Filesystem helpers use `TemporaryDirectory`; subprocess helpers use the injected runner.
+- **No silent fallbacks for missing data**. When a data source is absent (e.g., the bidder-constant table is missing), return a sentinel value (`(True, [])` for `prefix_uniqueness_check`) and document the best-effort behavior in the docstring. Callers can check the result and decide.
+- **R5 helpers** consume `scripts/lib/r5_check.py` (the harness-shared comparator); do not duplicate the comparator logic.
+
+When a helper changes its public signature, bump the corresponding port skill's `version` field per the [Versioning policy](#versioning-policy) above.
+
 ## Adding or modifying a CI rule
 
 - R1–R10 are documented in `prebid-server-go/read/skills/shared/adapter-spec.md` (Validation rules section).

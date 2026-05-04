@@ -448,6 +448,7 @@ cross_language:
     bidder_class: EmxDigitalBidder
     config_class: EmxDigitalConfiguration
     yaml_path: src/main/resources/bidder-config/emxdigital.yaml
+    bidder_params_path: src/main/resources/static/bidder-params/emx_digital.json   # snake_case upstream — diverges from lowercase package directory `emxdigital`
     proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/emxdigital/
   port_concerns:
     aliases_inverted: true                    # Java declares cadent_aperture_mx as disabled+geo-restricted alias under emxdigital. Go has NO YAML alias — co-registers both as core bidders with shared Builder. Cross-language asymmetry on the alias mechanism (Rule 33-adjacent).

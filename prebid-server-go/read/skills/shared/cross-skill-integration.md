@@ -111,6 +111,13 @@ Worked example — Kobler. The spec at [`prebid-server-go/read/test-fixtures/kob
 
 Translate a Go-source spec into Java adapter artifacts. The skill consumes the spec's `cross_language.*` block (path hints, port concerns, lineage) plus the [`port-translation-rules.md`](port-translation-rules.md) Rules 1–46 indexed by the spec field that drives them.
 
+The mapping below covers the SPEC-FIELD → JAVA-ARTIFACT relationship. For the operational emission contract (file shapes, checkstyle rules, PR-template auto-population, registration insertion), see the per-skill emission references at [`prebid-server-java/port-go2java/references/`](../../../../prebid-server-java/port-go2java/references/) — Phase D1.3 deliverables.
+
+- [`java-artifact-shapes.md`](../../../../prebid-server-java/port-go2java/references/java-artifact-shapes.md) — license headers, package decls, ImportOrder + EmptyLineSeparator + LineLength + ban-list checkstyle rules, test-application.properties append shape, IT-fixture pair shape, Jacoco coverage gate.
+- [`pr-template-mapping.md`](../../../../prebid-server-java/port-go2java/references/pr-template-mapping.md) — `pull_request_template.md` checkbox auto-population from spec fields; companion docs PR draft; pre-submit rebase protocol.
+- [`registration-rules.md`](../../../../prebid-server-java/port-go2java/references/registration-rules.md) — file create/edit table; per-alias asymmetry; Spring auto-discovery (Java has no equivalent of Go's `bidders.go`/`adapter_builders.go` registry edits).
+- Java framework utilities (read-side companion): [`framework-utilities-java.md`](../../../../prebid-server-java/read/skills/shared/framework-utilities-java.md) — `BidderUtil`, `BidderDeps`, `JacksonMapper`, `CurrencyConversionService`, `HttpUtil.headers()`, `BidderInfoCreator`, `ImpUtil`.
+
 ### 3.1 Trigger fields
 
 | `cross_language.port_concerns.*` flag | What `port-go2java` does |
@@ -155,6 +162,14 @@ Worked example — Adverxo. The Go side has `adverxotest/` with N fixtures total
 ## 4. `read` (Java) → `port-java2go`
 
 Symmetric inverse of §3. The skill consumes a Java-source spec and emits Go adapter artifacts.
+
+The mapping below covers the SPEC-FIELD → GO-ARTIFACT relationship. For the operational emission contract (file shapes, gofmt + go vet gates, PR-shape conventions, registration insertion, lossy-direction asymmetries), see the per-skill emission references at [`prebid-server-go/port-java2go/references/`](../../../port-java2go/references/) — Phase D1.3 deliverables.
+
+- [`go-artifact-shapes.md`](../../../port-java2go/references/go-artifact-shapes.md) — license headers, package decls, import order, file naming convention, Builder/MakeRequests/MakeBids skeleton, headers construction (Rule 19 inverse expansion), bidder-info YAML emission rules, exemplary-fixture re-authoring.
+- [`pr-shape.md`](../../../port-java2go/references/pr-shape.md) — Go PR title (`New Adapter: {Bidder}`), body convention, companion docs PR, pre-submit rebase, anti-patterns observed in declined PRs.
+- [`registration-rules.md`](../../../port-java2go/references/registration-rules.md) — `openrtb_ext/bidders.go` const + slice insertion, `exchange/adapter_builders.go` import + map insertion, `prefix_uniqueness_check` pre-emit gate.
+- [`porting-guide.md`](../../../port-java2go/references/porting-guide.md) — internally-authored Java→Go inverse porting guide (analogue of upstream Java's `bid-adapter-porting-guide.md`); covers lossy-direction asymmetries (Rule 35 typed-config-subclass demotion to Go opaque `ExtraAdapterInfo`; Rule 19 helper expansion; Rule 8 Lombok @Builder loss).
+- Bidder-constant lookup table: [`bidder-constant-table.yaml`](bidder-constant-table.yaml) — 271-entry yaml_name → constant_root map sourced from upstream HEAD (84 of 271 are non-mechanical and require lookup; do not recompute).
 
 ### 4.1 Trigger fields
 

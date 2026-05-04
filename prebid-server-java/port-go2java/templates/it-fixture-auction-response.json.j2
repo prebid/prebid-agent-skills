@@ -1,0 +1,62 @@
+{# IT fixture: auction response prebid-server returns to the publisher.
+Lives at src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-auction-{bidder}-response.json
+
+Inputs:
+  ctx.response_id       : str  — typically same as the auction-request's id
+  ctx.cur               : str  — final response currency (typically "USD")
+  ctx.bidder_name       : str  — seat name (matches @TestPropertySource entry)
+  ctx.bids              : list[dict]  — per bid; each:
+      id          : str  — typically same as the bid-response's bid id
+      impid       : str
+      price       : str  — numeric literal preserving precision
+      adm         : str
+      crid        : str
+      adomain     : list[str]|null
+      cat         : list[str]|null
+      w           : int|null
+      h           : int|null
+      ext_prebid_type : str  — bid.ext.prebid.type ∈ {banner, video, audio, native}
+      ext_origbidcpm  : str|null  — original bid CPM (when currency conversion applied)
+      ext_origbidcur  : str|null  — original bid currency
+
+prebid-server adds bid.ext.prebid.{type, meta} wrappers + may convert
+currency. The auction-response thus differs from the bid-response in
+the ext.prebid scaffolding. assertJsonEquals (in IT-test.java.j2) uses
+JSON-Path-aware comparison so ordering/trivial differences don't break.
+#}
+{
+  "id": {{ ctx.response_id | tojson }},
+  "cur": {{ ctx.cur | tojson }},
+  "seatbid": [
+    {
+      "seat": {{ ctx.bidder_name | tojson }},
+      "group": 0,
+      "bid": [
+{% for bid in ctx.bids %}
+        {
+          "id": {{ bid.id | tojson }},
+          "impid": {{ bid.impid | tojson }},
+          "price": {{ bid.price }},
+          "adm": {{ bid.adm | tojson }},
+          "crid": {{ bid.crid | tojson }}{% if bid.adomain %},
+          "adomain": {{ bid.adomain | tojson }}{% endif %}{% if bid.cat %},
+          "cat": {{ bid.cat | tojson }}{% endif %}{% if bid.w is not none %},
+          "w": {{ bid.w }}{% endif %}{% if bid.h is not none %},
+          "h": {{ bid.h }}{% endif %},
+          "ext": {
+            "prebid": {
+              "type": {{ bid.ext_prebid_type | tojson }}{% if bid.ext_origbidcpm %},
+              "meta": {
+                "origbidcpm": {{ bid.ext_origbidcpm }}{% if bid.ext_origbidcur %},
+                "origbidcur": {{ bid.ext_origbidcur | tojson }}{% endif %}
+
+              }{% endif %}
+
+            }
+          }
+        }{% if not loop.last %},{% endif %}
+{% endfor %}
+      ]
+    }
+  ]
+}

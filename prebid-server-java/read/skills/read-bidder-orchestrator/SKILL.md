@@ -1,7 +1,7 @@
 ---
 name: read-bidder-orchestrator
 description: USE WHEN extracting an Adapter Specification from a Java bidder in prebid-server-java (or fork) — discovers files at a commit, dispatches per-domain readers (read-bidder-class, read-bidder-config, read-bidder-params-java), assembles output into the language-neutral spec (source_language=java), and emits YAML+Markdown. Idempotent under round-trip; byte-comparable to Go-side spec on cross-language fields. Mirrors read-adapter-orchestrator with Java specifics (Spring DI, unified bidder-config YAML, inverted aliases, multi-file fixtures, per-alias IT classes).
-version: 1.0.0
+version: 1.1.0
 ---
 
 # read-bidder-orchestrator (Java)
@@ -25,7 +25,8 @@ Downstream consumers: the future `port-java2go/` skill suite (Phase D), `diff-sp
 | `--ref=<spec>` | no | `branch=master` | One of `branch=<name>`, `commit=<sha>`, `pr=<N>`, `tag=<vX.Y.Z>`. PR resolves to `head.sha`. |
 | `--source-mode=<mode>` | no | `auto` | `local`, `github-raw`, `gh-cli`, or `auto`. See [references/source-modes.md](references/source-modes.md). |
 | `--persist` | no | off | Write to `prebid-server-java/read/specs/{bidder}/{shortsha}.{yaml,md}` plus `latest.yaml` symlink. |
-| `--out=<path>` | no | stdout | Output file path. Filename convention: `{bidder}-{shortsha}.spec.{yaml,md}`. |
+| `--out=<path>` (synonym `--output=<path>`) | no | stdout | Output file path. Filename convention: `{bidder}-{shortsha}.spec.{yaml,md}`. The `--output` synonym matches the spelling used in [`../../../../docs/methodology/end-to-end-flow.md`](../../../../docs/methodology/end-to-end-flow.md); both names resolve to the same flag. |
+| `--run-id=<id>` | no | `${FULL_LOOP_RUN_ID}` env var if set | Teal-flow convention (Phase D1.5). When set (and neither `--persist` nor `--out` is given), output path defaults to `.tmp/full-loop/{run-id}/java/{bidder}.yaml` — the canonical handoff location the upcoming `port-go2java` / `port-java2go` skills look for the source spec. Format: ISO-like timestamp + short hash, e.g., `2026-05-04T1430Z-a3f9`. The `.tmp/` directory is `.gitignore`d (Wave 5). |
 | `--format=<set>` | no | `yaml,md` | Comma-separated subset of `yaml,md`. |
 | `--fixture-mode=<mode>` | no | `count` | `count`, `summary`, `verbatim`. |
 
@@ -160,7 +161,8 @@ Emit per the [Output](#output) contract.
 The Java orchestrator's emission rules are identical in shape to the Go orchestrator's (see [`../../../../prebid-server-go/read/skills/read-adapter-orchestrator/SKILL.md`](../../../../prebid-server-go/read/skills/read-adapter-orchestrator/SKILL.md) `## Output`), with the path roots swapped:
 
 - `--persist` → `prebid-server-java/read/specs/{bidder}/{shortsha}.{yaml,md}` plus `latest.yaml` symlink. Directory `.gitignore`d by default.
-- `--out=<path>` → same precedence and PATH/extension semantics as Go.
+- `--out=<path>` (synonym `--output=<path>`) → same precedence and PATH/extension semantics as Go.
+- `--run-id=<id>` (or `${FULL_LOOP_RUN_ID}` env var, with neither `--persist` nor `--out` given) → write to `.tmp/full-loop/{run-id}/java/{bidder}.yaml`. The `.tmp/full-loop/` directory is `.gitignore`d. This is the **Teal-flow convention** — see [`../../../../docs/methodology/end-to-end-flow.md`](../../../../docs/methodology/end-to-end-flow.md) §1.2 for the read → port → review handoff. The `port-go2java` / `port-java2go` skills look for the source spec at this canonical path.
 - (default) → stdout with `--- yaml ---` / `--- markdown ---` delimiters.
 
 `--format` and `--fixture-mode` flags behave identically to Go. YAML encoding contract is identical (LF, 2-space indent, single trailing `\n`, fixture lists alphabetically sorted, header order matches `../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json`).

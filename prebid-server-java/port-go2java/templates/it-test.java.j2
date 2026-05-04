@@ -1,0 +1,95 @@
+{# Java integration test template — emits
+src/test/java/org/prebid/server/it/{Bidder}Test.java
+
+IT class extends IntegrationTest (the upstream parent that wires WireMock,
+provides the responseFor / assertJsonEquals helpers, and binds the
+adapter-config endpoint property to a localhost stub URL). Each
+@Test method exercises one auction scenario: stub the bidder's HTTP
+endpoint with WireMock, fire an /openrtb2/auction request, assert the
+auction response equals a canned fixture.
+
+For empire-parent bidders (adverxo with 3 children, smarthub with 10),
+each alias child gets its OWN IT class — naming convention
+{Alias}Test.java with the same shape. The SKILL Step 5 emits N IT
+classes when family_shape == "empire-parent" or alias-child has
+distinct test paths. This template focuses on the primary case;
+empire-parent rendering invokes the template once per child.
+
+Inputs:
+  ctx.bidder_name        : str  — Java YAML / package name (lowercase; used in class name AND fixture paths)
+  ctx.bidder_class_root  : str  — PascalCase (used in IT class name e.g., "{Bidder}Test")
+  ctx.endpoint_path      : str  — WireMock URL path the IT class stubs (e.g., "/kobler-exchange")
+  ctx.scenarios          : list[dict]  — per-scenario test method spec; each:
+      method_name        : str  — JUnit method name (camelCase, descriptive)
+      summary            : str  — Javadoc summary (1 line)
+      bid_request_path   : str  — fixture path (e.g., "openrtb2/kobler/test-kobler-bid-request.json")
+      bid_response_path  : str  — fixture path
+      auction_request_path : str  — fixture path
+      auction_response_path: str  — fixture path
+      expected_seats     : list[str]  — seat names to assert in the response (typically [bidder_name])
+  ctx.javadoc_summary    : str|null
+
+The IntegrationTest parent class provides:
+- WIRE_MOCK_RULE — JUnit5 extension auto-registered
+- jsonFrom(path) — read JSON fixture from src/test/resources/{path}
+- responseFor(fixturePath, endpoint) — fire request to the local server
+- assertJsonEquals(fixturePath, response, ignoredFields) — compare with JSON-Path-aware assertion
+
+@TestPropertySource overrides the bidder's endpoint URL so the test
+hits the WireMock stub instead of the real bidder URL. The path matches
+the stub URL declared in @TestPropertySource AND in the WireMock stubFor.
+#}
+package org.prebid.server.it;
+
+import io.restassured.response.Response;
+import org.json.JSONException;
+import org.junit.jupiter.api.Test;
+import org.prebid.server.model.Endpoint;
+import org.springframework.test.context.TestPropertySource;
+
+import java.io.IOException;
+
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+{% set ns = namespace(any_multi_seat=false) %}
+{% for s in ctx.scenarios %}
+{% if s.expected_seats and (s.expected_seats | length) > 1 %}
+{% set ns.any_multi_seat = true %}
+{% endif %}
+{% endfor %}
+{% if ns.any_multi_seat %}
+import static java.util.Arrays.asList;
+{% else %}
+import static java.util.Collections.singletonList;
+{% endif %}
+
+{% if ctx.javadoc_summary %}
+/**
+ * {{ ctx.javadoc_summary }}
+ */
+{% endif %}
+@TestPropertySource(properties = "adapters.{{ ctx.bidder_name }}.endpoint=http://localhost:8090{{ ctx.endpoint_path }}")
+public class {{ ctx.bidder_class_root }}Test extends IntegrationTest {
+
+{% for scenario in ctx.scenarios %}
+    @Test
+    public void {{ scenario.method_name }}() throws IOException, JSONException {
+        // {{ scenario.summary }}
+        WIRE_MOCK_RULE.stubFor(post(urlPathEqualTo("{{ ctx.endpoint_path }}"))
+                .withRequestBody(equalToJson(jsonFrom("{{ scenario.bid_request_path }}")))
+                .willReturn(aResponse().withBody(jsonFrom("{{ scenario.bid_response_path }}"))));
+
+        final Response response = responseFor("{{ scenario.auction_request_path }}", Endpoint.openrtb2_auction);
+
+{% set seats = scenario.expected_seats if scenario.expected_seats else [ctx.bidder_name] %}
+{% if seats | length == 1 %}
+        assertJsonEquals("{{ scenario.auction_response_path }}", response, singletonList("{{ seats[0] }}"));
+{% else %}
+        assertJsonEquals("{{ scenario.auction_response_path }}", response, asList({% for seat in seats %}"{{ seat }}"{% if not loop.last %}, {% endif %}{% endfor %}));
+{% endif %}
+    }
+
+{% endfor %}
+}

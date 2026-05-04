@@ -1,0 +1,504 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 2ebf4216c4bc6127ef180643a0b91ed9e7087e88
+    fetch_method: gh-cli
+  read:
+    skill_versions:
+      orchestrator: 1.1.0
+    timestamp_utc: "2026-05-04T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: beachfront
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://display.bfmio.com/prebid_display"
+  endpoint_construction:
+    kind: custom
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@beachfront.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+    app:
+      mediaTypes:
+        - banner
+        - video
+  geoscope: []
+  gvl_vendor_id: 335
+  user_sync:
+    iframe:
+      url: "https://sync.bfmio.com/sync_s2s?gdpr={{gdpr}}&url={{redirect_url}}"
+      uid_macro: "[io_cid]"
+      support_cors: false
+    cookie_family_name: beachfront
+  yaml_extra_fields:
+    video-endpoint: "https://reachms.bfmio.com/bid.json?exchange_id="
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Beachfront Adapter Params",
+    "description": "A schema which validates params accepted by the Beachfront adapter",
+    "type": "object",
+    "properties": {
+      "appId": {
+        "type": "string",
+        "description": "The id of an inventory target. This can only be used in requests that contain one media type. It will be applied to all imps in the request."
+      },
+      "appIds": {
+        "type": "object",
+        "description": "An object that specifies appIds for specific media types. This can be used for either single media type requests or multiple.",
+        "properties": {
+          "video": {
+            "type": "string",
+            "title": "Video appId",
+            "description": "An appId string that will be applied to video requests in this imp."
+          },
+          "banner": {
+            "type": "string",
+            "title": "Banner appId",
+            "description": "An appId string that will be applied to banner requests in this imp."
+          }
+        },
+        "anyOf":[
+          {"required":["video"]},
+          {"required":["banner"]}
+        ]
+      },
+      "bidfloor": {
+        "type": "number",
+        "description": "The price floor for the bid. Will override the bidfloor set for the impression."    },
+      "videoResponseType": {
+        "type": "string",
+        "description": "By default the video response will be an AdM element containing VAST 3.0 markup including tracking, click through, and mediafile elements pointing to mp4, webm or other playable media files or Vpaid media as configured for the exchange at beachfront.io. Optionally, set this to 'nurl' to receive a URI pointing to VAST 3.0 markup which will contain a mediafile pointing to a beachfront neptune javascript video player which will load your video and take care of tracking, etc. Regardless of which format is selected, the id of the returned impression will be the provided impression id (imp[{'id'...},...] in the request) with the format appended. The impression id will be returned unchanged as 'impid'. So if you indicate 'nurl', and an impression id 'someImp', the returned impression will have an 'impid' value of 'someImpNurlVideo'. This is to differentiate the object in the case that a request includes both video and banner elements. Setting videoResponseType to any other string will have no effect and the default format (AdM) will be returned."
+      }
+    },
+    "oneOf": [
+      {"required": ["appId"] },
+      {"required": ["appIds"]}
+    ]
+  }
+bidder_params_sha256: 9b142b7299a127c2155adea14b11c4e34c0fb35a915051fdd83b3b989bb67fe0
+
+params:
+  schema_interpretation:
+    properties:
+      - name: appId
+        type: string
+        description: "Single appId — used when all imps share one media type."
+      - name: appIds
+        type: object
+        description: "Per-mediatype appIds object with optional video and banner string fields."
+      - name: bidfloor
+        type: number
+        description: "Override price floor."
+      - name: videoResponseType
+        type: string
+        description: "Video response format selector ('adm' default, 'nurl' Beachfront-hosted player)."
+    required_fields: []
+    flexible_types: []
+    combinators_used:
+      - oneOf
+      - anyOf
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.beachfront
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/beachfront/ExtImpBeachfront.java
+    type_name: ExtImpBeachfront
+    fields:
+      - name: appId
+        json_tag: appId
+        type_native: String
+        omitempty: false
+        notes: []
+      - name: appIds
+        json_tag: appIds
+        type_native: ExtImpBeachfrontAppIds
+        omitempty: false
+        notes:
+          - "Lombok @Value sub-class with optional video + banner String fields."
+      - name: bidfloor
+        json_tag: bidfloor
+        type_native: BigDecimal
+        omitempty: false
+        notes: []
+      - name: videoResponseType
+        json_tag: videoResponseType
+        type_native: String
+        omitempty: true
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/proto/openrtb/ext/request/beachfront/ExtImpBeachfrontTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: BeachfrontBidder
+  directory_name: beachfront
+  package_directory_mismatch: false
+  file_layout:
+    kind: multi-file
+    files:
+      - name: BeachfrontBidder.java
+        role: implementation
+        loc: 575
+      - name: BeachfrontFloorResolver.java
+        role: utils
+        loc: 143
+      - name: model/
+        role: models
+        loc: 0
+  imports:
+    has_template_engine: false
+    has_currency_helper: true
+    has_jsonutil: true
+    third_party:
+      - org.apache.commons.collections4.CollectionUtils
+      - org.apache.commons.lang3.StringUtils
+      - io.vertx.core.MultiMap
+      - io.vertx.core.http.HttpMethod
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: format-split
+          formats:
+            - banner
+            - video
+        - kind: per-imp
+          notes: "Video imps emit one BeachfrontVideoRequest per imp; banner imps batch into one BeachfrontBannerRequest with all banner slots aggregated."
+    request_body:
+      kind: custom
+      custom_body_type: BeachfrontBannerRequest | BeachfrontVideoRequest[]
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Device: immutable-rebuild
+        User: immutable-rebuild
+        Imp: immutable-rebuild
+        Cur: append-if-missing
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpBeachfront
+      wrapper_type: null
+    endpoint_resolution:
+      kind: multi-endpoint-by-mediatype
+      mechanism_go: null
+      mechanism_java: typed-config-subclass-fields
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: makeBannerRequests
+        signature: "private List<HttpRequest<Void>> makeBannerRequests(BidRequest bidRequest, List<Imp> imps)"
+      - name: makeVideoRequests
+        signature: "private List<HttpRequest<Void>> makeVideoRequests(BidRequest bidRequest, List<Imp> imps)"
+      - name: parseImpExt
+        signature: "private ExtImpBeachfront parseImpExt(Imp imp)"
+      - name: getAppId
+        signature: "private String getAppId(ExtImpBeachfront extImpBeachfront, BidType bidType)"
+      - name: extractFloor
+        signature: "private Price extractFloor(ExtImpBeachfront extImpBeachfront, Imp imp, BidRequest bidRequest)"
+      - name: checkFormats
+        signature: "private boolean checkFormats(Banner banner)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidderCall<Void> httpCall, BidRequest bidRequest)"
+      - name: bidsFromBannerResponse
+        signature: "private List<BidderBid> bidsFromBannerResponse(BidderCall<Void> httpCall, BidRequest bidRequest)"
+      - name: bidsFromVideoResponse
+        signature: "private List<BidderBid> bidsFromVideoResponse(BidderCall<Void> httpCall, BidResponse bidResponse, BidRequest bidRequest)"
+  make_bids:
+    response_type: Void
+    custom_response_type: 'List<BeachfrontResponseSlot> (banner) | BidResponse (video)'
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-request-uri-suffix
+          field: BidderCall.request.uri ends with bannerEndpoint vs videoEndpoint
+          fallback_action: next
+        - method: hardcoded
+          hardcoded_value: BidTypeBanner
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: by-request-uri
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/beachfront/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-beachfront-banner-bid-request.json
+        sha256: pending-operator-fetch
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-beachfront-banner-bid-response.json
+        sha256: pending-operator-fetch
+        bytes: 0
+        role: bidder-bid-response
+      - filename: test-beachfront-video-bid-request.json
+        sha256: pending-operator-fetch
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-beachfront-video-bid-response.json
+        sha256: pending-operator-fetch
+        bytes: 0
+        role: bidder-bid-response
+      - filename: test-auction-beachfront-request.json
+        sha256: pending-operator-fetch
+        bytes: 0
+        role: auction-request
+      - filename: test-auction-beachfront-response.json
+        sha256: pending-operator-fetch
+        bytes: 0
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods:
+    - "BeachfrontBidderTest (per-method coverage; full count not yet read)"
+  fixture_handling: count-only
+  test_application_properties_entries_added: 2
+  integration_test_class: BeachfrontTest
+  integration_test_pattern: 4-file-split
+
+spring_config:
+  factory_class: BeachfrontConfiguration
+  factory_method: beachfrontBidderDeps
+  property_source_path: classpath:/bidder-config/beachfront.yaml
+  bidder_creator_lambda: |
+    config -> new BeachfrontBidder(
+            config.getEndpoint(),
+            config.getVideoEndpoint(),
+            currencyConversionService,
+            mapper)
+  configuration_properties_class:
+    name: BeachfrontConfigurationProperties
+    extends: BidderConfigurationProperties
+    extra_fields:
+      - name: videoEndpoint
+        type: String
+        validations:
+          - "@NotBlank"
+    nested_classes: []
+    lombok_annotations:
+      - Data
+      - EqualsAndHashCode
+      - NoArgsConstructor
+  bean_dependencies:
+    - name: config
+      type: BeachfrontConfigurationProperties
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+    - name: currencyConversionService
+      type: CurrencyConversionService
+      source: framework-injected
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: BeachfrontBidder
+  parameterized_request_type: Void
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 4
+    parameters:
+      - name: bannerEndpointUrl
+        type: String
+        source: config.endpoint
+        role: properties
+      - name: videoEndpointUrl
+        type: String
+        source: config.videoEndpoint
+        role: properties
+      - name: currencyConversionService
+        type: CurrencyConversionService
+        source: framework-injected
+        role: helper-collaborator
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields:
+    - name: BEACHFRONT_EXT_TYPE_REFERENCE
+      type: TypeReference
+    - name: NURL_VIDEO_TYPE
+      type: String
+      value: "nurl"
+    - name: ADM_VIDEO_TYPE
+      type: String
+      value: "adm"
+    - name: BEACHFRONT_NAME
+      type: String
+      value: "BF_PREBID_S2S"
+    - name: BEACHFRONT_VERSION
+      type: String
+      value: "1.0.0"
+    - name: NURL_VIDEO_ENDPOINT_SUFFIX
+      type: String
+      value: "&prebidserver"
+    - name: FAKE_IP
+      type: String
+      value: "255.255.255.255"
+    - name: DEFAULT_VIDEO_WIDTH
+      type: int
+      value: "300"
+    - name: DEFAULT_VIDEO_HEIGHT
+      type: int
+      value: "250"
+  helper_classes_co_located:
+    - BeachfrontFloorResolver
+  helper_classes_in_proto:
+    - ExtImpBeachfront
+    - ExtImpBeachfrontAppIds
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-builder
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: null
+    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
+  injection: dependency
+  bid_request_passed_for_context: true
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: typed-video-endpoint-config-subclass
+    file: src/main/java/org/prebid/server/spring/config/bidder/BeachfrontConfiguration.java
+    summary: "BeachfrontConfigurationProperties subclasses BidderConfigurationProperties and adds @NotBlank private String videoEndpoint. Master sample for ADR-007 F1 + Rule 35 typed-config-subclass — Java externalizes the video endpoint as a typed bean field rather than the Go-side opaque ExtraAdapterInfo JSON string."
+    edge_case_taxon: spring-config-properties-subclass
+  - id: parameterized-request-type-Void
+    file: src/main/java/org/prebid/server/bidder/beachfront/BeachfrontBidder.java
+    summary: "BeachfrontBidder implements Bidder<Void> rather than Bidder<BidRequest> — the bidder sends custom request bodies (BeachfrontBannerRequest, BeachfrontVideoRequest) per-mediatype, NOT the OpenRTB2 BidRequest. Rule 9 master sample for the Java direction."
+    edge_case_taxon: parameterized-request-type
+  - id: floor-resolver-helper-class
+    file: src/main/java/org/prebid/server/bidder/beachfront/BeachfrontFloorResolver.java
+    summary: "Currency-aware bidfloor resolution lives in a dedicated helper class (BeachfrontFloorResolver) injected with CurrencyConversionService. Encapsulates Price + currency conversion logic the Go side handles inline in setBidFloor."
+    edge_case_taxon: multi-file-layout-justified
+  - id: nurl-vs-adm-video-response-type
+    file: src/main/java/org/prebid/server/bidder/beachfront/BeachfrontBidder.java
+    summary: "videoResponseType ('nurl' | 'adm') controls bid response format with NURL_VIDEO_ENDPOINT_SUFFIX ('&prebidserver') appended for nurl variant. Mirror of Go-side quirk."
+    edge_case_taxon: vendor-specific-protocol-quirk
+  - id: multi-endpoint-by-mediatype
+    file: src/main/java/org/prebid/server/bidder/beachfront/BeachfrontBidder.java
+    summary: "Per-imp routing: imps with valid Banner go to bannerEndpointUrl; imps with Video go to videoEndpointUrl. Master sample for ADR-007 F1 endpoint_resolution.kind: multi-endpoint-by-mediatype."
+    edge_case_taxon: multi-endpoint-by-mediatype
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/beachfront/
+    package_name: beachfront
+    bidder_constant: openrtb_ext.BidderBeachfront
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/beachfront/
+    bidder_class: BeachfrontBidder
+    config_class: BeachfrontConfiguration
+    yaml_path: src/main/resources/bidder-config/beachfront.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/beachfront/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - rule-9-custom-request-type
+      - rule-35-typed-config-subclass
+      - adr-007-f1-multi-endpoint-by-mediatype
+      - currency-aware-bidfloor-resolver
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "BeachfrontBidder implements Bidder<Void> — the request body is a custom struct, not OpenRTB2 BidRequest. Framework dispatches the Bidder<Void> path differently from Bidder<BidRequest>; the bidder is responsible for serializing the custom struct to bytes."
+    - "BeachfrontConfigurationProperties is declared as a private static inner class inside BeachfrontConfiguration.java rather than a separate file — atypical placement; most adapters that have a config subclass put it in its own file."
+    - "BeachfrontFloorResolver helper class is distinct from BeachfrontBidder and lives in the same package directory; unusual extraction granularity (most adapters inline floor resolution)."
+    - "BIDDER_NAME = 'BF_PREBID_S2S' (with version '1.0.0') is stamped into outgoing request payloads as adapterName + adapterVersion fields — bidder-side identification not present in OpenRTB."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: null

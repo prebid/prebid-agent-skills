@@ -391,6 +391,7 @@ cross_language:
     bidder_class: AdkernelAdnBidder
     config_class: AdkernelAdnConfiguration
     yaml_path: src/main/resources/bidder-config/adkerneladn.yaml
+    bidder_params_path: src/main/resources/static/bidder-params/adkernelAdn.json   # camelCase upstream — diverges from lowercase package directory (per quirks.bidder-params-camelcase-filename)
     proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/adkerneladn/
   port_concerns:
     aliases_inverted: false                   # No aliases on either side

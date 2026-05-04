@@ -219,7 +219,7 @@ def compare_bidder_go(bidder: str, golden_path: Path,
         known_keys = {
             "endpoint", "endpointCompression", "geoscope", "maintainer",
             "capabilities", "gvlVendorID", "modifyingVastXmlAllowed",
-            "disabled", "userSyncURL", "syncer", "yaml", "aliasOf",
+            "disabled", "userSyncURL", "userSync", "syncer", "yaml", "aliasOf",
             "experiment", "openrtb", "extra_info", "ortb-version",
             "endpoint-compression",  # Java-style camelCase variants tolerated
         }
@@ -253,8 +253,16 @@ def compare_bidder_java(bidder: str, golden_path: Path,
     with open(golden_path) as fp:
         golden = yaml.safe_load(fp) or {}
 
-    # 1. bidder_params byte-fidelity.
-    params_path = f"src/main/resources/static/bidder-params/{bidder}.json"
+    # 1. bidder_params byte-fidelity. The golden's
+    # `cross_language.java_artifacts.bidder_params_path` overrides the default
+    # construction when the upstream filename diverges from the lowercase bidder
+    # name (adkerneladn → adkernelAdn.json camelCase; emxdigital → emx_digital.json
+    # snake_case). Phase D0.2 admitted this override; older goldens without the
+    # field fall through to the default lowercase construction.
+    params_path = (
+        _path(golden, "cross_language", "java_artifacts", "bidder_params_path")
+        or f"src/main/resources/static/bidder-params/{bidder}.json"
+    )
     upstream_json = fetcher(params_path)
     if upstream_json is None and not _path(golden, "meta", "is_alias"):
         findings.append(Finding(bidder, "java", "bidder_params_missing", SEVERITY_FAIL,
@@ -272,11 +280,13 @@ def compare_bidder_java(bidder: str, golden_path: Path,
     # 2. bidder-config YAML — presence + tracked field comparison.
     config_path = f"src/main/resources/bidder-config/{bidder}.yaml"
     upstream_yaml_bytes = fetcher(config_path)
-    if upstream_yaml_bytes is None:
+    if upstream_yaml_bytes is None and not _path(golden, "meta", "is_alias"):
+        # Alias children (e.g., 152media → adkernel) ride the parent's bidder-config
+        # YAML; absence upstream is expected. Only fail for non-aliases.
         findings.append(Finding(bidder, "java", "bidder_config_missing", SEVERITY_FAIL,
                                 f"{config_path} not found upstream",
                                 {"path": config_path}))
-    else:
+    elif upstream_yaml_bytes is not None:
         try:
             upstream_yaml = yaml.safe_load(upstream_yaml_bytes) or {}
         except yaml.YAMLError as e:

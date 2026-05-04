@@ -120,21 +120,42 @@ Rules are applied in the order declared in `port-translation-rules.yaml`. The YA
 
 The order is **deterministic** so that two port runs of the same source spec at the same rules version produce byte-identical destination specs (R4 round-trip determinism applies to ports too).
 
-When two rules produce conflicting artifacts (Section 5), the rule with the lower id wins. Rule 1 has priority over Rule 5 has priority over Rule 35 etc. The conflict is recorded as an `unresolved_translations` entry with reason `conflicting-rules` so the reflection loop sees it.
+When two rules act on overlapping spec fields, see Section 5 for the composition (typical) vs conflict (rare) distinction. For genuine conflicts where two rules produce mutually-exclusive artifacts, the rule with the lower id wins on artifact placement and the conflict is recorded as an `unresolved_translations` entry with reason `conflicting-rules` so the reflection loop sees it.
 
 ---
 
-## 5. Conflict resolution
+## 5. Rule composition and conflict resolution
 
-Most rules are non-overlapping (each names its own `spec_field_driver`). The cases where rules conflict, and how the port skill handles them:
+Most rules are non-overlapping (each names its own `spec_field_driver`). When two rules touch the same field, the relationship is almost always **composition** — one rule's output becomes the other's input — not conflict. True winner-take-all conflict is rare; the port skill handles each shape differently.
 
-**Rule 11 vs Rule 35 — endpoint construction vs config-properties subclass.** When a Java config exposes `dev-endpoint` (Kobler) AND the endpoint URL uses `{{TOKEN}}` substitution, both Rule 11 (multi-token-substitution) and Rule 35 (config-properties subclass) apply. Resolution: apply Rule 35 first to construct the subclass field, then Rule 11 substitutes the field's value into the URL template. Lower-id rule wins on artifact placement; the higher-id rule transforms the lower-id's output.
+### 5.1 Composition (the common case)
 
-**Rule 38 byte-equality vs language-specific reformatting.** When porting Go→Java, the bidder-params JSON might need re-formatting to match Java's 4-space indent. This breaks Rule 38 byte-equality but preserves semantic equivalence. The port skill applies Java's canonical formatting AND emits a `human_todos` entry with category `byte-divergence-warning` so a human can decide whether to (a) revert to Go-byte-equal, (b) accept the byte divergence, (c) file an upstream-bidder fix.
+When two applicable rules produce complementary artifacts that compose cleanly, the port skill applies them in declared order. The lower-id rule lands its artifact first; the higher-id rule transforms or extends that artifact.
 
-**Rule 5 mutation strategy pairing.** Source has `entity_strategies.Site: deep-copy-then-mutate`; target language's idiom is `immutable-rebuild`. Rule 5 declares this is a valid pair. Apply the language-idiom translation (deep-copy-then-mutate → immutable-rebuild for Go→Java; the inverse for Java→Go). No conflict.
+**Rule 11 ⊕ Rule 35 — endpoint construction composes with config-properties subclass.** When a Java config exposes `dev-endpoint` (Kobler) AND the endpoint URL uses `{{TOKEN}}` substitution, both Rule 11 (multi-token-substitution) and Rule 35 (config-properties subclass) apply. Resolution: apply Rule 35 first to construct the subclass field, then Rule 11 substitutes the field's value into the URL template. The higher-id rule transforms the lower-id's output. No conflict — both artifacts coexist by design.
+
+**Rule 5 mutation strategy pairing.** Source has `entity_strategies.Site: deep-copy-then-mutate`; target language's idiom is `immutable-rebuild`. Rule 5 declares this is a valid pair. Apply the language-idiom translation (deep-copy-then-mutate → immutable-rebuild for Go→Java; the inverse for Java→Go). No conflict — the rule itself encodes the translation.
 
 **ADR-007 F1/F3/F4/F5 patterns at adapter_spec_version 1.1.0+.** When the source spec uses one of these patterns (multi-endpoint, entity_strategies extensions, bid_post_processing, imp_ext_strip), the port applies the corresponding language idiom. Wave 11b B3+ closed `Code` and added structured `MakeRequests`/`MakeBids` $defs, but the F1/F3/F4/F5 $defs themselves remain unwired — the corresponding sub-positions (`endpoint_resolution`, `mutation`, `imp_ext_unmarshal`, `bid_post_processing`) are typed `object|null` and treated as implicit-open by the phantom-detector. The port skill applies the pattern by inspection of the source's `code.make_requests.{endpoint_resolution, mutation, imp_ext_unmarshal}` and `code.make_bids.bid_post_processing` blocks; per-pattern $ref-wiring is a future wave.
+
+### 5.2 Pseudo-conflict (rule + cross-cutting concern)
+
+Some rules trade off against cross-cutting language conventions. Both apply, both produce side-effects, but neither is "wrong" — the port skill emits both plus a `human_todos` so the operator can adjudicate.
+
+**Rule 38 byte-equality vs language-specific reformatting.** When porting Go→Java, the bidder-params JSON might need re-formatting to match Java's 4-space indent. This breaks Rule 38 byte-equality but preserves semantic equivalence. The port skill applies Java's canonical formatting AND emits a `human_todos` entry with category `byte-divergence-warning` so a human can decide whether to (a) revert to Go-byte-equal, (b) accept the byte divergence, (c) file an upstream-bidder fix. Not a conflict in the winner-take-all sense — both forms are arguably correct.
+
+### 5.3 Conflict (genuine winner-take-all; rare)
+
+A genuine conflict is two rules emitting mutually-exclusive artifacts at the same path. The current rule corpus has no documented case; the resolution protocol is reserved for future rule additions.
+
+**Resolution protocol** (when it arises):
+
+1. The port skill identifies the conflict during Step 3 — both rules emit `verdict: applied` with overlapping artifact paths.
+2. The lower-id rule's artifact wins (declared-order priority).
+3. The higher-id rule's would-be artifact is recorded as an `unresolved_translations[]` entry with `reason: conflicting-rules` and `ambiguous_rule_ids: [lower_id, higher_id]`.
+4. Phase F (reflection loop) triages the entry: amend one of the two rules to narrow its `spec_field_driver`, OR introduce a precedence note in `port-translation-rules.yaml`.
+
+**Synthetic example** (illustrative; not currently in the corpus): Suppose a hypothetical Rule 50 emits a custom `{Bidder}HttpClient.java` while Rule 8 emits `{Bidder}Bidder.java` declaring its own `HttpClient` field with the same name. Both produce code referencing `{Bidder}HttpClient` but only one of the two files can compile. Lower id wins (Rule 8); Rule 50's would-be artifact lands in `unresolved_translations[]` for Phase F triage.
 
 ---
 
@@ -158,13 +179,13 @@ The reflection loop in Phase F triages these `unresolved_translations` entries �
 
 ## 7. R5-strict check at port time
 
-The R5-strict check at port time uses the same logic as `scripts/round-trip-ci.py r5_check`, but invoked on the source ↔ destination pair instead of two existing fixtures. Three differences:
+The R5-strict check at port time calls `scripts/lib/r5_check.compare_pair`, the same comparator the harness uses, but invoked on the source ↔ destination pair instead of two existing fixtures. Three differences:
 
 1. **Source/destination pairing**: source = the input spec; destination = the freshly-emitted one. No `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` is consulted (the pair file may not exist for new bidders being ported).
 2. **Strict-keys decomposition**: applies the Wave 1 R5 fix — `params.schema_interpretation.{required_fields, combinators_used, flexible_types}` are the strict subfields; the prose-bearing description/notes are NOT compared.
 3. **Severity remap**: a port-time R5 fail is a `human_todos` entry, not a CI failure. The port still ships; humans decide.
 
-Phase D will share the R5-check implementation between `round-trip-ci.py` and the port skills (refactor extracts the comparison logic to `scripts/lib/r5_check.py`).
+The R5 comparator was lifted to `scripts/lib/r5_check.py` in Phase D0.1 (the harness re-exports the public surface for backward compatibility). Port skills consume `compare_pair(go_spec, java_spec, *, assertions=None, overall=None) -> R5Result`; the harness wraps `R5Diagnostic` items into its own `Finding` dataclass.
 
 ---
 
@@ -207,7 +228,7 @@ Phase D's tests (live under `scripts/tests/test_port_skills.py` when authored) v
 1. **Round-trip determinism (port-side R4)**: read source spec → port → re-read destination → port-back → byte-equal to source. This is stronger than the read-side R4 because it covers the rule-application transformation.
 2. **R5-strict check correctness**: synthetic source/destination pairs that should pass / warn / fail; verify the port's R5 check returns the expected state.
 3. **Rule coverage**: every rule has at least one fixture demonstrating `verdict: applied`.
-4. **Conflict resolution**: synthetic specs that trigger Rule 11 + Rule 35 conflict; verify lower-id-wins.
+4. **Composition**: synthetic specs exercising Rule 11 ⊕ Rule 35 (endpoint construction composes with config-properties subclass per §5.1) — verify both artifacts emit and the higher-id rule's transform applies after the lower-id rule's output. **Conflict resolution**: when a future rule introduces a genuine winner-take-all case (none in the current corpus per §5.3), verify lower-id-wins and the loser lands in `unresolved_translations[]`.
 5. **Novel-pattern handling**: synthetic source with a quirk not in the taxonomy; verify `human_todos` + `unresolved_translations` populate correctly.
 6. **Port-report schema validation**: every emitted report validates against `port-report.schema.json`.
 

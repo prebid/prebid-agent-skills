@@ -1,0 +1,60 @@
+{# IT fixture: BidRequest the prebid-server adapter sends to the bidder's endpoint.
+Lives at src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-{bidder}-bid-request.json
+
+Inputs:
+  ctx.request_id        : str  — typically same as the auction-request's id
+  ctx.imps              : list[dict]  — per imp; same shape as auction-request
+                                          BUT typically without the prebid wrapper
+                                          (adapter strips imp.ext.prebid.bidder.{bidder}
+                                          out and flattens to imp.ext.bidder)
+  ctx.tmax              : int
+  ctx.cur               : list[str]
+  ctx.site_page         : str|null
+  ctx.app_bundle        : str|null
+  ctx.publisher_id      : str
+  ctx.flatten_imp_ext   : bool  — when true, emit imp.ext as just {"bidder": {...}}
+                                   (the adapter's typical ImpExt shape); when false,
+                                   keep the prebid wrapper (rare; bidder-specific)
+
+The bid-request typically omits the User/Regs blocks the auction-request
+carried (the adapter strips them) but the operator may need to preserve
+them. The SKILL Step 5's Rule 36 inverse handles per-bidder mutations.
+#}
+{
+  "id": {{ ctx.request_id | tojson }},
+  "tmax": {{ ctx.tmax }},
+  "cur": {{ ctx.cur | tojson }},
+{% if ctx.site_page %}
+  "site": {
+    "page": {{ ctx.site_page | tojson }},
+    "publisher": { "id": {{ ctx.publisher_id | tojson }} }
+  },
+{% elif ctx.app_bundle %}
+  "app": {
+    "bundle": {{ ctx.app_bundle | tojson }},
+    "publisher": { "id": {{ ctx.publisher_id | tojson }} }
+  },
+{% endif %}
+  "imp": [
+{% for imp in ctx.imps %}
+    {
+      "id": {{ imp.id | tojson }},
+      "{{ imp.mediatype }}": {{ imp.mediatype_props | tojson }},
+{% if ctx.flatten_imp_ext %}
+      "ext": {
+        "bidder": {{ imp.ext_bidder | tojson }}
+      }
+{% else %}
+      "ext": {
+        "prebid": {
+          "bidder": {
+            "{{ ctx.bidder_name }}": {{ imp.ext_bidder | tojson }}
+          }
+        }
+      }
+{% endif %}
+    }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ]
+}

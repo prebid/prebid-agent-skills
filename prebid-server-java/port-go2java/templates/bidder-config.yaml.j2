@@ -1,0 +1,87 @@
+{# Java bidder-config YAML template — emits src/main/resources/bidder-config/{bidder}.yaml.
+
+Inputs:
+  ctx.bidder_name           : str  — Java YAML name (lowercase + drop non-[a-z0-9]; via port_engine.normalize_bidder_name)
+  ctx.endpoint              : str  — bidder_info.endpoint URL (Java template syntax; macros normalized per Rule 11)
+  ctx.maintainer_email      : str  — from bidder_info.maintainer.email
+  ctx.gvl_vendor_id         : int|null
+  ctx.endpoint_compression  : str|null
+  ctx.modifying_vast_xml    : bool
+  ctx.geoscope              : list[str]  — alphabetical sort applied by caller
+  ctx.site_media_types      : list[str]|null  — from capabilities.site.mediaTypes (sorted)
+  ctx.app_media_types       : list[str]|null  — from capabilities.app.mediaTypes (sorted)
+  ctx.dooh_media_types      : list[str]|null  — from capabilities.dooh.mediaTypes (sorted)
+  ctx.aliases               : dict[str, dict]  — alias-name → per-alias overrides (Rule 33 inverted)
+  ctx.user_sync             : dict|null  — pass-through from bidder_info.user_sync
+  ctx.ortb_version          : str|null
+
+Naming convention: kebab-case YAML keys (Java edge case #1 — Go uses camelCase
+endpointCompression; Java uses kebab-case endpoint-compression). The caller passes
+already-translated values; the template just emits.
+
+Idempotency: re-running the port skill produces byte-identical output for a fixed
+source spec + rules version (R4 round-trip determinism applies).
+
+Render env: trim_blocks=True, lstrip_blocks=True. Block tags strip the newline
+after the tag and the indent before the tag, so the visible YAML structure stays
+clean. Do NOT use `-%}`/`{%-` strippers on the block tags below — they would
+also remove the indentation of the following data line.
+#}
+adapters:
+  {{ ctx.bidder_name }}:
+    endpoint: {{ ctx.endpoint | tojson }}
+{% if ctx.endpoint_compression %}
+    endpoint-compression: {{ ctx.endpoint_compression }}
+{% endif %}
+{% if ctx.ortb_version %}
+    ortb-version: {{ ctx.ortb_version | tojson }}
+{% endif %}
+    geoscope:
+{% for region in ctx.geoscope %}
+      - {{ region }}
+{% endfor %}
+{% if ctx.modifying_vast_xml %}
+    modifying-vast-xml-allowed: true
+{% endif %}
+    meta-info:
+      maintainer-email: {{ ctx.maintainer_email | tojson }}
+{% if ctx.gvl_vendor_id is not none %}
+      vendor-id: {{ ctx.gvl_vendor_id }}
+{% endif %}
+{% if ctx.site_media_types %}
+      site-media-types:
+{% for mt in ctx.site_media_types %}
+        - {{ mt }}
+{% endfor %}
+{% endif %}
+{% if ctx.app_media_types %}
+      app-media-types:
+{% for mt in ctx.app_media_types %}
+        - {{ mt }}
+{% endfor %}
+{% endif %}
+{% if ctx.dooh_media_types %}
+      dooh-media-types:
+{% for mt in ctx.dooh_media_types %}
+        - {{ mt }}
+{% endfor %}
+{% endif %}
+{% if ctx.user_sync %}
+    usersync:
+{% for k, v in ctx.user_sync | dictsort %}
+      {{ k }}: {{ v | tojson }}
+{% endfor %}
+{% endif %}
+{% if ctx.aliases %}
+    aliases:
+{% for alias_name, overrides in ctx.aliases | dictsort %}
+{% if overrides %}
+      {{ alias_name }}:
+{% for k, v in overrides | dictsort %}
+        {{ k }}: {{ v | tojson }}
+{% endfor %}
+{% else %}
+      {{ alias_name }}: ~
+{% endif %}
+{% endfor %}
+{% endif %}

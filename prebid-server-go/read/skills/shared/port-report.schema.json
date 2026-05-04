@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/prebid/prebid-agent-skills/prebid-server-go/read/skills/shared/port-report.schema.json",
   "title": "Port Report",
-  "description": "Output schema emitted by Phase D port skills (port-go2java, port-java2go) and consumed by the Phase F reflection loop. Captures the provenance of one port run, the rules applied, the quirks emitted, the R5-strict cross-language equivalence result, and human-attention items. The destination spec lives at .tmp/full-loop/{run-id}/{target_lang}/{bidder}.yaml (Wave 5 convention) when running as part of the Teal flow; otherwise wherever the orchestrator writes it. The port report itself lives next to the destination spec at .tmp/full-loop/{run-id}/port-report.json. Versioning per ADR-001 D7 (SemVer string).",
+  "description": "Output schema emitted by Phase D port skills (port-go2java, port-java2go) and consumed by the Phase F reflection loop. Captures the provenance of one port run, the rules applied, the quirks emitted, the R5-strict cross-language equivalence result, and human-attention items. The destination spec lives at .tmp/full-loop/{run-id}/{target_lang}/{bidder}.yaml (Wave 5 convention) when running as part of the Teal flow; otherwise wherever the orchestrator writes it. The port report itself lives next to the destination spec at .tmp/full-loop/{run-id}/port-report.json. Versioning per ADR-001 D7 (SemVer string). Initial release 0.1.0; Phase D1.4 added 0.2.0 (MINOR, additive): PR-shape automation fields (recommended_pr_title, target_pr_label_recommendations, companion_docs_pr_draft, pre_submit_rebase), source provenance fields (source_pr_url, source_pr_merged_commit_sha, source_discussion_anchors), fidelity-tracking fields (re_authored_paragraphs, upstream_bugs_to_file), and two additional r5_check.state enum values (warn-target-strengthens-source, fail-source-omits-target-constraint). All 0.1.0 reports continue to validate against 0.2.0 per schema-versioning.md MINOR criteria.",
 
   "type": "object",
   "required": [
@@ -16,7 +16,7 @@
     "port_report_version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-      "description": "Schema version this port report conforms to. SemVer string per ADR-001 D7. Initial release: 0.1.0."
+      "description": "Schema version this port report conforms to. SemVer string per ADR-001 D7. 0.1.0 initial; 0.2.0 admits PR-shape automation fields, source-provenance fields, fidelity-tracking fields, and two extra r5_check.state enum values. 0.1.0 reports continue to validate."
     },
 
     "port_run": {
@@ -92,13 +92,21 @@
 
     "r5_check": {
       "type": "object",
-      "description": "Result of R5-strict cross-language equivalence check at port time. The destination spec is loaded as if it were a fresh read of the ported code; compared field-by-field against the source spec. The check uses the same R5_STRICT_KEYS / R5_DIVERGENT_KEYS partitioning as scripts/round-trip-ci.py.",
+      "description": "Result of R5-strict cross-language equivalence check at port time. The destination spec is loaded as if it were a fresh read of the ported code; compared field-by-field against the source spec. The check uses the same R5_STRICT_KEYS / R5_FORM_DIVERGENT_KEYS / R5_ADVISORY_DIVERGENT_KEYS partitioning as scripts/lib/r5_check.py (also re-exported by scripts/round-trip-ci.py).",
       "required": ["state"],
       "additionalProperties": false,
       "properties": {
         "state": {
           "type": "string",
-          "enum": ["pass", "warn-byte-only-divergence", "fail-semantic-divergence", "skipped-no-pair-fixture"]
+          "description": "Six-state enum: pass (everything matches); warn-byte-only-divergence (byte/whitespace divergence per Rule 38, semantically identical); warn-target-strengthens-source (target spec carries a constraint absent in source — Connatix-style: Java has minimum/maximum that Go lacks; port preserves the constraint, no fidelity loss); fail-semantic-divergence (semantic divergence with no documented justification); fail-source-omits-target-constraint (source omits a constraint the target language requires; port cannot emit a valid target without operator intervention — aax-style; surfaces in human_todos[] for upstream confirmation); skipped-no-pair-fixture (pair fixture absent at port time, R5 cannot run).",
+          "enum": [
+            "pass",
+            "warn-byte-only-divergence",
+            "warn-target-strengthens-source",
+            "fail-semantic-divergence",
+            "fail-source-omits-target-constraint",
+            "skipped-no-pair-fixture"
+          ]
         },
         "byte_equal_fields": {
           "type": "array",
@@ -122,6 +130,164 @@
       }
     },
 
+    "source_pr_url": {
+      "type": ["string", "null"],
+      "description": "Phase D 0.2.0. GitHub URL of the upstream PR that introduced or last touched the source-side adapter, e.g., https://github.com/prebid/prebid-server/pull/3904 for kobler-Go. Null when the port is from genesis (rare). Maintains source-side provenance so reviewers can trace the port back to upstream review threads."
+    },
+    "source_pr_merged_commit_sha": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{40}$",
+      "description": "Phase D 0.2.0. 40-hex SHA of the merge commit that landed the source adapter. Provenance: anchors the port to a specific upstream snapshot, so that future cross-version replay (Phase F) can reproduce the exact source state. Null when source_pr_url is null or the source state predates the repo's git history. Empty string is NOT admitted — pattern requires exactly 40 hex chars when the field is a string (Phase D review M-D)."
+    },
+    "source_discussion_anchors": {
+      "type": "array",
+      "description": "Phase D 0.2.0. Links to source-side PR review comments, commit messages, or issues that informed port decisions. Reviewers on the destination PR quote these directly when explaining 'the source side handles this case because…' (per the empirical Wave-5 review-pattern audit).",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "GitHub anchor URL — typically a PR-review-comment permalink or a commit SHA URL."
+          },
+          "context": {
+            "type": ["string", "null"],
+            "description": "Free-text summary of what the anchor tells us, in case the link rots over time."
+          },
+          "load_bearing_for": {
+            "type": ["string", "null"],
+            "description": "Spec field or rule id this anchor is load-bearing for (e.g., 'rule_30: status helpers'; 'meta.disabled')."
+          }
+        }
+      }
+    },
+
+    "re_authored_paragraphs": {
+      "type": "array",
+      "description": "Phase D 0.2.0. Sections of the destination spec where the port skill re-authored content rather than translating 1:1 from source. Captures the Rule 36 reframing (semantic-coverage parity, not byte-translation) and similar prose-bearing fields where the languages legitimately diverge in idiom.",
+      "items": {
+        "type": "object",
+        "required": ["spec_section", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "spec_section": {
+            "type": "string",
+            "description": "Path to the re-authored section (e.g., 'tests.fixtures', 'params.schema_interpretation.notes', 'bidder_info.endpoint_construction')."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why re-authoring was needed instead of byte-translation (e.g., 'Java IT 4-file split has no Go-side analog; re-authored as semantic-coverage parity per Rule 36 reframing')."
+          },
+          "source_paragraphs": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Optional: the source-side prose paragraphs that informed the re-authored content."
+          }
+        }
+      }
+    },
+
+    "recommended_pr_title": {
+      "type": ["string", "null"],
+      "description": "Phase D 0.2.0. PR title the operator should use when opening the destination PR. Java-target convention per upstream porting-guide: 'Port {Bidder}: New Adapter' or 'Port {alias}: New alias for {parent}'. Go-target convention per real-PR audit: 'New Adapter: {Bidder}' (capital A, observed 100% of merged PRs). Null when port is dry-run / spec-only."
+    },
+    "target_pr_label_recommendations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Phase D 0.2.0. PR labels the operator should apply on the destination PR. Java-target default ['do not port'] per upstream porting-guide. Go-target default empty list (Go has no upstream PR template; no mandatory labels). Empty array also acceptable for dry-run / spec-only ports."
+    },
+    "upstream_bugs_to_file": {
+      "type": "array",
+      "description": "Phase D 0.2.0. Bugs the port skill discovered in upstream artifacts while porting — Connatix-style 'found a Go bug while porting to Java' or aax-style 'Java side is missing a constraint Go enforces'. Phase F triages each entry: file an upstream issue, amend a port-translation-rule, or update a dual-spec assertion.",
+      "items": {
+        "type": "object",
+        "required": ["target_repo", "summary", "severity"],
+        "additionalProperties": false,
+        "properties": {
+          "target_repo": {
+            "type": "string",
+            "enum": ["prebid/prebid-server", "prebid/prebid-server-java", "prebid/prebid.github.io"],
+            "description": "Where the bug should be filed."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Short bug summary (suitable as an issue/PR title)."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["fidelity-violation", "schema-mismatch", "documentation-gap", "other"],
+            "description": "Connatix-style 'target adds constraint source lacks' is fidelity-violation; aax-style 'target omits constraint source enforces' is also fidelity-violation; missing PR template entries are documentation-gap; etc."
+          },
+          "evidence_path": {
+            "type": ["string", "null"],
+            "description": "File path or URL to evidence supporting the bug claim."
+          }
+        }
+      }
+    },
+    "companion_docs_pr_draft": {
+      "type": ["object", "null"],
+      "description": "Phase D 0.2.0. Draft adapter-docs page for the maintainer-mandatory companion PR on prebid/prebid.github.io. Phase D mandates this for Java-target ports per BeOp #4660 review pattern; expected for Go-target ports for parity even though Go-side enforcement is softer. Null when the port is dry-run / spec-only.",
+      "required": ["target_repo", "file_path", "body_markdown"],
+      "additionalProperties": false,
+      "properties": {
+        "target_repo": {
+          "type": "string",
+          "enum": ["prebid/prebid.github.io"],
+          "description": "Always prebid.github.io for adapter docs."
+        },
+        "file_path": {
+          "type": "string",
+          "description": "Path within prebid.github.io, typically 'dev-docs/bidders/{bidder}.md'."
+        },
+        "body_markdown": {
+          "type": "string",
+          "description": "Draft markdown body populated from the source spec's bidder_info, params, and meta fields. Operator submits this as the docs PR alongside the main code PR."
+        }
+      }
+    },
+    "pre_submit_rebase": {
+      "type": ["object", "null"],
+      "description": "Phase D 0.2.0. Records the pre-submit rebase outcome — port skills MUST rebase the target branch onto upstream master HEAD immediately before opening the PR (per Risk #1 mitigation). Captures the master HEAD at port-emit time and at PR-submit time so Phase F can correlate post-merge surprises with framework drift. Null when the port is dry-run / spec-only.",
+      "required": ["upstream_repo", "base_sha_at_emit", "base_sha_at_submit", "conflicts_detected"],
+      "additionalProperties": false,
+      "properties": {
+        "upstream_repo": {
+          "type": "string",
+          "enum": ["prebid/prebid-server", "prebid/prebid-server-java"]
+        },
+        "base_sha_at_emit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Upstream master HEAD when the port emitted artifacts."
+        },
+        "base_sha_at_submit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Upstream master HEAD when the port re-rebased and opened the PR. May equal base_sha_at_emit when no upstream activity intervened."
+        },
+        "conflicts_detected": {
+          "type": "boolean",
+          "description": "True when the rebase surfaced conflicts the operator had to resolve manually before submit."
+        },
+        "conflicts_summary": {
+          "type": ["string", "null"],
+          "description": "Free-text describing what conflicted. Required (non-null, non-empty string) when conflicts_detected is true; the if/then below enforces this declaratively (Phase D review M-D)."
+        }
+      },
+      "if": {
+        "properties": { "conflicts_detected": { "const": true } },
+        "required": ["conflicts_detected"]
+      },
+      "then": {
+        "properties": {
+          "conflicts_summary": { "type": "string", "minLength": 1 }
+        },
+        "required": ["conflicts_summary"]
+      }
+    },
+
     "human_todos": {
       "type": "array",
       "description": "Items requiring human review/approval before merging the port. Each entry is a single actionable concern. Categories partition the universe of port-time judgment calls.",
@@ -132,7 +298,7 @@
         "properties": {
           "category": {
             "type": "string",
-            "enum": ["novel-pattern", "byte-divergence-warning", "upstream-confirmation", "alias-graph-inversion", "framework-asymmetry", "language-stamped-header", "cross-package-pojo-placement", "other"]
+            "enum": ["novel-pattern", "byte-divergence-warning", "upstream-confirmation", "alias-graph-inversion", "framework-asymmetry", "language-stamped-header", "cross-package-pojo-placement", "style-violation", "other"]
           },
           "summary": { "type": "string" },
           "evidence_path": {

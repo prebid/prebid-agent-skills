@@ -1,20 +1,190 @@
 # Changelog
 
-All notable changes to the Adapter Specification schema, behavior taxonomy, and
-port-translation rules. Format follows [Keep a Changelog](https://keepachangelog.com/);
-versioning is per ADR-001 D7 (SemVer string `X.Y.Z`).
+All notable changes to the Adapter Specification schema, behavior taxonomy,
+port-translation rules, and port-report schema. Format follows
+[Keep a Changelog](https://keepachangelog.com/); versioning is per ADR-001 D7
+(SemVer string `X.Y.Z`).
 
-The three independently-versioned artifacts are:
+The four independently-versioned artifacts are:
 
 - **adapter_spec_version** — the JSON Schema at `prebid-server-go/read/skills/shared/adapter-spec.schema.json`
 - **taxonomy_version** — the behavior taxonomy at `prebid-server-go/read/skills/shared/behavior-taxonomy.yaml`
 - **port_translation_rules_version** — the rule corpus at `prebid-server-go/read/skills/shared/port-translation-rules.yaml`
+- **port_report_version** — the port-report schema at `prebid-server-go/read/skills/shared/port-report.schema.json` (promoted to first-class artifact in Phase D1.4; previously tracked in narrative form)
 
-Every entry references the ADRs (`docs/decisions/`) that drove the change.
+Every entry header lists all four at their current state for reproducibility.
+Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
-## [adapter_spec_version 1.2.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-03
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-04 (engineering complete)
+
+Phase D engineering layer complete. D0 + D1 set up the port-skill
+prerequisites (R5 lib, port-engine helpers, schemas, emission refs);
+D2 + D3 ship the SKILL pipeline prose and all 17 Jinja templates
+across both directions (Go→Java and Java→Go); D4 lands the CI
+integration (port-side R4 round-trip framework, coverage-report
+extension, mvn checkstyle dry-run helper). Operator-side validation
+against the 6 MVP pairs (D2.8 / D3.8) and the beachfront ADR-007 F1
+master fixture (D4.4) remain.
+
+### Added — port skill engineering layer (D0-D4)
+
+- `scripts/lib/r5_check.py` — comparator-neutral R5 comparator
+  (`compare_pair`, `aggregate_state`, `R5Diagnostic`, `R5Result`,
+  `SpecView` protocol). Harness re-exports preserve test_round_trip_ci.py
+  imports.
+- `scripts/lib/port_engine.py` — 10 mechanical helpers consumed by both
+  port skills: `byte_copy`, `normalize_bidder_name`, `alias_graph_invert`,
+  `iab_table_translate`, `r5_check_at_port_time`, `port_report_emit`,
+  `alphabetical_insert`, `prefix_uniqueness_check`, `gofmt_post_process`,
+  `mvn_checkstyle_dry_run`.
+- Two skill directories with full pipeline prose:
+  `prebid-server-java/port-go2java/SKILL.md` (Go→Java; v0.3.0) and
+  `prebid-server-go/port-java2go/SKILL.md` (Java→Go; v0.3.0).
+- 11 Java-target Jinja templates at
+  `prebid-server-java/port-go2java/templates/`: bidder-config.yaml,
+  ext-imp-pojo.java, configuration.java, configuration-properties.java,
+  bidder.java, bidder-test.java, it-test.java, plus 4 IT fixture JSONs.
+- 6 Go-target Jinja templates at
+  `prebid-server-go/port-java2go/templates/`: bidder-info.yaml,
+  imp-ext-pojo.go, bidder-test.go, params-test.go, exemplary-fixture.json,
+  bidder.go.
+- 11 emission reference docs across both port skills'
+  `references/` directories + a shared
+  `prebid-server-go/read/skills/shared/bidder-constant-table.yaml`
+  (271 entries; 84 non-mechanical) refreshed to v4 module path post
+  upstream PR #4710 (resolved_commit `2fae16f31693`).
+
+### Added — schema bumps + CI extensions
+
+- **adapter_spec_version 1.3.0** (additive): optional
+  `cross_language.java_artifacts.bidder_params_path` for the rare
+  bidders whose Java upstream filename diverges from the lowercase
+  bidder name (adkerneladn → adkernelAdn.json camelCase; emxdigital →
+  emx_digital.json snake_case).
+- **port_report_version 0.2.0** (additive): PR-shape automation
+  (5 fields including `companion_docs_pr_draft` and `pre_submit_rebase`
+  with declarative if/then constraint), source provenance (3 fields),
+  fidelity tracking (`re_authored_paragraphs[]`),
+  `r5_check.state` enum extended 4 → 6 values (warn-target-strengthens-
+  source, fail-source-omits-target-constraint).
+- `port_report_version` promoted to first-class versioned artifact
+  (4th alongside the original three) per
+  `docs/methodology/schema-versioning.md` revision.
+- `scripts/round-trip-ci.py` R11 port-side round-trip determinism gate
+  (consults `port-translation-rules.yaml` Round-Trip Safety table for
+  lossy-direction filtering).
+- `scripts/coverage-report.py` §7b per-rule applied-count from
+  port-report.json archives.
+- **Beachfront cross-language pair fixture** (D4.4) at
+  `prebid-server-{go,java}/read/test-fixtures/beachfront.golden.spec.yaml`
+  + `cross-language-pairs/beachfront.dual-spec-assertions.yaml`. Master
+  sample for THREE load-bearing patterns: ADR-007 F1
+  multi-endpoint-by-mediatype (banner endpoint vs video endpoint per
+  mediatype), Rule 35 typed-config-subclass (Java
+  `BeachfrontConfigurationProperties` with `@NotBlank private String
+  videoEndpoint` vs Go opaque `ExtraAdapterInfo` JSON string), and
+  Rule 9 parameterized-request-type (Java `Bidder<Void>` + custom
+  request bodies). Dual-spec assertions document 2 expected R5 WARNs
+  (bidder-params byte-only-whitespace divergence; endpoint_construction
+  encoding divergence by ADR-007 F1 design); no port-fidelity FAILs.
+  Corpus expanded 40 → 42 goldens; 16 → 17 dual-specs.
+
+### Added — review iteration scaffolding
+
+- `scripts/tests/test_port_e2e_fixtures.py` — fixture-driven render
+  tests using real `kobler.golden.spec.yaml` source rather than
+  hand-rolled synthetic contexts; closes the gap where per-template
+  tests proved "template renders given pre-cooked ctx" but not
+  "SKILL → context → template is consistent".
+- `TestPortReportV020Invariants` in test_schema_jsonschema.py — 8
+  cases pinning the M-D schema tightenings (if/then constraint, SHA
+  pattern, six-state enum) so they can't regress silently.
+- `TestModuleVersionTableSync` cross-checks the test-suite
+  `GO_MODULE_VERSION` constant against the bidder-constant-table's
+  `module_version` pin so a future v5 bump fires a test until the
+  test constant updates accordingly.
+
+### Driving ADRs / methodology
+
+- `docs/methodology/port-skills-design.md` §3-§7 — pipeline contract.
+- `docs/execution-plan-phase-d.md` — D0-D4 sub-phase breakdown +
+  per-pair acceptance gates.
+- `docs/methodology/end-to-end-flow.md` — Teal flow handoff convention.
+- `docs/methodology/repo-rules.md` — upstream snapshot pin
+  re-verified 2026-05-04 (Go HEAD `2fae16f31693`, Java HEAD
+  `a1fe64e123d6`); in-flight upstream PR #4126 tracked.
+
+---
+
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-04 (initial)
+
+Phase D scaffolding — port skill prerequisites land. D0 lifted the R5
+cross-language equivalence comparator to `scripts/lib/r5_check.py` so
+the upcoming `port-go2java` / `port-java2go` skills can compute R5 from
+the same source of truth as the harness; D0.2 cleared 16 of 17
+sync-from-upstream drifts (single false-positive remains as data-only
+WARN); D1.4 bumps the port-report contract to 0.2.0 with PR-shape
+automation, source provenance, and fidelity tracking. All existing
+goldens and 0.1.0-shape port reports continue to validate.
+
+### `adapter_spec_version` 1.2.0 → 1.3.0 (MINOR; additive)
+
+`cross_language.java_artifacts.bidder_params_path` (string|null,
+optional) — overrides the upstream bidder-params JSON path when the
+Java filename diverges from the lowercase bidder name. Two known
+divergences populated:
+
+- `adkerneladn` → `adkernelAdn.json` (camelCase; lowercase variant 404s)
+- `emxdigital` → `emx_digital.json` (snake_case)
+
+Goldens without the override fall through to the default lowercase path
+construction. `scripts/sync-from-upstream.py compare_bidder_java()`
+honors the override.
+
+### `port_report_version` 0.1.0 → 0.2.0 (MINOR; additive)
+
+PR-shape automation cluster (5 fields):
+- `recommended_pr_title` — Java-target convention `Port {Bidder}: New Adapter` per upstream porting-guide; Go-target convention `New Adapter: {Bidder}` per real-PR audit (capital A).
+- `target_pr_label_recommendations[]` — Java-target default `["do not port"]`; Go-target default `[]`.
+- `companion_docs_pr_draft` — draft `prebid/prebid.github.io` adapter-docs page (maintainer-mandatory for Java-target; expected-for-parity on Go-target).
+- `pre_submit_rebase` — captures the rebase outcome (master HEAD at emit vs at submit, conflicts detected/summary) so Phase F can correlate post-merge surprises with upstream framework drift.
+- `upstream_bugs_to_file[]` — Connatix-style "found a bug while porting" (target_repo, summary, severity ∈ {fidelity-violation, schema-mismatch, documentation-gap, other}, evidence_path).
+
+Source provenance cluster (3 fields):
+- `source_pr_url` — GitHub URL of the upstream PR that landed the source-side adapter.
+- `source_pr_merged_commit_sha` — 40-hex of the merge commit (anchors port to a specific upstream snapshot for cross-version replay).
+- `source_discussion_anchors[]` — load-bearing review-comment / commit / issue links that informed port decisions (per Wave-5 review-pattern audit).
+
+Fidelity tracking (1 field):
+- `re_authored_paragraphs[]` — sections re-authored as semantic-coverage parity rather than 1:1 byte-translation (Rule 36 reframing).
+
+`r5_check.state` enum extended (4 → 6 values):
+- `warn-target-strengthens-source` — target carries a constraint absent in source (Connatix-style: Java has minimum/maximum that Go lacks; port preserves the constraint).
+- `fail-source-omits-target-constraint` — source lacks a constraint the target language requires; port cannot emit a valid target without operator intervention (aax-style; surfaces in `human_todos[]` for upstream confirmation).
+
+`human_todos[].category` enum extended: `style-violation` admitted (for D4.3 pre-submit checkstyle dry-run findings).
+
+### Added (Phase D scaffolding outside the schemas)
+
+- `scripts/lib/r5_check.py` (533 lines) — comparator-neutral R5 library exposed via `compare_pair(go_spec, java_spec, *, assertions=None, overall=None) -> R5Result` and `aggregate_state(diagnostics, pair_present) -> (state, byte_equal, warn, fail)`. Duck-typed `SpecView` so existing harness `Spec` is untouched; `R5Diagnostic` is comparator-neutral so callers wrap to `Finding` (harness) or schema dict (port skill). The harness re-exports `R5_STRICT_KEYS`, `R5_FORM_DIVERGENT_KEYS`, `R5_ADVISORY_DIVERGENT_KEYS`, `deep_eq`, `_list_set_eq`, `_maintainer_eq`, `normalize_endpoint_macros` for backward-compatibility with `scripts/tests/test_round_trip_ci.py`.
+- `scripts/tests/test_r5_check.py` (357 lines, 34 tests) — lib-level callable contract tests covering pass / warn / fail scenarios, `SpecView` duck typing, helper edge cases, and the four-state `aggregate_state` reduction.
+
+### Updated (drift detector + repo-rules snapshot)
+
+- `scripts/sync-from-upstream.py` — `userSync` admitted in known-keys allowlist; `bidder_config_missing` is now alias-aware; `bidder_params_path` override honored. Drift output went 17 fail / 1 warn → 0 fail / 1 warn (real adkernel `endpoint_compression` data-only drift parked for operator ack).
+- `docs/methodology/repo-rules.md` — re-verified dates bumped to 2026-05-04. Two new subsections: "In-flight upstream changes" (currently tracking `prebid/prebid-server-java#4126` URL validation, OPEN; D2/D3 pre-submit rebase MUST verify post-rebase emission still compiles) and "Known data-only drifts" (`adkernel` `endpoint_compression`).
+
+### Driving ADRs / methodology
+
+- `docs/methodology/port-skills-design.md` §7 — R5-strict check at port time consumes `scripts/lib/r5_check.compare_pair`; updated to reflect the now-completed D0.1 refactor.
+- `docs/decisions/004-rule-45-disabled-by-default-java-alias.md` — `R5_DIVERGENT_KEYS` reference path corrected to `scripts/lib/r5_check.py`.
+- `docs/methodology/schema-versioning.md` MINOR criteria — both bumps satisfy: additive only, no new required fields, no enum value removals (only additions), no type changes on existing fields.
+
+---
+
+## [adapter_spec_version 1.2.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.1.0] — 2026-05-03
 
 Wave 11b / Phase 2.8 — schema closure + gate enforcement reality alignment.
 Closes 17 accidentally-open `additionalProperties: true` sites that were
@@ -260,7 +430,7 @@ Corpus-coupled decisions deferred:
 
 ---
 
-## [adapter_spec_version 1.1.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-03
+## [adapter_spec_version 1.1.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.1.0] — 2026-05-03
 
 ADR-007 (novel-pattern schema additions): F1, F3, F4, F5 admitted to the schema
 as `$defs`. NOT `$ref`-wired into top-level `Code` yet — adapter_spec_version
@@ -667,7 +837,7 @@ implementation will reference these design docs.
 
 ---
 
-## [adapter_spec_version 1.0.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-02
+## [adapter_spec_version 1.0.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.1.0] — 2026-05-02
 
 First official versioned release. Cuts the schema spine and the data-driven
 taxonomy + rule corpus loose from the legacy hand-authored Markdown.
