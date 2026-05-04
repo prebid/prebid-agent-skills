@@ -9,10 +9,10 @@ Tracks per-rule, per-empire, per-pair coverage of the goldens corpus against ADR
 
 ## 1. Golden inventory
 
-- **Go goldens**: 21 (152media, 33across, aax, adkernel, adkernelAdn, adtonos, adverxo, appnexus, bidstack, cadent_aperture_mx, elementaltv, freewheelssp, kobler, limelightDigital, mediasquare, msft, optidigital, smarthub, teqblaze, thetradedesk, vungle)
-- **Java goldens**: 19 (152media, aax, adkerneladn, adverxo, appnexus, elementaltv, emxdigital, freewheelssp, generic, huaweiads, kobler, limelightDigital, mediasquare, optidigital, rubicon, smarthub, teqblaze, thetradedesk, vungle)
-- **Paired goldens** (both languages): 14 (152media, aax, adverxo, appnexus, elementaltv, freewheelssp, kobler, limelightDigital, mediasquare, optidigital, smarthub, teqblaze, thetradedesk, vungle)
-- **Dual-spec assertion files**: 16
+- **Go goldens**: 22 (152media, 33across, aax, adkernel, adkernelAdn, adtonos, adverxo, appnexus, beachfront, bidstack, cadent_aperture_mx, elementaltv, freewheelssp, kobler, limelightDigital, mediasquare, msft, optidigital, smarthub, teqblaze, thetradedesk, vungle)
+- **Java goldens**: 20 (152media, aax, adkerneladn, adverxo, appnexus, beachfront, elementaltv, emxdigital, freewheelssp, generic, huaweiads, kobler, limelightDigital, mediasquare, optidigital, rubicon, smarthub, teqblaze, thetradedesk, vungle)
+- **Paired goldens** (both languages): 15 (152media, aax, adverxo, appnexus, beachfront, elementaltv, freewheelssp, kobler, limelightDigital, mediasquare, optidigital, smarthub, teqblaze, thetradedesk, vungle)
+- **Dual-spec assertion files**: 17
 
 Reconnaissance totals (Round 3 inventory, ADR-003):
 
@@ -103,6 +103,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `adkernelAdn` | ✓ | ✓ | — | — | — | 9 |
 | `adverxo` | ✓ | ✓ | — | — | — | 8 |
 | `appnexus` | ✓ | ✓ | — | — | — | 8 |
+| `beachfront` | ✓ | ✓ | — | — | — | 8 |
 | `elementaltv` | ✓ | ✓ | — | — | — | 8 |
 | `emxdigital` | ✓ | ✓ | — | — | — | 9 |
 | `freewheelssp` | ✓ | ✓ | — | — | — | 9 |
@@ -245,8 +246,8 @@ Reflection loop (Phase F) consumes this section once port runs land. An always-z
 
 ## Sources
 
-- Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (40 files).
-- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (16 files).
+- Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (42 files).
+- Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (17 files).
 - Port-translation rules (46 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.
 - Port reports (0 discovered): `prebid-server-go/port-java2go/output/*/port-report.json, prebid-server-java/port-go2java/output/*/port-report.json, .tmp/full-loop/*/port-report.json` (Phase D4.2 — sourced when port skills run).
 - ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).
