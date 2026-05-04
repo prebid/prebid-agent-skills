@@ -125,8 +125,17 @@ def discover_goldens() -> dict[str, set[str]]:
 
 
 def discover_dual_specs() -> dict[str, dict]:
-    """Return {bidder: parsed_yaml} for each dual-spec assertion file."""
-    out = {}
+    """Return {bidder: parsed_yaml} for each dual-spec assertion file.
+
+    Wave 11b B4 AD2: prior code caught bare Exception and inserted a
+    {"_parse_error": str(e)} sentinel that downstream coverage code may or
+    may not have handled. The bare-Exception catch also swallowed unrelated
+    bugs (KeyError, TypeError from corrupted files) as if they were YAML
+    parse errors. Now scoped to (OSError, yaml.YAMLError) and prints the
+    failure to stderr so the operator sees it; the broken file is excluded
+    from the result rather than silently injecting sentinel data.
+    """
+    out: dict[str, dict] = {}
     if not DUAL_SPEC_DIR.is_dir():
         return out
     for f in sorted(DUAL_SPEC_DIR.glob("*.dual-spec-assertions.yaml")):
@@ -134,8 +143,14 @@ def discover_dual_specs() -> dict[str, dict]:
         try:
             with open(f) as fp:
                 out[bidder] = yaml.safe_load(fp) or {}
-        except Exception as e:
-            out[bidder] = {"_parse_error": str(e)}
+        except (OSError, yaml.YAMLError) as exc:
+            print(
+                f"WARN: failed to load dual-spec for {bidder!r}: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            # Skip this file; do NOT insert sentinel data. Coverage report
+            # will simply show this bidder as having no dual-spec assertions.
     return out
 
 

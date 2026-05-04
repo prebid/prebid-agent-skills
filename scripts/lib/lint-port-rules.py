@@ -324,29 +324,68 @@ def lint_pair(go_spec: dict, java_spec: dict, dual_spec: Optional[dict] = None,
     return findings
 
 
-def discover_pairs(go_dir: Path = GOLDENS_GO,
-                   java_dir: Path = GOLDENS_JAVA,
-                   dual_dir: Path = DUAL_SPEC_DIR) -> list[tuple[str, dict, dict, Optional[dict]]]:
-    """Find bidders with both Go and Java goldens; load each + optional dual-spec."""
+def discover_pairs(
+    go_dir: Path = GOLDENS_GO,
+    java_dir: Path = GOLDENS_JAVA,
+    dual_dir: Path = DUAL_SPEC_DIR,
+) -> tuple[list[tuple[str, dict, dict, Optional[dict]]], list[Finding]]:
+    """Find bidders with both Go and Java goldens; load each + optional dual-spec.
+
+    Returns:
+        (pairs, errors) where:
+          - pairs: list of (bidder, go_spec, java_spec, dual_spec_or_None)
+          - errors: list of Finding(rule_id=0, severity="fail", ...) for any
+            per-file YAML/IO failures encountered. Pairs that fail to load
+            are EXCLUDED from `pairs` (the lint can't run on a broken pair),
+            but the failure is surfaced as a Finding so main() can report it.
+
+    Raises:
+        FileNotFoundError when either GOLDENS_GO or GOLDENS_JAVA directory
+        is missing entirely. Wave 11b B4 C3 fix: prior code returned an
+        empty list silently on missing dirs, masking environment misconfig
+        as "no pairs to lint" (exit 0 success). Now refused at the source.
+    """
+    if not go_dir.is_dir():
+        raise FileNotFoundError(f"Go fixtures directory not found: {go_dir}")
+    if not java_dir.is_dir():
+        raise FileNotFoundError(f"Java fixtures directory not found: {java_dir}")
+
     pairs: list[tuple[str, dict, dict, Optional[dict]]] = []
-    if not go_dir.is_dir() or not java_dir.is_dir():
-        return pairs
+    errors: list[Finding] = []
 
     go_files = {f.stem.replace(".golden.spec", ""): f for f in go_dir.glob("*.golden.spec.yaml")}
     java_files = {f.stem.replace(".golden.spec", ""): f for f in java_dir.glob("*.golden.spec.yaml")}
 
     for bidder in sorted(set(go_files) & set(java_files)):
-        with open(go_files[bidder]) as fp:
-            go = yaml.safe_load(fp)
-        with open(java_files[bidder]) as fp:
-            java = yaml.safe_load(fp)
+        try:
+            with open(go_files[bidder]) as fp:
+                go = yaml.safe_load(fp)
+        except (OSError, yaml.YAMLError) as exc:
+            errors.append(Finding(0, "fail", bidder,
+                f"failed to load go golden {go_files[bidder].name}: {type(exc).__name__}: {exc}"))
+            continue
+        try:
+            with open(java_files[bidder]) as fp:
+                java = yaml.safe_load(fp)
+        except (OSError, yaml.YAMLError) as exc:
+            errors.append(Finding(0, "fail", bidder,
+                f"failed to load java golden {java_files[bidder].name}: {type(exc).__name__}: {exc}"))
+            continue
         dual_path = dual_dir / f"{bidder}.dual-spec-assertions.yaml"
-        dual = None
+        dual: Optional[dict] = None
         if dual_path.is_file():
-            with open(dual_path) as fp:
-                dual = yaml.safe_load(fp)
+            try:
+                with open(dual_path) as fp:
+                    dual = yaml.safe_load(fp)
+            except (OSError, yaml.YAMLError) as exc:
+                errors.append(Finding(0, "fail", bidder,
+                    f"failed to load dual-spec {dual_path.name}: {type(exc).__name__}: {exc}"))
+                # Don't `continue` — the pair lint can still run with dual=None;
+                # only the dual-spec-aware rules will skip. The error finding
+                # surfaces the load failure independently.
+                dual = None
         pairs.append((bidder, go, java, dual))
-    return pairs
+    return pairs, errors
 
 
 def main(argv=None) -> int:
@@ -361,9 +400,14 @@ def main(argv=None) -> int:
                         help="Print only the summary, not per-finding output")
     args = parser.parse_args(argv)
 
-    pairs = discover_pairs()
+    try:
+        pairs, load_errors = discover_pairs()
+    except FileNotFoundError as exc:
+        print(f"FATAL: {exc}", file=sys.stderr)
+        return 1
     if args.bidder:
         pairs = [p for p in pairs if p[0] == args.bidder]
+        load_errors = [e for e in load_errors if e.bidder == args.bidder]
         if not pairs:
             print(f"No pair found for bidder {args.bidder!r}", file=sys.stderr)
             return 1
@@ -378,9 +422,12 @@ def main(argv=None) -> int:
     print(f"Pairs scanned: {len(pairs)}")
     if pairs:
         print(f"  bidders: {', '.join(p[0] for p in pairs)}")
+    if load_errors:
+        print(f"Load errors: {len(load_errors)} (rule_id=0 fail entries)")
     print()
 
-    all_findings: list[Finding] = []
+    # Seed findings with any per-file load errors from discover_pairs.
+    all_findings: list[Finding] = list(load_errors)
     for bidder, go, java, dual in pairs:
         findings = lint_pair(go, java, dual, java_parents)
         all_findings.extend(findings)

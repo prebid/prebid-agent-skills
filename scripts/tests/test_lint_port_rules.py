@@ -322,7 +322,9 @@ class TestLintPairOnRealGoldens(unittest.TestCase):
     """Spot-check that the lint produces expected verdicts on shipped goldens."""
 
     def setUp(self):
-        self.pairs = lpr.discover_pairs()
+        # Wave 11b B4 C3: discover_pairs now returns (pairs, errors) tuple;
+        # for the spot-check tests we only care about pairs.
+        self.pairs, _errors = lpr.discover_pairs()
         self.pairs_by_bidder = {p[0]: p for p in self.pairs}
 
     def test_kobler_pair_clean_except_rule_38_passes(self):
