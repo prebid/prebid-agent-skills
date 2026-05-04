@@ -305,7 +305,7 @@ class TestLintPairOnRealGoldens(unittest.TestCase):
     def setUp(self):
         # Wave 11b B4 C3: discover_pairs now returns (pairs, errors) tuple;
         # for the spot-check tests we only care about pairs.
-        self.pairs, _errors = lpr.discover_pairs()
+        self.pairs, _ = lpr.discover_pairs()
         self.pairs_by_bidder = {p[0]: p for p in self.pairs}
 
     def test_kobler_pair_clean_no_failures(self):
@@ -313,7 +313,7 @@ class TestLintPairOnRealGoldens(unittest.TestCase):
         pair lints cleanly (no failures) under the post-deletion ruleset.
         Rule 38 byte-equality enforcement now lives in round-trip-ci.py R5."""
         self.assertIn("kobler", self.pairs_by_bidder)
-        bidder, go, java, dual = self.pairs_by_bidder["kobler"]
+        _, go, java, dual = self.pairs_by_bidder["kobler"]
         findings = lpr.lint_pair(go, java, dual, {})
         rule_38 = [f for f in findings if f.rule_id == 38]
         self.assertEqual(0, len(rule_38),
@@ -325,7 +325,7 @@ class TestLintPairOnRealGoldens(unittest.TestCase):
     def test_mediasquare_rule_9_custom_passes(self):
         """mediasquare is the canonical Rule 9 custom-body case."""
         self.assertIn("mediasquare", self.pairs_by_bidder)
-        bidder, go, java, dual = self.pairs_by_bidder["mediasquare"]
+        _, go, java, dual = self.pairs_by_bidder["mediasquare"]
         findings = lpr.lint_pair(go, java, dual, {})
         rule_9 = [f for f in findings if f.rule_id == 9]
         self.assertEqual(1, len(rule_9))
@@ -335,7 +335,7 @@ class TestLintPairOnRealGoldens(unittest.TestCase):
     def test_152media_alias_rule_46_passes(self):
         """152media has matching go==java names ('152media'); Rule 46 is trivially satisfied."""
         self.assertIn("152media", self.pairs_by_bidder)
-        bidder, go, java, dual = self.pairs_by_bidder["152media"]
+        _, go, java, dual = self.pairs_by_bidder["152media"]
         findings = lpr.lint_pair(go, java, dual, {})
         rule_46 = [f for f in findings if f.rule_id == 46]
         self.assertEqual(1, len(rule_46))
@@ -343,9 +343,9 @@ class TestLintPairOnRealGoldens(unittest.TestCase):
 
     def test_overall_no_failures_on_shipped_goldens(self):
         """Shipped goldens MUST NOT have any Rule failure (only pass/warn)."""
-        java_parents = {b: j for (b, _g, j, _d) in self.pairs if not (j.get("meta", {}) or {}).get("is_alias")}
+        java_parents = {b: j for (b, _, j, _) in self.pairs if not (j.get("meta", {}) or {}).get("is_alias")}
         all_findings = []
-        for bidder, go, java, dual in self.pairs:
+        for _, go, java, dual in self.pairs:
             all_findings.extend(lpr.lint_pair(go, java, dual, java_parents))
         fails = [f for f in all_findings if f.severity == "fail"]
         self.assertEqual([], fails, f"Shipped goldens have {len(fails)} Rule failure(s): {fails}")

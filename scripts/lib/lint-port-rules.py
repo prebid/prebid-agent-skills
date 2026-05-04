@@ -410,7 +410,7 @@ def main(argv=None) -> int:
 
     # Build map of Java parent specs (any non-alias Java spec is a candidate parent)
     java_parents: dict[str, dict] = {}
-    for bidder, _go, java, _dual in pairs:
+    for bidder, _, java, _ in pairs:
         if not _path(java, "meta", "is_alias"):
             java_parents[bidder] = java
 

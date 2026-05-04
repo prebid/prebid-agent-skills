@@ -27,7 +27,7 @@ import importlib.util
 import os
 import sys
 import unittest
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 RTCI_PATH = os.path.join(REPO_ROOT, "scripts", "round-trip-ci.py")
@@ -176,8 +176,9 @@ class TestR2(unittest.TestCase):
             "bidder_params_sha256": bogus_sha,
         })
         findings = rtci.r2_check(spec)
-        fail = next((f for f in findings if f.severity == rtci.SEV_FAIL), None)
-        self.assertIsNotNone(fail, f"Expected R2 to FAIL; got: {findings}")
+        fails = [f for f in findings if f.severity == rtci.SEV_FAIL]
+        self.assertTrue(fails, f"Expected R2 to FAIL; got: {findings}")
+        fail = fails[0]
         # Both SHAs (declared + computed) must appear in full
         self.assertIn(bogus_sha, fail.detail,
             f"Expected full declared SHA in detail; got: {fail.detail}")
@@ -204,7 +205,7 @@ class TestR4(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestR5(unittest.TestCase):
-    def _make_pair(self, go_extra: Dict[str, Any] = None, java_extra: Dict[str, Any] = None):
+    def _make_pair(self, go_extra: Optional[Dict[str, Any]] = None, java_extra: Optional[Dict[str, Any]] = None):
         go_raw = {
             "meta": {"bidder_name": "foo"},
             "bidder_params_sha256": "a" * 64,
