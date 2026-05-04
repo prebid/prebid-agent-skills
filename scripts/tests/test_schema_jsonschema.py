@@ -1,18 +1,25 @@
-"""Phase 2.0 + 2.1 milestone test: validate every golden against the
-new JSON Schema (`adapter-spec.schema.json`).
+"""JSON Schema validation gate: every golden in the 40-spec corpus must
+validate cleanly against `adapter-spec.schema.json` (Draft 2020-12).
 
-Phase 2.0: kobler-Go and kobler-Java validate cleanly.
-Phase 2.1: ALL 22 goldens validate cleanly + if/then/else discrimination
-on `source_language` ensures Go specs null spring_config/bidder_class.
+Test classes:
 
-Runs as a unit test so `make test` and the CI workflow exercise it
-automatically.
+- `TestSchemaSelfValidity` — schemas pass meta-schema check.
+- `TestKoblerGoldensAgainstSchema` — kobler Go+Java sanity validation.
+- `TestAllGoldensAgainstSchema` — all 40 goldens validate; if/then/else
+  invariants enforced (source_language=go nulls Java-only blocks per
+  ADR-001 + Wave 11b B4 C5; meta.is_alias=true Java specs null
+  spring_config + bidder_class). Includes path-aware phantom-key
+  detector (Wave 11b B5 #1 replaced the prior leaf-key escape).
+
+Module-level helper `_build_declared_at(schema)` returns
+`(declared_at, open_map_prefixes)` used by the path-aware phantom
+detector — see its docstring for the cycle-guarded $ref + composition
+union walk.
 
 Why a separate file (rather than extending `test_schema_contract.py`):
-the contract test walks SKILL.md prose paths against a hand-curated
-registry; this test runs `jsonschema` against actual golden YAML data.
-They check different invariants and Phase 2 keeps both during the
-migration window.
+the contract test walks SKILL.md prose paths against the schema's
+path-keyed registry; this test runs `jsonschema` against actual golden
+YAML data. They check different invariants and run independently.
 """
 
 from __future__ import annotations

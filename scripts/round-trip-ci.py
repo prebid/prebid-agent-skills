@@ -1513,33 +1513,34 @@ def render_text(
     )
     lines.append("")
     # Rule labels are short for table-formatting; documented enforcement
-    # caveats below. Wave 11b will tighten the actual checks; until then,
-    # readers should treat the labels as advisory:
+    # below.  Wave 11b tightened all three previously-advisory rules; the
+    # caveats here describe what now lands:
     #
-    # R3 — labeled "custom-quirk pairing" but in DEFAULT mode (no
-    #      --strict-r3) treats ANY non-empty quirks[] list as paired for
-    #      every `custom` enum value. Pass --strict-r3 for keyword-pairing
-    #      enforcement (CI does NOT pass --strict-r3 by default).
-    # R5 — labeled "cross-language structural parity" but Wave 1's
-    #      prose-key decomposition only covers `params.schema_interpretation`.
-    #      Other R5_STRICT_KEYS entries (geoscope list-order,
-    #      maintainer alt-fields, capabilities set-equality) may emit
-    #      stale-FAIL on legitimate divergence. See Wave 11b plan B5.
-    # R8 — labeled "endpoint placeholder unresolved" but checks ONLY
-    #      `bidder_info.endpoint`. ADR-007 F1 multi-endpoints
-    #      (`code.make_requests.endpoint_resolution.endpoints[*]`) and
-    #      dynamic-template URLs in headers are NOT walked. See Wave 11b
-    #      plan B5 finding-7.
+    # R3 — keyword pairing strict by default post-Wave-11b B5 #3
+    #      (--strict-r3 default-on; round-2 audit confirmed 40/0/0 on
+    #      corpus). --lenient-r3 opts back to the advisory mode.
+    # R5 — Wave 11b B5 #2 refactored R5_STRICT_KEYS to per-key
+    #      comparators: list-set-equality for capabilities/geoscope/
+    #      schema_interpretation list keys; email-only equality for
+    #      maintainer; deep_eq for pure-data scalars. Wave 11b B4 C1
+    #      split the divergent-keys bucket into FORM_DIVERGENT (endpoint
+    #      with normalize_endpoint_macros) + ADVISORY_DIVERGENT.
+    # R8 — Wave 11b B5 #7 expanded the walker from single-field
+    #      (bidder_info.endpoint) to multi-path collector covering
+    #      user-sync URLs (iframe/redirect.url + uid_macro + flat forms),
+    #      bidder_class.static_fields[*].value, plus the original
+    #      endpoint. USER_SYNC_MACROS + OPENRTB_MACROS registries admit
+    #      well-known macros without noise.
     rule_descriptions = {
         "R1": "file-reachability",
         "R2": "sha integrity",
-        "R3": "custom-quirk pairing (advisory; --strict-r3 to enforce)",
+        "R3": "custom-quirk pairing (strict by default; --lenient-r3 to relax)",
         "R3b": "quirk taxa registered",
         "R4": "round-trip determinism",
-        "R5": "cross-language structural parity (subset; see Wave 11b)",
+        "R5": "cross-language structural parity (per-key comparators)",
         "R6": "bidder_name / package / constant",
         "R7": "bidder-constant-mismatch surfaces",
-        "R8": "endpoint placeholder (bidder_info.endpoint only)",
+        "R8": "endpoint placeholder (recursive walker — endpoint + user_sync + static_fields)",
         "R9": "legacy encoding/json direct usage",
         "R10": "canonical-harness flag",
     }

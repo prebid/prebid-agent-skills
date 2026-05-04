@@ -134,7 +134,7 @@ Most rules are non-overlapping (each names its own `spec_field_driver`). The cas
 
 **Rule 5 mutation strategy pairing.** Source has `entity_strategies.Site: deep-copy-then-mutate`; target language's idiom is `immutable-rebuild`. Rule 5 declares this is a valid pair. Apply the language-idiom translation (deep-copy-then-mutate → immutable-rebuild for Go→Java; the inverse for Java→Go). No conflict.
 
-**ADR-007 F1/F3/F4/F5 patterns at adapter_spec_version 1.1.0.** When the source spec uses one of these patterns (multi-endpoint, entity_strategies extensions, bid_post_processing, imp_ext_strip), the port applies the corresponding language idiom. Wave 3's `$defs` are NOT $ref-wired yet (Phase 2.8 will tighten); the port skill validates leniently against the open-map `Code` shape and applies the pattern by inspection of the source's `code.make_requests.{endpoint_resolution, mutation, imp_ext_unmarshal}` and `code.make_bids.bid_post_processing` blocks.
+**ADR-007 F1/F3/F4/F5 patterns at adapter_spec_version 1.1.0+.** When the source spec uses one of these patterns (multi-endpoint, entity_strategies extensions, bid_post_processing, imp_ext_strip), the port applies the corresponding language idiom. Wave 11b B3+ closed `Code` and added structured `MakeRequests`/`MakeBids` $defs, but the F1/F3/F4/F5 $defs themselves remain unwired — the corresponding sub-positions (`endpoint_resolution`, `mutation`, `imp_ext_unmarshal`, `bid_post_processing`) are typed `object|null` and treated as implicit-open by the phantom-detector. The port skill applies the pattern by inspection of the source's `code.make_requests.{endpoint_resolution, mutation, imp_ext_unmarshal}` and `code.make_bids.bid_post_processing` blocks; per-pattern $ref-wiring is a future wave.
 
 ---
 

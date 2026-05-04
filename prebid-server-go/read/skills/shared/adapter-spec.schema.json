@@ -94,7 +94,7 @@
     "registry": {
       "type": "object",
       "additionalProperties": true,
-      "description": "ADR-001 D6: present on Java goldens that record test-application.properties registry. Open-map for Phase 2.0/2.1; Phase 2.7 will move to tests.test_application_properties.* with proper $defs."
+      "description": "ADR-001 D6: present on Java goldens that record test-application.properties registry. Open-map; Wave 11c C3 will move to tests.test_application_properties.* with proper $defs (deferred from Wave 11b's B6 closure pass — corpus-coupled migration requires its own ADR-001 amendment)."
     },
     "taxonomy_version": {
       "description": "ADR-001 D7: SemVer string for behavior taxonomy version goldens conform to.",
@@ -245,7 +245,7 @@
                 "single-token-substitution", "multi-token-substitution",
                 "query-parameter-augmentation", "custom"
               ],
-              "description": "Phase 2.1 accepts the UNION of bidder_info-scope and code-scope values. ADR-001 H3 documents the intended scope-distinct enums; Phase 2.7 will tighten this back to the 9-value bidder_info-scope set after fixing goldens that mix the two."
+              "description": "Accepts the UNION of bidder_info-scope and code-scope values. ADR-001 H3 documents the intended scope-distinct enums; tightening to the 9-value bidder_info-scope set is deferred to a future wave that fixes goldens currently mixing the two scopes (out of Wave 11b's closure-only scope)."
             },
             "macros_used": {
               "type": "array",
@@ -393,7 +393,7 @@
     "EndpointResolution": {
       "type": "object",
       "additionalProperties": true,
-      "description": "ADR-007 F1: endpoint resolution mechanism for `code.make_requests.endpoint_resolution`. NOT $ref-wired into `Code` yet — adapter_spec_version 1.1.0 admits the `multi-endpoint-by-mediatype` / `multi-endpoint-by-shape` kinds and the `endpoints[]` array via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample: beachfront (banner + video endpoints).",
+      "description": "ADR-007 F1: endpoint resolution mechanism for `code.make_requests.endpoint_resolution`. adapter_spec_version 1.1.0 admits the `multi-endpoint-by-mediatype` / `multi-endpoint-by-shape` kinds and the `endpoints[]` array. Wave 11b B3+ closed Code's outer shape and added a structured `MakeRequests` `$def` for the parent block; per-pattern `$ref`-wiring of THIS `$def` (EndpointResolution) into `MakeRequests.endpoint_resolution` is deferred to a future wave. Master sample: beachfront (banner + video endpoints).",
       "properties": {
         "kind": {
           "type": "string",
@@ -427,7 +427,7 @@
     "EntityStrategy": {
       "type": "object",
       "additionalProperties": true,
-      "description": "ADR-007 F3: per-entity (Site/App/User) mutation strategy under `code.make_requests.mutation.entity_strategies`. NOT $ref-wired yet — adapter_spec_version 1.1.0 admits `replace-with-app-synthesis` / `synthesize-app-replacement` / `synthesize-from-site` via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample: vungle (Site=replace-with-app-synthesis, App=synthesize-app-replacement).",
+      "description": "ADR-007 F3: per-entity (Site/App/User) mutation strategy under `code.make_requests.mutation.entity_strategies`. adapter_spec_version 1.1.0 admits `replace-with-app-synthesis` / `synthesize-app-replacement` / `synthesize-from-site`. Wave 11b B3+ closed Code at the outer level; `MakeRequests.mutation.entity_strategies` is currently typed `object|null` (implicit-open under MakeRequests's structured $def). Per-pattern $ref-wiring of THIS $def (EntityStrategy) into the entity_strategies position is deferred to a future wave. Master sample: vungle (Site=replace-with-app-synthesis, App=synthesize-app-replacement).",
       "properties": {
         "Site": {
           "type": ["string", "null"],
@@ -461,7 +461,7 @@
     "BidPostProcessing": {
       "type": "object",
       "additionalProperties": true,
-      "description": "ADR-007 F4: post-decode mutation of bid fields (e.g., AUCTION_PRICE macro replacement in bid.NURL / bid.AdM / bid.BURL). Lives at `code.make_bids.bid_post_processing`. NOT $ref-wired yet — adapter_spec_version 1.1.0 admits the shape via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample: thetradedesk.",
+      "description": "ADR-007 F4: post-decode mutation of bid fields (e.g., AUCTION_PRICE macro replacement in bid.NURL / bid.AdM / bid.BURL). Lives at `code.make_bids.bid_post_processing`. adapter_spec_version 1.1.0 admits the shape. Wave 11b B3+ closed Code at the outer level; the `code.make_bids` block has its own structured `MakeBids` $def now, but `bid_post_processing` is typed `object|null` within MakeBids — per-pattern $ref-wiring of THIS $def (BidPostProcessing) into MakeBids.bid_post_processing is deferred to a future wave. Master sample: thetradedesk.",
       "properties": {
         "macros": {
           "description": "Logical (declaration) order; not lex-sorted (per ADR-007 array ordering policy).",
@@ -487,7 +487,7 @@
     "ImpExtUnmarshal": {
       "type": "object",
       "additionalProperties": true,
-      "description": "ADR-007 F5: imp.ext unmarshal pattern + post-extraction strip flag. Lives at `code.make_requests.imp_ext_unmarshal`. NOT $ref-wired yet — adapter_spec_version 1.1.0 admits the `strip_post_extraction` flag via Code's open-map permissiveness; Phase 2.8 will tighten + wire. Master sample for strip_post_extraction: beintoo (zeroes out imp.Ext after parsing).",
+      "description": "ADR-007 F5: imp.ext unmarshal pattern + post-extraction strip flag. Lives at `code.make_requests.imp_ext_unmarshal`. adapter_spec_version 1.1.0 admits the `strip_post_extraction` flag. Wave 11b B3+ closed Code at the outer level; `code.make_requests.imp_ext_unmarshal` is typed `object|null` within MakeRequests's structured $def. Per-pattern $ref-wiring of THIS $def (ImpExtUnmarshal) into MakeRequests.imp_ext_unmarshal is deferred to a future wave. Master sample for strip_post_extraction: beintoo (zeroes out imp.Ext after parsing).",
       "properties": {
         "kind": {
           "type": "string",
@@ -679,7 +679,7 @@
     "Alias": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Per-alias metadata for Java parent goldens that declare aliases (e.g., adkernel parent's 152media child). Open map; Phase 2.7 will tighten if a stable subset emerges.",
+      "description": "Per-alias metadata for Java parent goldens that declare aliases (e.g., adkernel parent's 152media child). Open map; Wave 11c C1 will resolve the canonical name field decision (`bidder_name` vs `name`) — corpus-coupled, deferred from Wave 11b's closure pass to its own ADR-001 amendment.",
       "properties": {
         "bidder_name": { "type": "string" },
         "parent": { "type": "string" },

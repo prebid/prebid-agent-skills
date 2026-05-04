@@ -19,8 +19,11 @@ The extra Go value reflects the Go-side IAB-category-table file (e.g.,
 `iab_category_storage.storage_kind: yaml-inlined` per ADR-001 D2 and never
 ships a separate file. `make ci` and `.github/workflows/round-trip-ci.yml`
 both invoke with `--include-go`, so CI does cover both languages — but
-ad-hoc invocations without the flag silently skip Go (Wave 11b will flip
-the default to on, with `--java-only` as the opt-out).
+ad-hoc invocations without the flag silently skip Go. Wave 11b B5 #4
+deferred the default-on flip (no nested file_layout fixtures in the
+corpus today; the recursive walker that would benefit from default-on
+isn't yet needed); a future wave can revisit when nested-fixture goldens
+land.
 
 Aliases (`meta.is_alias: true`) are exempt — alias goldens may legitimately
 have empty `code.file_layout` because the layout is inherited from the parent.
