@@ -1,6 +1,6 @@
 # Roadmap
 
-This repo's work is organized into project-level phases A–F. Phases A–C (read-skill foundation) are complete; Phase D (porting skills) is the next implementation milestone; Phase E (review-skill expansion) and Phase F (reflection loop) have design landed in this PR with implementation deferred.
+This repo's work is organized into project-level phases A–F. Phases A–C (read-skill foundation) are complete; Phase D (porting skills) is in progress (D0 + D1 scaffolding landed; D2 + D3 implement the bidirectional MVPs); Phase E (review-skill expansion) and Phase F (reflection loop) have design landed with implementation deferred.
 
 ## Phase A — Acceptance-gate goldens (complete)
 
@@ -31,14 +31,16 @@ Four parallel skills under `prebid-server-java/read/skills/`:
 
 The Java suite shares the canonical schema, taxonomy, and port-translation rules with Go via `prebid-server-go/read/skills/shared/`. A future Java-specific schema would land at `prebid-server-java/read/skills/shared/adapter-spec-java.md` if divergence demands it.
 
-## Phase D — Porting skills (next; design landed in this PR)
+## Phase D — Porting skills (in progress)
 
-Bidirectional Go ↔ Java translation:
+Bidirectional Go ↔ Java translation. Both directions ship production-grade — the empirical Go→Java dominance in merged PRs (12+ vs 0 in 18 months) reflects current tooling limits, not user need or maintainer disinterest. Phase D removes that asymmetry as a first-class deliverable.
 
-- `port-go2java/` — Go-source spec → Java artifacts (will live under `prebid-server-java/`)
-- `port-java2go/` — Java-source spec → Go artifacts (will live under `prebid-server-go/`)
+- [`prebid-server-java/port-go2java/`](prebid-server-java/port-go2java/) — Go-source spec → Java artifacts (skeleton landed in D1.1; D2 fills the body)
+- [`prebid-server-go/port-java2go/`](prebid-server-go/port-java2go/) — Java-source spec → Go artifacts (skeleton landed in D1.1; D3 fills the body, mirroring D2's prose-driven-SKILL-with-mechanical-helpers architecture)
 
-Both consume the cross-language translation rules at `prebid-server-go/read/skills/shared/port-translation-rules.md`. Cross-language pair fixtures at `cross-language-pairs/` are the round-trip safety net (16 pairs at the pinned commits). Design at [`docs/methodology/port-skills-design.md`](docs/methodology/port-skills-design.md); output schema at [`prebid-server-go/read/skills/shared/port-report.schema.json`](prebid-server-go/read/skills/shared/port-report.schema.json).
+Both consume the cross-language translation rules at `prebid-server-go/read/skills/shared/port-translation-rules.md`. Cross-language pair fixtures at `cross-language-pairs/` are the round-trip safety net (16 pairs at the pinned commits). Design at [`docs/methodology/port-skills-design.md`](docs/methodology/port-skills-design.md); execution plan + per-phase acceptance gates at [`docs/execution-plan-phase-d.md`](docs/execution-plan-phase-d.md); output schema at [`prebid-server-go/read/skills/shared/port-report.schema.json`](prebid-server-go/read/skills/shared/port-report.schema.json) (v0.2.0).
+
+D0 (Pre-D refactor + sync) and D1.1 / D1.4 have landed: R5 cross-language comparator lifted to [`scripts/lib/r5_check.py`](scripts/lib/r5_check.py); upstream snapshot re-verified to 2026-05-04; port-report schema bumped to v0.2.0 with PR-shape automation, source provenance, and fidelity-tracking fields.
 
 ## Phase E — Review-skill expansion + cross-skill integration (partially shipped)
 
