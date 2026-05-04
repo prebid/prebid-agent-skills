@@ -8,7 +8,7 @@ version: 1.0.0
 
 This skill is the heaviest of the four Go read-skills. It walks every `.go` file in `adapters/{xyz}/` (excluding `params_test.go`, owned by `read-bidder-params`) plus every JSON fixture under `adapters/{xyz}/{xyz}test/**/`, classifies each by role, extracts behavioral evidence, and emits the `code:`, `tests:`, and Go-specific cross-language fragments of the canonical Adapter Specification (see [../shared/adapter-spec.md](../shared/adapter-spec.md)).
 
-The skill operates in read mode against a single resolved commit — the orchestrator hands it pre-fetched file paths and the resolved SHA. It produces deterministic output: re-running on the same commit yields a byte-identical fragment modulo `provenance.read.timestamp_utc` (Validation Rule R4).
+The skill operates in read mode against a single resolved commit — the orchestrator hands it pre-fetched file paths and the resolved SHA. It produces deterministic output: re-running on the same commit yields a fragment idempotent under round-trip (Validation Rule R4: `yaml.safe_load → safe_dump` is byte-stable). Byte-identical reproduction modulo `provenance.read.timestamp_utc` is the target; R4 enforces idempotency.
 
 ## What this skill produces
 

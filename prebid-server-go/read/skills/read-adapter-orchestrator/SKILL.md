@@ -15,7 +15,7 @@ For a single bidder pinned to a single commit, the skill produces:
 1. **YAML Adapter Specification** — a language-neutral document conforming to [`../shared/adapter-spec.md`](../shared/adapter-spec.md) version 1. Sections include `provenance`, `meta`, `bidder_info`, `bidder_params_json` (verbatim) + `bidder_params_sha256`, `params`, `code`, `tests`, `quirks[]`, and `cross_language` (with Go-side dense + Java-side path-hint stubs).
 2. **Markdown summary** — a human-friendly `.spec.md` companion that surfaces the load-bearing fields (endpoint, capabilities, batching rules, bid-type method chain, quirks, cross-language port concerns).
 
-The YAML is the contract; the Markdown is the dashboard. Both are emitted at the same `provenance.source.resolved_commit`. Re-running the skill on the same commit MUST produce a byte-identical YAML modulo `provenance.read.timestamp_utc` and `provenance.read.operator` (R4 round-trip determinism).
+The YAML is the contract; the Markdown is the dashboard. Both are emitted at the same `provenance.source.resolved_commit`. Re-running the skill on the same commit produces a YAML spec idempotent under round-trip (R4: `yaml.safe_load → safe_dump` on the emitted spec is byte-stable, dump2 == dump3). The orchestrator's encoding contract targets byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator`; R4 enforces idempotency, not raw-byte equality against a previously-stored golden.
 
 The output is the input contract for the future `write/` skill (regenerate adapter from spec) and the future `port-go2java/` skill (translate Go-source spec into Java artifacts; will consume [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md)). Both are Phase D/E milestones — see [`../../../ROADMAP.md`](../../../ROADMAP.md).
 
@@ -127,7 +127,7 @@ Destination precedence (one per invocation):
 
 `--format=yaml` suppresses the Markdown half; `--format=md` suppresses the YAML half; `--format=yaml,md` (default) emits both. `--fixture-mode={count,summary,verbatim}` controls per-fixture payload in `tests.fixture_inventory.*`: `count` (filename + sha + bytes), `summary` (adds extracted media types), `verbatim` (inlines the JSON; 10–100× larger).
 
-YAML encoding contract (R4 byte-stable): LF line endings, 2-space indent, exactly one trailing `\n`, fixture lists sorted alphabetically by `filename`. Header order matches `../shared/adapter-spec.schema.json` property order; Java-only blocks (`spring_config`, `bidder_class`) emit as `null` on Go specs to keep the schema shape complete. Goldens at `read/test-fixtures/*.golden.spec.yaml` demonstrate the canonical format.
+YAML encoding contract (the canonical encoding R4's idempotency assumes): LF line endings, 2-space indent, exactly one trailing `\n`, fixture lists sorted alphabetically by `filename`. Header order matches `../shared/adapter-spec.schema.json` property order; Java-only blocks (`spring_config`, `bidder_class`) emit as `null` on Go specs to keep the schema shape complete. Goldens at `read/test-fixtures/*.golden.spec.yaml` demonstrate the canonical format. R4 verifies that emissions of THIS canonical encoding round-trip cleanly through `yaml.safe_load → safe_dump`; raw-vs-emission byte equality is the TARGET but is not directly enforced.
 
 The Markdown summary is a derived dashboard surfacing `meta`, `bidder_info`, `code` highlights, `quirks` count, and `provenance.warnings[]`. It is NOT a replacement for the YAML — consumers wanting structured data read the YAML.
 
@@ -207,7 +207,7 @@ The skill is verified against the two Phase A acceptance-gate goldens:
    Expected: two `bidder-constant-mismatch` entries (kobler_test.go:12 BidderKargo, params_test.go:47 BidderKrushmedia).
    Compare full output against [`../../test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml).
 
-R4 round-trip determinism: re-running on the same `provenance.source.resolved_commit` MUST produce a byte-identical YAML modulo `provenance.read.timestamp_utc` and `provenance.read.operator`. Diff with `diff <(spec1.yaml) <(spec2.yaml)` and accept only the two excluded lines.
+R4 round-trip determinism: re-running on the same `provenance.source.resolved_commit` produces a YAML spec idempotent under `yaml.safe_load → safe_dump` (the test asserts dump2 == dump3). The orchestrator targets byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator` — verify locally with `diff <(spec1.yaml) <(spec2.yaml)` and accept only the two excluded lines, but be aware R4 enforces idempotency rather than raw-byte equality.
 
 R5 cross-language structural parity: for any bidder also in `prebid-server-java`, the Go and Java specs MUST agree on `bidder_params_sha256`, `bidder_info.capabilities`, `bidder_info.maintainer.email`, `bidder_info.geoscope`, `bidder_info.gvl_vendor_id`, and `params.schema_interpretation`. The kobler dual-spec assertion at `cross-language-pairs/kobler.dual-spec-assertions.yaml` is the canonical round-trip test.
 

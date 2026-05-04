@@ -159,7 +159,7 @@ Branch names may contain slashes (e.g., `feature/foo`). URLs with slashes work f
 
 ### Cross-mode consistency
 
-The orchestrator's R4 round-trip determinism rule requires that re-running on the same `provenance.source.resolved_commit` produces a byte-identical YAML modulo timestamp/operator. This MUST hold across modes — fetching a file via `local`, `gh-cli`, or `github-raw` MUST return identical bytes (they do; all three are reading the same Git object). A mode mismatch producing different bytes is a serious bug — emit a hard error of type `cross-mode-byte-mismatch` to surface it.
+The orchestrator's R4 round-trip determinism rule requires that re-running on the same `provenance.source.resolved_commit` produces a YAML spec idempotent under `yaml.safe_load → safe_dump` (byte-identical reproduction modulo timestamp/operator is the target; R4 enforces idempotency). Cross-mode byte-equivalence on FETCHED files is a separate invariant — fetching via `local`, `gh-cli`, or `github-raw` MUST return identical bytes (they do; all three are reading the same Git object). A mode mismatch producing different fetched bytes is a serious bug — emit a hard error of type `cross-mode-byte-mismatch` to surface it.
 
 ---
 

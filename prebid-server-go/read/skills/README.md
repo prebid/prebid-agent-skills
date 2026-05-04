@@ -47,7 +47,7 @@ Top-to-bottom guidance for a reviewer reading an adapter spec YAML. Use the Opti
 
 ## Test fixtures
 
-Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. 10 fixtures pinned to commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`: `152media, 33across, adkernel, adtonos, appnexus, bidstack, kobler, mediasquare, msft, optidigital`. The Phase A acceptance-gate fixtures are `optidigital` (clean baseline) and `kobler` (cross-language port pair — its sibling lives at `prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`). Round-trip determinism (R4) is enforced via these — re-running the orchestrator on the same `provenance.source.resolved_commit` MUST produce a byte-identical spec modulo `provenance.read.timestamp_utc` and `provenance.read.operator`. See `read/test-fixtures/README.md` for per-fixture edge cases.
+Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. 10 fixtures pinned to commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e`: `152media, 33across, adkernel, adtonos, appnexus, bidstack, kobler, mediasquare, msft, optidigital`. The Phase A acceptance-gate fixtures are `optidigital` (clean baseline) and `kobler` (cross-language port pair — its sibling lives at `prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`). Round-trip determinism (R4) is enforced via these — re-running the orchestrator on the same `provenance.source.resolved_commit` produces a spec idempotent under `yaml.safe_load → safe_dump` (the test asserts dump2 == dump3). Byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator` is the orchestrator's TARGET, not what R4 verifies. See `read/test-fixtures/README.md` for per-fixture edge cases.
 
 ## What's NOT in scope
 

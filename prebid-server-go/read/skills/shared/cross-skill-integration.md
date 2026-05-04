@@ -243,9 +243,9 @@ The shortsha is the first 7 chars of `provenance.source.resolved_commit`. A dire
 
 ### 6.3 Determinism guarantee
 
-R4 (round-trip determinism) requires that re-running the orchestrator on the same commit produces a byte-identical YAML modulo `provenance.read.timestamp_utc` and `provenance.read.operator`. This is essential for diff comparison — a non-deterministic spec generates noise on every read.
+R4 (round-trip determinism) requires that re-running the orchestrator on the same commit produces a YAML spec idempotent under `yaml.safe_load → safe_dump` (R4 asserts dump2 == dump3). The orchestrator targets byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator`. This idempotency is essential for diff comparison — a non-idempotent spec generates noise on every read.
 
-A consumer (write/, port-go2java/, port-java2go/, pr-triage prior_spec) MAY rely on the YAML being byte-stable as long as the upstream commit is identical.
+A consumer (write/, port-go2java/, port-java2go/, pr-triage prior_spec) MAY rely on the YAML being round-trip-stable (idempotent under `yaml.safe_load → safe_dump`) as long as the upstream commit is identical. Byte-identical reproduction is the orchestrator's target but is not what R4 enforces.
 
 ---
 
@@ -362,11 +362,11 @@ Anthropic's skill-creator framework standardizes testing through `evals/evals.js
 
 Read skills are NOT directly executable. They are LLM workflows: a SKILL.md instructs the operator (a Claude instance) to read source files, classify behavior against the taxonomy, and emit a YAML spec. There is no Python function to call, no return value to inspect. Three concrete consequences:
 
-- **Determinism is the whole game.** R4 is the load-bearing rule: the same skill on the same commit must produce a byte-identical spec. Goldens give byte-deterministic regression coverage that `script_eval` would have to reconstruct from scratch — and `model_eval` would inject judgment-noise on every check.
+- **Determinism is the whole game.** R4 is the load-bearing rule: the same skill on the same commit produces a spec idempotent under round-trip (R4 asserts `yaml.safe_load → safe_dump` is byte-stable). Goldens give regression coverage that `script_eval` would have to reconstruct from scratch — and `model_eval` would inject judgment-noise on every check.
 - **Cross-language coupling.** R5 fails on the dual-spec-assertion level when Go and Java specs diverge on contract fields. This is a per-pair invariant — `evals.json`'s per-skill model can't natively express "the output of skill A and the output of skill B must agree."
 - **Schema-anchored invariants.** R1–R10 are properties of the spec schema, not of any one skill's output. Any read skill that contributes to an emission shares the same rules — there's no per-skill `script_eval` that captures, say, R3's `custom`-quirk pairing without re-encoding the schema in the eval file.
 
-Goldens + R-rules give us byte-stable artifacts AND schema-anchored invariants in one place. `evals.json` would partially duplicate this across each of the 8 (4 Go + 4 Java) skills' evals files.
+Goldens + R-rules give us round-trip-stable artifacts AND schema-anchored invariants in one place. `evals.json` would partially duplicate this across each of the 8 (4 Go + 4 Java) skills' evals files.
 
 ### When to use which
 

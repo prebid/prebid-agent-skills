@@ -150,7 +150,7 @@ The orchestrator sorts `code.file_layout.files[]` by:
 1. `<xyz>.go` first (the canonical entry-point file).
 2. Other files alphabetically.
 
-This ensures byte-identical specs across re-reads (R4 round-trip determinism).
+This ordering supports R4 round-trip determinism (re-emissions are idempotent under `yaml.safe_load → safe_dump`).
 
 ---
 

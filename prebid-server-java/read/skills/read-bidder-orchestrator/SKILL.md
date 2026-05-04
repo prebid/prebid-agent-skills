@@ -214,10 +214,10 @@ The Kobler Java golden spec at `../../test-fixtures/kobler.golden.spec.yaml` is 
 ```
 read-bidder-orchestrator --bidder=kobler --source-mode=local --format=yaml | yq .meta
 # Expected: bidder_name=kobler, is_alias=false, java_artifact_version=3.41.0
-# Expected (rest of spec): byte-identical to kobler.golden.spec.yaml modulo provenance.read.timestamp_utc + provenance.read.operator
+# Expected (rest of spec): targets byte-identical reproduction of kobler.golden.spec.yaml modulo provenance.read.timestamp_utc + provenance.read.operator (R4 enforces idempotency under round-trip, not raw-byte equality)
 ```
 
-Round-trip determinism (R4): re-running on the same commit MUST produce a byte-identical spec modulo the two provenance read fields.
+Round-trip determinism (R4): re-running on the same commit produces a spec idempotent under `yaml.safe_load → safe_dump` (R4 asserts dump2 == dump3). The orchestrator targets byte-identical reproduction modulo the two provenance read fields; R4 enforces idempotency, not raw-byte equality against a stored golden.
 
 Cross-language R5 verification: read Kobler in BOTH suites; compare `bidder_params_sha256` (must equal `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685`), `bidder_info.capabilities` (banner-only on both), `params.schema_interpretation` (single `test: boolean` field), `bidder_info.gvl_vendor_id` (0 on both).
 
