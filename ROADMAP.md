@@ -48,11 +48,12 @@ Both consume the cross-language translation rules at `prebid-server-go/read/skil
 - D3 — port-java2go pipeline prose + 6 Go-target Jinja templates (Go code + flat fixtures); 25 render tests.
 - D4 — round-trip-ci.py R11 port-side round-trip determinism gate; coverage-report.py per-rule applied-count from port-report.json archives; `mvn_checkstyle_dry_run` port-engine helper for pre-submit Java style validation.
 
-**Pending operator-side work** (out-of-session against local upstream clones):
+- D4.4 — beachfront fixture (ADR-007 F1 multi-endpoint-by-mediatype master sample) — Go + Java goldens + dual-spec assertions; also master sample for Rule 35 typed-config-subclass and Rule 9 parameterized-request-type. Corpus expanded 40 → 42 goldens, 16 → 17 dual-specs.
+
+**Pending operator-side work** (out-of-session against local upstream clones; review team can run on a real prebid-server-{go,java} checkout):
 
 - D2.8 — port-go2java validation against the 6 MVP pairs (kobler, aax, adkernelAdn, adverxo, vungle, thetradedesk): `mvn -B compile`, `mvn -B checkstyle:check`, Jacoco line-coverage ≥ 90%, R5 state matches expectation per [execution plan §D2.3](docs/execution-plan-phase-d.md).
 - D3.8 — port-java2go validation against the same 6 pairs reversed: `go build`, `go vet`, `gofmt -s -l`, `./scripts/check_coverage.sh ≥ 80%`, `TestBidderUniquenessGatekeeping`, R5 state per [§D3.3](docs/execution-plan-phase-d.md).
-- D4.4 — beachfront fixture (ADR-007 F1 multi-endpoint-by-mediatype master sample) — Go + Java goldens + dual-spec assertions. Deferred to dedicated session.
 
 ## Phase E — Review-skill expansion + cross-skill integration (partially shipped)
 

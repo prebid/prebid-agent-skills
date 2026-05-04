@@ -77,6 +77,19 @@ master fixture (D4.4) remain.
   lossy-direction filtering).
 - `scripts/coverage-report.py` §7b per-rule applied-count from
   port-report.json archives.
+- **Beachfront cross-language pair fixture** (D4.4) at
+  `prebid-server-{go,java}/read/test-fixtures/beachfront.golden.spec.yaml`
+  + `cross-language-pairs/beachfront.dual-spec-assertions.yaml`. Master
+  sample for THREE load-bearing patterns: ADR-007 F1
+  multi-endpoint-by-mediatype (banner endpoint vs video endpoint per
+  mediatype), Rule 35 typed-config-subclass (Java
+  `BeachfrontConfigurationProperties` with `@NotBlank private String
+  videoEndpoint` vs Go opaque `ExtraAdapterInfo` JSON string), and
+  Rule 9 parameterized-request-type (Java `Bidder<Void>` + custom
+  request bodies). Dual-spec assertions document 2 expected R5 WARNs
+  (bidder-params byte-only-whitespace divergence; endpoint_construction
+  encoding divergence by ADR-007 F1 design); no port-fidelity FAILs.
+  Corpus expanded 40 → 42 goldens; 16 → 17 dual-specs.
 
 ### Added — review iteration scaffolding
 
