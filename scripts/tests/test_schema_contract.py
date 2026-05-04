@@ -18,42 +18,43 @@ Caught: phantom paths under closed top-level blocks — `bidder_info`
 Concretely: `bidder_info.fakey_fake` and `provenance.read.NOT_REAL` are
 caught.
 
-NOT caught: paths under any of the 28 open-map prefixes the schema
-declares with `additionalProperties: true`. Concretely:
-`code.this_does_not_exist`, `tests.fakey`, `quirks.fake`, etc. all pass.
+NOT caught: paths under the open-map prefixes the schema declares with
+`additionalProperties: true` (post-Wave-11b: 11 such prefixes remain —
+4 EXTENSION-SLOTS + 7 LEGITIMATELY-OPEN). Concretely:
+`bidder_info.yaml_extra_fields.fakey_field`, `tests.fixture_inventory.x`
+all pass; closures applied in Wave 11b mean `code.this_does_not_exist`
+and `quirks.fake` are now CAUGHT.
 
-## Documented gaps (Wave 11b will close)
+## Open-map prefix history
 
-The 28 open-map prefixes (auto-derived from schema's `additionalProperties:
-true` plus the static `OPEN_MAP_POINTS` set):
+Pre-Wave-11b the schema had 28 open-map prefixes (13 top-level + 15
+nested). Wave 11b / Phase 2.8 closed 17 accidentally-open sites (B1
+Tier A: 6 sites; B2 Tier B: 9 sites; B3 Tier C: 4 lift-to-$defs; B3+
+round-2 sweep: 8 sites under code.* and cross_language.*). Post-Wave-11b
+the schema has 11 open-map prefixes:
 
-  Top-level (13): aliases, bidder_class, code, code_naming, cross_language,
-  deploy_time_tokens, headers_constructed, iab_category_storage, lifecycle,
-  quirks, registry, spring_config, tests
+  4 EXTENSION-SLOTS (ADR-007 F1/F3/F4/F5 `$defs`, NOT yet $ref-wired
+  into Code; per-pattern wiring is a future wave's task):
+  EndpointResolution, EntityStrategy, BidPostProcessing, ImpExtUnmarshal.
 
-  Nested (15): bidder_info.{capabilities, user_sync, yaml_extra_fields,
-  yaml_field_name_quirks}, code.file_layout, code.file_layout.files,
-  ext_pojo_construction.custom_unmarshal, headers_constructed.custom_headers,
-  params.{ext_struct, params_test, schema_interpretation,
-  schema_interpretation.properties}, tests.fixture_inventory,
-  aliases.{test_application_properties_entries, test_assets}
+  7 LEGITIMATELY-OPEN (keyed by arbitrary user/upstream name):
+  - `tests.fixture_inventory` (keyed by category)
+  - `params.schema_interpretation.properties` (keyed by JSON Schema property name)
+  - `bidder_info.yaml_extra_fields` (arbitrary upstream YAML)
+  - `bidder_info.yaml_field_name_quirks` (arbitrary upstream YAML quirk names)
+  - `bidder_info.user_sync` (sub-keys vary per usersync mechanism)
+  - `bidder_info.capabilities` (keyed by ad format pair)
+  - `provenance.read.skill_versions` (keyed by skill name; patternProperties)
 
-Of these 28: 4 are EXTENSION-SLOTS (ADR-007 F1/F3/F4/F5 `$defs`,
-intentionally open until $ref-wired in Phase 2.8); 7 are LEGITIMATELY-OPEN
-(keyed by arbitrary user/upstream name — `tests.fixture_inventory`
-keyed by category, `params.schema_interpretation.properties` keyed by
-property name, `bidder_info.yaml_extra_fields` capturing arbitrary upstream
-YAML, etc.); 17 are ACCIDENTALLY-OPEN (Phase 2.0/2.4/2.7 punts that this
-PR did not close). Wave 11b / Phase 2.8 closes the 17 accidentally-open
-sites — see `/Users/quantum/.claude/plans/wiggly-spinning-curry.md` for
-the closure-tier breakdown (Tier A zero-risk, Tier B additive, Tier C
-lift-to-$defs, Tier D corpus-coupled).
+Wave 11c will close 3 of the 7 LEGITIMATELY-OPEN sites if the corpus
+canonical-encoding decisions (Alias canonical name, fixture_inventory
+typed-values, registry migration) land. See
+`/Users/quantum/.claude/plans/wiggly-spinning-curry.md`.
 
-A second documented gap lives in the sibling phantom-path test in
-`test_schema_jsonschema.py:test_no_truly_invented_keys_outside_open_maps`:
-its leaf-key permissive branch (line 271-273) admits ANY key whose name
-appears anywhere in any `$defs.*.properties` block. Wave 11b will delete
-that branch.
+The sibling phantom-path test at
+`test_schema_jsonschema.py:test_no_truly_invented_keys_outside_open_maps`
+was rewritten in Wave 11b B5 #1 to use path-aware vocabulary (closes
+the prior leaf-key permissive escape gap).
 
 Phase 2.3 note (2026-05-02): the schema registry is derived from
 `adapter-spec.schema.json`; the legacy 180-entry hand-curated

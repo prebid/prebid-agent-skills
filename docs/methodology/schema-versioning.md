@@ -46,6 +46,14 @@ fail validation against `X+1.0.0`?" If yes, MAJOR.
 - Loosening a `pattern` regex.
 - Adding a new `$def` referenced from new optional fields.
 - Adding new validation rules (R-numbered) that warn-only.
+- **Wave 11b clarification — closing accidentally-open
+  `additionalProperties: true` to `false`**: MINOR if all currently-validating
+  goldens continue to validate (the declared property set absorbs the
+  previously-undeclared corpus emissions). Wave 11b closed 17 such sites
+  (B1/B2/B3) plus 8 round-2 sweep sites without breaking any of the 40
+  goldens. The closure is MAJOR only when a closure refuses an existing
+  corpus emission AND the fix is a schema concession rather than a
+  corpus edit (i.e., the corpus emits a real key the schema then drops).
 
 For port-translation rules: adding a new rule (Rule 44/45/46 in Phase 2.5)
 is MINOR. Existing rules' contracts unchanged.

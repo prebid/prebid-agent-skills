@@ -14,6 +14,231 @@ Every entry references the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 1.2.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-03
+
+Wave 11b / Phase 2.8 — schema closure + gate enforcement reality alignment.
+Closes 17 accidentally-open `additionalProperties: true` sites that were
+Phase 2.0/2.4/2.7 punts; lifts 4 top-level open-maps to structured `$defs`;
+closes 8 round-2 sweep sites under `code.*` and `cross_language.*`;
+tightens R5/R8/R3/Rule-33 enforcement; deletes redundant Rule 38 lint
+check; replaces the leaf-key phantom-path escape with path-aware
+vocabulary lookup.
+
+All 40 existing goldens continue to validate against the tightened schema.
+Per `docs/methodology/schema-versioning.md` MINOR criteria (clarified in
+this wave to explicitly cover closure-as-MINOR), no MAJOR bump required.
+
+### Added (schema $defs — Wave 11b B3 + B3+)
+
+22 new `$defs` total. Top-level lift-to-$defs replacing Tier C open-maps:
+
+- `SpringConfig` (was top-level `spring_config` open-map; declares
+  factory_class, factory_method, property_source_path,
+  bidder_creator_lambda, configuration_properties_class, bean_dependencies,
+  factory_class_package, notes).
+- `BidderClass` (was top-level `bidder_class`; declares name, parameterized
+  request/response types, override_methods, constructor, static_fields,
+  helper_classes_co_located/in_proto/in_model, notes).
+- `CodeNaming` (was top-level `code_naming`; declares class_name_root,
+  yaml_name, preserves_acronym_case, identifier_workaround, package_name,
+  notes).
+- `Lifecycle` (was top-level `lifecycle`; restructured per round-1 finding
+  that 14 keys nest under `lifecycle.rename`, not at lifecycle top-level).
+- Plus nested children: `ConfigurationPropertiesClass`,
+  `ConfigurationPropertyField`, `ConfigurationPropertyNestedClass`,
+  `ConfigurationPropertyNestedClassField`, `BeanDependency`,
+  `BidderClassConstructor`, `BidderClassConstructorParameter`,
+  `BidderClassStaticField`, `LifecycleRename`, `LifecycleMove`.
+
+Round-2 sweep additions (B3+) under `code.*` and `cross_language.*`:
+
+- `CodeImports` (4 keys: has_currency_helper, has_jsonutil,
+  has_template_engine, third_party).
+- `AdapterStruct` (3 keys + nested fields[] items).
+- `CodeBuilder` (4 keys + errors_returned[] items as oneOf string|object).
+- `MakeRequests` (6 sub-objects + helpers[] with name/signature item shape).
+- `MakeBids` (8 universal + notes_currency + helpers[] for parity).
+- `GoArtifacts` (3 universal + 9 per-bidder file-path artifacts).
+- `JavaArtifacts` (5 universal + declared_in for huaweiads).
+- `PortConcerns` (6 universal booleans).
+
+### Changed (schema closures — Wave 11b B1 + B2)
+
+Tier A (B1) — flipped `additionalProperties: true → false` at 6
+zero-extra sites: `Code`, `code.file_layout.files[]` items,
+`headers_constructed.custom_headers[]` items, `aliases[].test_assets`,
+`aliases[].test_application_properties_entries[]` items, `CrossLanguage`
+top-level. `Code` description updated to past-tense closure note.
+
+Tier B (B2) — additive closures at 9 sites with property additions:
+`code.file_layout` (+ file_count_total, notes from huaweiads), `Tests`
+(+ test_application_properties_keys), `IabCategoryStorage` (+ notes),
+`ExtPojoConstruction.custom_unmarshal` (+ notes), `HeadersConstructed`
+(+ authentication_algorithm, authentication_output_encoding, notes),
+`DeployTimeToken` (+ file, line, on_alias as STRING [plan corrected
+from "boolean"], notes as oneOf string|array per dual emitter shape),
+`Quirk` (+ line). Plus Provenance.warnings/items + language_stamped_headers/items
+flipped directly.
+
+Plan correction: `on_alias` is `string-or-null` (alias name like
+"appStockSSP"), not `boolean-or-null` as plan said. teqblaze's `note:`
+also renamed to `notes:` (corpus normalization; both teqblaze and rubicon
+prose are golden-author commentary, not upstream Java quotes).
+
+### Tightened (Wave 11b B4)
+
+- `if/then` invariants: Go specs now require `code_naming: null` and
+  `registry: null` (in addition to spring_config/bidder_class). Java
+  alias specs (`meta.is_alias: true`) now require `spring_config: null`
+  and `bidder_class: null` (152media-Java's existing values confirmed).
+- Port_lineage shared-genesis invariant DEFERRED to Wave 11c C4
+  (freewheelssp-Java's `destination_language: null` is captured as
+  ADR-007 F2 contradicted exemplar; tightening would unilaterally
+  invalidate that evidence).
+
+### Tightened (Wave 11b B4 — failure-swallow fixes)
+
+- `round-trip-ci.py` R1 network probe: `gh_path_exists` refactored to
+  raise `GhApiUnreachable` on auth/rate-limit/network failures (Wave 10
+  recipe propagated). Top-level handler in `main()` exits 3 with
+  diagnostic. Fixes the same false-FAIL-flood class as audit-golden.py.
+- `lint-port-rules.py:discover_pairs`: returns `(pairs, errors)` tuple;
+  raises FileNotFoundError on missing fixtures dirs; emits Finding(
+  rule_id=0, severity="fail") on YAML/IO load errors instead of
+  swallowing or crashing.
+- `coverage-report.py:discover_dual_specs`: scoped Exception catch to
+  `(OSError, yaml.YAMLError)`; prints WARN to stderr and skips broken
+  files instead of inserting `_parse_error` sentinel data.
+- Renderer `consumed_keys` assertions: `render-taxonomy.py` and
+  `render-port-rules.py` now raise ValueError on unrecognized YAML keys,
+  catching the silent-drop class of bug. Each has injection regression
+  test.
+
+### R5 split (Wave 11b B4 C1 + B5 #2)
+
+R5 divergent-keys bucket split into:
+- `R5_FORM_DIVERGENT_KEYS` — endpoint URLs only. New
+  `normalize_endpoint_macros()` canonicalizes Go `{{.X}}`, Java `${X}`,
+  Spring EL `#{X}`, raw `{{X}}` to single `{{X}}` form. After
+  normalization: deep_eq. Absence of dual-spec assertion when normalized
+  values differ → FAIL `assertion_missing` (Wave 11b strictness).
+- `R5_ADVISORY_DIVERGENT_KEYS` — endpoint_construction, default_enabled,
+  alias_metadata, port_lineage, lifecycle_rename, reviewer_cohort,
+  test_fixture_cost (preserved current behavior; documentation-only).
+
+`R5_STRICT_KEYS` refactored from flat (spec_field, dual_key) tuples to
+(spec_field, dual_key, comparator) three-tuples with per-key comparator
+selection: `_list_set_eq` for 4 LIST-VALUED keys (capabilities, geoscope,
+schema_interpretation.{required_fields, combinators_used,
+flexible_types}); `_maintainer_eq` for the 1 PROSE-BEARING key
+(maintainer.email-only); `deep_eq` for 4 PURE-DATA scalars.
+
+Prerequisite corpus edit: aax dual-spec gained `bidder_info_endpoint`
+assertion (severity:warn) documenting Java's
+`?src={{PREBID_SERVER_ENDPOINT}}` extension.
+
+### R8 expansion (Wave 11b B5 #7)
+
+R8 endpoint-placeholder walker expanded from single-field
+(`bidder_info.endpoint`) to multi-path collector covering user-sync URLs
+(iframe/redirect.url + uid_macro + flat forms), `bidder_class.static_fields[*].value`,
+plus the original endpoint. New macro registries:
+
+- `USER_SYNC_MACROS` — admitted on user_sync paths. Both Go PascalCase
+  and Java snake_case forms (GDPR/gdpr, GDPRConsent/gdpr_consent,
+  USPrivacy/us_privacy, GPP/gpp, GPPSID/gpp_sid, RedirectURL/redirect_url,
+  BidderName/bidder, UID/uid).
+- `OPENRTB_MACROS` — universal. AUCTION_PRICE, AUCTION_BID_ID, etc. per
+  OpenRTB 2.5 §4.1.
+
+16 new R8 WARNs surface for bidder-specific identifiers (TokenID,
+SourceId, SupplyId, etc.) — legitimate signals for documentation, not
+breaking changes.
+
+### Removed (Wave 11b B5 #8)
+
+- `rule_38_bidder_params_byte_fidelity` deleted from `lint-port-rules.py`.
+  Redundant with R5's dual-spec-aware byte-divergence reporting; emitted
+  13/14 pairs as warn with no actionable distinction. The Rule 38
+  PRINCIPLE remains documented in `port-translation-rules.md:45-77` as
+  a load-bearing port-translation rule; the runtime gate is R5.
+
+### Promoted (Wave 11b B5 #8)
+
+- Rule 33 (alias-graph inversion) promoted from `warn` to `fail`
+  severity. 0 active warns across corpus; promotion turns alias-graph
+  inversions into hard CI gates.
+
+### Path-aware phantom detection (Wave 11b B5 #1)
+
+`test_schema_jsonschema.py:test_no_truly_invented_keys_outside_open_maps`
+rewritten to use path-aware vocabulary. New module-level helper
+`_build_declared_at(schema)` returns `(declared_at, open_maps)`.
+Replaces the prior leaf-key escape that admitted ANY key whose name
+appeared anywhere in any `$defs.*.properties`. Closes Gap #2 (paths
+like `code.builder.request_body` no longer slip through because
+`request_body` is declared at `code.make_requests`, not `code.builder`).
+
+### R3 strict-mode flipped default-on (Wave 11b B5 #3)
+
+`--strict-r3` produced 40 PASS / 0 WARN / 0 FAIL across corpus; safe
+to default-on. `--lenient-r3` opt-out preserves prior advisory mode for
+contributors who deliberately under-document quirks.
+
+### Doc-count regex extension (Wave 11b B5 #5)
+
+`test_doc_count_claims.py` DISCOVERY_REGEX gained
+`(?:java\s+)?(?:alias-)?empire\s+parents` alternation; canonical from
+`coverage-report.py:INVENTORY_TOTALS["java_empire_parents"]`. Three
+plan-recipe phrases ("N goldens", "N reference PRs", "N fixtures")
+deferred — corpus uses each ambiguously.
+
+### Counts
+
+- Open-map prefixes: 28 → 11 (4 EXTENSION-SLOTS + 7 LEGITIMATELY-OPEN
+  remain by design; Wave 11c may close 3 corpus-coupled sites).
+- Accidentally-open sites: 17 → 0 (plus 8 round-2 sweep additions = 25
+  total closures landed).
+- Schema $defs: +22 new (12 → 34).
+- Test count: 115 → 125 (+10 new across 7 commits).
+- Wave 11b commits: 16 (1 plan + 15 implementation).
+
+### Goldens posture
+
+40 existing goldens stay at `adapter_spec_version: "1.0.0"`; they all
+validate against the 1.2.0-tightened schema. Future fixtures using the
+post-closure structure should declare `adapter_spec_version: "1.2.0"`.
+
+### Unchanged
+
+`taxonomy_version` stays at `1.0.0` (no behavior-taxonomy changes);
+`port_translation_rules_version` stays at `0.2.0` (Rule 38 lint deletion
+doesn't change rule taxonomy — Rule 38 the principle is preserved in
+the rules YAML).
+
+### Driving ADRs / methodology
+
+- ADR-001 D5 (lifecycle.rename schema)
+- ADR-001 D7 (SemVer string format)
+- ADR-007 (novel-pattern schema additions; status flipped to "Partially
+  implemented in Phase 2.8 / Wave 11b" with port_lineage shared-genesis
+  invariant deferred to Wave 11c)
+- `docs/methodology/schema-versioning.md` (closure-as-MINOR clarification
+  added)
+- Wave 11 plan: `/Users/quantum/.claude/plans/wiggly-spinning-curry.md`
+
+### Wave 11c (FUTURE PR — separate from this one)
+
+Corpus-coupled decisions deferred:
+- C1: Alias canonical name field (`bidder_name` vs `name`).
+- C2: `tests.fixture_inventory` typed-values closure.
+- C3: `registry` migration to `tests.test_application_properties.*`.
+- C4: `cross_language.port_lineage` shared-genesis canonical encoding
+  (NEW — moved from Wave 11b's B4 C5 to avoid contradicting ADR-007
+  F2 freewheelssp exemplar; needs ADR amendment).
+
+---
+
 ## [adapter_spec_version 1.1.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-03
 
 ADR-007 (novel-pattern schema additions): F1, F3, F4, F5 admitted to the schema
