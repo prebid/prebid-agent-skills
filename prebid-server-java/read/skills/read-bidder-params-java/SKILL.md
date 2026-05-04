@@ -208,7 +208,6 @@ Per-step verification:
 
 ## Sources
 
-- Plan: (Claude Code planning artifact) (Phase C task list)
 - Canonical schema: [`prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md) (`bidder_params_json:`, `bidder_params_sha256:`, `params:` block, `ext_pojo_construction`)
 - Behavior taxonomy: [`prebid-server-go/read/skills/shared/behavior-taxonomy.md`](../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md) (`combinators_used[]`, `framework_choice`, `custom_unmarshal.kind`, `where_branched`)
 - Port translation rules: [`prebid-server-go/read/skills/shared/port-translation-rules.md`](../../../../prebid-server-go/read/skills/shared/port-translation-rules.md) (R5 — bidder_params_json byte-identical contract; R9 — flexible-type idiom mismatch)

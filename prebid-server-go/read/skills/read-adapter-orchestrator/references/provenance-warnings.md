@@ -280,7 +280,7 @@ The orchestrator emits warnings using these rules:
 
 ## Sources
 
-- The plan: (Claude Code planning artifact) — Phase 2 reconnaissance findings ("Real bugs found during validation"): `kobler_test.go:12` calls `Builder` with `openrtb_ext.BidderKargo`; `params_test.go:47` references `openrtb_ext.BidderKrushmedia` — both pass tests; the spec's `provenance.warnings` block is load-bearing for surfacing these.
+- Phase 2 reconnaissance findings ("Real bugs found during validation"): `kobler_test.go:12` calls `Builder` with `openrtb_ext.BidderKargo`; `params_test.go:47` references `openrtb_ext.BidderKrushmedia` — both pass tests; the spec's `provenance.warnings` block is load-bearing for surfacing these.
 - Spec schema: [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md) — `provenance.warnings[]` schema definition (Per-section field reference → `provenance` table → "Warnings schema" subsection); validation rules R1–R10 and which warnings they emit.
 - Behavior taxonomy: [`../../shared/behavior-taxonomy.md`](../../shared/behavior-taxonomy.md) — `quirks[].edge_case_taxon` registry (closed list of registered taxa); cross-reference for paired warning↔quirk taxa.
 - Framework utilities (Go): [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) — `EndpointTemplateParams` 18-field list (drives `endpoint-placeholder-unresolved` warning); module-path `v4` major-version reference (drives `module-major-drift`); `jsonutil` package and the recommendation against direct `encoding/json` (drives `legacy-encoding-json-direct-usage`); v3-import-in-PR-diff is NOT drift rule.

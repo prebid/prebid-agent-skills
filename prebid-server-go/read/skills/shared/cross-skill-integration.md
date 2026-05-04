@@ -389,7 +389,7 @@ Don't translate the R-rules into per-skill `script_eval` entries. The result wou
 
 ## Sources
 
-- Master plan: (Claude Code planning artifact) — Phase E section "Cross-skill integration + handoff" + the spec format definition.
+- Phase E section "Cross-skill integration + handoff" + the spec format definition.
 - Canonical schema: [`adapter-spec.md`](adapter-spec.md) — full Adapter Specification format with worked Kobler dual-spec example.
 - Port translation rules: [`port-translation-rules.md`](port-translation-rules.md) — 46 explicit Go ↔ Java rules indexed by spec field driver.
 - Behavior taxonomy: [`behavior-taxonomy.md`](behavior-taxonomy.md) — enumerated values for behavioral fields and the `quirks[].edge_case_taxon` registry.

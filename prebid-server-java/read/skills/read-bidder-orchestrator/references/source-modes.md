@@ -79,6 +79,5 @@ The `ref` block carries the user-provided ref form, NOT the resolved SHA. `resol
 
 ## Sources
 
-- Master plan: (Claude Code planning artifact) (Source modes section).
 - Canonical schema: `../../../../../prebid-server-go/read/skills/shared/adapter-spec.md` (provenance section).
 - Sibling Go skill: `../../../../../prebid-server-go/read/skills/read-adapter-orchestrator/references/source-modes.md` (when authored — same content shape).

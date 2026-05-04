@@ -247,7 +247,6 @@ the rules YAML).
   invariant deferred to Wave 11c)
 - `docs/methodology/schema-versioning.md` (closure-as-MINOR clarification
   added)
-- Wave 11 plan: (Claude Code planning artifact)
 
 ### Wave 11c (FUTURE PR — separate from this one)
 

@@ -172,7 +172,6 @@ Hard errors (R1, R2, R3) abort the read and never reach `provenance.warnings`. T
 
 ## Sources
 
-- Master plan: (Claude Code planning artifact) (warnings schema requirement, Phase 2 bidder-constant-mismatch findings).
 - Canonical schema: `../../../../../prebid-server-go/read/skills/shared/adapter-spec.md` (Warnings schema section under provenance).
 - Behavior taxonomy: `../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md` (`bidder-constant-mismatch`, `yaml-field-name-typo`, `endpoint-compression-typo` taxa).
 - Port translation rules: `../../../../../prebid-server-go/read/skills/shared/port-translation-rules.md` (Rule 33 alias inversion, Rule 34 YAML unification, Rule 35 config subclass).

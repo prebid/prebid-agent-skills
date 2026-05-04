@@ -181,7 +181,7 @@ The Adapter Specification format itself, the 46 port-translation rules, and the 
 
 ## Sources
 
-- Master plan: (Claude Code planning artifact) — Phase 2 reconnaissance findings (cross-language reviewer cohort disjointness; port-fidelity as #1 Java review theme), Phase E section "Document the review-pattern transfer ban".
+- Phase 2 reconnaissance findings (cross-language reviewer cohort disjointness; port-fidelity as #1 Java review theme), Phase E section "Document the review-pattern transfer ban".
 - Go reference list: [`../../../references/new-bid-adapter-prs.md`](../../../references/new-bid-adapter-prs.md) — 89 PRs with reviewer attribution; canonical Go cohort corpus.
 - Java reference list: [`../../../../prebid-server-java/references/new-bid-adapter-prs.md`](../../../../prebid-server-java/references/new-bid-adapter-prs.md) — 49 PRs with `Patterns Demonstrated` tags; `port-from-go` tag identifies port pairs.
 - Spec schema: [`adapter-spec.md`](adapter-spec.md) — `cross_language.reviewer_cohort.{go, java, cross_language_coordinator}` field definitions; `port_lineage.fidelity_review_themes[]`.

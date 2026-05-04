@@ -225,7 +225,6 @@ Manual inspection corpus (full v1, 10 Java goldens): `kobler, optidigital, media
 
 ## Sources
 
-- Master plan: (Claude Code planning artifact)
 - Canonical schema: `../../../../prebid-server-go/read/skills/shared/adapter-spec.md`
 - Behavior taxonomy: `../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md`
 - Port translation rules (46 rules): `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`

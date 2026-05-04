@@ -48,8 +48,7 @@ the schema has 11 open-map prefixes:
 
 Wave 11c will close 3 of the 7 LEGITIMATELY-OPEN sites if the corpus
 canonical-encoding decisions (Alias canonical name, fixture_inventory
-typed-values, registry migration) land. See
-(Claude Code planning artifact).
+typed-values, registry migration) land. See `CHANGELOG.md` entry [adapter_spec_version 1.2.0] for the full closure-tier breakdown.
 
 The sibling phantom-path test at
 `test_schema_jsonschema.py:test_no_truly_invented_keys_outside_open_maps`

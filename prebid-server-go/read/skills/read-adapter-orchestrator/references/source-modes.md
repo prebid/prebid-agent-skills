@@ -177,7 +177,7 @@ The auto policy will pick the best mode given what's available. The user only ne
 
 ## Sources
 
-- The plan: (Claude Code planning artifact) — "Source modes" section: auto policy, ref types, the `local`/`github-raw`/`gh-cli` triad.
+- "Source modes" section: auto policy, ref types, the `local`/`github-raw`/`gh-cli` triad.
 - Existing source-mode dispatch reused: [`../../../../review/skills/pr-triage/SKILL.md`](../../../../review/skills/pr-triage/SKILL.md) — Step 1c uses `gh api` for `head.sha` resolution; Step 2 uses `curl` for raw content. The "no WebFetch" rule and the choice of `curl` over WebFetch is canonical there.
 - File-to-skill routing (used in Step 2 discovery): [`../../../../review/skills/pr-triage/references/routing-rules.md`](../../../../review/skills/pr-triage/references/routing-rules.md) — bidder name extraction rules, file pattern table.
 - Framework utilities for module-path major-version drift: [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) — current major `v4` (verified at v4.1.0).
