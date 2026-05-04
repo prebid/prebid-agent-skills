@@ -17,7 +17,95 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
-## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-04
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-04 (engineering complete)
+
+Phase D engineering layer complete. D0 + D1 set up the port-skill
+prerequisites (R5 lib, port-engine helpers, schemas, emission refs);
+D2 + D3 ship the SKILL pipeline prose and all 17 Jinja templates
+across both directions (Go→Java and Java→Go); D4 lands the CI
+integration (port-side R4 round-trip framework, coverage-report
+extension, mvn checkstyle dry-run helper). Operator-side validation
+against the 6 MVP pairs (D2.8 / D3.8) and the beachfront ADR-007 F1
+master fixture (D4.4) remain.
+
+### Added — port skill engineering layer (D0-D4)
+
+- `scripts/lib/r5_check.py` — comparator-neutral R5 comparator
+  (`compare_pair`, `aggregate_state`, `R5Diagnostic`, `R5Result`,
+  `SpecView` protocol). Harness re-exports preserve test_round_trip_ci.py
+  imports.
+- `scripts/lib/port_engine.py` — 10 mechanical helpers consumed by both
+  port skills: `byte_copy`, `normalize_bidder_name`, `alias_graph_invert`,
+  `iab_table_translate`, `r5_check_at_port_time`, `port_report_emit`,
+  `alphabetical_insert`, `prefix_uniqueness_check`, `gofmt_post_process`,
+  `mvn_checkstyle_dry_run`.
+- Two skill directories with full pipeline prose:
+  `prebid-server-java/port-go2java/SKILL.md` (Go→Java; v0.3.0) and
+  `prebid-server-go/port-java2go/SKILL.md` (Java→Go; v0.3.0).
+- 11 Java-target Jinja templates at
+  `prebid-server-java/port-go2java/templates/`: bidder-config.yaml,
+  ext-imp-pojo.java, configuration.java, configuration-properties.java,
+  bidder.java, bidder-test.java, it-test.java, plus 4 IT fixture JSONs.
+- 6 Go-target Jinja templates at
+  `prebid-server-go/port-java2go/templates/`: bidder-info.yaml,
+  imp-ext-pojo.go, bidder-test.go, params-test.go, exemplary-fixture.json,
+  bidder.go.
+- 11 emission reference docs across both port skills'
+  `references/` directories + a shared
+  `prebid-server-go/read/skills/shared/bidder-constant-table.yaml`
+  (271 entries; 84 non-mechanical) refreshed to v4 module path post
+  upstream PR #4710 (resolved_commit `2fae16f31693`).
+
+### Added — schema bumps + CI extensions
+
+- **adapter_spec_version 1.3.0** (additive): optional
+  `cross_language.java_artifacts.bidder_params_path` for the rare
+  bidders whose Java upstream filename diverges from the lowercase
+  bidder name (adkerneladn → adkernelAdn.json camelCase; emxdigital →
+  emx_digital.json snake_case).
+- **port_report_version 0.2.0** (additive): PR-shape automation
+  (5 fields including `companion_docs_pr_draft` and `pre_submit_rebase`
+  with declarative if/then constraint), source provenance (3 fields),
+  fidelity tracking (`re_authored_paragraphs[]`),
+  `r5_check.state` enum extended 4 → 6 values (warn-target-strengthens-
+  source, fail-source-omits-target-constraint).
+- `port_report_version` promoted to first-class versioned artifact
+  (4th alongside the original three) per
+  `docs/methodology/schema-versioning.md` revision.
+- `scripts/round-trip-ci.py` R11 port-side round-trip determinism gate
+  (consults `port-translation-rules.yaml` Round-Trip Safety table for
+  lossy-direction filtering).
+- `scripts/coverage-report.py` §7b per-rule applied-count from
+  port-report.json archives.
+
+### Added — review iteration scaffolding
+
+- `scripts/tests/test_port_e2e_fixtures.py` — fixture-driven render
+  tests using real `kobler.golden.spec.yaml` source rather than
+  hand-rolled synthetic contexts; closes the gap where per-template
+  tests proved "template renders given pre-cooked ctx" but not
+  "SKILL → context → template is consistent".
+- `TestPortReportV020Invariants` in test_schema_jsonschema.py — 8
+  cases pinning the M-D schema tightenings (if/then constraint, SHA
+  pattern, six-state enum) so they can't regress silently.
+- `TestModuleVersionTableSync` cross-checks the test-suite
+  `GO_MODULE_VERSION` constant against the bidder-constant-table's
+  `module_version` pin so a future v5 bump fires a test until the
+  test constant updates accordingly.
+
+### Driving ADRs / methodology
+
+- `docs/methodology/port-skills-design.md` §3-§7 — pipeline contract.
+- `docs/execution-plan-phase-d.md` — D0-D4 sub-phase breakdown +
+  per-pair acceptance gates.
+- `docs/methodology/end-to-end-flow.md` — Teal flow handoff convention.
+- `docs/methodology/repo-rules.md` — upstream snapshot pin
+  re-verified 2026-05-04 (Go HEAD `2fae16f31693`, Java HEAD
+  `a1fe64e123d6`); in-flight upstream PR #4126 tracked.
+
+---
+
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-04 (initial)
 
 Phase D scaffolding — port skill prerequisites land. D0 lifted the R5
 cross-language equivalence comparator to `scripts/lib/r5_check.py` so

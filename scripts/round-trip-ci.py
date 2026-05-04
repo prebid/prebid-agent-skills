@@ -49,21 +49,39 @@ if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
 # R5 logic was lifted to scripts/lib/r5_check.py in Phase D0.1 so that the
-# upcoming port skills (port-go2java / port-java2go) can compute R5 from
-# the same source of truth as this harness. Module-level re-exports below
-# keep test_round_trip_ci.py imports unchanged.
+# port skills (port-go2java / port-java2go) can compute R5 from the same
+# source of truth as this harness. Module-level re-exports below keep
+# test_round_trip_ci.py imports unchanged. The names listed in __all__ are
+# the load-bearing re-exports; they are imported here precisely so that
+# `import round_trip_ci as rtci; rtci.R5_STRICT_KEYS` resolves the way
+# scripts/tests/test_round_trip_ci.py expects.
 from lib.r5_check import (  # noqa: E402  (after sys.path setup)
     R5_ADVISORY_DIVERGENT_KEYS,
     R5_FORM_DIVERGENT_KEYS,
     R5_STRICT_KEYS,
     R5Diagnostic,
     R5Result,
-    SpecView,  # noqa: F401  (re-exported for type-narrowing callers)
+    SpecView,
     _list_set_eq,
     _maintainer_eq,
     compare_pair as _r5_compare_pair,
     deep_eq,
     normalize_endpoint_macros,
+)
+
+# Public re-export surface for downstream tests + the port skills.
+# Pyright's reportUnused* respects __all__ presence here.
+__all__ = (
+    "R5_ADVISORY_DIVERGENT_KEYS",
+    "R5_FORM_DIVERGENT_KEYS",
+    "R5_STRICT_KEYS",
+    "R5Diagnostic",
+    "R5Result",
+    "SpecView",
+    "_list_set_eq",
+    "_maintainer_eq",
+    "deep_eq",
+    "normalize_endpoint_macros",
 )
 
 

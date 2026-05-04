@@ -31,16 +31,28 @@ Four parallel skills under `prebid-server-java/read/skills/`:
 
 The Java suite shares the canonical schema, taxonomy, and port-translation rules with Go via `prebid-server-go/read/skills/shared/`. A future Java-specific schema would land at `prebid-server-java/read/skills/shared/adapter-spec-java.md` if divergence demands it.
 
-## Phase D — Porting skills (in progress)
+## Phase D — Porting skills (engineering complete; operator validation pending)
 
 Bidirectional Go ↔ Java translation. Both directions ship production-grade — the empirical Go→Java dominance in merged PRs (12+ vs 0 in 18 months) reflects current tooling limits, not user need or maintainer disinterest. Phase D removes that asymmetry as a first-class deliverable.
 
-- [`prebid-server-java/port-go2java/`](prebid-server-java/port-go2java/) — Go-source spec → Java artifacts (skeleton landed in D1.1; D2 fills the body)
-- [`prebid-server-go/port-java2go/`](prebid-server-go/port-java2go/) — Java-source spec → Go artifacts (skeleton landed in D1.1; D3 fills the body, mirroring D2's prose-driven-SKILL-with-mechanical-helpers architecture)
+- [`prebid-server-java/port-go2java/`](prebid-server-java/port-go2java/) — Go-source spec → Java artifacts. SKILL.md pipeline + 11 Jinja templates shipped (D2.1-D2.7; frontmatter v0.3.0).
+- [`prebid-server-go/port-java2go/`](prebid-server-go/port-java2go/) — Java-source spec → Go artifacts. SKILL.md pipeline + 6 Jinja templates shipped (D3.1-D3.2; frontmatter v0.3.0).
 
 Both consume the cross-language translation rules at `prebid-server-go/read/skills/shared/port-translation-rules.md`. Cross-language pair fixtures at `cross-language-pairs/` are the round-trip safety net (16 pairs at the pinned commits). Design at [`docs/methodology/port-skills-design.md`](docs/methodology/port-skills-design.md); execution plan + per-phase acceptance gates at [`docs/execution-plan-phase-d.md`](docs/execution-plan-phase-d.md); output schema at [`prebid-server-go/read/skills/shared/port-report.schema.json`](prebid-server-go/read/skills/shared/port-report.schema.json) (v0.2.0).
 
-D0 (Pre-D refactor + sync) and D1.1 / D1.4 have landed: R5 cross-language comparator lifted to [`scripts/lib/r5_check.py`](scripts/lib/r5_check.py); upstream snapshot re-verified to 2026-05-04; port-report schema bumped to v0.2.0 with PR-shape automation, source provenance, and fidelity-tracking fields.
+**Phase D engineering layer complete:**
+
+- D0 — R5 comparator lifted to [`scripts/lib/r5_check.py`](scripts/lib/r5_check.py); upstream snapshot re-verified.
+- D1 — port skill scaffolds; [`scripts/lib/port_engine.py`](scripts/lib/port_engine.py) with 10 mechanical helpers; port-report schema 0.2.0 (additive PR-shape automation, source provenance, fidelity tracking); 11 emission references; CONTRIBUTING.md.
+- D2 — port-go2java pipeline prose + 11 Jinja templates (Java code + IT fixtures); 110+ render tests.
+- D3 — port-java2go pipeline prose + 6 Go-target Jinja templates (Go code + flat fixtures); 25 render tests.
+- D4 — round-trip-ci.py R11 port-side round-trip determinism gate; coverage-report.py per-rule applied-count from port-report.json archives; `mvn_checkstyle_dry_run` port-engine helper for pre-submit Java style validation.
+
+**Pending operator-side work** (out-of-session against local upstream clones):
+
+- D2.8 — port-go2java validation against the 6 MVP pairs (kobler, aax, adkernelAdn, adverxo, vungle, thetradedesk): `mvn -B compile`, `mvn -B checkstyle:check`, Jacoco line-coverage ≥ 90%, R5 state matches expectation per [execution plan §D2.3](docs/execution-plan-phase-d.md).
+- D3.8 — port-java2go validation against the same 6 pairs reversed: `go build`, `go vet`, `gofmt -s -l`, `./scripts/check_coverage.sh ≥ 80%`, `TestBidderUniquenessGatekeeping`, R5 state per [§D3.3](docs/execution-plan-phase-d.md).
+- D4.4 — beachfront fixture (ADR-007 F1 multi-endpoint-by-mediatype master sample) — Go + Java goldens + dual-spec assertions. Deferred to dedicated session.
 
 ## Phase E — Review-skill expansion + cross-skill integration (partially shipped)
 
