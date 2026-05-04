@@ -32,6 +32,10 @@ Inputs (mirror of bidder.java.j2 ctx):
   ctx.has_extra_info          : bool — true when source has ExtraAdapterInfo (Rule 35
                                         inverse demoted Java typed config to Go opaque
                                         JSON string); imports + struct fields adjust.
+  ctx.module_version          : str  — Go module major version per upstream go.mod
+                                        (current "v4"; v3→v4 PR #4710 merged 2026-03-05).
+                                        See bidder-constant-table.yaml::upstream_source.module_version
+                                        for the canonical pin.
   ctx.imports_extra           : list[str] — caller-collected; one fully-qualified import
                                             per entry; alphabetical.
   ctx.javadoc_summary         : str|null — // doc comment above package var or struct
@@ -44,10 +48,10 @@ import (
 	"net/http"
 
 	"github.com/prebid/openrtb/v20/openrtb2"
-	"github.com/prebid/prebid-server/v3/adapters"
-	"github.com/prebid/prebid-server/v3/config"
-	"github.com/prebid/prebid-server/v3/openrtb_ext"
-	"github.com/prebid/prebid-server/v3/util/jsonutil"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/config"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/util/jsonutil"
 {% for imp in ctx.imports_extra %}
 	"{{ imp }}"
 {% endfor %}
@@ -103,6 +107,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			Uri:     a.resolveEndpoint(request),
 			Body:    body,
 			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(request.Imp),
 		},
 	}, errors
 {% elif ctx.batching_kind == "per-imp" %}
@@ -124,6 +129,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			Uri:     a.resolveEndpoint(&perImp),
 			Body:    body,
 			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perImp.Imp),
 		})
 	}
 	return requests, errors
@@ -149,6 +155,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			Uri:     a.resolveEndpoint(&chunkRequest),
 			Body:    body,
 			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp),
 		})
 	}
 	return requests, errors

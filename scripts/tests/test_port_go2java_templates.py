@@ -680,6 +680,16 @@ class TestItTestJ2(unittest.TestCase):
             rendered,
         )
 
+    def test_endpoint_class_imported(self):
+        """D2-B1: emitted IT class references Endpoint.openrtb2_auction;
+        without `import org.prebid.server.model.Endpoint;` mvn compile
+        fails. Verified upstream KoblerTest/AaxTest/AdkernelAdnTest all
+        carry this import."""
+        rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
+        self.assertIn("import org.prebid.server.model.Endpoint;", rendered)
+        # The usage must be present (else why import).
+        self.assertIn("Endpoint.openrtb2_auction", rendered)
+
     def test_scenario_method_emits_with_wiremock_stub(self):
         rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
         self.assertIn("public void openrtb2AuctionShouldRespondWithBidsFromKoblerBidder()", rendered)

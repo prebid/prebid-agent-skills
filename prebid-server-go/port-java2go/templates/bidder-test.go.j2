@@ -13,6 +13,7 @@ Inputs:
   ctx.package_name       : str  — Go package name (matches the bidder dir)
   ctx.bidder_constant    : str  — full constant ref (e.g., "openrtb_ext.BidderKobler")
   ctx.bidder_class_root  : str  — PascalCase root (used in test function names)
+  ctx.module_version     : str  — Go module major version (current "v4")
 
 The Builder signature is canonical (3-arg: name, config, server). Test
 just exercises Builder + the fixture-driven RunJSONBidderTest loop.
@@ -22,9 +23,9 @@ package {{ ctx.package_name }}
 import (
 	"testing"
 
-	"github.com/prebid/prebid-server/v3/adapters/adapterstest"
-	"github.com/prebid/prebid-server/v3/config"
-	"github.com/prebid/prebid-server/v3/openrtb_ext"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters/adapterstest"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/config"
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
 )
 
 func Test{{ ctx.bidder_class_root }}(t *testing.T) {

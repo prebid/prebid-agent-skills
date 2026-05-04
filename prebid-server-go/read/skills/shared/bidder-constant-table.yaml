@@ -1,4 +1,4 @@
-# Bidder constant lookup table — Phase D1.3 deliverable.
+# Bidder constant lookup table — Phase D1.3 deliverable; refreshed Phase D3-B1.
 #
 # Maps each upstream Go bidder yaml_name to its `BidderName` constant root
 # (the suffix of `Bidder{X}` declared in `openrtb_ext/bidders.go`). Sourced
@@ -22,17 +22,25 @@
 # `Bidder` + yaml_name[0].upper() + yaml_name[1:]; consult this table
 # instead of recomputing.
 #
+# Module-version pinning: the upstream module path is declared in go.mod
+# as `github.com/prebid/prebid-server/{module_version}`. The current
+# major version is **v4** (PR #4710 bumped v3→v4 on 2026-03-05). All
+# port-java2go templates that reference the import path consume
+# ctx.module_version (default `v4`) so a future v5 bump is a one-line
+# update at the SKILL Step 4 context-assembly site rather than a
+# multi-template-touching change.
+#
 # Refresh cadence: regenerate when scripts/sync-from-upstream.py reports
-# a new bidder upstream OR when the master HEAD on bidders.go advances
-# more than one minor release (per docs/methodology/repo-rules.md).
+# a new bidder upstream OR when go.mod's module-version line changes.
 
 schema_version: "1.0.0"
 
 upstream_source:
   repo: prebid/prebid-server
   path: openrtb_ext/bidders.go
-  resolved_commit: f601e3f3db83b21f6bab6abb4ca5d4197a65013e
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
   fetched_at: 2026-05-04
+  module_version: v4
 
 # Map keyed by the lowercase yaml_name; value is the Go constant suffix
 # (so the full constant is `openrtb_ext.Bidder{value}`). Entries sorted

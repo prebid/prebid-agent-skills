@@ -77,11 +77,17 @@ def _kobler_imp_ext_pojo_ctx() -> Dict[str, Any]:
     }
 
 
+# Current upstream module-version pin (post v3→v4 PR #4710 merged 2026-03-05).
+# Centralized so a future v5 bump is a one-line change.
+GO_MODULE_VERSION = "v4"
+
+
 def _kobler_bidder_test_ctx() -> Dict[str, Any]:
     return {
         "package_name": "kobler",
         "bidder_constant": "openrtb_ext.BidderKobler",
         "bidder_class_root": "Kobler",
+        "module_version": GO_MODULE_VERSION,
     }
 
 
@@ -89,6 +95,7 @@ def _kobler_params_test_ctx() -> Dict[str, Any]:
     return {
         "package_name": "kobler",
         "bidder_constant": "openrtb_ext.BidderKobler",
+        "module_version": GO_MODULE_VERSION,
         "valid_cases": [
             '{"test": true}',
             '{"test": false}',
@@ -104,7 +111,7 @@ def _kobler_params_test_ctx() -> Dict[str, Any]:
 
 def _kobler_exemplary_fixture_ctx() -> Dict[str, Any]:
     return {
-        "expected_request": {
+        "mock_bid_request": {
             "id": "req-1",
             "imp": [{"id": "imp-1", "banner": {"format": [{"w": 300, "h": 250}]}}],
         },
@@ -139,6 +146,7 @@ def _kobler_bidder_go_ctx() -> Dict[str, Any]:
         "http_status_kind": "canonical-helpers",
         "bid_type_resolution": "imp-mediatype-introspection",
         "has_extra_info": False,
+        "module_version": GO_MODULE_VERSION,
         "imports_extra": [],
         "javadoc_summary": None,
     }
@@ -250,10 +258,21 @@ class TestParamsTestGoJ2(unittest.TestCase):
 
 
 class TestExemplaryFixtureJ2(unittest.TestCase):
+    def test_top_level_key_is_mockBidRequest(self):
+        """D3-B3: top-level key MUST be `mockBidRequest`, not `expectedRequest`.
+        adapterstest.RunJSONBidderTest reads `mockBidRequest`; emitted fixtures
+        with `expectedRequest` at top level fail input lookup."""
+        rendered = _render("exemplary-fixture.json.j2", _kobler_exemplary_fixture_ctx())
+        parsed = json.loads(rendered)
+        self.assertIn("mockBidRequest", parsed)
+        self.assertNotIn("expectedRequest", parsed)
+        # The INNER expectedRequest under each httpCalls[] entry IS correct.
+        self.assertIn("expectedRequest", parsed["httpCalls"][0])
+
     def test_renders_well_formed_json(self):
         rendered = _render("exemplary-fixture.json.j2", _kobler_exemplary_fixture_ctx())
         parsed = json.loads(rendered)
-        self.assertIn("expectedRequest", parsed)
+        self.assertIn("mockBidRequest", parsed)
         self.assertIn("httpCalls", parsed)
         self.assertEqual(len(parsed["httpCalls"]), 1)
         call = parsed["httpCalls"][0]
@@ -331,6 +350,59 @@ class TestBidderGoJ2(unittest.TestCase):
         rendered = _render("bidder.go.j2", _kobler_bidder_go_ctx())
         self.assertIn("if imps[i].Video != nil", rendered)
         self.assertIn("openrtb_ext.BidTypeBanner", rendered)
+
+    def test_module_version_pinned_to_v4_in_imports(self):
+        """D3-B1: emitted import paths must use the current upstream module
+        major version (v4 since PR #4710 merged 2026-03-05). Hardcoded v3
+        would fail go build against current upstream."""
+        rendered = _render("bidder.go.j2", _kobler_bidder_go_ctx())
+        self.assertIn('"github.com/prebid/prebid-server/v4/adapters"', rendered)
+        self.assertIn('"github.com/prebid/prebid-server/v4/openrtb_ext"', rendered)
+        self.assertNotIn("/v3/", rendered)
+
+    def test_module_version_parameterized(self):
+        """A future v5 bump should require only a ctx field change."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["module_version"] = "v5"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn('"github.com/prebid/prebid-server/v5/adapters"', rendered)
+        self.assertNotIn("/v4/", rendered)
+
+    def test_request_data_populates_impids(self):
+        """D3-H1: every adapter must set RequestData.ImpIDs for analytics
+        correlation. Verified universal pattern across 10 sampled adapters."""
+        rendered = _render("bidder.go.j2", _kobler_bidder_go_ctx())
+        self.assertIn("ImpIDs:  openrtb_ext.GetImpIDs(request.Imp)", rendered)
+
+    def test_request_data_populates_impids_per_imp_batching(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["batching_kind"] = "per-imp"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("ImpIDs:  openrtb_ext.GetImpIDs(perImp.Imp)", rendered)
+
+    def test_request_data_populates_impids_max_imps_batching(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["batching_kind"] = "max-imps-per-request"
+        ctx["batching_max_imps"] = 5
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp)", rendered)
+
+
+class TestModuleVersionInOtherTemplates(unittest.TestCase):
+    """D3-B1: bidder-test.go.j2 and params-test.go.j2 also import from
+    the prebid-server module path; both must be parameterized."""
+
+    def test_bidder_test_module_version_v4(self):
+        rendered = _render("bidder-test.go.j2", _kobler_bidder_test_ctx())
+        self.assertIn('"github.com/prebid/prebid-server/v4/adapters/adapterstest"', rendered)
+        self.assertIn('"github.com/prebid/prebid-server/v4/config"', rendered)
+        self.assertIn('"github.com/prebid/prebid-server/v4/openrtb_ext"', rendered)
+        self.assertNotIn("/v3/", rendered)
+
+    def test_params_test_module_version_v4(self):
+        rendered = _render("params-test.go.j2", _kobler_params_test_ctx())
+        self.assertIn('"github.com/prebid/prebid-server/v4/openrtb_ext"', rendered)
+        self.assertNotIn("/v3/", rendered)
 
 
 class TestRequiredArtifacts(unittest.TestCase):

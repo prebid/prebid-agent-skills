@@ -6,10 +6,11 @@ Go's flat fixture shape collapses Java's IT 4-file split (auction-
 request, auction-response, bid-request, bid-response) into a single
 JSON file with `httpCalls[]` and `expectedBidResponses[]` arrays.
 
-The Go fixture format is:
+The Go fixture format is (verified against upstream
+adapters/kobler/koblertest/exemplary/site-simple_banner.json):
 
   {
-    "expectedRequest": <publisher-side BidRequest BidRequest>,
+    "mockBidRequest": <publisher-side BidRequest>,
     "httpCalls": [
       {
         "expectedRequest": { uri, body },
@@ -19,8 +20,15 @@ The Go fixture format is:
     "expectedBidResponses": [{ currency, bids: [{ bid, type }] }]
   }
 
+Note: top-level wrapper key is `mockBidRequest` (Phase D3-B3 fix; the
+earlier `expectedRequest` form did NOT match what
+adapterstest.RunJSONBidderTest looks up). The INNER `expectedRequest`
+under each httpCalls[] entry IS correct — different concept (the
+request the adapter is expected to SEND vs the request the harness
+INJECTS into MakeRequests).
+
 Inputs:
-  ctx.expected_request   : dict  — the BidRequest the harness feeds to MakeRequests
+  ctx.mock_bid_request   : dict  — the BidRequest the harness feeds to MakeRequests
   ctx.http_calls         : list[dict]  — per outgoing HTTP call; each:
       uri      : str  — the bidder endpoint URL the adapter resolved
       body     : dict  — the JSON body the adapter sent (typically a BidRequest)
@@ -37,7 +45,7 @@ or malformed body. The SKILL Step 5 emits those into
 adapters/{bidder}/{bidder}test/supplemental/.
 #}
 {
-  "expectedRequest": {{ ctx.expected_request | tojson }},
+  "mockBidRequest": {{ ctx.mock_bid_request | tojson }},
   "httpCalls": [
 {% for call in ctx.http_calls %}
     {

@@ -495,5 +495,130 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
                       "code should be declared at top-level prefix")
 
 
+class TestPortReportV020Invariants(unittest.TestCase):
+    """Phase D review M-D + Tests-H1: commit the four schema-invariant
+    cases that the M-D commit verified ad-hoc (the verification ran from a
+    Python REPL but never landed as a checked-in test). Without these,
+    the M-D tightenings — `pre_submit_rebase` if/then constraint and
+    `source_pr_merged_commit_sha` pattern — could regress silently.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        port_report_schema_path = (
+            Path(__file__).resolve().parents[2]
+            / "prebid-server-go" / "read" / "skills" / "shared" / "port-report.schema.json"
+        )
+        with open(port_report_schema_path) as fp:
+            cls.schema = json.load(fp)
+
+    def _base_report(self) -> dict:
+        return {
+            "port_report_version": "0.2.0",
+            "port_run": {
+                "run_id": "2026-05-04T0001Z-test",
+                "source_lang": "go",
+                "target_lang": "java",
+                "source_spec_sha": "a" * 64,
+            },
+            "r5_check": {"state": "pass"},
+            "port_translation_rules_version": "0.2.0",
+        }
+
+    def test_pre_submit_rebase_with_conflict_and_summary_validates(self):
+        from jsonschema import validate
+        report = self._base_report()
+        report["pre_submit_rebase"] = {
+            "upstream_repo": "prebid/prebid-server-java",
+            "base_sha_at_emit": "a" * 40,
+            "base_sha_at_submit": "b" * 40,
+            "conflicts_detected": True,
+            "conflicts_summary": "rebase touched X file",
+        }
+        validate(report, self.schema)
+
+    def test_pre_submit_rebase_with_conflict_but_null_summary_is_rejected(self):
+        from jsonschema import ValidationError, validate
+        report = self._base_report()
+        report["pre_submit_rebase"] = {
+            "upstream_repo": "prebid/prebid-server-java",
+            "base_sha_at_emit": "a" * 40,
+            "base_sha_at_submit": "b" * 40,
+            "conflicts_detected": True,
+            "conflicts_summary": None,
+        }
+        with self.assertRaises(ValidationError):
+            validate(report, self.schema)
+
+    def test_pre_submit_rebase_no_conflict_null_summary_validates(self):
+        from jsonschema import validate
+        report = self._base_report()
+        report["pre_submit_rebase"] = {
+            "upstream_repo": "prebid/prebid-server-java",
+            "base_sha_at_emit": "a" * 40,
+            "base_sha_at_submit": "b" * 40,
+            "conflicts_detected": False,
+            "conflicts_summary": None,
+        }
+        validate(report, self.schema)
+
+    def test_pre_submit_rebase_with_conflict_and_empty_summary_is_rejected(self):
+        """Beyond null: an empty string MUST also be rejected when conflicts
+        are flagged true (the if/then constraint adds minLength: 1)."""
+        from jsonschema import ValidationError, validate
+        report = self._base_report()
+        report["pre_submit_rebase"] = {
+            "upstream_repo": "prebid/prebid-server-java",
+            "base_sha_at_emit": "a" * 40,
+            "base_sha_at_submit": "b" * 40,
+            "conflicts_detected": True,
+            "conflicts_summary": "",
+        }
+        with self.assertRaises(ValidationError):
+            validate(report, self.schema)
+
+    def test_source_pr_merged_commit_sha_empty_string_rejected(self):
+        from jsonschema import ValidationError, validate
+        report = self._base_report()
+        report["source_pr_merged_commit_sha"] = ""
+        with self.assertRaises(ValidationError):
+            validate(report, self.schema)
+
+    def test_source_pr_merged_commit_sha_40_hex_validates(self):
+        from jsonschema import validate
+        report = self._base_report()
+        report["source_pr_merged_commit_sha"] = "a" * 40
+        validate(report, self.schema)
+
+    def test_source_pr_merged_commit_sha_null_validates(self):
+        """Per type ['string', 'null'] — null is a valid alternative to a
+        40-hex string. Confirms the M-D fix didn't accidentally close out
+        the legitimate null-equivalent path."""
+        from jsonschema import validate
+        report = self._base_report()
+        report["source_pr_merged_commit_sha"] = None
+        validate(report, self.schema)
+
+    def test_r5_check_state_six_state_enum(self):
+        """Phase D 0.2.0 schema admits six r5_check.state values."""
+        from jsonschema import validate, ValidationError
+        for state in (
+            "pass",
+            "warn-byte-only-divergence",
+            "warn-target-strengthens-source",
+            "fail-semantic-divergence",
+            "fail-source-omits-target-constraint",
+            "skipped-no-pair-fixture",
+        ):
+            report = self._base_report()
+            report["r5_check"] = {"state": state}
+            validate(report, self.schema)
+        # Non-enum values rejected.
+        report = self._base_report()
+        report["r5_check"] = {"state": "bogus-state"}
+        with self.assertRaises(ValidationError):
+            validate(report, self.schema)
+
+
 if __name__ == "__main__":
     unittest.main()

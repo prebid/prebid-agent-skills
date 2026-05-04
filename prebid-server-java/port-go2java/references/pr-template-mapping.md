@@ -144,48 +144,6 @@ The upstream template's checks above are necessary but not sufficient — the po
 
 This sub-section is NOT part of the upstream template. The operator pastes it below the template's last checkbox. Reviewers benefit from the explicit linkage to the port-translation rules; if a maintainer asks for a different format, the port skill template at `../templates/pr-body.md.j2` can be amended in a future PR.
 
-## 5. PR body — narrative sections
-
-The upstream template has three free-text sections. The port skill auto-populates each from spec data:
-
-### Description
-
-```markdown
-## Description
-
-Ports the {Bidder} adapter from prebid-server (Go) to prebid-server-java
-(this repo). Source upstream PR: {source_pr_url}; merged at
-{source_pr_merged_commit_sha}. Port-translation-rules version
-{port_translation_rules_version} applied; {N} rules emitted "applied"
-verdict (see port-report.json `rules_consumed[]` for the full list).
-
-R5-strict cross-language equivalence at port time: state={r5_check.state}.
-{r5_check.summary or "All R5 strict-key fields match between source spec and emitted Java spec."}
-```
-
-### Test Plan
-
-```markdown
-## Test Plan
-
-- mvn -B compile --file extra/pom.xml: passes
-- mvn -B checkstyle:check: passes
-- mvn -B test -Dtest={Bidder}BidderTest: passes
-- Jacoco line-coverage on {Bidder}Bidder.java: {N}% (≥ 90% required)
-- {Bidder}Test integration test scenarios: {list of fixture pair names}
-```
-
-### Notes for reviewers
-
-```markdown
-## Notes for reviewers
-
-{For each port-report.json::human_todos[] entry:}
-- {category}: {summary}
-{For each port-report.json::source_discussion_anchors[] entry:}
-- Source-side context: {url} ({load_bearing_for})
-```
-
 ## 6. Companion docs PR (`prebid/prebid.github.io`)
 
 Maintainer-mandatory per BeOp #4660 review pattern. The port skill emits `port-report.json::companion_docs_pr_draft` populated against the source spec:
