@@ -296,6 +296,84 @@ class TestR5(unittest.TestCase):
             f"got: {findings}",
         )
 
+    def test_normalize_endpoint_macros_canonicalizes_forms(self):
+        """Wave 11b B4 C1: normalize_endpoint_macros must canonicalize the
+        recognized macro syntaxes (Go template, Java property reference,
+        Spring EL) to the `{{X}}` form so FORM_DIVERGENT comparison
+        doesn't fire on pure-syntax divergence."""
+        n = rtci.normalize_endpoint_macros
+        self.assertEqual(n("https://x/{{.Foo}}"),     "https://x/{{Foo}}")
+        self.assertEqual(n("https://x/${Foo}"),       "https://x/{{Foo}}")
+        self.assertEqual(n("https://x/#{Foo}"),       "https://x/{{Foo}}")
+        self.assertEqual(n("https://x/{{Foo}}"),      "https://x/{{Foo}}")
+        # Multiple macros in one URL
+        self.assertEqual(
+            n("https://x/{{.A}}/{{.B}}?q={{.C}}"),
+            "https://x/{{A}}/{{B}}?q={{C}}",
+        )
+        # %s positional NOT normalized (no name to canonicalize)
+        self.assertEqual(n("https://x/?z=%s"), "https://x/?z=%s")
+        # Non-strings pass through (None, dict, list)
+        self.assertIsNone(n(None))
+        self.assertEqual(n([]), [])
+
+    def test_form_divergent_normalized_equal_no_finding(self):
+        """Wave 11b B4 C1: when normalized endpoint forms agree across
+        languages (Go template `{{.X}}` vs Java raw `{{X}}`), R5 must NOT
+        emit a divergence finding for that key."""
+        go_spec, java_spec = self._make_pair()
+        go_spec.raw["bidder_info"]["endpoint"] = "https://x/foo/{{.PublisherID}}"
+        java_spec.raw["bidder_info"]["endpoint"] = "https://x/foo/{{PublisherID}}"
+        # Make SHAs equal so we don't catch other findings
+        go_spec.raw["bidder_params_sha256"] = "z" * 64
+        java_spec.raw["bidder_params_sha256"] = "z" * 64
+        findings = rtci.r5_check(go_spec, java_spec, {})
+        endpoint_findings = [f for f in findings if "endpoint" in f.detail and "construction" not in f.detail]
+        self.assertEqual(
+            endpoint_findings, [],
+            f"Expected no endpoint finding when normalized forms equal; got: {endpoint_findings}",
+        )
+
+    def test_form_divergent_no_assertion_fails_assertion_missing(self):
+        """Wave 11b B4 C1 strictness: when normalized endpoint forms DIFFER
+        and dual-spec has no bidder_info_endpoint assertion, R5 must FAIL
+        with assertion_missing — the gap must be documented or the
+        divergence fixed."""
+        go_spec, java_spec = self._make_pair()
+        go_spec.raw["bidder_info"]["endpoint"] = "https://x/foo"
+        java_spec.raw["bidder_info"]["endpoint"] = "https://x/foo?src={{PREBID_SERVER_ENDPOINT}}"
+        go_spec.raw["bidder_params_sha256"] = "y" * 64
+        java_spec.raw["bidder_params_sha256"] = "y" * 64
+        findings = rtci.r5_check(go_spec, java_spec, {})  # no dual-spec assertion
+        endpoint_fails = [f for f in findings
+                          if f.severity == rtci.SEV_FAIL and "assertion_missing" in f.detail]
+        self.assertTrue(
+            len(endpoint_fails) >= 1,
+            f"Expected FAIL assertion_missing for divergent endpoint without "
+            f"dual-spec entry; got: {findings}",
+        )
+
+    def test_form_divergent_stale_pass_fails(self):
+        """Wave 11b B4 C1: when dual-spec assertion claims severity:pass for
+        bidder_info_endpoint but normalized forms differ, R5 must FAIL with
+        stale-pass-assertion (polarity inversion)."""
+        go_spec, java_spec = self._make_pair()
+        go_spec.raw["bidder_info"]["endpoint"] = "https://x/foo"
+        java_spec.raw["bidder_info"]["endpoint"] = "https://x/bar"
+        go_spec.raw["bidder_params_sha256"] = "x" * 64
+        java_spec.raw["bidder_params_sha256"] = "x" * 64
+        dual_specs = {"foo": {"assertions": {"bidder_info_endpoint": {
+            "severity": "pass", "divergence_summary": "claims equivalent",
+        }}}}
+        findings = rtci.r5_check(go_spec, java_spec, dual_specs)
+        stale = [f for f in findings
+                 if f.severity == rtci.SEV_FAIL and "stale-pass" in f.detail]
+        self.assertTrue(
+            len(stale) >= 1,
+            f"Expected stale-pass FAIL when assertion claims pass but forms "
+            f"differ; got: {findings}",
+        )
+
     def test_one_side_only_fixture_does_not_crash(self):
         """R5 must run even when only one language has a spec."""
         java_spec = make_spec("aax", "java", {

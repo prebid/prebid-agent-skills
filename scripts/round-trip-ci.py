@@ -721,16 +721,29 @@ R5_STRICT_KEYS = (
     ("bidder_info.maintainer",                  "bidder_info_maintainer"),
     ("bidder_info.modifying_vast_xml_allowed",  "bidder_info_modifying_vast_xml_allowed"),
 )
-# R5-divergent keys: legitimate language-idiom divergence. Honor only the
-# assertion's severity (no runtime FAIL on divergence).
-# - bidder_info.endpoint: macro form differs by language (Go's `{{.X}}` template
-#   vs Java's `${X}` / `%s` printf form) — same observable URL post-substitution.
-# - bidder_info.endpoint_construction: kind+macros struct mirrors per-language
-#   mechanism; Go-template vs String.replace is per-language idiom.
-# - bidder_info.default_enabled: Java's edge-case #30 enabled:false opt-in pattern
-#   is legitimate (e.g., optidigital).
-R5_DIVERGENT_KEYS = (
+# Wave 11b B4 C1: R5 divergent keys split into two buckets.
+#
+# R5_FORM_DIVERGENT_KEYS: macro form differs by language but the URL/value
+# after normalization MUST be equal. normalize_endpoint_macros() canonicalizes
+# Go's `{{.X}}` template form, Java's `${X}` printf, Spring EL `#{X}`, and
+# raw `{{X}}` to a single `{{X}}` form. Real semantic divergence (different
+# macro names, different URL paths) surfaces as FAIL after normalization.
+# Absence of dual-spec assertion when normalized values DIFFER → FAIL
+# `assertion_missing` (Wave 11b strictness; aax's bidder_info_endpoint
+# assertion was added as prerequisite to land this gate).
+R5_FORM_DIVERGENT_KEYS = (
     ("bidder_info.endpoint",                    "bidder_info_endpoint"),
+)
+
+# R5_ADVISORY_DIVERGENT_KEYS: cross-language-metadata that legitimately
+# diverges per-language; honor only the assertion's severity (no runtime
+# FAIL on divergence; absence of assertion is silent — these are
+# documentation-only checks). bidder_info.endpoint_construction stays here
+# because the divergence is SEMANTIC (different macro NAMES per language,
+# e.g., adverxo Go uses `AdUnit` / Java uses `adUnitId`) not just macro
+# syntax — normalization can't paper that over and the dual-spec is the
+# right surface to document the per-language idiom.
+R5_ADVISORY_DIVERGENT_KEYS = (
     ("bidder_info.endpoint_construction",       "bidder_info_endpoint_construction"),
     ("bidder_info.default_enabled",             "bidder_info_default_enabled"),
     ("meta.alias_metadata",                     "alias_metadata"),
@@ -739,6 +752,31 @@ R5_DIVERGENT_KEYS = (
     (None,                                      "reviewer_cohort"),
     (None,                                      "test_fixture_cost"),
 )
+
+
+def normalize_endpoint_macros(s: Any) -> Any:
+    """Normalize endpoint URL macro syntax across languages to canonical
+    `{{X}}` form. Used by R5_FORM_DIVERGENT_KEYS check so that pure-syntax
+    divergence (Go template vs Java property reference) doesn't fire false
+    structural-parity FAILs.
+
+    Recognized forms:
+      - `{{.X}}`     → `{{X}}`   (Go html/text template)
+      - `${X}`       → `{{X}}`   (Java property reference / shell-style)
+      - `#{X}`       → `{{X}}`   (Spring Expression Language)
+      - `{{X}}`      → `{{X}}`   (already canonical)
+
+    `%s` (printf positional) is intentionally NOT normalized — it has no
+    name to canonicalize against, so any pair using `%s` on one side and
+    `{{X}}` on the other will surface as a real divergence (and should be
+    documented in dual-spec or fixed in the corpus).
+    """
+    if not isinstance(s, str):
+        return s
+    s = re.sub(r"\{\{\.(\w+)\}\}", r"{{\1}}", s)   # Go {{.X}} → {{X}}
+    s = re.sub(r"\$\{(\w+)\}",      r"{{\1}}", s)   # Java ${X} → {{X}}
+    s = re.sub(r"#\{([^}]+)\}",     r"{{\1}}", s)   # Spring EL #{X} → {{X}}
+    return s
 
 
 def r5_check(go_spec: Optional[Spec], java_spec: Optional[Spec],
@@ -864,8 +902,57 @@ def r5_check(go_spec: Optional[Spec], java_spec: Optional[Spec],
                 findings.append(Finding("R5", f"pair/{bidder}", severity,
                     f"{spec_field} differs across languages"))
 
-    # R5-divergent keys: honor only the assertion severity. No runtime FAIL.
-    for spec_field, dual_key in R5_DIVERGENT_KEYS:
+    # R5_FORM_DIVERGENT keys: normalize macro syntax + deep_eq. Real
+    # divergence (different macro names, different URLs) FAILs unless the
+    # dual-spec assertion documents it; absence of assertion when normalized
+    # values differ → FAIL assertion_missing (Wave 11b B4 C1 strictness).
+    for spec_field, dual_key in R5_FORM_DIVERGENT_KEYS:
+        if go_spec is None or java_spec is None:
+            continue
+        a = go_spec.get(spec_field)
+        b = java_spec.get(spec_field)
+        if a is None and b is None:
+            continue
+        a_norm = normalize_endpoint_macros(a) if isinstance(a, str) else a
+        b_norm = normalize_endpoint_macros(b) if isinstance(b, str) else b
+        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
+        if a_norm == b_norm:
+            # Normalized forms agree; emit per assertion if present.
+            if isinstance(dual_assert, dict):
+                sev = (dual_assert.get("severity") or "").lower()
+                if sev in ("fail", "error"):
+                    findings.append(Finding(
+                        "R5", f"pair/{bidder}", SEV_FAIL,
+                        f"{spec_field}: dual-spec claims divergence but normalized forms equal — stale-fail-assertion",
+                    ))
+                # severity=pass or warn with normalized-equal: no finding (correct).
+            continue
+        # Normalized forms still differ — real divergence beyond macro syntax.
+        if not isinstance(dual_assert, dict):
+            findings.append(Finding(
+                "R5", f"pair/{bidder}", SEV_FAIL,
+                f"{spec_field}: assertion_missing — normalized forms differ but no dual-spec entry "
+                f"under '{dual_key}' (Wave 11b B4 C1: FORM_DIVERGENT keys require explicit assertion)",
+            ))
+            continue
+        sev = (dual_assert.get("severity") or "").lower()
+        summary = dual_assert.get("divergence_summary") or "divergent per dual-spec"
+        if sev in ("fail", "error"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_FAIL, f"{spec_field}: {summary}"))
+        elif sev in ("warn", "warning"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_WARN, f"{spec_field}: {summary}"))
+        elif sev == "pass":
+            # Polarity inversion: assertion claims pass but normalized forms differ.
+            findings.append(Finding(
+                "R5", f"pair/{bidder}", SEV_FAIL,
+                f"{spec_field}: stale-pass-assertion — normalized forms differ "
+                f"(assertion claims equivalent: {summary})",
+            ))
+
+    # R5_ADVISORY_DIVERGENT keys: honor only the assertion severity. No
+    # runtime FAIL on divergence; silent on absence (these are
+    # cross-language metadata where divergence is documentation, not contract).
+    for spec_field, dual_key in R5_ADVISORY_DIVERGENT_KEYS:
         dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
         if not isinstance(dual_assert, dict):
             continue

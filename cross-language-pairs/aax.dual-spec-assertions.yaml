@@ -53,6 +53,25 @@ assertions:
       [banner, video, native] for both site and app. Match.
     severity: pass
 
+  bidder_info_endpoint:
+    go: https://prebid.aaxads.com/rtb/pb/aax-prebid
+    java: https://prebid.aaxads.com/rtb/pb/aax-prebid?src={{PREBID_SERVER_ENDPOINT}}
+    byte_equal: false
+    semantically_equal: false
+    divergence_kind: java-extra-source-attribution-param
+    severity: warn
+    divergence_summary: |
+      Java appends a `?src={{PREBID_SERVER_ENDPOINT}}` query param that Go
+      omits. Java's macro substitutes the prebid-server endpoint URL (used
+      for source attribution / referral tracking on the AAX side); Go
+      makes the bid call without surfacing this attribution. The bid
+      response semantics are unaffected — same auction, same bid format —
+      but Java carries one additional context field. Wave 11b B4 C1
+      assertion-required-on-divergence: this entry is now mandatory under
+      the FORM_DIVERGENT split (the endpoint URLs differ even after macro
+      syntax normalization). Severity warn (not fail) because the
+      divergence does not affect bid validity, only attribution.
+
   bidder_info_gvl_vendor_id:
     go: 720
     java: 720
