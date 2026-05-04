@@ -700,11 +700,48 @@ def deep_eq(a: Any, b: Any) -> bool:
     return json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 
-# R5-strict keys: runtime divergence is FAIL (semantic equivalence required across
-# languages). When the dual-spec assertion says severity:warn, downgrade to WARN.
+def _list_set_eq(a: Any, b: Any) -> bool:
+    """Set-equality for list-valued runtime fields where order is not
+    semantically load-bearing. Wave 11b B5 #2: corrects the false-positive
+    class where Go's `sort.Strings()` and Java's `LinkedHashSet` produce
+    legitimately different iteration orders for the same set.
+
+    Both None → equal. Both lists → set-equal (compared via JSON-serialized
+    member representations to admit nested dicts/lists). Mixed types or
+    non-lists fall through to deep_eq."""
+    if a is None and b is None:
+        return True
+    if not isinstance(a, list) or not isinstance(b, list):
+        return deep_eq(a, b)
+    return sorted(json.dumps(x, sort_keys=True, default=str) for x in a) == \
+           sorted(json.dumps(x, sort_keys=True, default=str) for x in b)
+
+
+def _maintainer_eq(a: Any, b: Any) -> bool:
+    """Maintainer-block equality: only the email is the runtime invariant.
+    Wave 11b B5 #2: prevents stale-FAILs when one language adds extra
+    maintainer fields (phone, team, slack handle) the other doesn't carry.
+    Both None → equal. Compares case-insensitive email after stripping
+    whitespace; missing email on either side compares as empty string."""
+    em_a = (a or {}).get("email") if isinstance(a, dict) else None
+    em_b = (b or {}).get("email") if isinstance(b, dict) else None
+    return (em_a or "").strip().lower() == (em_b or "").strip().lower()
+
+
+# Wave 11b B5 #2: R5_STRICT_KEYS refactored from flat (spec_field, dual_key)
+# tuples to (spec_field, dual_key, comparator) three-tuples. Per-key
+# comparator selection prevents false positives:
+# - LIST-VALUED keys (capabilities, geoscope, schema_interpretation.*)
+#   use _list_set_eq (order-independent set equality).
+# - PROSE-BEARING keys (maintainer) use _maintainer_eq (compares only the
+#   runtime-invariant subfield, not advisory fields).
+# - PURE-DATA keys (gvl_vendor_id, endpoint_compression, modifying_vast_xml_allowed)
+#   use deep_eq (scalar equality).
+#
+# When the dual-spec assertion says severity:warn, downgrade to WARN.
 # When dual-spec says severity:pass but runtime disagrees → FAIL (stale-pass).
 R5_STRICT_KEYS = (
-    ("bidder_info.capabilities",                "bidder_info_capabilities"),
+    ("bidder_info.capabilities",                       "bidder_info_capabilities",                _list_set_eq),
     # params.schema_interpretation is decomposed into runtime-invariant
     # subfields only. The whole block contains prose-bearing fields
     # (properties[].description, properties[].notes) that legitimately
@@ -712,14 +749,14 @@ R5_STRICT_KEYS = (
     # Go may reference regexp substring semantics, etc. Comparing the whole
     # block via deep_eq fired stale-pass FAILs on dual-spec assertions that
     # were correctly capturing semantic equivalence (e.g., thetradedesk).
-    ("params.schema_interpretation.required_fields",  "params_schema_interpretation"),
-    ("params.schema_interpretation.combinators_used", "params_schema_interpretation"),
-    ("params.schema_interpretation.flexible_types",   "params_schema_interpretation"),
-    ("bidder_info.gvl_vendor_id",               "bidder_info_gvl_vendor_id"),
-    ("bidder_info.endpoint_compression",        "bidder_info_endpoint_compression"),
-    ("bidder_info.geoscope",                    "bidder_info_geoscope"),
-    ("bidder_info.maintainer",                  "bidder_info_maintainer"),
-    ("bidder_info.modifying_vast_xml_allowed",  "bidder_info_modifying_vast_xml_allowed"),
+    ("params.schema_interpretation.required_fields",   "params_schema_interpretation",            _list_set_eq),
+    ("params.schema_interpretation.combinators_used",  "params_schema_interpretation",            _list_set_eq),
+    ("params.schema_interpretation.flexible_types",    "params_schema_interpretation",            _list_set_eq),
+    ("bidder_info.gvl_vendor_id",                      "bidder_info_gvl_vendor_id",               deep_eq),
+    ("bidder_info.endpoint_compression",               "bidder_info_endpoint_compression",        deep_eq),
+    ("bidder_info.geoscope",                           "bidder_info_geoscope",                    _list_set_eq),
+    ("bidder_info.maintainer",                         "bidder_info_maintainer",                  _maintainer_eq),
+    ("bidder_info.modifying_vast_xml_allowed",         "bidder_info_modifying_vast_xml_allowed",  deep_eq),
 )
 # Wave 11b B4 C1: R5 divergent keys split into two buckets.
 #
@@ -876,7 +913,9 @@ def r5_check(go_spec: Optional[Spec], java_spec: Optional[Spec],
             f"only-one-side fixture; dual-spec sha-assertion noted (severity={sha_assert.get('severity', '?') if isinstance(sha_assert, dict) else '?'})"))
 
     # R5-strict keys: runtime divergence FAILs unless dual-spec downgrades to WARN.
-    for spec_field, dual_key in R5_STRICT_KEYS:
+    # Wave 11b B5 #2: per-key comparator selection (set-equality for list-valued
+    # keys, email-only for maintainer, deep_eq for pure-data scalars).
+    for spec_field, dual_key, eq_fn in R5_STRICT_KEYS:
         if go_spec is None or java_spec is None:
             continue
         a = go_spec.get(spec_field)
@@ -884,7 +923,7 @@ def r5_check(go_spec: Optional[Spec], java_spec: Optional[Spec],
         if a is None and b is None:
             continue
         dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
-        if not deep_eq(a, b):
+        if not eq_fn(a, b):
             severity = SEV_FAIL
             stale = False
             if isinstance(dual_assert, dict):

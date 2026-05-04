@@ -296,6 +296,43 @@ class TestR5(unittest.TestCase):
             f"got: {findings}",
         )
 
+    def test_list_set_eq_treats_lists_as_sets(self):
+        """Wave 11b B5 #2: _list_set_eq must return True for lists with the
+        same members in different orders (capabilities/geoscope/schema_*
+        list-valued strict keys), and False for lists with different members."""
+        eq = rtci._list_set_eq
+        # Same members, different orders → equal
+        self.assertTrue(eq(["a", "b", "c"], ["c", "a", "b"]))
+        self.assertTrue(eq([1, 2, 3], [3, 2, 1]))
+        # Different members → not equal
+        self.assertFalse(eq(["a", "b"], ["a", "b", "c"]))
+        self.assertFalse(eq([1, 2], [1, 3]))
+        # Both None → equal
+        self.assertTrue(eq(None, None))
+        # Nested dicts in lists are JSON-serialized for comparison
+        self.assertTrue(eq([{"k": "v"}, {"k": "w"}], [{"k": "w"}, {"k": "v"}]))
+        # Mixed types fall through to deep_eq (None vs []  → not equal)
+        self.assertFalse(eq(None, []))
+
+    def test_maintainer_eq_compares_email_only(self):
+        """Wave 11b B5 #2: _maintainer_eq treats only the email as the runtime
+        invariant. Same email + different advisory fields → equal. Different
+        email → not equal. Email comparison is case-insensitive + whitespace-
+        trimmed."""
+        eq = rtci._maintainer_eq
+        # Same email, different advisory fields → equal
+        self.assertTrue(eq(
+            {"email": "x@y.com", "name": "Alice"},
+            {"email": "x@y.com", "team": "ads"},
+        ))
+        # Case + whitespace insensitive
+        self.assertTrue(eq({"email": "X@Y.COM"}, {"email": "  x@y.com  "}))
+        # Different emails → not equal
+        self.assertFalse(eq({"email": "x@y.com"}, {"email": "z@y.com"}))
+        # Both None / empty → equal (both effectively "")
+        self.assertTrue(eq(None, None))
+        self.assertTrue(eq({}, {}))
+
     def test_normalize_endpoint_macros_canonicalizes_forms(self):
         """Wave 11b B4 C1: normalize_endpoint_macros must canonicalize the
         recognized macro syntaxes (Go template, Java property reference,
