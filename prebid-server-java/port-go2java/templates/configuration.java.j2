@@ -1,0 +1,108 @@
+{# Java Spring DI Configuration template — emits
+src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java
+
+Inputs:
+  ctx.bidder_name              : str  — Java YAML name (lowercase, used for Spring property keys)
+  ctx.bidder_class_root        : str  — PascalCase (e.g., "Kobler", "AdkernelAdn")
+  ctx.uses_currency_conversion : bool — source spec's currency_conversion.used
+  ctx.has_typed_config_props   : bool — Rule 35 fired (typed config subclass exists);
+                                         when true, configurationProperties() returns the subclass
+                                         and bidderCreator passes the subclass-typed config in.
+  ctx.typed_config_class_name  : str|null — subclass name when has_typed_config_props (e.g., "KoblerBidderConfigurationProperties")
+  ctx.extra_constructor_args   : list[dict]|null — per-bidder extra constructor args; each:
+      java_type    : str  — "CurrencyConversionService", custom service type, etc.
+      java_name    : str  — argument name as referenced inside bidderCreator lambda
+      bean_param   : str  — full Spring annotation form (e.g., "CurrencyConversionService currencyConversionService")
+      lambda_arg   : str  — what the bidderCreator lambda passes through (e.g., "currencyConversionService")
+  ctx.bidder_creator_extra_args: str|null — additional comma-separated args for the bidderCreator's `new {Bidder}Bidder(...)` call beyond `config.getEndpoint(), mapper`
+  ctx.user_sync                : dict|null — user-sync configuration; null → omit usersyncerCreator(...) line and the externalUrl param
+                                              the bidder lambda's signature; emit usersyncerCreator(UsersyncerCreator.create(externalUrl))
+                                              when present.
+  ctx.javadoc_summary          : str|null  — class-level Javadoc summary; null → no Javadoc
+
+Canonical shape per references/java-artifact-shapes.md §9 (Adverxo "BidderConfiguration"
+form vs Kobler "Configuration" form): both forms are accepted by upstream; this template
+emits the "Configuration" form as default. Operator flag --bidder-configuration-form
+(future) can switch to the BidderConfiguration form.
+
+ImportOrder strict 3-group: java.*, javax.* (none here), then com.* + jakarta.* +
+org.* alphabetical. EmptyLineSeparator between imports groups + members.
+
+The PropertySource @value path is hardcoded to classpath:/bidder-config/{bidder}.yaml
+(the upstream convention; matches the bidder-config.yaml.j2 emission).
+#}
+package org.prebid.server.spring.config.bidder;
+
+import jakarta.validation.constraints.NotBlank;
+import org.prebid.server.bidder.BidderDeps;
+import org.prebid.server.bidder.{{ ctx.bidder_name }}.{{ ctx.bidder_class_root }}Bidder;
+{% if ctx.uses_currency_conversion %}
+import org.prebid.server.currency.CurrencyConversionService;
+{% endif %}
+import org.prebid.server.json.JacksonMapper;
+{% if not ctx.has_typed_config_props %}
+import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;
+{% endif %}
+import org.prebid.server.spring.config.bidder.util.BidderDepsAssembler;
+import org.prebid.server.spring.config.bidder.util.BidderInfoCreator;
+import org.prebid.server.spring.config.bidder.util.UsersyncerCreator;
+import org.prebid.server.spring.env.YamlPropertySourceFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+{% if ctx.has_typed_config_props %}
+import org.springframework.validation.annotation.Validated;
+{% endif %}
+
+{% if ctx.javadoc_summary %}
+/**
+ * {{ ctx.javadoc_summary }}
+ */
+{% endif %}
+@Configuration
+@PropertySource(value = "classpath:/bidder-config/{{ ctx.bidder_name }}.yaml", factory = YamlPropertySourceFactory.class)
+public class {{ ctx.bidder_class_root }}Configuration {
+
+    private static final String BIDDER_NAME = "{{ ctx.bidder_name }}";
+
+    @Bean("{{ ctx.bidder_name }}ConfigurationProperties")
+    @ConfigurationProperties("adapters." + BIDDER_NAME)
+{% if ctx.has_typed_config_props %}
+    @Validated
+    {{ ctx.typed_config_class_name }} configurationProperties() {
+        return new {{ ctx.typed_config_class_name }}();
+    }
+{% else %}
+    BidderConfigurationProperties configurationProperties() {
+        return new BidderConfigurationProperties();
+    }
+{% endif %}
+
+    @Bean
+    BidderDeps {{ ctx.bidder_name }}BidderDeps(
+{% if ctx.has_typed_config_props %}
+            {{ ctx.typed_config_class_name }} {{ ctx.bidder_name }}ConfigurationProperties,
+{% else %}
+            BidderConfigurationProperties {{ ctx.bidder_name }}ConfigurationProperties,
+{% endif %}
+            @NotBlank @Value("${external-url}") String externalUrl,
+{% if ctx.uses_currency_conversion %}
+            CurrencyConversionService currencyConversionService,
+{% endif %}
+{% if ctx.extra_constructor_args %}
+{% for arg in ctx.extra_constructor_args %}
+            {{ arg.bean_param }},
+{% endfor %}
+{% endif %}
+            JacksonMapper mapper) {
+
+        return BidderDepsAssembler.forBidder(BIDDER_NAME)
+                .withConfig({{ ctx.bidder_name }}ConfigurationProperties)
+                .usersyncerCreator(UsersyncerCreator.create(externalUrl))
+                .bidderInfo(BidderInfoCreator.create(mapper)::create)
+                .bidderCreator(config -> new {{ ctx.bidder_class_root }}Bidder(config.getEndpoint(){% if ctx.uses_currency_conversion %}, currencyConversionService{% endif %}{% if ctx.bidder_creator_extra_args %}, {{ ctx.bidder_creator_extra_args }}{% endif %}, mapper))
+                .assemble();
+    }
+}
