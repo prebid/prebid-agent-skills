@@ -95,6 +95,60 @@ class TestR1(unittest.TestCase):
             f"Expected R1 to FAIL on '..' path traversal; got: {[f.detail for f in findings]}",
         )
 
+    def test_gh_path_exists_distinguishes_404_from_unreachable(self):
+        """Wave 11b B4 C2: gh_path_exists must return False on genuine 404
+        and raise GhApiUnreachable on auth/rate-limit/network failures.
+
+        The Wave 10 incident: prior code treated every non-zero returncode
+        as 404, causing 246 false-FAILs against goldens whose upstream
+        files actually existed. The refactor inspects stderr to
+        distinguish failure modes.
+        """
+        from unittest.mock import patch
+        from subprocess import CompletedProcess
+
+        # Simulate genuine 404
+        with patch("shutil.which", return_value="/usr/bin/gh"), \
+             patch("subprocess.run", return_value=CompletedProcess(
+                 args=[], returncode=1, stdout="",
+                 stderr="gh: Not Found (HTTP 404)\n")):
+            cache: Dict[Any, Any] = {}
+            result = rtci.gh_path_exists("foo/bar", "abc123", "missing.go", cache)
+            self.assertEqual(result, False, "genuine 404 must return False")
+
+        # Simulate auth failure (401 or rate-limit) — must RAISE
+        with patch("shutil.which", return_value="/usr/bin/gh"), \
+             patch("subprocess.run", return_value=CompletedProcess(
+                 args=[], returncode=1, stdout="",
+                 stderr="gh: HTTP 401: Bad credentials\n")):
+            cache = {}
+            with self.assertRaises(rtci.GhApiUnreachable) as cm:
+                rtci.gh_path_exists("foo/bar", "abc123", "x.go", cache)
+            self.assertIn("401", str(cm.exception))
+
+        # Simulate timeout — must RAISE
+        from subprocess import TimeoutExpired
+        with patch("shutil.which", return_value="/usr/bin/gh"), \
+             patch("subprocess.run", side_effect=TimeoutExpired(cmd="gh", timeout=15)):
+            cache = {}
+            with self.assertRaises(rtci.GhApiUnreachable) as cm:
+                rtci.gh_path_exists("foo/bar", "abc123", "x.go", cache)
+            self.assertIn("timeout", str(cm.exception).lower())
+
+        # Simulate gh not installed — must return None (expected fallback)
+        with patch("shutil.which", return_value=None):
+            cache = {}
+            result = rtci.gh_path_exists("foo/bar", "abc123", "x.go", cache)
+            self.assertIsNone(result, "gh not installed must return None")
+
+        # Simulate success (HTTP 200) — must return True
+        with patch("shutil.which", return_value="/usr/bin/gh"), \
+             patch("subprocess.run", return_value=CompletedProcess(
+                 args=[], returncode=0, stdout="{}", stderr="")):
+            cache = {}
+            result = rtci.gh_path_exists("foo/bar", "abc123", "ok.go", cache)
+            self.assertEqual(result, True, "HTTP 200 must return True")
+
     def test_forbids_absolute_paths(self):
         """R1 must FAIL on absolute paths (leading `/`)."""
         spec = make_spec(raw={"provenance": _provenance("/etc/shadow")})

@@ -371,10 +371,42 @@ def r1_check(spec: Spec, network_check: bool, gh_cache: Dict[Tuple[str, str], bo
     return findings
 
 
+class GhApiUnreachable(Exception):
+    """Raised by `gh_path_exists` when the gh CLI is unauthenticated,
+    rate-limited, network-failed, or otherwise can't reach the API.
+    DISTINCT from a genuine HTTP 404 (file doesn't exist at the ref,
+    returns False) AND from `gh` not installed (returns None — the
+    expected fallback when --check-network can't be honored).
+
+    Wave 10 incident, recipe mirrored from audit-golden.py: missing
+    GH_TOKEN in CI caused unauthenticated `gh api` calls to rate-limit
+    or 401, and the prior gh_path_exists treated every non-zero
+    returncode as 404. R1 reported "file not reachable" for every
+    upstream path on every spec — a silent false-FAIL flood that masked
+    real upstream-drift signals. The fix: distinguish failure modes by
+    inspecting stderr; raise this typed exception on auth/network/rate-
+    limit failures so main() aborts with exit 3 rather than emitting a
+    flood of misleading FAILs.
+    """
+
+
 def gh_path_exists(
     repo: str, sha: str, path: str, cache: Dict[Tuple[str, str], bool]
 ) -> Optional[bool]:
-    """Best-effort check via `gh api` if `gh` is on PATH; returns None if no network/gh."""
+    """Best-effort path existence check via `gh api`.
+
+    Returns:
+        - True on HTTP 200 (path exists at the ref).
+        - False on genuine HTTP 404 (path does not exist at the ref).
+        - None when `gh` CLI is not on PATH (network check unavailable;
+          R1 falls back to structural-plausibility-only and emits WARN).
+
+    Raises:
+        GhApiUnreachable on any non-404 failure (auth missing, rate
+        limit, timeout, network error, malformed response). main()
+        catches this at the top level and exits 3 — propagating ensures
+        the audit aborts rather than silently emitting false FAILs.
+    """
     key = (repo, sha + ":" + path)
     if key in cache:
         return cache[key]
@@ -388,12 +420,31 @@ def gh_path_exists(
             text=True,
             timeout=15,
         )
-    except (subprocess.TimeoutExpired, OSError):
-        cache[key] = None  # type: ignore[assignment]
-        return None
-    ok = proc.returncode == 0
-    cache[key] = ok
-    return ok
+    except FileNotFoundError as exc:
+        raise GhApiUnreachable(f"gh CLI vanished mid-run: {exc}")
+    except subprocess.TimeoutExpired:
+        raise GhApiUnreachable(f"timeout fetching {repo}/{path}@{sha}")
+    except Exception as exc:  # noqa: BLE001
+        raise GhApiUnreachable(
+            f"gh subprocess failed for {repo}/{path}@{sha}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+    if proc.returncode == 0:
+        cache[key] = True
+        return True
+    stderr = (proc.stderr or "").strip()
+    # `gh api` exits non-zero with stderr "gh: Not Found (HTTP 404)" for
+    # genuine 404s. Auth failures, rate limits, and network errors
+    # surface as different stderr text — propagate as GhApiUnreachable
+    # so the audit aborts rather than treating "API unreachable" as
+    # "every file is missing" (the Wave 10 false-FAIL flood incident).
+    if "HTTP 404" in stderr or "Not Found" in stderr:
+        cache[key] = False
+        return False
+    raise GhApiUnreachable(
+        f"gh api failed for {repo}/{path}@{sha} (returncode={proc.returncode}): "
+        f"{stderr or '<empty stderr>'}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1426,28 +1477,46 @@ def main(argv: Optional[List[str]] = None) -> int:
         ("R9",  r9_check),
         ("R10", r10_check),
     ]
-    for spec in specs:
-        for rule_name, fn in per_spec_rules:
-            try:
-                findings.extend(fn(spec))
-            except Exception as exc:  # noqa: BLE001
-                findings.append(Finding(
-                    rule_name, spec.label, SEV_FAIL,
-                    f"rule crashed: {type(exc).__name__}: {exc}",
-                ))
-
     # R5: per port pair OR per dual-spec entry (run even when one side is missing).
     all_r5_bidders = sorted(set(pair_bidders) | set(dual_specs.keys()))
-    for bidder in all_r5_bidders:
-        go_spec = by_lang_bidder.get(("go", bidder))
-        java_spec = by_lang_bidder.get(("java", bidder))
-        try:
-            findings.extend(r5_check(go_spec, java_spec, dual_specs))
-        except Exception as exc:  # noqa: BLE001
-            findings.append(Finding(
-                "R5", f"pair/{bidder}", SEV_FAIL,
-                f"rule crashed: {type(exc).__name__}: {exc}",
-            ))
+    try:
+        for spec in specs:
+            for rule_name, fn in per_spec_rules:
+                try:
+                    findings.extend(fn(spec))
+                except GhApiUnreachable:
+                    raise  # propagate to top-level handler below
+                except Exception as exc:  # noqa: BLE001
+                    findings.append(Finding(
+                        rule_name, spec.label, SEV_FAIL,
+                        f"rule crashed: {type(exc).__name__}: {exc}",
+                    ))
+
+        for bidder in all_r5_bidders:
+            go_spec = by_lang_bidder.get(("go", bidder))
+            java_spec = by_lang_bidder.get(("java", bidder))
+            try:
+                findings.extend(r5_check(go_spec, java_spec, dual_specs))
+            except GhApiUnreachable:
+                raise  # propagate to top-level handler
+            except Exception as exc:  # noqa: BLE001
+                findings.append(Finding(
+                    "R5", f"pair/{bidder}", SEV_FAIL,
+                    f"rule crashed: {type(exc).__name__}: {exc}",
+                ))
+    except GhApiUnreachable as exc:
+        # Wave 10 recipe: distinguish "API unreachable" from "file doesn't
+        # exist". Aborting with exit 3 prevents the silent false-FAIL flood
+        # the prior swallowed-non-zero behavior produced.
+        print(f"ERROR: GitHub API unreachable during R1 network check: {exc}",
+              file=sys.stderr)
+        print("Common causes:", file=sys.stderr)
+        print("  - GH_TOKEN missing or insufficient scope", file=sys.stderr)
+        print("  - rate limit exceeded", file=sys.stderr)
+        print("  - network unavailable", file=sys.stderr)
+        print("Aborting to avoid emitting misleading FAILs against reachable files.",
+              file=sys.stderr)
+        return 3
     if not all_r5_bidders:
         findings.append(Finding("R5", "n/a", SEV_PASS, "no port pairs to compare"))
 
