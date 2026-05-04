@@ -1,0 +1,201 @@
+dual_spec_assertion_version: 1
+bidder_name: 152media
+go_spec: prebid-server-go/read/test-fixtures/152media.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/152media.golden.spec.yaml
+go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+
+note_on_alias_status: |
+  152media is an ALIAS of adkernel on BOTH languages. There is NO own
+  static/bidder-params/152media.json on either side — the alias resolves to
+  the parent's static/bidder-params/adkernel.json at validation time on both
+  sides. The cross-language byte divergence captured below is therefore
+  PARENT-LEVEL (adkernel.json byte-divergence between Go and Java), not
+  alias-level. The alias-level cross-language concern is the
+  GVL-vendor-id divergence (Go 152media overrides to 1111, Java tilde-inherits
+  parent adkernel's 14) — captured separately below.
+
+assertions:
+  bidder_params_sha256:
+    go: 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed
+    java: e814426953d0dea7abac9ef9618600fa48a72c934381465a238863384228649c
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only
+    divergence_summary: |
+      Byte-only whitespace divergence at the PARENT level. Both files refer
+      to static/bidder-params/adkernel.json (the alias resolves through the
+      parent on both languages). Go and Java versions of adkernel.json
+      semantically declare the same single property `zoneId` (integer with
+      minimum=1) marked required, but use different whitespace formatting.
+      Parsing both as JSON yields identical ASTs. This is a parent-level
+      port-fidelity concern that should be reconciled at the adkernel pair
+      level, NOT at the 152media alias level — but it surfaces here because
+      the alias inherits the parent's params schema.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video, audio, native]
+      app: [banner, video, audio, native]
+    java:
+      site: [banner, video, audio, native]
+      app: [banner, video, audio, native]
+    equivalent: true
+    divergence_summary: |
+      Both languages list all 4 mediaTypes [banner, video, audio, native] for
+      both site and app — inherited from parent adkernel via
+      processBidderAliases (Go) or tilde_inherit (Java). Match.
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 1111
+    java: 14
+    equivalent: false
+    divergence_summary: |
+      CROSS-LANGUAGE GVL-VENDOR-ID DIVERGENCE: Go's
+      static/bidder-info/152media.yaml explicitly OVERRIDES gvlVendorID to
+      1111 (parent adkernel.yaml has gvlVendorID: 14). Java's
+      bidder-config/adkernel.yaml declares 152media as a tilde-inherit alias
+      (`152media: ~`), which means it inherits ALL parent fields unchanged,
+      INCLUDING the parent's gvl_vendor_id (14). Effectively, 152media has
+      different GVL vendor IDs across languages — a real configuration
+      asymmetry. Reviewers should reconcile: either add a populated alias
+      block in Java (replacing tilde-inherit with explicit gvl_vendor_id:
+      1111), or remove the override on Go to match Java's inheritance. Phase D
+      flagged this as a port-fidelity concern; severity warn (operational
+      asymmetry in the consent framework, not a hard fail because both
+      values are valid GVL IDs).
+    severity: warn
+
+  bidder_info_maintainer:
+    go: prebid-dev@adkernel.com
+    java: prebid-dev@adkernel.com
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_endpoint:
+    go: "http://pbs.adksrv.com/hb?zone={{.ZoneID}}"
+    java: "http://pbs.adksrv.com/hb?zone=%s"
+    equivalent: false
+    divergence_summary: |
+      MACRO FORM DIVERGENCE: Go uses the canonical Go-template form
+      `{{.ZoneID}}` (resolved via macros.EndpointTemplateParams.ZoneID at
+      request time); Java uses printf-style `%s` (resolved via String.format
+      with the zoneId integer at request time). Same observable URL pattern
+      (wire-format URL ends up being .../hb?zone=12345 on both sides), but
+      different macro mechanism. This asymmetry is parent-level (inherited
+      from adkernel) and is captured by Rule 11 (single-token-substitution
+      with mechanism_go: text/template vs mechanism_java: string-replace).
+      Not a port-fidelity bug — both languages can resolve their respective
+      forms to the same wire output.
+    severity: warn
+
+  params_schema_interpretation:
+    go_required_fields: [zoneId]
+    java_required_fields: [zoneId]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [zoneId]
+    java_properties: [zoneId]
+    go_constraints: { zoneId: { minimum: 1 } }
+    java_constraints: { zoneId: { minimum: 1 } }
+    equivalent: false
+    divergence_summary: "Schema content (zoneId integer >= 1, required) is identical across languages, but the rendered `params.schema_interpretation` blocks in the two goldens differ at the YAML-formatting level (alias-inheritance handling — 152media is a pure tilde-alias of adkernel on Java, vs a standalone YAML file on Go). Runtime equivalence is preserved; this is rendering drift, not a schema bug."
+    severity: warn
+
+  alias_metadata:
+    go_alias_form: child-to-parent
+    go_alias_yaml_path: static/bidder-info/152media.yaml
+    java_alias_form: parent-to-child
+    java_alias_yaml_path: src/main/resources/bidder-config/adkernel.yaml
+    java_alias_config_form: tilde_inherit
+    java_it_class: OneFiveTwoMediaTest
+    java_it_class_workaround: digit-leading-rename
+    notes: |
+      Canonical aliases-inversion case (Rule 33). Go declares 152media in
+      its OWN file (static/bidder-info/152media.yaml: aliasOf: adkernel +
+      gvlVendorID: 1111). Java declares 152media UNDER the parent's aliases
+      map (bidder-config/adkernel.yaml line 6: 152media: ~). Same fact,
+      opposite direction.
+
+      The Java side ALSO requires the digit-leading identifier-rule
+      workaround for the IT class: 152media starts with the digit '1'
+      which is not a valid Java identifier first character. Convention
+      spells out each leading digit as English (1='One', 5='Five',
+      2='Two') and TitleCases the rest ('Media') -> OneFiveTwoMediaTest.
+      The fixture directory (openrtb2/152media/) keeps the canonical
+      digit-leading YAML name since resource paths face no Java identifier
+      constraint. This asymmetry is unique to digit-leading bidders.
+
+  test_fixture_cost:
+    go_alias_files: 1
+    java_alias_files: 7
+    notes: |
+      Java alias is ~7 files (1 IT class + 4 fixtures + 2 lines in
+      test-application.properties). Go alias is just 1 file
+      (static/bidder-info/152media.yaml). This is the canonical
+      Java-vs-Go test-fixture-cost asymmetry from Rule 37. Both languages
+      route 152media imps through the parent adkernel execution path; the
+      Java side ships the test fixtures despite the alias being a pure
+      tilde-inherit (zero behavioral divergence from parent).
+
+  port_lineage:
+    direction: unknown
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes:
+      - aliases-inverted
+      - identifier-rule-workaround
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: divergent-byte-only
+  blocker_count: 0
+  warning_count: 3
+  notes: |
+    152media is an ALIAS of adkernel on both languages. The cross-language
+    divergences captured here are NOT alias-implementation divergences —
+    they are properties inherited from the parent (adkernel) plus a single
+    alias-level override on the Go side (gvl_vendor_id=1111).
+
+    Three warnings: (1) parent-level bidder-params byte divergence between
+    Go's adkernel.json and Java's adkernel.json (whitespace only —
+    semantically equivalent zoneId integer with minimum=1 required schema);
+    (2) GVL vendor ID asymmetry (Go 152media overrides to 1111; Java
+    inherits parent's 14 via tilde_inherit alias form); (3) endpoint macro
+    mechanism asymmetry (Go uses {{.ZoneID}} text/template; Java uses %s
+    String.format) which is a mechanism-level cross-language asymmetry
+    inherited from adkernel parent.
+
+    Capabilities (all 4 mediaTypes for site+app), maintainer email,
+    schema interpretation (single zoneId integer minimum=1 required) all
+    match. The aliases-inversion direction (Go child->parent vs Java
+    parent->child) is the canonical Rule 33 pattern; the OneFiveTwoMediaTest
+    IT class is the canonical Rule 26 digit-leading-identifier-rule
+    workaround. Java alias ships 7 files (IT class + 4 fixtures + 2 props
+    lines); Go alias ships 1 file — canonical Rule 37 fixture-cost
+    asymmetry.
+
+    Porter advice: (a) the bidder-params byte parity should be addressed
+    at the PARENT (adkernel) level, not at the 152media alias level —
+    reformat adkernel.json on one side to match the other; (b) reconcile
+    the GVL ID divergence by either adding a populated 152media alias
+    block in Java's bidder-config/adkernel.yaml that overrides
+    gvl-vendor-id to 1111 (matching Go's intent), or removing the
+    1111 override from Go's static/bidder-info/152media.yaml and
+    accepting the parent's 14 as authoritative; (c) when porting future
+    digit-leading aliases (Go->Java), apply the OneFiveTwoMediaTest naming
+    convention and ship the 7-file alias bundle per Rule 37.
+
+    NOTE: Phase D agents flagged that this assertion file's
+    "divergence at the parent's level, not the alias's" is the precise
+    description of the byte-divergence here — but the
+    GVL-vendor-id divergence IS alias-level. Both are captured.

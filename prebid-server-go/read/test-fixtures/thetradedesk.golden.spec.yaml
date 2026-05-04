@@ -1,0 +1,433 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: "2026-05-02T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: adr-007-f4-empirical-confirmation
+      file: adapters/thetradedesk/thetradedesk.go
+      line: 239
+      summary: "ADR-007 F4 cites thetradedesk as the canonical master sample for `bid-post-processing-macro`. EMPIRICAL EVIDENCE CONFIRMS this claim. The adapter has a dedicated `resolveAuctionPriceMacros(bid)` helper at line 239 that substitutes `${AUCTION_PRICE}` into bid.NURL, bid.AdM, and bid.BURL using `strings.ReplaceAll`. Number formatting via `strconv.FormatFloat(bid.Price, 'f', -1, 64)` (drops trailing zeros, ~16 significant digits precision). Runs BEFORE `getBidType` (Java runs AFTER — order divergence but both end states identical). A dedicated supplemental fixture file `thetradedesktest/supplemental/auction-price-macro-replacement.json` exists, naming the F4 pattern explicitly. Cross-language symmetric on the substitution mechanism; subtle number-formatting precision divergence on high-precision inputs."
+
+meta:
+  bidder_name: thetradedesk
+  is_alias: false
+  alias_of: null
+  parent_aliases: []                          # Go has NO YAML aliases. Java has `ttd: ~` tilde-stub alias under thetradedesk.yaml — Java-only declaration. Hosts using bidders=ttd succeed against Java but fail against Go (Rule-33-style alias-graph divergence).
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+  empire_canonical_master: false
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://direct.adsrvr.org/bid/bidder/{{.SupplyId}}"
+  endpoint_construction:
+    kind: template-macro
+    macros_used: ["SupplyId"]
+    macro_syntax: go-template                 # Go-template dot-syntax `{{.SupplyId}}`. Java uses plain placeholder `{{SupplyId}}` resolved via String.replace. Same observable URL after resolution.
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: Prebid-Maintainers@thetradedesk.com
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 21
+  user_sync:
+    supports:                                  # Declarative `supports` only — no actual `redirect:` or `iframe:` URL subtree. Embedded comment in YAML: "TheTradeDesk supports user syncing, but requires configuration by the host." Host must configure sync URLs out-of-band.
+      - redirect
+      - iframe
+  yaml_extra_fields:
+    openrtb:
+      gpp_supported: true                     # Top-level `openrtb.gpp-supported: true` — explicit GPP propagation declaration. Java side does not declare this in its YAML (Java handles GPP centrally per OrtbVersion config rather than per-bidder).
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+  	"$schema": "http://json-schema.org/draft-04/schema#",
+  	"title": "The Trade Desk Adapter Params",
+  	"description": "A schema which validates params accepted by the The Trade Desk adapter",
+  	"type": "object",
+  	"properties": {
+  		"publisherId": {
+  			"type": "string",
+  			"minLength": 1,
+  			"description": "An ID which identifies the publisher"
+  		},
+  		"supplySourceId": {
+  			"type":"string",
+  			"minLength": 1,
+  			"description": "An ID provided by TheTradeDesk used to determine which endpoint to use"
+  		}
+  	},
+  	"required": ["publisherId"]
+  }
+bidder_params_sha256: 769d92e699416dc3e30f16c8383f9c21dfb568adb323b9f9d953fe6968818845
+
+params:
+  schema_interpretation:
+    properties:
+      - name: publisherId
+        type: string
+        minLength: 1
+        description: "An ID which identifies the publisher"
+        notes:
+          - "Required field. The adapter takes the FIRST non-empty publisherId from imps and propagates to request.Site.Publisher.ID or request.App.Publisher.ID."
+      - name: supplySourceId
+        type: string
+        minLength: 1
+        description: "An ID provided by TheTradeDesk used to determine which endpoint to use"
+        notes:
+          - "Optional field. If absent, falls back to the Builder's `defaultEndpoint` resolved from `config.ExtraAdapterInfo` at startup. Must be lowercase letters only (regex `([a-z]+)$`)."
+    required_fields:
+      - publisherId
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_thetradedesk.go
+    type_name: ExtImpTheTradeDesk             # Multi-cap PascalCase preserves inner word boundaries (TheTradeDesk = three words). Cross-language symmetric on the type name.
+    fields:
+      - name: PublisherId
+        json_tag: publisherId
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: SupplySourceId
+        json_tag: supplySourceId
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/thetradedesk/params_test.go
+    valid_cases_count: 3
+    invalid_cases_count: 9
+    bidder_constant_referenced: openrtb_ext.BidderTheTradeDesk
+
+code:
+  package_or_class: thetradedesk
+  directory_name: thetradedesk
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: thetradedesk.go
+        role: implementation
+        loc: 248
+  imports:
+    has_template_engine: true                 # text/template via macros.ResolveMacros for endpoint URL substitution
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party:
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: bidderEndpointTemplate
+        type: string                           # Raw template string (preserved for inspection)
+      - name: defaultEndpoint
+        type: string                           # Pre-resolved endpoint using config.ExtraAdapterInfo at builder time
+      - name: templateEndpoint
+        type: "*template.Template"             # Compiled Go template stored on the adapter struct (per-request macro resolution)
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: true             # config.ExtraAdapterInfo is the host-config-time supplyId; validated against regex `([a-z]+)$` (lowercase letters only)
+    template_parsed_at_build: true            # Builder parses config.Endpoint as text/template once at startup
+    errors_returned:
+      - "ExtraAdapterInfo regex validation failure: \"ExtraAdapterInfo must be a simple string provided by TheTradeDesk\""
+      - "template parse error: \"unable to parse endpoint url template: <err>\""
+      - "default-endpoint macro resolution failure: \"unable to resolve endpoint macros: <err>\""
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-batch                     # SINGLE outbound HTTP request with ALL imps in one body. Cross-language symmetric.
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place                         # for each imp: if Banner non-nil and Format non-empty, deep-copy banner with W/H from format[0]; reassign imp.Banner pointer
+        Banner: deep-copy-then-mutate         # `bannerCopy := *imp.Banner`; W/H overridden from format[0]
+        Video: none
+        Site: deep-copy-then-mutate           # `siteCopy := *request.Site`; if Publisher non-nil, deep-copy + override ID with publisherId; if Publisher nil, synthesize new Publisher{ID: pubID}
+        App: deep-copy-then-mutate            # Same as Site path: deep-copy app + publisher mutation
+        Source: none
+        Device: none
+        User: none
+        Cur: none
+      go_idiom: shallow-copy-then-mutate
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImpTheTradeDesk
+      wrapper_type: null
+    endpoint_resolution:
+      kind: template-macro
+      mechanism_go: text-template-resolve-macros
+      mechanism_java: null
+      macros_used: ["SupplyId"]
+    helpers:
+      - name: getExtensionInfo
+        signature: "func getExtensionInfo(impressions []openrtb2.Imp) (string, string, error)"
+      - name: getImpressionExt
+        signature: "func getImpressionExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImpTheTradeDesk, error)"
+      - name: buildEndpointURL
+        signature: "func (a *adapter) buildEndpointURL(supplySourceId string) (string, error)"
+      - name: resolveAuctionPriceMacros
+        signature: "func resolveAuctionPriceMacros(bid *openrtb2.Bid)"
+      - name: getBidType
+        signature: "func getBidType(markupType openrtb2.MarkupType) (openrtb_ext.BidType, error)"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers              # Uses adapters.IsResponseStatusCodeNoContent + adapters.CheckResponseStatusCodeForErrors helpers
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: bid-mtype-switch            # Switch on bid.MType: 1=banner, 2=video, 4=native. Audio (3) explicitly NOT supported. Default: error "unsupported mtype: <int>". Cross-language symmetric on classification, divergent on error semantics (Go aborts whole MakeBids; Java filters per-bid).
+          hardcoded_value: null
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: none
+    bid_pointer_pattern: range-with-bid-copy   # `for _, bid := range seatBid.Bid { bid := bid; resolveAuctionPriceMacros(&bid); ...; &bid }` — value copy then pointer-to-local. Same pattern as freewheelssp.
+    bid_pointer_go_sibling: range-value-copy
+    currency_overwrite_safety: passthrough-from-response   # `bidderResponse.Currency = bidResponse.Cur` — single response-level assignment. Java attaches per-bid via BidderBid.of(bid, type, cur).
+
+tests:
+  test_root_directory: thetradedesktest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - ortb_response_video_parsing
+      - prebidjs_response_video_parsing
+      - simple-banner-inapp
+      - simple-banner-multiple-bids-and-formats
+      - simple-banner-multiple-bids
+      - simple-banner
+      - simple-empty-publisherId
+      - simple-multi-type-banner
+      - simple-multi-type-video
+      - simple-native
+      - simple-video
+      - use-supply-source-id-param
+    supplemental:
+      - 200-response-from-target
+      - 204-response-from-target
+      - 400-response-from-target
+      - 500-response-from-target
+      - auction-price-macro-replacement       # F4 self-evidence: dedicated supplemental fixture explicitly named for the bid-post-processing-macro pattern
+      - invalid-mtype
+      - invalid-publisher
+      - invalid-supplySourceId
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true                # thetradedesk_test.go calls adapterstest.RunJSONBidderTest
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+aliases: []                                    # Go has no aliases under thetradedesk. Java has `ttd: ~` tilde-stub — Java-only declaration.
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+lifecycle:
+  rename: null                                # No rename history. The "adsby was renamed to thetradedesk" claim from external sources is UNSUBSTANTIATED by upstream code (zero `adsby` references in either repo at the pinned commits). The bidder appears to have always been thetradedesk.
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: bid-post-processing-macro-master-sample
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 239
+    summary: "ADR-007 F4 CANONICAL MASTER SAMPLE. resolveAuctionPriceMacros(bid) helper at line 239 substitutes `${AUCTION_PRICE}` into bid.NURL, bid.AdM, and bid.BURL using strings.ReplaceAll. Number formatting: `strconv.FormatFloat(bid.Price, 'f', -1, 64)` (drops trailing zeros). Runs BEFORE getBidType (Java runs AFTER — order divergence but both end states identical). Single-macro-three-field flavor (only AUCTION_PRICE; only NURL+AdM+BURL — LURL is intentionally not touched). Distinct from adverxo/vungle which have F4 as side-quirks; for thetradedesk, F4 IS the bidder's identity."
+    edge_case_taxon: bid-post-processing-macro
+  - id: auction-price-macro-replacement-named-fixture
+    file: adapters/thetradedesk/thetradedesktest/supplemental/auction-price-macro-replacement.json
+    summary: "Dedicated supplemental test fixture with the literal name `auction-price-macro-replacement` — self-documenting marker for ADR-007 F4 in the corpus. Most fixtures are named after media types or scenarios; this one names the F4 pattern explicitly. Worth surfacing as a corpus signal that thetradedesk is the master sample."
+    edge_case_taxon: bid-post-processing-macro
+  - id: bid-type-mtype-only-no-imp-correlation
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 199
+    summary: "getBidType resolves from bid.MType ONLY (1=banner, 2=video, 4=native). NO imp-correlation fallback, NO `ext.prebid.type` inspection, NO bid.AdM sniffing. Audio (mtype 3) explicitly NOT supported. Default case errors with `unsupported mtype: <int>`. Cross-language symmetric on classification logic, divergent on error semantics (Go aborts whole MakeBids; Java filters per-bid)."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: terminal-error-on-bad-mtype
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 184
+    summary: "If getBidType returns error (unrecognized mtype), MakeBids returns `nil, []error{err}` — terminal abort that drops ALL bids in the response. Java side filters JUST the bad bid via per-bid error append (Rule 41 error-handling divergence). Cross-language behavioral asymmetry on partial-bad responses."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: per-imp-publisher-id-first-non-empty
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 132
+    summary: "getExtensionInfo iterates imps; FIRST non-empty publisherId AND FIRST non-empty supplySourceId win. Once both are found, breaks early. Same algorithm cross-language."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: site-or-app-publisher-id-mutation
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 55
+    summary: "After publisher-id extraction, MakeRequests mutates request.Site.Publisher.ID OR request.App.Publisher.ID (whichever is present). If Publisher is nil, synthesizes new Publisher{ID: pubID}. If Publisher exists, deep-copies and overrides ID. Cross-language symmetric — Java does the same via Publisher.builder().id(publisherId).build()."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: extraAdapterInfo-regex-substring-vs-full-match
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 214
+    summary: "Builder validates `config.ExtraAdapterInfo` against regex `([a-z]+)$` using `regexp.Match` (substring match — returns true if pattern matches anywhere). Java side uses `Pattern.compile(\"([a-z]+)$\").matcher(...).matches()` which requires WHOLE-INPUT match. Subtle correctness divergence: input like `\"ABCabc\"` — Go matches the trailing `abc` (returns true), Java rejects (whole input must be lowercase). Real cross-language fidelity gap with potentially material implications for hosts."
+    edge_case_taxon: yaml-field-name-typo
+  - id: extraAdapterInfo-error-message-go-config-term
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 216
+    summary: "Validation error message uses Go-config-field name: `\"ExtraAdapterInfo must be a simple string provided by TheTradeDesk\"`. Java uses bidder-concept name: `\"SupplyId must be a simple string provided by TheTradeDesk\"`. Same template structure; first word divergent. Reveals naming-convention asymmetry — Java picks bidder-facing concept, Go picks host-config-facing field name."
+    edge_case_taxon: yaml-field-name-typo
+  - id: number-format-strconv-floattoa-drops-trailing-zeros
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 243
+    summary: "`strconv.FormatFloat(bid.Price, 'f', -1, 64)` drops trailing zeros (`1.50` → `\"1.5\"`) and limits precision to ~16 significant digits. Java's `BigDecimal.toPlainString()` preserves source scale exactly (`1.50` → `\"1.50\"`) and supports arbitrary precision. For typical 2-3 decimal bid prices, semantically equivalent; for high-precision inputs (>15 sig digits like `123456789.123456789`), Go and Java produce DIFFERENT substituted result strings. Latent fidelity gap — unlikely in production but observable in tests."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: macro-replace-before-bid-type-resolution
+    file: adapters/thetradedesk/thetradedesk.go
+    line: 181
+    summary: "resolveAuctionPriceMacros runs BEFORE getBidType in the bid-iteration loop. Java runs AFTER. Functionally equivalent because Go aborts on bad mtype anyway, but the ordering is a Rule 5 mutation-flow asymmetry. Java's order means the macro substitution only runs on bids that classify successfully; Go's order means even bids that error get processed (but never observed externally)."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: usersync-supports-only-no-url
+    file: static/bidder-info/thetradedesk.yaml
+    line: 18
+    summary: "userSync block declares `supports: [redirect, iframe]` only — no actual `redirect:` or `iframe:` URL subtree. Embedded comment: \"TheTradeDesk supports user syncing, but requires configuration by the host. Contact a technical account manager...\". Host must configure sync URLs out-of-band. Cross-language symmetric: Java YAML also has no usersync URL block."
+    edge_case_taxon: yaml-field-name-typo
+  - id: gpp-supported-go-only-yaml-declaration
+    file: static/bidder-info/thetradedesk.yaml
+    line: 26
+    summary: "Go YAML declares `openrtb.gpp-supported: true`. Java YAML has no equivalent declaration. Both sides actually do propagate GPP at runtime — the YAML declarations are the divergence, not the runtime behavior. Java handles GPP centrally per OrtbVersion config rather than per-bidder."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/thetradedesk/
+    package_name: thetradedesk
+    bidder_constant: openrtb_ext.BidderTheTradeDesk
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/thetradedesk/
+    bidder_class: TheTradeDeskBidder
+    config_class: TheTradeDeskConfiguration
+    yaml_path: src/main/resources/bidder-config/thetradedesk.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/thetradedesk/
+  port_concerns:
+    aliases_inverted: true                    # Java has `ttd: ~` tilde-stub alias under thetradedesk.yaml; Go has no `ttd.yaml` entry. Hosts using bidders=ttd succeed against Java but fail against Go. Rule-33-style asymmetric alias declaration.
+    yaml_unification: false
+    mutation_idiom_divergence: true           # Go shallow-copy + in-place pointer; Java Lombok toBuilder immutable rebuild
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - bid-post-processing-macro              # F4 master sample — CONFIRMED
+      - mutation-idiom-tobuilder               # Rule 5
+      - macro-form-divergence                  # Rule 11 (endpoint URL macro syntax)
+      - alias-presence-divergence              # Rule 33-style ttd asymmetry (Java only)
+      - error-message-style                    # Rule 41 (ExtraAdapterInfo vs SupplyId)
+      - regex-match-semantics-divergence       # subtle: Go substring vs Java full-string
+      - number-formatting-precision-divergence # strconv.FormatFloat 'f' -1 vs BigDecimal.toPlainString
+      - bid-type-error-handling-divergence     # Go terminal vs Java per-bid filter
+      - cross-language-byte-divergence         # Rule 38 (tabs vs 2-space)
+      - gpp-supported-yaml-declaration-go-only
+  go_specific_concerns:
+    - "Adapter struct has 3 fields: bidderEndpointTemplate (raw template string), defaultEndpoint (pre-resolved at builder time using config.ExtraAdapterInfo), templateEndpoint (compiled *template.Template). Builder parses + resolves once; per-request endpoint resolution uses the compiled template."
+    - "ExtraAdapterInfo regex validation uses `regexp.Match` (substring match). Java uses `Matcher.matches()` (full-input match). Input like `\"ABCabc\"` — Go would match the trailing `abc`, Java rejects. Real cross-language fidelity gap on the supplyId validator."
+    - "Number formatting: `strconv.FormatFloat(bid.Price, 'f', -1, 64)` drops trailing zeros (`1.50` → `\"1.5\"`). Java's `BigDecimal.toPlainString()` preserves source scale (`1.50` → `\"1.50\"`). High-precision inputs (>15 sig digits) produce different substituted result strings."
+    - "Macro substitution order: Go runs `resolveAuctionPriceMacros` BEFORE `getBidType`; Java runs AFTER. Functionally equivalent because Go aborts on bad mtype, but the ordering is a Rule 5 mutation-flow asymmetry."
+    - "Bid-type error path: Go aborts whole MakeBids on first bad mtype (`return nil, []error{err}`). Java filters JUST the bad bid via per-bid error append. Cross-language behavioral asymmetry on partial-bad responses."
+    - "`openrtb.gpp-supported: true` declared on Go YAML; Java has no equivalent declaration. Both sides do propagate GPP at runtime."
+    - "Error message: Go uses `\"ExtraAdapterInfo must be a simple string provided by TheTradeDesk\"` (config-field name). Java uses `\"SupplyId must be a simple string provided by TheTradeDesk\"` (bidder concept name)."
+    - "Bid-pointer pattern: `bid := bid` value-copy then `&bid` pointer-to-local. Same pattern as freewheelssp."
+    - "`thetradedesktest/supplemental/auction-price-macro-replacement.json` is a corpus self-signal for ADR-007 F4 master sample status."
+    - "`getBidType` error message: `\"unsupported mtype: <int>\"` (reports the int). Java: `\"could not define media type for impression: <impid>\"` (reports the imp.id). Different debugging information."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

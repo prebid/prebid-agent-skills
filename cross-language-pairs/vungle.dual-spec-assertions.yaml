@@ -1,0 +1,226 @@
+dual_spec_assertion_version: 1
+bidder_name: vungle
+go_spec: prebid-server-go/read/test-fixtures/vungle.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/vungle.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+assertions:
+  bidder_params_sha256:
+    go: 437c5b5b81115bca701113d4324392e04a539b2119919d4f33b8e1a13dfb6308
+    java: 750a278d0720e87af2dc2ec5f46986a0675b1f78ba199a556cc11215676dc6fe
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only
+    divergence_summary: "Same JSON Schema content. Bytes differ in trailing-newline presence (Java has, Go doesn't) and minor formatting."
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [video]
+      app: [video]
+    java:
+      site: [video]
+      app: [video]
+    equivalent: true
+    severity: pass
+
+  bidder_info_endpoint:
+    go: "https://rtb.ads.vungle.com/bid/t/c770f32"
+    java: "https://rtb.ads.vungle.com/bid/t/c770f32"
+    equivalent: true
+    severity: pass
+
+  bidder_info_endpoint_compression:
+    go: gzip
+    java: gzip
+    equivalent: true
+    severity: pass
+
+  bidder_info_modifying_vast_xml_allowed:
+    go: true
+    java: true
+    equivalent: true
+    severity: pass
+
+  bidder_info_maintainer:
+    go: vxssp@liftoff.io
+    java: vxssp@liftoff.io
+    equivalent: true
+    severity: pass
+    note: "Maintainer email reflects post-acquisition Liftoff parent-company address; bidder name remains vungle on both sides."
+
+  bidder_info_default_enabled:
+    go: true
+    java: true
+    equivalent: true
+    rule_45_match: n/a
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [app_store_id, placement_reference_id]
+    java_required_fields: [app_store_id, placement_reference_id]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [app_store_id, placement_reference_id]
+    java_properties: [app_store_id, placement_reference_id]
+    equivalent: true
+    severity: pass
+
+  alias_graph:                                # Cross-language alias-back asymmetry
+    go_aliases: []                            # Go uses removed-bidder warning map (clean-delete pattern), NOT a child YAML alias
+    java_aliases: [liftoff]                   # Java uses tilde_inherit alias-back (default-disabled)
+    aliases_match: false
+    rule_33_inversion: true
+    rule_44_empire_flavor: null               # Not an empire — phantom rename only
+    severity: warn
+    note: |
+      Cross-language asymmetry on the alias-back mechanism for the legacy `liftoff`
+      operator-config: Java provides `aliases: { liftoff: { enabled: false } }` under
+      vungle.yaml (tilde_inherit form, default-disabled — Rule 45 instance). Go has
+      NO alias YAML; instead, `exchange/adapter_util.go` carries a removed-bidder
+      warning map entry redirecting `liftoff` to `vungle`. Both mechanisms achieve
+      backward-compat for operators with `liftoff` in their config, but with different
+      operator UX:
+        - Java: silent fallback to vungle adapter (must explicitly enable)
+        - Go: hard error redirecting to update config
+
+  lifecycle:
+    rename:
+      old_name: liftoff
+      new_name: vungle
+      subtype: bilateral                      # ACTUAL upstream state (NOT go-leads as ADR-006 claims)
+      go_alias_back: removed-bidder-warning-map
+      java_alias_back: tilde_inherit
+      merged_at: null                         # No discrete rename PR — bidder always was vungle. Liftoff appeared in operator configs based on the 2021 Liftoff/Vungle parent-company-name change.
+      release: null
+    severity: pass
+    note: |
+      Phantom-rename pattern. Liftoff acquired Vungle in 2021; the parent-company name
+      change did NOT translate into a code-level bidder rename — vungle stayed canonical
+      on both sides. Some operators configured `liftoff` based on the news; both prebid
+      servers handle this with backward-compat surfaces.
+
+      ADR-006 originally classified liftoff/vungle as `go-leads` (Go has post-rebrand
+      name; Java retains pre-rebrand). Upstream evidence (this fixture pair) shows the
+      ACTUAL state is `bilateral` with phantom-rename history. Both sides have vungle
+      as canonical; both have backward-compat for liftoff (different mechanisms). The
+      subtype on this fixture is `bilateral`. ADR-006 was subsequently corrected
+      per this evidence — see CHANGELOG `## Unreleased — ADR corrections (no
+      version bump)` and ADR-006 line 3 "refined 2026-05-03".
+
+  imp_ext_three-key-wrapper:                   # Both sides repack imp.ext with overlapping content
+    go_wrapper: vungleImpressionExt
+    java_wrapper: VungleImpressionExt
+    keys: [bidder, vungle]                    # Plus prebid on Java side
+    severity: pass
+    note: |
+      Both sides wrap imp.ext with structures that carry overlapping content under
+      `bidder` and `vungle` keys. Go's vungleImpressionExt embeds *adapters.ExtImpBidder
+      anonymously and adds a `vungle` field. Java's VungleImpressionExt wraps prebid +
+      bidder + vungle keys explicitly. Wire-format imp.ext post-build has the same
+      shape on both sides modulo the `prebid` key (Java only).
+
+  buyer_uid_promotion:
+    go: "imp.ext.bidder.bid_token = request.User.BuyerUID"
+    java: "imp.ext.vungle.bid_token = bidRequest.user.buyerUid"
+    equivalent: true
+    severity: pass
+    note: "Cross-language symmetric. Both sides promote request.user.buyerUid into the imp.ext bid_token field at request-build time. Distinct from publisher-supplied imp ext fields."
+
+  site_to_app_synthesis:
+    go: "if request.Site != nil { requestCopy.Site = nil; requestAppCopy = openrtb2.App{ID: pubAppStoreID} }"
+    java: "resolveSite returns null when bidRequest.site is set; resolveApp synthesizes App with App.ID = extImp.appStoreId"
+    equivalent: true
+    severity: pass
+    note: "ADR-007 F3 mediatype-context-rewrite-site-to-app master sample on BOTH sides. Cross-language symmetric. Outgoing request to Vungle ALWAYS has App context, never Site."
+
+  bid_type_resolution:
+    go_method_chain: [{ method: hardcoded, hardcoded_value: BidTypeVideo }]
+    java_method_chain: [{ method: hardcoded, hardcoded_value: BidType.video }]
+    equivalent: true
+    severity: pass
+    note: "Rule 26 hardcoded master sample on BOTH sides. All bids classified video regardless of bid.mtype."
+
+  bid_token_snake_case_serialization:
+    go: "json.RawMessage tag `bid_token` (snake_case explicit)"
+    java: "Lombok @Value bidToken (camelCase) with NO @JsonProperty — relies on JacksonMapper PROPERTY_NAMING_STRATEGY"
+    equivalent: false
+    severity: warn
+    note: |
+      Cross-language fidelity gap. Go has explicit `bid_token` JSON tag. Java's Lombok
+      @Value defaults to Jackson's PROPERTY_NAMING_STRATEGY for serialization. If the
+      JacksonMapper's global strategy is set to SNAKE_CASE (likely, given other
+      adapters), the field serializes as `bid_token`. If not, would serialize as
+      `bidToken` and break wire-format parity with Go side. Verify the JacksonMapper
+      config — possible latent fidelity gap.
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: prebid/prebid-server-java#1819
+    destination_pr: prebid/prebid-server#3024
+    fidelity_review_themes:
+      - port-fidelity
+      - mediatype-context-rewrite-site-to-app
+      - buyer-uid-promotion
+      - hardcoded-video-bid-type
+      - phantom-rename-liftoff-vungle
+      - bid-token-snake-case-jackson-mapping
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 4
+  notes: |
+    Vungle is the Phase 5 P2 #2 fixture intended for ADR-006 Rule 43 lifecycle
+    sub-type coverage. ADR-006 originally classified it as `go-leads` (liftoff Go ↔
+    vungle Java). Upstream evidence at this commit (Go 2fae16f3, Java a1fe64e1)
+    shows the ACTUAL state is `bilateral` with phantom-rename history:
+
+      - Both sides canonical = vungle
+      - Liftoff is a parent-company-name event (2021 acquisition), NOT a code rename
+      - Operators may configure `liftoff` based on acquisition news
+      - Java backward-compat: `aliases: { liftoff: { enabled: false } }` (tilde-inherit)
+      - Go backward-compat: removed-bidder warning map redirecting to vungle
+
+    ADR-006 was corrected per this evidence — see CHANGELOG `## Unreleased — ADR
+    corrections (no version bump)` for the bilateral phantom-rename reclassification.
+
+    Patterns captured for the first time:
+      - ADR-007 F3 mediatype-context-rewrite-site-to-app master sample on BOTH sides.
+        First corpus fixture to populate `entity_strategies.Site:
+        replace-with-app-synthesis` + `App: synthesize-app-replacement`.
+      - Buyer-UID-promotion: request.user.buyerUid → imp.ext.bid_token (cross-language
+        symmetric). New pattern not previously captured.
+      - Three-key imp.ext wrapper (bidder + vungle keys carrying overlapping content)
+        symmetric across languages.
+      - Rule 26 hardcoded video bid type — first corpus master sample.
+      - param_test.go (singular) filename quirk — Ogury-style.
+      - bilateral lifecycle.rename with PHANTOM rename (no discrete rename PR) — first
+        corpus example.
+      - Cross-language alias-back asymmetry (tilde-inherit Java vs removed-bidder-warning
+        Go) — first corpus example.
+
+    Four warn-level findings:
+      (1) bidder_params_sha byte-divergence (trailing newline + minor formatting).
+      (2) alias_graph cross-language asymmetry (tilde-inherit vs removed-bidder-warning
+          mechanisms for liftoff backward-compat).
+      (3) lifecycle.rename subtype evidence contradicts ADR-006 (bilateral, not go-leads).
+      (4) bid_token snake_case serialization may diverge if Jackson PROPERTY_NAMING_STRATEGY
+          is not set to SNAKE_CASE on the JacksonMapper.
+
+    Coverage progression (post-this-commit):
+      - Phase 5: 5 of 9 pairs (P1 complete + P2 #1-#2: limelightDigital + vungle).
+      - Lifecycle pairs: 2 of 7 (elementaltv `bilateral` + vungle `bilateral` from
+        evidence; the ADR-006 master sample claim is being corrected by this fixture).
+      - 32 goldens (16 Go + 16 Java).
+
+    Phase 5 next: P2 #3 (cadent_aperture_mx/emxdigital — Rule 43 java-leads master,
+    AND a true cross-name pair where Go and Java goldens use different bidder names).

@@ -1,6 +1,7 @@
 ---
 name: bidder-info-pr-review
 description: Reviews changes to bidder-info YAML files at static/bidder-info/*.yaml. USE WHEN a PR adds/modifies/removes any of these files. Verifies endpoint reachability, alias parent existence and inheritance, GVL vendor lookups, user-sync URL macros, white-label policy compliance, capability declarations, and SSL certificate validity. Do NOT use for static/bidder-params/*.json, openrtb_ext/imp_*.go, or adapter Go code.
+version: 1.0.0
 ---
 
 # Bidder Info PR Review
@@ -192,7 +193,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 1. **`whiteLabelOnly: true` semantics**: Marks the bidder as available only as a white-label parent (aliases reference it). Does NOT preclude Go adapter code on the parent. Reference parents like TeqBlaze (PR #4480) and SmartHub have full Go code AND `whiteLabelOnly: true` — the Go code serves the aliases. **Severity: INFO** if the flag is set on a new file.
 2. **Full adapter that looks like a copy**: If a new full Go adapter is being added but the PR description / discussion / file structure resembles an existing adapter (heuristic: identical endpoint domain, comparable parameter schema, copy-paste-style code organization), flag as **WARN** with the suggestion: "this may be a white-label scenario — consider using `aliasOf:` instead of duplicating Go code." Severity stays WARN (not FAIL) because the determination requires reviewer judgment.
-3. **Reviewer-redirect quotes**: see canonical examples in [../../shared/framework-utilities.md#aliasing](../../shared/framework-utilities.md#aliasing) — patterns from PRs #4329 (Tagoras), #4383 (RocketLab), #4391 (MediaYo), #4376 (PinkLion), #4565 (Nuba) where reviewers redirected full → alias-only. Code reduction quoted by reviewer: "1k+ to ~20".
+3. **Reviewer-redirect quotes**: see canonical examples in [../shared/framework-utilities.md#aliasing](../shared/framework-utilities.md#aliasing) — patterns from PRs #4329 (Tagoras), #4383 (RocketLab), #4391 (MediaYo), #4376 (PinkLion), #4565 (Nuba) where reviewers redirected full → alias-only. Code reduction quoted by reviewer: "1k+ to ~20".
 
    **Cross-skill de-duplication**: If pr-triage manifest's CROSS-SKILL CONCERNS section already records the 5g whitelabel-resemblance signal OR the `whitelabel-redirect-mid-review` sub-label was set per Step 4 rule 5b, do NOT re-flag the same concern. Note `Previously flagged by triage` in this skill's findings and only emit net-new findings (e.g., parent-choice verification per Workflow: Alias Adapter Added Step 11).
 4. **Alias-only directionality**: `aliasOf` is added to NEW files; reviewers do not redirect from alias-only → full. The exception is PR #4614 (TRUSTX) which migrated from alias → full because the bidder organization was establishing independent infrastructure. Treat alias→full as a special case requiring matching deletion of `aliasOf:` line PLUS introduction of full endpoint/capabilities/userSync block.
@@ -207,7 +208,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
    - If the endpoint URL is HTTPS, also validate certificate per Workflow: SSL Certificate Validation (separate workflow below).
 4. **HTTP response behavior**: A bare POST to the endpoint should not return 404. Acceptable responses: 200, 204, 400 (invalid body expected). If the endpoint returns 404 for POST requests with bodies, flag for clarification from the bidder
 5. **Domain ownership**: Verify the endpoint domain plausibly belongs to the bidder organization (domain name should relate to bidder name)
-6. **Template macros**: If URL contains `{{...}}` patterns, cross-reference against the canonical 18-field list at [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros). Any `{{.XYZ}}` macro NOT in that list will silently resolve to empty string at runtime — flag as **FAIL**. Non-Go-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros and require `disabled: true` plus a comment block listing valid values (PR #4502 appStockSSP convention).
+6. **Template macros**: If URL contains `{{...}}` patterns, cross-reference against the canonical 18-field list at [../shared/framework-utilities.md#endpoint-template-macros](../shared/framework-utilities.md#endpoint-template-macros). Any `{{.XYZ}}` macro NOT in that list will silently resolve to empty string at runtime — flag as **FAIL**. Non-Go-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros and require `disabled: true` plus a comment block listing valid values (PR #4502 appStockSSP convention).
 7. **No hardcoded credentials**: Ensure the URL does not contain actual API keys, passwords, or secrets in plain text
 
 ### Workflow: SSL Certificate Validation
@@ -284,7 +285,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 3. **Platform addition vs. media type addition**: When adding a new platform (e.g., adding `site` to an adapter that only had `app`), no additional adapter test files are typically required — the existing adapter code handles it
 4. **DOOH scrutiny**: DOOH (Digital Out Of Home) is uncommon — if declared, verify the bidder genuinely supports DOOH inventory
 5. **Alias impact**: If this bidder has aliases, verify the alias capabilities remain a valid subset
-6. **Cross-check vs Go code**: When `static/bidder-info/{bidder}.yaml` capabilities are modified AND `adapters/{bidder}/{bidder}.go` is also in the PR, the adapter-code-pr-review skill will run a YAML-capabilities ↔ Go MType drift check. This skill records the YAML-declared media types in the BIDDER METADATA block of its findings so the adapter-code skill can cross-reference. See [../../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift](../../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift).
+6. **Cross-check vs Go code**: When `static/bidder-info/{bidder}.yaml` capabilities are modified AND `adapters/{bidder}/{bidder}.go` is also in the PR, the adapter-code-pr-review skill will run a YAML-capabilities ↔ Go MType drift check. This skill records the YAML-declared media types in the BIDDER METADATA block of its findings so the adapter-code skill can cross-reference. See [../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift](../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift).
    - **DOOH-specific cross-check**: If `capabilities.dooh` is declared, the adapter MUST include at least one exemplary test fixture exercising `dooh` context (`mockBidRequest.dooh` present). If absent, flag as **WARN** — reviewer may ask the contributor to remove DOOH from capabilities since they have no DOOH supply. Reference: PR #4287 (Optidigital) declared dooh but had no DOOH fixture; the new rule would have caught this.
 
 ### Workflow: Bidder Disabled
@@ -345,7 +346,7 @@ Complete mapping of every BidderInfo field to its review criteria. Source: `conf
 
 - Manual reviewer process. The reviewer (typically `bsardo`) sends a verification email and blocks merge until the maintainer replies "received". Skills cannot fully automate this gate.
 - Flag generic-domain emails (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `proton.me`, `icloud.com`) as **INFO** — historically these receive extra scrutiny because they don't establish organizational ownership.
-- Flag personal-name patterns (e.g., `firstname.lastname@`, `firstname@`) as **WARN** — reviewer policy is to require a group/role mailbox (`tech@`, `support@`, `prebid@`, etc.). See [../../shared/framework-utilities.md#maintainer-email-policy](../../shared/framework-utilities.md#maintainer-email-policy) for the canonical rule.
+- Flag personal-name patterns (e.g., `firstname.lastname@`, `firstname@`) as **WARN** — reviewer policy is to require a group/role mailbox (`tech@`, `support@`, `prebid@`, etc.). See [../shared/framework-utilities.md#maintainer-email-policy](../shared/framework-utilities.md#maintainer-email-policy) for the canonical rule.
 - For aliases: `maintainer.email` MAY be inherited from the parent (omit the field). If declared on the alias, it should be the alias organization's email — not a copy of the parent's, unless they share infrastructure. Flag the parent-email-on-alias case as **INFO** asking for confirmation it was intentional (per PR #4441 reviewer practice).
 - If the PR comments include reviewer phrases like "please reply 'received'" or "I'll merge once you confirm via email", record `email-confirmation-pending` status in the review summary.
 
@@ -626,4 +627,4 @@ After reviewing individual fields, verify these cross-field constraints:
 
 See [field-index.md](references/field-index.md) for the complete Go struct mapping with types, YAML tags, and validation functions, plus common YAML field patterns observed across the 89 reference adapter PRs.
 
-For framework-wide concerns (endpoint template macros canonical list, maintainer email policy, naming conventions, aliasing semantics, anti-patterns, test harness contract), see [../../shared/framework-utilities.md](../../shared/framework-utilities.md) — this skill references that file rather than duplicating its content.
+For framework-wide concerns (endpoint template macros canonical list, maintainer email policy, naming conventions, aliasing semantics, anti-patterns, test harness contract), see [../shared/framework-utilities.md](../shared/framework-utilities.md) — this skill references that file rather than duplicating its content.

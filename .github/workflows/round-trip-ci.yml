@@ -1,0 +1,131 @@
+name: round-trip-ci
+
+# Phase 4.7 hardened CI gates. Runs on every PR + push to main:
+#  - Render-drift: re-render behavior-taxonomy.md, port-translation-rules.md,
+#    docs/coverage-report.md from their YAML/Python sources and assert no drift.
+#  - Schema validation: every golden validates against adapter-spec.schema.json
+#    (Go-source and Java-source discrimination via if/then/else).
+#  - R1–R10 round-trip CI + dual-spec assertions: respects .github/known-broken-pairs.txt
+#    so the aax pair (the one historically-broken pair) is downgraded fail→warn.
+#  - Mechanizable port-rule lints (Phase 2.6) for Rules 5, 9, 33, 36, 38, 44, 46.
+#  - Schema-contract test: all SKILL-cited dotted paths exist in the schema.
+#  - Unit tests: full discovery across scripts/tests/ for the harness internals.
+#  - Description-length lint (informational): SKILL frontmatter description
+#    over 600 chars triggers an info-level annotation (not blocking).
+
+on:
+  pull_request:
+    paths:
+      - 'prebid-server-go/**'
+      - 'prebid-server-java/**'
+      - 'cross-language-pairs/**'
+      - 'scripts/**'
+      - 'docs/**'
+      - 'templates/**'
+      - 'requirements.txt'
+      - 'Makefile'
+      - 'CHANGELOG.md'
+      - '.github/workflows/round-trip-ci.yml'
+      - '.github/known-broken-pairs.txt'
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      # Workflow only reads code + runs tests; no writes (no PR comments,
+      # no commits, no releases). Default GITHUB_TOKEN scopes (incl.
+      # contents:write, pull-requests:write) are unnecessary attack
+      # surface — narrow to the minimum.
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Read known-broken pairs
+        id: known-broken
+        run: |
+          PAIRS=$(grep -vE '^\s*(#|$)' .github/known-broken-pairs.txt | tr '\n' ',' | sed 's/,$//')
+          echo "pairs=$PAIRS" >> $GITHUB_OUTPUT
+          echo "Known-broken pairs: $PAIRS"
+
+      - name: Render-drift — behavior-taxonomy.md
+        run: python3 scripts/render-taxonomy.py --check
+
+      - name: Render-drift — port-translation-rules.md
+        run: python3 scripts/render-port-rules.py --check
+
+      - name: Render-drift — docs/coverage-report.md
+        run: python3 scripts/coverage-report.py --check
+
+      - name: Schema-contract test (dotted paths in registry)
+        run: python3 scripts/tests/test_schema_contract.py
+
+      - name: Schema validation — all goldens
+        run: python3 -m unittest scripts.tests.test_schema_jsonschema -v
+
+      # NOTE: `audit-golden.py` runs upstream `gh api` calls to verify each
+      # golden's recorded SHAs / file paths match the upstream repo at the
+      # pinned commit. Required at fixture-authoring time, not at PR time.
+      # Removed from CI to keep the workflow hermetic (no external API
+      # dependency, no GH_TOKEN coupling). Authors run `make audit-goldens`
+      # locally before submitting fixture-touching PRs — see
+      # `prebid-server-{go,java}/read/test-fixtures/README.md`.
+
+      - name: Unit tests (full harness)
+        run: python3 -m unittest discover -s scripts/tests -v
+
+      - name: Round-trip CI (R1–R10 + dual-spec assertions)
+        run: |
+          set +e
+          python3 scripts/round-trip-ci.py --strict-r3 \
+            --allow-known-broken-pairs "${{ steps.known-broken.outputs.pairs }}"
+          EXIT=$?
+          set -e
+          # Exit codes: 0=all pass, 1=fail, 2=warn-only.
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
+
+      - name: Mechanizable port-rule lints (Phase 2.6)
+        run: |
+          set +e
+          python3 scripts/lib/lint-port-rules.py
+          EXIT=$?
+          set -e
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
+
+      - name: File-role enum lint (Wave 4 — Java + Go)
+        run: |
+          set +e
+          python3 scripts/lib/lint-java-roles.py --include-go
+          EXIT=$?
+          set -e
+          # Exit codes: 0=all pass, 1=fail, 2=warn-only.
+          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
+
+      - name: Description-length lint (informational)
+        run: |
+          # Phase 4.7 informational gate: warn when a SKILL's frontmatter
+          # `description:` exceeds 600 chars. Doesn't block; just surfaces.
+          set +e
+          OVERLONG=0
+          for f in $(find prebid-server-go/read/skills prebid-server-java/read/skills -name 'SKILL.md'); do
+            DESC=$(awk '/^description: /,/^[a-z_]+: /' "$f" | head -n -1 | sed 's/^description: //' | tr -d '\n')
+            LEN=${#DESC}
+            if [ "$LEN" -gt 600 ]; then
+              echo "::notice file=$f::SKILL description is $LEN chars (soft limit 600); consider tightening for at-a-glance dispatch."
+              OVERLONG=$((OVERLONG + 1))
+            fi
+          done
+          echo "Description-length lint: $OVERLONG SKILLs exceed the 600-char soft limit."
+          # Always exit 0 — informational only.
+          exit 0

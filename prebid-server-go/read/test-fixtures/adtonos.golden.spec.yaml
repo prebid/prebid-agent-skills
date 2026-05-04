@@ -1,0 +1,316 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-adapter-code: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/claude-opus-4-7[1m]
+  warnings:
+    - type: legacy-encoding-json-direct-usage
+      file: adapters/adtonos/adtonos.go
+      line: 53
+      summary: "MakeRequests calls json.Marshal (encoding/json) at line 53 instead of jsonutil.Marshal. Imports both encoding/json and util/jsonutil; the unmarshal paths use jsonutil but the marshal path is on the legacy helper. Recommended migration: switch to jsonutil.Marshal for consistency."
+
+meta:
+  bidder_name: adtonos
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://exchange.adtonos.com/bid/{{.PublisherID}}"
+  endpoint_construction:
+    kind: template-macro
+    macros_used:
+      - PublisherID
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: true
+  maintainer:
+    email: "support@adtonos.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - audio
+    app:
+      mediaTypes:
+        - audio
+        - video
+    dooh:
+      mediaTypes:
+        - audio
+  geoscope:
+    - global
+  gvl_vendor_id: 682
+  user_sync:
+    redirect:
+      url: "https://play.adtonos.com/redir?to={{.RedirectURL}}"
+      userMacro: "@UUID@"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+# NOTE: encoded as YAML double-quoted scalar (rather than the schema example's `|` literal block)
+# to preserve byte-fidelity. The original file has NO terminal newline AND carries trailing
+# whitespace on one blank line (line 5 = "  \n", two spaces). A `|` block would force a
+# terminal newline and risk clipping the indented blank line; the double-quoted form
+# makes sha256(bidder_params_json) == bidder_params_sha256 exactly (R2 contract).
+bidder_params_json: "{\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n  \"title\": \"AdTonos Adapter Params\",\n  \"description\": \"A schema which validates params accepted by the AdTonos adapter\",\n  \n  \"type\": \"object\",\n  \"properties\": {\n    \"supplierId\": {\n      \"type\": \"string\",\n      \"description\": \"ID of the supplier account in AdTonos platform\"\n    }\n  },\n  \"required\": [\"supplierId\"]\n}"
+bidder_params_sha256: 47dece96fbd30bea3639faa2b9c504cf1b9501bf564674218aa745d5898f89cc
+
+params:
+  schema_interpretation:
+    properties:
+      - name: supplierId
+        type: string
+        description: "ID of the supplier account in AdTonos platform"
+    required_fields:
+      - supplierId
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_adtonos.go
+    type_name: ImpExtAdTonos
+    fields:
+      - name: SupplierID
+        json_tag: supplierId
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/adtonos/params_test.go
+    valid_cases_count: 2
+    invalid_cases_count: 1
+    bidder_constant_referenced: openrtb_ext.BidderAdTonos
+
+code:
+  package_or_class: adtonos
+  directory_name: adtonos
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: adtonos.go
+        role: implementation
+        loc: 143
+  imports:
+    has_template_engine: true
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party: []
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpointTemplate
+        type: "*template.Template"
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: true
+    errors_returned:
+      - "unable to parse endpoint url template: %v"
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-passthrough
+      custom_body_type: null
+    mutation:
+      mutates_request: false
+      entity_strategies: {}
+      go_idiom: none
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtAdTonos
+      wrapper_type: null
+    endpoint_resolution:
+      kind: single-token-substitution
+      mechanism_go: text/template
+      mechanism_java: null
+      macro_field_set:
+        - PublisherID
+      template_params_struct_field_count: 18
+    helpers:
+      - name: buildEndpointURL
+        signature: "(a *adapter) buildEndpointURL(params *openrtb_ext.ImpExtAdTonos) (string, error)"
+      - name: getMediaTypeForBid
+        signature: "getMediaTypeForBid(bid openrtb2.Bid, requestImps []openrtb2.Imp) (openrtb_ext.BidType, error)"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-mtype
+          fallback_action: next
+        - method: by-imp-mediatype
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: lenient
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: adtonostest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: simple-audio-with-mtype.json
+        sha256: 53480fb542d6c56ff77c96e73d35f04f00cf012db54c2afc1d8ba4dc512f663a
+        bytes: 2462
+      - filename: simple-audio.json
+        sha256: 95155897b01b00170687ae0dde99a76d01c4a8b9c83fed214ae8baaab5f390d3
+        bytes: 2408
+      - filename: simple-video.json
+        sha256: e60cbf31c64eabe0cd908b2c84f64f12506158be40e13b93d738bbd0c496627a
+        bytes: 2409
+    supplemental:
+      - filename: wrong-impression-mapping.json
+        sha256: 99359a73c521582e409eb56cdf433041c554fbb3852400df590e72ac2120722d
+        bytes: 2290
+    amp: []
+    video: []
+    videosupplemental: []
+    dooh: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: dooh-mediaTypes-audio-only
+    file: static/bidder-info/adtonos.yaml
+    summary: "DOOH capability declared with `mediaTypes: [audio]` only. AdTonos is a pure-audio exchange (per inline YAML comment lines 12-13: 'video ads are synthesized from audio ads for compatibility with mobile games'). Audio is the only DOOH-supported media type, while app capability extends to [audio, video] and site capability is [audio] only — three distinct mediaType lists across the three capability categories."
+    edge_case_taxon: incomplete-classification
+  - id: first-imp-only-ext-parsing
+    file: adapters/adtonos/adtonos.go
+    summary: "MakeRequests parses ONLY request.Imp[0].Ext (line 36) to derive the endpoint PublisherID — other imps' ext objects are never inspected. If multiple imps carry different supplierId values the first one wins silently. The error message hardcodes 'impression index %d, 0' (lines 38, 44), confirming the index-0-only design. The single-batched body still passes ALL imps through to the bidder."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: legacy-json-marshal-mixed-with-jsonutil
+    file: adapters/adtonos/adtonos.go
+    summary: "Adapter imports BOTH encoding/json (line 4) and util/jsonutil (line 15). Unmarshal paths (lines 36, 42, 88) use jsonutil; the request-body Marshal at line 53 uses encoding/json.Marshal. Inconsistent — should be migrated to jsonutil.Marshal for fidelity with PR #4614 reviewer convention. Surfaces as legacy-encoding-json-direct-usage warning."
+    edge_case_taxon: legacy-encoding-json-direct-usage
+  - id: bid-type-fallback-favours-audio
+    file: adapters/adtonos/adtonos.go
+    summary: "getMediaTypeForBid (lines 112-143) chains by-bid-mtype first (handles MarkupAudio/Video/Banner/Native explicitly, lines 115-124), then falls through to imp-mediatype lookup (lines 127-138) which checks Audio FIRST then Video — Banner/Native imps are explicitly rejected with BadInput 'Unsupported bidtype'. The audio-first fallback ordering is by design (inline comment line 126: 'AdTonos is an audio company so we prioritize that')."
+    edge_case_taxon: incomplete-classification
+  - id: error-message-typo-Infomation
+    file: adapters/adtonos/adtonos.go
+    summary: "BadInput error messages at lines 38 and 44 spell 'Error Infomation' (missing letter 'r'). Pre-existing typo in the canonical messages. Cosmetic only — does not affect behavior."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/adtonos/
+    package_name: adtonos
+    bidder_constant: openrtb_ext.BidderAdTonos
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/adtonos/
+    bidder_class: AdtonosBidder
+    config_class: AdtonosConfiguration
+    yaml_path: src/main/resources/bidder-config/adtonos.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/adtonos/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  go_specific_concerns:
+    - "Endpoint template macro key spelled `{{.PublisherID}}` (Go-template syntax) on the Go side; the Java side uses `{{PublisherId}}` (no leading dot, lower-cased 'd'). A porter Go->Java must rewrite the YAML endpoint AND the proto class field name (Go: SupplierID json:'supplierId'; Java: ExtImpAdtonos.supplierId). The bidder constant name itself differs between languages too: Go `BidderAdTonos` (CamelCase preserves brand TitleCase) vs Java `AdtonosBidder` (single-T)."
+    - "MakeRequests parses ONLY `request.Imp[0].Ext` (line 36) — multi-imp callers cannot route different imps to different supplierIds. The Java port (AdtonosBidder.java line 47: `bidRequest.getImp().getFirst()`) inherits the same first-imp-only behavior; this is INTENTIONAL parity, not a port-fidelity divergence."
+    - "Adapter mixes encoding/json (line 53 Marshal) with util/jsonutil (lines 36, 42, 88 Unmarshal). Reviewer convention from PR #4614 advises migration to jsonutil.Marshal — flagged as legacy-encoding-json-direct-usage warning."
+    - "Bid type chain: by-bid-mtype first (4-way switch on MarkupAudio/Video/Banner/Native at lines 115-124), then imp-mediatype fallback (lines 127-138) that checks Audio FIRST then Video and explicitly REJECTS Banner/Native imps with `BadInput 'Unsupported bidtype'`. Inline comment (line 126) documents 'AdTonos is an audio company so we prioritize that' — the Banner/Native rejection is by design despite Banner appearing in the mtype switch above."
+    - "DOOH capability is declared with mediaTypes: [audio] only (yaml line 18-20); site capability is [audio] only (line 16-17); app capability extends to [audio, video] (lines 9-14) per the inline comment 'video ads are synthesized from audio ads for compatibility with mobile games that only understand video mimetypes'. Three distinct mediaType lists across three capability categories — uncommon split."
+    - "modifyingVastXmlAllowed: true is declared at YAML line 7 (Go side); the Java YAML at src/main/resources/bidder-config/adtonos.yaml does NOT carry the modifying-vast-xml-allowed field. Cross-language asymmetry — Java's modifying-vast-xml-allowed support is a recent addition (FeedAd, Mediasquare); a Go->Java port should add the field on the Java side."
+    - "request.Imp[0].Ext is dereferenced unconditionally (line 36) — if the request has zero imps, this panics with index-out-of-range. Framework's adapter loop typically guarantees at least one imp; defensive nil/empty check absent."
+  java_specific_concerns: []
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

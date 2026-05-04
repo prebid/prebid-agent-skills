@@ -1,0 +1,540 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-orchestrator: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/claude-opus-4-7[1m]
+  warnings:
+    - type: cross-language-byte-divergence
+      file: src/main/resources/static/bidder-params/mediasquare.json
+      line: 18
+      summary: "Java-side mediasquare.json formats `required` array across multiple lines (4 lines, 527 bytes); Go-side same file uses single-line `[\"owner\", \"code\"]` (515 bytes). SHA differs: Java=946207d8 vs Go=798a251b. R5 cross-language byte-equality FAILS for bidder_params; surfaced as quirk port-fidelity-divergence."
+
+meta:
+  bidder_name: mediasquare
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://pbs-front.mediasquare.fr/msq_prebid"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  # Edge case #31 — modifying-vast-xml-allowed: true is set in mediasquare.yaml line 5.
+  modifying_vast_xml_allowed: true
+  maintainer:
+    email: "tech@mediasquare.fr"
+  capabilities:
+    # Java mediasquare.yaml declares only `app-media-types: [banner, video, native]`.
+    # `site-media-types` is OMITTED (null on MetaInfo POJO) — Java framework treats this
+    # as no site capabilities. Go side declares both site and app with [banner, video, native];
+    # cross-language asymmetry surfaced in port_concerns + quirks.
+    site:
+      mediaTypes: []
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 791
+  user_sync: {}
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+# Verbatim bytes of src/main/resources/static/bidder-params/mediasquare.json. Encoded
+# as a YAML literal block scalar with `|` (final newline preserved). Java file is 527
+# bytes terminating with `\n}\n`. R2 holds: sha256(decoded scalar) == bidder_params_sha256.
+# Note the Go-side counterpart uses a different formatting for `required` (single-line
+# array vs Java's 4-line block) — bidder_params_sha256 differs across languages, R5 FAILS.
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Mediasquare Adapter Params",
+    "description": "A schema which validates params accepted by the Mediasquare adapter",
+    "type": "object",
+    "properties": {
+      "owner": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The owner provided for mediasquare."
+      },
+      "code": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The code provided for mediasquare."
+      }
+    },
+    "required": [
+      "owner",
+      "code"
+    ]
+  }
+bidder_params_sha256: 946207d8154ae56cf5b08d007b746cf75d4921a9650d2be5d6cf2f1893bf55a8
+
+params:
+  schema_interpretation:
+    properties:
+      - name: owner
+        type: string
+        description: "The owner provided for mediasquare."
+        constraints:
+          minLength: 1
+      - name: code
+        type: string
+        description: "The code provided for mediasquare."
+        constraints:
+          minLength: 1
+    required_fields:
+      - owner
+      - code
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.mediasquare
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/mediasquare/ExtImpMediasquare.java
+    type_name: ExtImpMediasquare
+    fields:
+      - name: owner
+        json_tag: owner
+        type_native: String
+        omitempty: false
+        notes:
+          - "@Value(staticConstructor=of)"
+      - name: code
+        json_tag: code
+        type_native: String
+        omitempty: false
+        notes:
+          - "@Value(staticConstructor=of)"
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/mediasquare/MediasquareBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: MediasquareBidder
+  directory_name: mediasquare
+  package_directory_mismatch: false
+  # Edge case — multi-file Java layout. The implementation lives in MediasquareBidder.java
+  # plus 7 helper classes co-located under bidder/mediasquare/{request,response}/ and 1
+  # proto class under proto/openrtb/ext/request/mediasquare/. The split mirrors the Go-side
+  # multi-file layout but uses Java's class-per-type convention rather than file-per-role.
+  file_layout:
+    kind: multi-file
+    files:
+      - name: MediasquareBidder.java
+        role: implementation
+        loc: 296
+      - name: request/MediasquareRequest.java
+        role: types
+        loc: 26
+      - name: request/MediasquareCode.java
+        role: types
+        loc: 30
+      - name: request/MediasquareBanner.java
+        role: types
+        loc: 11
+      - name: request/MediasquareFloor.java
+        role: types
+        loc: 13
+      - name: request/MediasquareGdpr.java
+        role: types
+        loc: 11
+      - name: request/MediasquareMediaTypes.java
+        role: types
+        loc: 16
+      - name: request/MediasquareSupport.java
+        role: types
+        loc: 13
+      - name: response/MediasquareBid.java
+        role: types
+        loc: 49
+      - name: response/MediasquareResponse.java
+        role: types
+        loc: 11
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: false
+    third_party:
+      - CollectionUtils
+      - MapUtils
+      - ObjectUtils
+  adapter_struct: null
+  builder: null
+  make_requests:
+    # Edge case — multi-imp aggregation: each imp becomes one entry in
+    # MediasquareRequest.codes[], all sent in a single HTTP request. Mirrors Go-side
+    # imp-flatten-aggregate semantics.
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: imp-flatten-aggregate
+          custom_body_type: MediasquareRequest
+    # Edge case #5 — custom (non-OpenRTB) request body. The HTTP body is a
+    # MediasquareRequest payload (request/MediasquareRequest.java), NOT a BidRequest.
+    # Bidder<MediasquareRequest> generic parameterization carries this through the
+    # framework's HttpRequest<MediasquareRequest> typing — see bidder_class section.
+    request_body:
+      kind: custom
+      custom_body_type: MediasquareRequest
+    mutation:
+      mutates_request: false
+      entity_strategies: {}
+      go_idiom: null
+      java_idiom: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpMediasquare
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers:
+      - name: parseImpExt
+        signature: "private ExtImpMediasquare parseImpExt(Imp imp)"
+      - name: makeCode
+        signature: "private static MediasquareCode makeCode(BidRequest bidRequest, Imp imp, ExtImpMediasquare extImp)"
+      - name: makeMediaTypes
+        signature: "private static MediasquareMediaTypes makeMediaTypes(Imp imp)"
+      - name: makeBanner
+        signature: "private static MediasquareBanner makeBanner(Banner banner)"
+      - name: makeFloors
+        signature: "private static Map<String, MediasquareFloor> makeFloors(MediasquareFloor floor, MediasquareMediaTypes mediaTypes)"
+      - name: isCodeValid
+        signature: "private static boolean isCodeValid(MediasquareCode code)"
+      - name: makeRequest
+        signature: "private MediasquareRequest makeRequest(BidRequest bidRequest, List<MediasquareCode> codes)"
+      - name: getDsa
+        signature: "private static ExtRegsDsa getDsa(Regs regs)"
+      - name: makeGdpr
+        signature: "private static MediasquareGdpr makeGdpr(User user, Regs regs)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(MediasquareResponse response)"
+      - name: makeBidderBid
+        signature: "private BidderBid makeBidderBid(MediasquareBid bid)"
+      - name: getBidType
+        signature: "private static BidType getBidType(MediasquareBid bid)"
+      - name: makeBid
+        signature: "private Bid makeBid(MediasquareBid bid, BidType bidType)"
+      - name: getBidExt
+        signature: "private ObjectNode getBidExt(MediasquareBid bid, BidType bidType)"
+  make_bids:
+    # Edge case #6 — custom response unmarshal. The body is a MediasquareResponse
+    # struct (response/MediasquareResponse.java), with `responses[]` carrying
+    # MediasquareBid entries that are NOT openrtb2.Bid-shaped (cpm/creative_id/native
+    # sub-object).
+    response_type: custom
+    custom_response_type: MediasquareResponse
+    http_status_handling:
+      # Catches DecodeException from mapper.decodeValue (line 233) and emits
+      # BidderError.badServerResponse. HTTP status code itself is auto-handled by
+      # the Vert.x framework before makeBids is invoked.
+      kind: framework-default
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      # MediasquareBidder.getBidType (line 254-262) inspects the MediasquareBid payload
+      # shape: bid.video != null → video, bid.nativeResponse != null → xNative, else
+      # default banner. Pairs with custom response_type. Note: bid.mtype on the OUTPUT
+      # Bid is set via bidType.ordinal()+1 (line 274) — banner=1, video=2, audio=3, xNative=4.
+      method_chain:
+        - method: by-response-payload-shape
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: none
+    # extractBids uses .stream().filter(Objects::nonNull).map(this::makeBidderBid)
+    # over MediasquareResponse.responses (line 243-246). Java-side flatten via stream.
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    # BidderBid.of(makeBid(bid, bidType), bidType, bid.getCurrency()) at line 251 —
+    # passes bid.getCurrency() per-bid into BidderBid; the framework concatenates
+    # currencies across bids without overwriting. No bidResponse.Currency = ... assignment.
+    # Note: Go side has unguarded last-bid-wins overwrite; Java side does NOT — Java passes
+    # currency per-bid via BidderBid.of, which is structurally safer.
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/mediasquare/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-mediasquare-bid-request.json
+        sha256: 7f37d21f25ec22e1abc12b27b4ed6ce1397b9ab0f62df10fcc128a96d550e24f
+        bytes: 2070
+        role: bidder-bid-request
+      - filename: test-mediasquare-bid-response.json
+        sha256: 2788945ee841b9588fdf1e88c5e5265b3518ca21affd59cfc81155682dbdccbd
+        bytes: 1361
+        role: bidder-bid-response
+      - filename: test-auction-mediasquare-request.json
+        sha256: b64854ffde44e6235e5b6f7a2e28fa0dc0129eb834218076c70d9c307ad2c9db
+        bytes: 1687
+        role: auction-request
+      - filename: test-auction-mediasquare-response.json
+        sha256: 5bd2e6deb17e587c621732c0cef5713dc605631ed5e07cf053055e97508dd764
+        bytes: 2145
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 10
+  unit_test_loc: 415
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldReturnErrorIfImpExtCouldNotBeParsed
+    - makeHttpRequestsShouldHaveImpIds
+    - makeHttpRequestsShouldReturnExpectedHeaders
+    - makeHttpRequestsShouldUseCorrectUri
+    - makeHttpRequestsShouldCreateCorrectRequestPayload
+    - makeBidsShouldReturnErrorWhenResponseBodyCouldNotBeParsed
+    - makeBidsShouldReturnBannerBidSuccessfully
+    - makeBidsShouldReturnVideoBidSuccessfully
+    - makeBidsShouldReturnNativeBidSuccessfully
+  fixture_handling: count-only
+  test_application_properties_entries_added: 2
+  integration_test_class: MediasquareTest
+  integration_test_pattern: 4-file-split
+
+spring_config:
+  factory_class: MediasquareConfiguration
+  factory_method: mediasquareBidderDeps
+  property_source_path: classpath:/bidder-config/mediasquare.yaml
+  bidder_creator_lambda: |
+    config -> new MediasquareBidder(config.getEndpoint(), mapper)
+  configuration_properties_class:
+    name: BidderConfigurationProperties
+    extends: null
+    extra_fields: []
+    nested_classes: []
+    lombok_annotations: []
+  bean_dependencies:
+    - name: mediasquareConfigurationProperties
+      type: BidderConfigurationProperties
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: MediasquareBidder
+  # Edge case #28 — Bidder<T> generic parameterized with custom payload type.
+  # `public class MediasquareBidder implements Bidder<MediasquareRequest>` (line 55).
+  # The framework's HttpRequest<MediasquareRequest>, BidderCall<MediasquareRequest>,
+  # and Result<List<HttpRequest<MediasquareRequest>>> propagate the generic.
+  parameterized_request_type: MediasquareRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 2
+    parameters:
+      - name: endpointUrl
+        type: String
+        source: config.endpoint
+        role: properties
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields:
+    - name: SIZE_FORMAT
+      type: String
+      value: "%dx%d"
+    - name: TYPE_REFERENCE
+      type: TypeReference
+  helper_classes_co_located:
+    - MediasquareRequest
+    - MediasquareCode
+    - MediasquareBanner
+    - MediasquareFloor
+    - MediasquareGdpr
+    - MediasquareMediaTypes
+    - MediasquareSupport
+    - MediasquareBid
+    - MediasquareResponse
+  helper_classes_in_proto:
+    - ExtImpMediasquare
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  # HttpUtil.headers() returns a MultiMap pre-populated with Content-Type and Accept.
+  # See MediasquareBidder.java line 95.
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  # Edge case #28 — Bidder<MediasquareRequest> generic parameterization.
+  - id: bidder-generic-custom-request-type
+    file: src/main/java/org/prebid/server/bidder/mediasquare/MediasquareBidder.java
+    summary: "MediasquareBidder declares `implements Bidder<MediasquareRequest>` (line 55) — the framework's Bidder<T> interface is parameterized with the custom payload type so HttpRequest<MediasquareRequest>, BidderCall<MediasquareRequest>, and the marshaled body all flow through the typed pipeline. Constructor uses HttpRequest.<MediasquareRequest>builder() (line 92) instead of BidderUtil.defaultRequest (which is typed for BidRequest only)."
+    edge_case_taxon: multi-file-layout-justified
+  # Edge case #5 — custom request body shape (paired with batching.rules custom_body_type
+  # AND request_body.custom_body_type so the custom enum value has a quirks entry).
+  - id: custom-request-body-mediasquare
+    file: src/main/java/org/prebid/server/bidder/mediasquare/request/MediasquareRequest.java
+    summary: "makeHttpRequests marshals MediasquareRequest (request/MediasquareRequest.java) — a Lombok @Builder/@Value(staticConstructor=of) class with codes[], gdpr, type, dsa, support (@JsonProperty(\"tech\")), test fields. Codes[] aggregates one MediasquareCode per imp via makeCode (line 112-127). makeRequest at line 196-208 sets type=\"pbs\", test=Objects.equals(bidRequest.getTest(), 1), support=MediasquareSupport.of(device, app), and gdpr/dsa from regs. Canonical case for batching.rules: imp-flatten-aggregate."
+    edge_case_taxon: multi-file-layout-justified
+  # Edge case #6 — custom response shape.
+  - id: custom-response-body-mediasquare
+    file: src/main/java/org/prebid/server/bidder/mediasquare/response/MediasquareResponse.java
+    summary: "makeBids decodes MediasquareResponse (response/MediasquareResponse.java) with responses[] of MediasquareBid (response/MediasquareBid.java). MediasquareBid carries id/ad/bidId/cpm/currency/creativeId/height/width/netRevenue/transactionId/ttl/video(ObjectNode)/nativeResponse(@JsonProperty(\"native\") ObjectNode)/adomain/dsa(ObjectNode)/burl. extractBids (line 238-247) maps each MediasquareBid → BidderBid via makeBidderBid; getBidType (line 254-262) classifies by which sub-object (video/nativeResponse) is non-null; makeBid (line 264-278) constructs the OpenRTB Bid with mtype=bidType.ordinal()+1."
+    edge_case_taxon: multi-file-layout-justified
+  # Edge case — multi-file Java layout justified by the non-OpenRTB request body
+  # plus the rich MediasquareCode/MediasquareMediaTypes/MediasquareFloor type tree.
+  - id: multi-file-java-layout-non-openrtb-payload
+    file: src/main/java/org/prebid/server/bidder/mediasquare/
+    summary: "Adapter splits across MediasquareBidder.java (296 LOC orchestrator) plus 9 helper classes: 7 under request/ (MediasquareRequest, MediasquareCode, MediasquareBanner, MediasquareFloor, MediasquareGdpr, MediasquareMediaTypes, MediasquareSupport) and 2 under response/ (MediasquareBid, MediasquareResponse). Plus ExtImpMediasquare under proto/openrtb/ext/request/mediasquare/. Each Lombok @Value(staticConstructor=of) class is concise (11-49 LOC); the split is justified by the custom payload's type tree."
+    edge_case_taxon: multi-file-layout-justified
+  # Edge case #31 — modifying-vast-xml-allowed: true in YAML.
+  - id: modifying-vast-xml-allowed-true
+    file: src/main/resources/bidder-config/mediasquare.yaml
+    summary: "modifying-vast-xml-allowed: true at line 5 of bidder-config/mediasquare.yaml. Mediasquare's video bid responses may carry rewritable VAST XML; the framework grants this bidder the ability to modify VAST URLs/wrappers post-bid. Default is false; this is the explicit opt-in."
+    edge_case_taxon: port-fidelity-divergence
+  # R5 cross-language byte-divergence on bidder_params_json.
+  - id: bidder-params-byte-divergence-go
+    file: src/main/resources/static/bidder-params/mediasquare.json
+    summary: "Java mediasquare.json (527 bytes, sha256=946207d8) formats the `required` array across multiple lines; Go-side same file (515 bytes, sha256=798a251b) uses single-line `[\"owner\", \"code\"]`. Schema content is semantically identical (same properties, same required fields, same descriptions, same minLength constraints) but bytes differ. R5 cross-language byte-equality FAILS for bidder_params_sha256."
+    edge_case_taxon: port-fidelity-divergence
+  # YAML capabilities asymmetry: site capabilities are EMPTY on Java but present on Go.
+  - id: site-capabilities-omitted-java
+    file: src/main/resources/bidder-config/mediasquare.yaml
+    summary: "Java bidder-config/mediasquare.yaml declares only `app-media-types: [banner, video, native]`; `site-media-types` is OMITTED (yields null on MetaInfo POJO). Go-side static/bidder-info/mediasquare.yaml declares both site AND app capabilities with [banner, video, native]. Effectively, the Java configuration restricts mediasquare to app-only inventory while the Go configuration allows site too."
+    edge_case_taxon: port-fidelity-divergence
+  # Test-application.properties registry append.
+  - id: test-application-properties-registry-append
+    file: src/test/resources/org/prebid/server/it/test-application.properties
+    summary: "test-application.properties carries 2 mediasquare registry entries (lines 386-387): `adapters.mediasquare.enabled=true` and `adapters.mediasquare.endpoint=http://localhost:8090/mediasquare-exchange`. Standard 2-line registry append for IT-class wiring; matches the canonical 2-line pattern across most Java bidders."
+    edge_case_taxon: multi-file-layout-justified
+  # mtype computed via ordinal() arithmetic — fragile to enum reorder.
+  - id: mtype-from-bidtype-ordinal-arithmetic
+    file: src/main/java/org/prebid/server/bidder/mediasquare/MediasquareBidder.java
+    summary: "makeBid sets bid.mtype via `bidType.ordinal() + 1` (line 274). BidType ordinals: banner=0, video=1, audio=2, xNative=3 — so mtype maps to 1/2/3/4 matching OpenRTB 2.6 markup type values. This is fragile to BidType enum reordering; Go side hardcodes the int values per case (utils.go:18-27 mType()). Cross-language port concern: Java port relies on ordinal stability, Go port is explicit."
+    edge_case_taxon: port-fidelity-divergence
+  # @JsonProperty("tech") on MediasquareRequest.support: Java field name diverges from
+  # JSON key. Mirrors Go-side `tech` in msqParameters.
+  - id: jsonproperty-renames-support-to-tech
+    file: src/main/java/org/prebid/server/bidder/mediasquare/request/MediasquareRequest.java
+    summary: "MediasquareRequest field `support` is annotated @JsonProperty(\"tech\") (line 22). The wire payload key is `tech` (matching Go-side msqParameters.Tech via json tag); the Java field is named `support` for readability. Cross-language semantic match preserved by the Jackson annotation."
+    edge_case_taxon: json-key-style-mismatch
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/mediasquare/
+    package_name: mediasquare
+    bidder_constant: openrtb_ext.BidderMediasquare
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/mediasquare/
+    bidder_class: MediasquareBidder
+    config_class: MediasquareConfiguration
+    yaml_path: src/main/resources/bidder-config/mediasquare.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/mediasquare/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: false
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "MediasquareBidder declares `implements Bidder<MediasquareRequest>` — Java's typed payload generic is the canonical mechanism for non-OpenRTB request bodies. Go side has no equivalent generic; Go's adapter explicitly marshals msqParameters via jsonutil.Marshal and assembles RequestData manually."
+    - "MediasquareBidder constructor calls HttpUtil.validateUrl(endpointUrl) at line 65 — invalid URL triggers IllegalArgumentException at bean construction (covered by creationShouldFailOnInvalidEndpointUrl test)."
+    - "TYPE_REFERENCE static TypeReference<ExtPrebid<?, ExtImpMediasquare>> at line 58 enables mapper.convertValue(imp.getExt(), TYPE_REFERENCE).getBidder() to yield ExtImpMediasquare with one call. Mirrors Go-side jsonutil.Unmarshal two-phase pattern via Java's typed pipeline."
+    - "makeCode (line 112-127) uses Lombok @Builder on MediasquareCode rather than @Value(staticConstructor=of); MediasquareRequest, MediasquareCode, and MediasquareMediaTypes all carry @Builder for multi-field assembly. The remaining types use the static-of factory exclusively."
+    - "makeFloors (line 162-188) constructs a Map<String, MediasquareFloor> keyed by `WxH` size strings (e.g., \"300x250\") plus an asterisk wildcard for video/native. Returns null if the map ends up empty (line 187) — pairs with isCodeValid (line 190-194) which rejects codes whose mediaTypes lack any of banner/video/nativeRequest."
+    - "MediasquareRequest.support field is annotated @JsonProperty(\"tech\") — JSON wire key is `tech`, Java field is `support`. This is a deliberate rename (not a typo); Go side uses json:\"tech\" tag identically."
+    - "MediasquareBid.nativeResponse is annotated @JsonProperty(\"native\") because `native` is a Java keyword. The field stores an ObjectNode directly (not a typed Native class) because the upstream payload shape is opaque/passthrough."
+    - "getBidType (line 254-262) is order-dependent: video > xNative > banner. If a bid carries BOTH video AND nativeResponse simultaneously (malformed upstream), video wins. Mirrors Go-side utils.go:30-39 bidType() priority."
+    - "makeBid sets bid.mtype = bidType.ordinal() + 1 (line 274) — fragile to BidType enum reordering. Maintainers must NOT reorder BidType.banner/video/audio/xNative without breaking this adapter."
+    - "extractBids (line 238-247) emits a stream-flatten pipeline with .filter(Objects::nonNull) defensive filter — Go side does not need an equivalent because Go ranges never iterate over nil-element slots."
+    - "BidderConfigurationProperties is used directly (no subclass) — the Java port adds no extra YAML fields beyond the canonical endpoint+endpoint-compression+meta-info set. Mirrors the Go side's lack of extra_info."
+    - "Java mediasquare.yaml omits site-media-types — restricts mediasquare to app-only inventory. Go side declares both site and app with [banner, video, native]. Cross-language asymmetry in capability advertisement."
+    - "Java mediasquare.json formats the `required` array across multiple lines (4 lines, 527 bytes); Go counterpart uses single-line array (515 bytes). bidder_params_sha256 differs across languages — R5 cross-language byte-equality FAILS. Schema content is semantically identical."
+    - "Java MediasquareRequest carries `Boolean test` field (NOT primitive); makeRequest sets it via Objects.equals(bidRequest.getTest(), 1) — same true/false semantics as Go's `Test bool` populated when request.Test==1, but Java's boxed Boolean is null-safe."
+    - "modifying-vast-xml-allowed: true is set in mediasquare.yaml line 5 — bidder_info field surface that Go side records identically. Both languages opt-in to VAST modification."
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

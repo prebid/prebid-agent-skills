@@ -1,0 +1,1183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/prebid/prebid-agent-skills/prebid-server-go/read/skills/shared/adapter-spec.schema.json",
+  "title": "Adapter Specification",
+  "description": "Schema for the language-neutral Adapter Specification YAML emitted by the read-skill suite. Validated against all 40 goldens (21 Go + 19 Java) in `prebid-server-{go,java}/read/test-fixtures/`. Versioned independently from behavior-taxonomy.yaml and port-translation-rules.yaml; see CHANGELOG.md.",
+
+  "type": "object",
+  "required": [
+    "adapter_spec_version",
+    "spec_kind",
+    "source_language",
+    "provenance",
+    "meta",
+    "bidder_info",
+    "bidder_params_json",
+    "bidder_params_sha256",
+    "params",
+    "code",
+    "tests"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "adapter_spec_version": {
+      "description": "Schema version this spec conforms to. SemVer string per ADR-001 D7. The 40 existing goldens declare '1.0.0'; '1.1.0' admits the ADR-007 F1/F3/F4/F5 $defs (EndpointResolution, EntityStrategy, BidPostProcessing, ImpExtUnmarshal). Phase 2.8 / Wave 11b lands as '1.2.0' (MINOR): closes 17 accidentally-open additionalProperties:true sites, lifts 4 top-level open-maps to structured $defs (SpringConfig/BidderClass/CodeNaming/Lifecycle plus 10 nested item shapes), closes 8 round-2 sweep sites under code.* and cross_language.*, and tightens if/then invariants for Go specs and Java alias specs. All 40 existing goldens continue to validate (per `docs/methodology/schema-versioning.md` MINOR criteria).",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "spec_kind": {
+      "type": "string",
+      "const": "prebid-server-adapter"
+    },
+    "source_language": {
+      "type": "string",
+      "enum": ["go", "java"]
+    },
+    "provenance": { "$ref": "#/$defs/Provenance" },
+    "meta": { "$ref": "#/$defs/Meta" },
+    "bidder_info": { "$ref": "#/$defs/BidderInfo" },
+    "bidder_params_json": { "type": "string" },
+    "bidder_params_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^([a-f0-9]{64})?$"
+    },
+    "params": {
+      "oneOf": [
+        { "$ref": "#/$defs/Params" },
+        { "type": "null" }
+      ],
+      "description": "Null on alias-only specs (e.g., 152media-Java) where the alias inherits parent's params."
+    },
+    "code": {
+      "oneOf": [
+        { "$ref": "#/$defs/Code" },
+        { "type": "null" }
+      ],
+      "description": "Null on alias-only specs where the alias inherits parent's adapter code."
+    },
+    "tests": {
+      "oneOf": [
+        { "$ref": "#/$defs/Tests" },
+        { "type": "null" }
+      ],
+      "description": "Null on alias-only specs that don't carry their own test inventory."
+    },
+    "aliases": {
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/Alias" },
+      "description": "Rich alias metadata block. Per-alias entry on Java goldens; can be empty list on Go goldens that don't list aliases."
+    },
+    "spring_config": { "$ref": "#/$defs/SpringConfig" },
+    "bidder_class": { "$ref": "#/$defs/BidderClass" },
+    "code_naming": {
+      "$ref": "#/$defs/CodeNaming",
+      "description": "ADR-001 D1: top-level Java-only block (NOT nested under code.naming)."
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/Lifecycle",
+      "description": "ADR-001 D5: top-level lifecycle block. Currently only `rename` is emitted; future lifecycle event kinds (merge, split, etc.) would slot in alongside."
+    },
+    "iab_category_storage": { "$ref": "#/$defs/IabCategoryStorage" },
+    "ext_pojo_construction": { "$ref": "#/$defs/ExtPojoConstruction" },
+    "currency_conversion": { "$ref": "#/$defs/CurrencyConversion" },
+    "headers_constructed": { "$ref": "#/$defs/HeadersConstructed" },
+    "deploy_time_tokens": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DeployTimeToken" }
+    },
+    "quirks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Quirk" }
+    },
+    "cross_language": { "$ref": "#/$defs/CrossLanguage" },
+    "registry": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-001 D6: present on Java goldens that record test-application.properties registry. Open-map; Wave 11c C3 will move to tests.test_application_properties.* with proper $defs (deferred from Wave 11b's B6 closure pass — corpus-coupled migration requires its own ADR-001 amendment)."
+    },
+    "taxonomy_version": {
+      "description": "ADR-001 D7: SemVer string for behavior taxonomy version goldens conform to.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "source_language": { "const": "go" } }, "required": ["source_language"] },
+      "then": {
+        "description": "Go-source spec invariants per ADR-001: Java-only blocks must be null. spring_config and bidder_class are wholly Java-specific (Spring DI / class hierarchy). code_naming and registry are also Java-only — Go corpus walk confirms zero non-null emissions for either. lifecycle.rename remains bilateral (e.g., elementaltv-Go has lifecycle.rename for the Adoppler→ElementalTV rename).",
+        "properties": {
+          "spring_config": { "type": "null" },
+          "bidder_class": { "type": "null" },
+          "code_naming": { "type": "null" },
+          "registry": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "source_language": { "const": "java" } }, "required": ["source_language"] },
+      "then": {
+        "description": "Java-source spec invariants per ADR-001: spring_config and bidder_class are non-null on non-alias goldens. lifecycle and code_naming are populated when relevant; otherwise null. Aliases (meta.is_alias=true) are exempt — they're permitted to null these blocks.",
+        "anyOf": [
+          {
+            "description": "Non-alias Java spec: spring_config and bidder_class must be present (non-null).",
+            "properties": {
+              "meta": { "properties": { "is_alias": { "const": false } } },
+              "spring_config": { "type": "object" },
+              "bidder_class": { "type": "object" }
+            }
+          },
+          {
+            "description": "Alias Java spec (meta.is_alias=true): spring_config and bidder_class MUST be null (inherited from parent; never emitted on the alias spec itself). 152media-Java is the canonical example.",
+            "properties": {
+              "meta": { "properties": { "is_alias": { "const": true } } },
+              "spring_config": { "type": "null" },
+              "bidder_class": { "type": "null" }
+            }
+          }
+        ]
+      }
+    }
+  ],
+
+  "$defs": {
+    "Provenance": {
+      "type": "object",
+      "required": ["source", "read"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "object",
+          "required": ["repo", "resolved_commit"],
+          "additionalProperties": false,
+          "properties": {
+            "repo": { "type": "string" },
+            "ref": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "properties": {
+                "branch": { "type": "string" },
+                "tag": { "type": "string" },
+                "commit": { "type": "string" }
+              }
+            },
+            "resolved_commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "fetch_method": {
+              "type": "string",
+              "enum": ["github-raw", "local-checkout", "gh-cli"]
+            }
+          }
+        },
+        "read": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "skill_versions": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Open map keyed by skill name (`orchestrator`, `read-adapter-code`, etc.); value is the SemVer string version."
+            },
+            "timestamp_utc": { "type": "string" },
+            "operator": { "type": "string" }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": ["integer", "null"] },
+              "summary": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "Meta": {
+      "type": "object",
+      "required": ["bidder_name"],
+      "additionalProperties": false,
+      "properties": {
+        "bidder_name": { "type": "string" },
+        "is_alias": { "type": "boolean" },
+        "alias_of": { "type": ["string", "null"] },
+        "parent_aliases": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "whitelabel_only": { "type": "boolean" },
+        "disabled": { "type": "boolean" },
+        "module_path_major": { "type": ["string", "null"] },
+        "java_artifact_version": { "type": ["string", "null"] },
+        "empire_canonical_master": {
+          "type": "boolean",
+          "description": "ADR-003 audit B6: marks parent or single representative spec as canonical Rule 44 master sample."
+        },
+        "empire_parent_flavor": {
+          "type": ["string", "null"],
+          "enum": ["endpoint-macro-substitution", "white-label-saas", "registration-only", null],
+          "description": "ADR-003 audit B6: Rule 44 sub-flavor inherited from empire parent."
+        }
+      }
+    },
+
+    "BidderInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": { "type": ["string", "null"] },
+        "endpoint_construction": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "static", "template-macro", "url-with-query", "dev-prod-toggle",
+                "hardcoded-toggle", "runtime-region-selection", "deploy-time-token",
+                "single-token-substitution", "multi-token-substitution",
+                "query-parameter-augmentation", "custom"
+              ],
+              "description": "Accepts the UNION of bidder_info-scope and code-scope values. ADR-001 H3 documents the intended scope-distinct enums; tightening to the 9-value bidder_info-scope set is deferred to a future wave that fixes goldens currently mixing the two scopes (out of Wave 11b's closure-only scope)."
+            },
+            "macros_used": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "macro_syntax": {
+              "type": ["string", "null"],
+              "enum": ["go-template", "java-string-replace", "printf", "custom", null]
+            },
+            "placeholders_unresolved": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "endpoint_compression": { "type": ["string", "null"] },
+        "ortb_version": { "type": ["string", "null"] },
+        "default_enabled": { "type": ["boolean", "null"] },
+        "modifying_vast_xml_allowed": { "type": ["boolean", "null"] },
+        "maintainer": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "email": { "type": ["string", "null"] }
+          }
+        },
+        "capabilities": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Open map of {site|app|dooh}.mediaTypes; values vary."
+        },
+        "geoscope": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "gvl_vendor_id": { "type": ["integer", "null"] },
+        "user_sync": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Open map: verbatim user_sync subtree from upstream YAML."
+        },
+        "yaml_extra_fields": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "Open map of fields not in the canonical bidder-info schema."
+        },
+        "yaml_field_name_quirks": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string", "description": "Free-text quirk (huaweiads-Java style)." },
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Structured quirk (adkernel-Go style). Common keys: field, observed_value, canonical_value, summary, observed.",
+                "properties": {
+                  "field": { "type": "string" },
+                  "observed": { "type": "string" },
+                  "observed_value": { "type": ["string", "boolean", "number", "null"] },
+                  "canonical_value": { "type": ["string", "boolean", "number", "null"] },
+                  "summary": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "description": "Items are sometimes strings (free-text) and sometimes objects with structured fields. Phase 2.7 may normalize to one shape."
+        }
+      }
+    },
+
+    "Params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_interpretation": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "properties": {
+              "type": "array",
+              "items": { "type": "object", "additionalProperties": true }
+            },
+            "required_fields": { "type": "array", "items": { "type": "string" } },
+            "flexible_types": { "type": "array" },
+            "combinators_used": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "ext_struct": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "params_test": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "properties": {
+            "file": { "type": ["string", "null"] },
+            "valid_cases_count": { "type": ["integer", "null"] },
+            "invalid_cases_count": { "type": ["integer", "null"] },
+            "bidder_constant_referenced": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+
+    "Code": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; declared properties cover all corpus emissions.",
+      "properties": {
+        "package_or_class": { "type": ["string", "null"] },
+        "directory_name": { "type": ["string", "null"] },
+        "package_directory_mismatch": { "type": ["boolean", "null"] },
+        "file_layout": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["single-file", "multi-file"]
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": { "type": "string" },
+                  "role": { "type": "string" },
+                  "loc": { "type": ["integer", "null"] }
+                }
+              }
+            },
+            "file_count_total": { "type": ["integer", "null"] },
+            "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+          }
+        },
+        "imports": { "$ref": "#/$defs/CodeImports" },
+        "adapter_struct": { "$ref": "#/$defs/AdapterStruct" },
+        "builder": { "$ref": "#/$defs/CodeBuilder" },
+        "make_requests": { "$ref": "#/$defs/MakeRequests" },
+        "make_bids": { "$ref": "#/$defs/MakeBids" }
+      }
+    },
+
+    "EndpointResolution": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F1: endpoint resolution mechanism for `code.make_requests.endpoint_resolution`. adapter_spec_version 1.1.0 admits the `multi-endpoint-by-mediatype` / `multi-endpoint-by-shape` kinds and the `endpoints[]` array. Wave 11b B3+ closed Code's outer shape and added a structured `MakeRequests` `$def` for the parent block; per-pattern `$ref`-wiring of THIS `$def` (EndpointResolution) into `MakeRequests.endpoint_resolution` is deferred to a future wave. Master sample: beachfront (banner + video endpoints).",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "static", "literal",
+            "single-token-substitution", "multi-token-substitution",
+            "query-parameter-augmentation", "template-macro", "dynamic-template-string",
+            "dev-prod-toggle", "runtime-region-selection",
+            "multi-endpoint-by-mediatype", "multi-endpoint-by-shape"
+          ]
+        },
+        "mechanism_go": { "type": ["string", "null"] },
+        "mechanism_java": { "type": ["string", "null"] },
+        "endpoints": {
+          "description": "Populated when kind = multi-endpoint-*. Logical (declaration) order; not lex-sorted (per ADR-007 array ordering policy).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "role": { "type": "string", "description": "Free-text role tag (canonical: banner, video, adm, nurl)." },
+              "value": { "type": "string", "description": "URL or template." },
+              "mechanism": { "type": "string", "description": "Per-endpoint construction/dispatch mechanism." }
+            }
+          }
+        }
+      }
+    },
+
+    "EntityStrategy": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F3: per-entity (Site/App/User) mutation strategy under `code.make_requests.mutation.entity_strategies`. adapter_spec_version 1.1.0 admits `replace-with-app-synthesis` / `synthesize-app-replacement` / `synthesize-from-site`. Wave 11b B3+ closed Code at the outer level; `MakeRequests.mutation.entity_strategies` is currently typed `object|null` (implicit-open under MakeRequests's structured $def). Per-pattern $ref-wiring of THIS $def (EntityStrategy) into the entity_strategies position is deferred to a future wave. Master sample: vungle (Site=replace-with-app-synthesis, App=synthesize-app-replacement).",
+      "properties": {
+        "Site": {
+          "type": ["string", "null"],
+          "enum": [
+            "none", "in-place", "copy-then-mutate", "deep-copy-then-mutate",
+            "immutable-rebuild", "replace-with-null",
+            "replace-with-app-synthesis", "synthesize-app-replacement",
+            null
+          ]
+        },
+        "App": {
+          "type": ["string", "null"],
+          "enum": [
+            "none", "in-place", "copy-then-mutate", "deep-copy-then-mutate",
+            "immutable-rebuild", "replace-with-null",
+            "synthesize-app-replacement", "synthesize-from-site",
+            null
+          ]
+        },
+        "User": {
+          "type": ["string", "null"],
+          "enum": [
+            "none", "in-place", "copy-then-mutate", "deep-copy-then-mutate",
+            "immutable-rebuild", "replace-with-null",
+            null
+          ]
+        }
+      }
+    },
+
+    "BidPostProcessing": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F4: post-decode mutation of bid fields (e.g., AUCTION_PRICE macro replacement in bid.NURL / bid.AdM / bid.BURL). Lives at `code.make_bids.bid_post_processing`. adapter_spec_version 1.1.0 admits the shape. Wave 11b B3+ closed Code at the outer level; the `code.make_bids` block has its own structured `MakeBids` $def now, but `bid_post_processing` is typed `object|null` within MakeBids — per-pattern $ref-wiring of THIS $def (BidPostProcessing) into MakeBids.bid_post_processing is deferred to a future wave. Master sample: thetradedesk.",
+      "properties": {
+        "macros": {
+          "description": "Logical (declaration) order; not lex-sorted (per ADR-007 array ordering policy).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "macro": { "type": "string", "description": "Macro name (e.g., AUCTION_PRICE, AUCTION_BID_ID)." },
+              "fields": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Bid-field paths the macro substitutes into (e.g., bid.NURL, bid.AdM, bid.BURL)."
+              },
+              "source": { "type": "string", "description": "Where the substitution value comes from at runtime (e.g., bid.Price)." },
+              "mechanism": { "type": "string", "description": "How the substitution is performed (regex / token-replace / etc.)." }
+            }
+          }
+        }
+      }
+    },
+
+    "ImpExtUnmarshal": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "ADR-007 F5: imp.ext unmarshal pattern + post-extraction strip flag. Lives at `code.make_requests.imp_ext_unmarshal`. adapter_spec_version 1.1.0 admits the `strip_post_extraction` flag. Wave 11b B3+ closed Code at the outer level; `code.make_requests.imp_ext_unmarshal` is typed `object|null` within MakeRequests's structured $def. Per-pattern $ref-wiring of THIS $def (ImpExtUnmarshal) into MakeRequests.imp_ext_unmarshal is deferred to a future wave. Master sample for strip_post_extraction: beintoo (zeroes out imp.Ext after parsing).",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["none", "standard-two-phase", "shared-prebid-imp", "custom-typed", "passthrough"]
+        },
+        "strip_post_extraction": {
+          "type": "boolean",
+          "description": "ADR-007 F5: true when adapter zeroes out imp.Ext after parsing."
+        }
+      }
+    },
+
+    "Tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "test_root_directory": { "type": ["string", "null"] },
+        "go_directory_naming": {
+          "type": ["string", "null"],
+          "enum": ["canonical", "legacy-test", "custom", null]
+        },
+        "java_it_folder_naming": {
+          "type": ["string", "null"],
+          "enum": ["canonical", "multi-folder", "suffix-augmented", null]
+        },
+        "fixture_inventory": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Open map keyed by category (exemplary, supplemental, amp, video, videosupplemental, integration, plus extension categories like extrainfo_exemplary)."
+        },
+        "uses_canonical_harness": { "type": ["boolean", "null"] },
+        "unit_test_methods_count": { "type": ["integer", "null"] },
+        "unit_test_loc": { "type": ["integer", "null"] },
+        "hand_written_test_methods": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "fixture_handling": { "type": ["string", "null"] },
+        "test_application_properties_entries_added": { "type": ["integer", "null"] },
+        "integration_test_class": { "type": ["string", "null"] },
+        "integration_test_pattern": {
+          "type": ["string", "null"],
+          "enum": ["4-file-split", "6-file-with-cache", "multi-folder", "none", null]
+        },
+        "unit_test_breakdown": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "integer" },
+          "description": "ADR-001 D6: open map keyed by test class name, value is method count."
+        },
+        "test_application_properties_keys": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "IabCategoryStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; `notes` admitted as declared property.",
+      "properties": {
+        "storage_kind": {
+          "type": "string",
+          "enum": ["none", "yaml-inlined", "go-data-table", "dynamic-fetched"]
+        },
+        "yaml_field": { "type": ["string", "null"] },
+        "go_data_file": { "type": ["string", "null"] },
+        "table_size": { "type": ["integer", "null"] },
+        "delivery_mechanism": {
+          "type": ["string", "null"],
+          "enum": ["constructor-arg", "static-init", null],
+          "description": "ADR-001 D2: how the IAB category table is delivered to the adapter (Phase 2.7 renamed from `injection` to disambiguate from currency_conversion.injection)."
+        },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ExtPojoConstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "framework_choice": {
+          "type": ["string", "null"],
+          "enum": ["go-struct", "lombok-value-builder", "lombok-value-staticconstructor", "lombok-data", null]
+        },
+        "flexible_extension_used": { "type": "boolean" },
+        "custom_unmarshal": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Closed in Phase 2.8 / Wave 11b; `notes` admitted as declared property for goldens documenting branching strategies.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["none", "go-unmarshaljson", "jackson-jsondeserialize", "jackson-jsonalias-only", "runtime-isobject-isarray-branching"]
+            },
+            "accepts_shapes": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "where_branched": { "type": ["string", "null"] },
+            "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+
+    "CurrencyConversion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "used": { "type": ["boolean", "null"], "description": "Null on alias specs where currency-conversion knowledge is inherited from parent." },
+        "helper": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "go_signature": { "type": ["string", "null"] },
+            "java_signature": { "type": ["string", "null"] }
+          }
+        },
+        "injection": {
+          "type": ["string", "null"],
+          "enum": ["dependency", "function-arg", null]
+        },
+        "bid_request_passed_for_context": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "HeadersConstructed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pre_built_in_constructor": { "type": ["boolean", "null"] },
+        "per_request_dynamic": { "type": ["boolean", "null"] },
+        "custom_headers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "authentication_kind": {
+          "type": ["string", "null"],
+          "enum": ["none", "basic-auth", "hmac-digest", "bearer-token", "custom", null]
+        },
+        "authentication_input": { "type": "array" },
+        "language_stamped": {
+          "type": "boolean",
+          "description": "ADR-007 F2: true when at least one header value differs by language at request time."
+        },
+        "language_stamped_headers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "go_value": { "type": "string" },
+              "java_value": { "type": "string" },
+              "rationale": { "type": "string" }
+            }
+          },
+          "description": "ADR-007 F2: array kept in logical (declaration) order; not lex-sorted (audit C7)."
+        },
+        "authentication_algorithm": { "type": ["string", "null"] },
+        "authentication_output_encoding": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "DeployTimeToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "token": { "type": "string" },
+        "valid_values": { "type": "array" },
+        "documentation_link": { "type": ["string", "null"] },
+        "file": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"] },
+        "on_alias": { "type": ["string", "null"], "description": "Alias name this deploy-time token applies to (when token is alias-scoped); null otherwise." },
+        "notes": {
+          "type": ["string", "array", "null"],
+          "items": { "type": "string" },
+          "description": "Free-form prose; admitted as either a single string (literal block / scalar) or an array of strings."
+        }
+      }
+    },
+
+    "Alias": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Per-alias metadata for Java parent goldens that declare aliases (e.g., adkernel parent's 152media child). Open map; Wave 11c C1 will resolve the canonical name field decision (`bidder_name` vs `name`) — corpus-coupled, deferred from Wave 11b's closure pass to its own ADR-001 amendment.",
+      "properties": {
+        "bidder_name": { "type": "string" },
+        "parent": { "type": "string" },
+        "config_form": {
+          "type": "string",
+          "enum": ["tilde_inherit", "full_block"],
+          "description": "ADR-005: tilde_inherit = `<name>: ~`; full_block = nested override block."
+        },
+        "parent_yaml_path": { "type": ["string", "null"] },
+        "parent_yaml_line": { "type": ["integer", "null"] },
+        "inherited_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "overridden_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "test_assets": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "it_class": { "type": ["string", "null"] },
+            "it_class_file": { "type": ["string", "null"] },
+            "fixture_dir": { "type": ["string", "null"] },
+            "fixture_file_count": { "type": ["integer", "null"] },
+            "naming_asymmetry": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "properties": {
+                "it_class_uses_workaround": { "type": "boolean" },
+                "fixture_dir_uses_yaml_name": { "type": "boolean" },
+                "rationale": { "type": ["string", "null"] }
+              }
+            }
+          }
+        },
+        "test_application_properties_entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string" },
+              "value": { "type": ["string", "boolean", "integer", "null"] },
+              "line": { "type": ["integer", "null"] }
+            }
+          }
+        },
+        "rename_origin": {
+          "type": "boolean",
+          "description": "ADR-006: marks aliases that exist solely to provide backward-compat after a lifecycle rename."
+        },
+        "relationship_flavor": {
+          "type": ["string", "null"],
+          "enum": ["endpoint-macro-substitution", "white-label-saas", "registration-only", null],
+          "description": "ADR-003 audit B6: Rule 44 sub-flavor for this child's empire relationship."
+        }
+      }
+    },
+
+    "Quirk": {
+      "type": "object",
+      "required": ["id", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "file": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"] },
+        "summary": { "type": "string" },
+        "edge_case_taxon": { "type": ["string", "null"] },
+        "rationale": { "type": ["string", "null"] }
+      }
+    },
+
+    "SpringConfig": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; Java-only Spring DI block.",
+      "properties": {
+        "factory_class": { "type": "string" },
+        "factory_method": { "type": "string" },
+        "property_source_path": { "type": ["string", "null"] },
+        "bidder_creator_lambda": { "type": ["string", "null"] },
+        "configuration_properties_class": {
+          "description": "Either a class name (string, when bidder needs no structured properties), null (no SCP class), or a structured ConfigurationPropertiesClass.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" },
+            { "$ref": "#/$defs/ConfigurationPropertiesClass" }
+          ]
+        },
+        "bean_dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BeanDependency" }
+        },
+        "factory_class_package": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertiesClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "extends": { "type": ["string", "null"] },
+        "visibility": { "type": ["string", "null"] },
+        "declared_in": { "type": ["string", "null"] },
+        "extra_fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConfigurationPropertyField" }
+        },
+        "nested_classes": {
+          "type": ["array", "null"],
+          "items": { "$ref": "#/$defs/ConfigurationPropertyNestedClass" }
+        },
+        "lombok_annotations": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertyField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "validations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "default_value": { "type": ["string", "null"] },
+        "yaml_field": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertyNestedClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Nested static class within a ConfigurationPropertiesClass. `visibility` (rubicon) and `access` (huaweiads) are golden-author variants for the same concept; both admitted. Same for `annotations` vs `lombok_annotations`.",
+      "properties": {
+        "name": { "type": "string" },
+        "visibility": { "type": ["string", "null"] },
+        "access": { "type": ["string", "null"] },
+        "annotations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "lombok_annotations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConfigurationPropertyNestedClassField" }
+        },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ConfigurationPropertyNestedClassField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "validations": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "BeanDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" },
+        "type": { "type": "string" },
+        "validations": { "type": ["array", "null"] }
+      }
+    },
+
+    "BidderClass": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b; Java-only class hierarchy block.",
+      "properties": {
+        "name": { "type": "string" },
+        "parameterized_request_type": { "type": ["string", "null"] },
+        "parameterized_response_type": { "type": ["string", "null"] },
+        "override_methods": { "type": ["array", "null"], "items": { "type": "string" } },
+        "constructor": { "$ref": "#/$defs/BidderClassConstructor" },
+        "static_fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BidderClassStaticField" }
+        },
+        "helper_classes_co_located": { "type": ["array", "null"], "items": { "type": "string" } },
+        "helper_classes_in_proto": { "type": ["array", "null"], "items": { "type": "string" } },
+        "helper_classes_in_model": { "type": ["array", "null"], "items": { "type": "string" } },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "BidderClassConstructor": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "arity": { "type": "integer" },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BidderClassConstructorParameter" }
+        }
+      }
+    },
+
+    "BidderClassConstructorParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "source": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
+        "annotations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "BidderClassStaticField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "value": { "type": ["string", "integer", "null"] }
+      }
+    },
+
+    "CodeNaming": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b.",
+      "properties": {
+        "class_name_root": { "type": "string" },
+        "yaml_name": { "type": "string" },
+        "preserves_acronym_case": { "type": "boolean" },
+        "identifier_workaround": { "type": ["string", "null"] },
+        "package_name": { "type": ["string", "null"] },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "Lifecycle": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b. Currently only `rename` event kind is emitted; round-1 audit confirmed no other event kinds in corpus.",
+      "properties": {
+        "rename": { "$ref": "#/$defs/LifecycleRename" }
+      }
+    },
+
+    "LifecycleRename": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "ADR-001 D5: lifecycle rename metadata.",
+      "properties": {
+        "old_name": { "type": "string" },
+        "new_name": { "type": "string" },
+        "subtype": { "type": ["string", "null"] },
+        "release": { "type": ["string", "null"] },
+        "merged_at": { "type": ["string", "null"] },
+        "yaml_deletes": { "type": "array", "items": { "type": "string" } },
+        "yaml_adds": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": ["array", "null"], "items": { "type": "string" } },
+        "alias_back": { "type": ["boolean", "null"] },
+        "alias_back_form": { "type": ["string", "null"] },
+        "alias_back_yaml_path": { "type": ["string", "null"] },
+        "alias_back_yaml_line": { "type": ["integer", "null"] },
+        "pr": { "type": ["string", "null"] },
+        "package_moves": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LifecycleMove" }
+        },
+        "fixture_dir_moves": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LifecycleMove" }
+        }
+      }
+    },
+
+    "LifecycleMove": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    },
+
+    "CodeImports": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "has_currency_helper": { "type": ["boolean", "null"] },
+        "has_jsonutil": { "type": ["boolean", "null"] },
+        "has_template_engine": { "type": ["boolean", "null"] },
+        "third_party": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "AdapterStruct": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "type_name": { "type": "string" },
+        "type_visibility": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "CodeBuilder": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "errors_returned": {
+          "type": ["array", "null"],
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "condition": { "type": "string" },
+                  "source": { "type": "string" }
+                }
+              }
+            ]
+          }
+        },
+        "extra_adapter_info_used": { "type": ["boolean", "null"] },
+        "signature_canonical": { "type": ["boolean", "null"] },
+        "template_parsed_at_build": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "MakeRequests": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed at top-level in Phase 2.8 / Wave 11b round-2 sweep. Sub-object contents (batching.rules[*], endpoint_resolution, mutation, etc.) remain implicit-open per Draft 2020-12 default; future waves may tighten.",
+      "properties": {
+        "batching": { "type": ["object", "null"] },
+        "endpoint_resolution": { "type": ["object", "null"] },
+        "helpers": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "signature": { "type": "string" }
+            }
+          }
+        },
+        "imp_ext_unmarshal": { "type": ["object", "null"] },
+        "mutation": { "type": ["object", "null"] },
+        "request_body": { "type": ["object", "null"] }
+      }
+    },
+
+    "MakeBids": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed at top-level in Phase 2.8 / Wave 11b round-2 sweep. Sub-object contents remain implicit-open; future waves may tighten.",
+      "properties": {
+        "application_status_handling": { "type": ["object", "null"] },
+        "bid_pointer_go_sibling": { "type": ["string", "null"] },
+        "bid_pointer_pattern": { "type": ["string", "null"] },
+        "bid_type_resolution": { "type": ["object", "null"] },
+        "currency_overwrite_safety": { "type": ["string", "null"] },
+        "custom_response_type": { "type": ["string", "null"] },
+        "http_status_handling": { "type": ["object", "null"] },
+        "response_type": { "type": ["string", "null"] },
+        "notes_currency": { "type": ["array", "null"], "items": { "type": "string" } },
+        "helpers": {
+          "description": "Parity with code.make_requests.helpers[] — currently no goldens emit this on the make_bids side, but the read-adapter-code SKILL.md references the path for forward-compat (parsers/utils helpers can attach to either caller).",
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "signature": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "GoArtifacts": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep. Universal keys (bidder_constant, bidder_dir, package_name) plus per-bidder file-path artifacts (152media-Java emits 9 additional path keys describing its port artifacts).",
+      "properties": {
+        "bidder_constant": { "type": ["string", "null"] },
+        "bidder_dir": { "type": ["string", "null"] },
+        "package_name": { "type": ["string", "null"] },
+        "alias_yaml_path": { "type": ["string", "null"] },
+        "bidder_info_yaml": { "type": ["string", "null"] },
+        "bidder_params_json": { "type": ["string", "null"] },
+        "ext_struct_file": { "type": ["string", "null"] },
+        "ext_struct_type": { "type": ["string", "null"] },
+        "impl_file": { "type": ["string", "null"] },
+        "params_test_file": { "type": ["string", "null"] },
+        "test_file": { "type": ["string", "null"] },
+        "test_fixtures_dir": { "type": ["string", "null"] }
+      }
+    },
+
+    "JavaArtifacts": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "properties": {
+        "bidder_class": { "type": ["string", "null"] },
+        "bidder_dir": { "type": ["string", "null"] },
+        "config_class": { "type": ["string", "null"] },
+        "proto_dir": { "type": ["string", "null"] },
+        "yaml_path": { "type": ["string", "null"] },
+        "declared_in": { "type": ["string", "null"] }
+      }
+    },
+
+    "PortConcerns": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep. All values boolean; each flag captures a known cross-language port concern category.",
+      "properties": {
+        "aliases_inverted": { "type": ["boolean", "null"] },
+        "custom_unmarshaljson_present": { "type": ["boolean", "null"] },
+        "multi_file_layout": { "type": ["boolean", "null"] },
+        "mutation_idiom_divergence": { "type": ["boolean", "null"] },
+        "package_directory_mismatch": { "type": ["boolean", "null"] },
+        "yaml_unification": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "CrossLanguage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "go_artifacts": { "$ref": "#/$defs/GoArtifacts" },
+        "java_artifacts": { "$ref": "#/$defs/JavaArtifacts" },
+        "port_concerns": { "$ref": "#/$defs/PortConcerns" },
+        "port_lineage": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "source_language": {
+              "type": ["string", "null"],
+              "enum": ["go", "java", "shared-genesis", null],
+              "description": "ADR-001 D3: 'shared-genesis' for pre-Go-Java pair convention bidders (canonical: rubicon)."
+            },
+            "source_pr": { "type": ["string", "null"] },
+            "destination_language": {
+              "type": ["string", "null"],
+              "enum": ["go", "java", "shared-genesis", null],
+              "description": "ADR-001 D3: matches source_language enum; shared-genesis admitted for pre-Go-Java pair convention bidders."
+            },
+            "destination_pr": { "type": ["string", "null"] },
+            "fidelity_review_themes": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "go_specific_concerns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "java_specific_concerns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reviewer_cohort": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "go": { "type": "array", "items": { "type": "string" } },
+            "java": { "type": "array", "items": { "type": "string" } },
+            "cross_language_coordinator": { "type": ["string", "null"] }
+          }
+        }
+      }
+    }
+  }
+}

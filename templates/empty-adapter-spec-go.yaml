@@ -1,0 +1,257 @@
+# Empty Adapter Specification — Go-source template
+# Phase 4.0 of execution-plan.md.
+#
+# Scaffold for authoring a new Go-source spec by hand. All required fields
+# are present with placeholder values; optional fields are nulled with inline
+# comments explaining when to populate them.
+#
+# Validate via: python3 -m unittest scripts.tests.test_schema_jsonschema
+#               scripts/audit-golden.py --bidder=<your-bidder>
+#
+# Schema:    prebid-server-go/read/skills/shared/adapter-spec.schema.json
+# Worked:    prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml
+
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master                                 # OR commit: <sha> | pr: <N> | tag: <vX.Y.Z>
+    resolved_commit: 0000000000000000000000000000000000000000   # 40-char SHA
+    fetch_method: local                              # local | github-raw | gh-cli
+  read:
+    skill_versions:                                  # Open map: { skill_name: semver-string }
+      read-adapter-orchestrator: "1.0.0"
+      read-adapter-code: "1.0.0"
+      read-bidder-info: "1.0.0"
+      read-bidder-params: "1.0.0"
+    timestamp_utc: "1970-01-01T00:00:00Z"            # Excluded from R4 byte-equality.
+    operator: ""                                      # Excluded from R4.
+  warnings: []                                        # Append `provenance.warnings[]` entries here.
+
+meta:
+  bidder_name: TODO_lowercase_bidder_name
+  is_alias: false                                    # true → null spring_config/bidder_class on Java side too.
+  alias_of: null                                     # Required when is_alias=true.
+  disabled: false
+  module_path_major: v4                              # From go.mod's module declaration.
+  java_artifact_version: null                        # Java-only; null on Go-source.
+  parent_aliases: []                                 # Names of aliases declared by THIS bidder when it's a parent.
+  whitelabel_only: false                             # true for white-label-saas empire children.
+  alias_metadata: null
+  empire_canonical_master: false                     # ADR-003 D4 (Rule 44).
+  empire_parent_flavor: null                         # endpoint-macro-substitution | white-label-saas | registration-only.
+
+bidder_info:
+  endpoint: "https://TODO.example.com/openrtb2/auction"
+  endpoint_compression: none                         # none | gzip
+  endpoint_construction:
+    kind: literal                                    # literal | single-token-substitution | dev-prod-toggle | runtime-region-selection | deploy-time-token | custom
+    macros_used: []                                  # Subset of macros.EndpointTemplateParams 18-field list.
+    macro_field_set: []
+    template_parsed_at_build: false
+  modifying_vast_xml_allowed: false
+  default_enabled: true                              # ADR-001/ADR-004; flipped to false for opt-in adapters.
+  geoscope: []                                       # ISO-3166 alpha-3 codes; empty = global.
+  gvl_vendor_id: 0
+  maintainer:
+    email: "TODO@example.com"
+  capabilities:
+    site:
+      mediaTypes: []                                 # banner | video | native | audio
+    app:
+      mediaTypes: []
+    dooh:
+      mediaTypes: []
+  ortb_version: null                                 # Java-only; populated when YAML declares `ortb-version: "2.6"`.
+  yaml_extra_fields: {}                              # Open map: extra YAML keys not covered above.
+  yaml_field_name_quirks: []                         # `endpointCompression` (camelCase) typo regressions etc.
+
+bidder_params_json: |
+  {"$schema":"http://json-schema.org/draft-04/schema#","title":"TODO Adapter Params","type":"object","properties":{},"required":[]}
+
+bidder_params_sha256: null                           # Populated by orchestrator from the verbatim bytes.
+
+params:
+  schema_interpretation:
+    properties: []                                   # Source-order; do NOT alphabetize.
+    required_fields: []
+    flexible_types: []
+    combinators_used: []                             # Subset of: oneOf, anyOf, not, oneOf-of-oneOf, json-aliases-present.
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_TODO.go
+    type_name: ExtImpTODO                            # OR ImpExtTODO (legacy).
+    fields: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/TODO/params_test.go
+    valid_cases_count: 0
+    invalid_cases_count: 0
+    bidder_constant_referenced: openrtb_ext.BidderTODO   # Look up the literal in openrtb_ext/bidders.go.
+
+code:
+  package_or_class: TODO                             # Go: package name; Java: bidder class.
+  directory_name: TODO
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file                                # single-file | multi-file
+    files:                                           # Each file: { name, role, loc }.
+      - name: TODO.go
+        role: implementation
+        loc: 0
+  imports:
+    has_jsonutil: false
+    has_template_engine: false
+    has_currency_helper: false
+  adapter_struct:
+    type_name: adapter
+    type_visibility: package                         # package | exported
+    fields: []
+  builder:
+    errors_returned: []
+    template_parsed_at_build: false
+  make_requests:
+    request_body:
+      kind: openrtb2-passthrough                     # openrtb2-passthrough | openrtb2-modified | custom
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    mutation:
+      mutates_request: false
+      go_idiom: none                                 # none | shallow-copy | ptrutil.Clone | custom
+      java_idiom: null                               # Java-only.
+      entity_strategies:
+        Site: none                                   # none | copy-then-mutate | in-place | append-if-missing | immutable-rebuild
+        App: none
+        Source: none
+        Imp: none
+        Banner: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase                       # standard-two-phase | direct | none | custom
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: ExtImpTODO
+      wrapper_type: null
+    endpoint_resolution:
+      kind: literal                                  # Same enum as bidder_info.endpoint_construction.kind.
+      mechanism_go: literal
+      mechanism_java: null
+      macros_used: []
+      macro_field_set: []
+    helpers: []
+  make_bids:
+    response_type: BidResponse                       # BidResponse | custom
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: by-imp-mediatype
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict                 # strict | lenient | none
+    http_status_handling:
+      kind: canonical-go-helpers                     # canonical-go-helpers | legacy-raw-go | framework-default | custom
+    application_status_handling:
+      kind: none                                     # none | retcode-field
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: indexed-iteration           # indexed-iteration | pointer-iteration | flatten-streams
+    bid_pointer_go_sibling: openrtb2.SeatBid.Bid
+    currency_overwrite_safety: passthrough-from-response
+    helpers: []
+
+tests:
+  test_root_directory: adapters/TODO/TODOtest/
+  go_directory_naming: canonical                     # canonical | legacy (msft-style test/ + test-extrainfo/)
+  java_it_folder_naming: null                       # Java-only.
+  uses_canonical_harness: true                       # Go: RunJSONBidderTest; Java: VertxTest.
+  fixture_handling: count
+  fixture_inventory:
+    exemplary: []                                    # Each fixture: { filename, sha256, bytes }.
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    dooh: []
+    integration: []                                  # Java-only.
+
+aliases: []                                          # Java parents populate; Go aliases live as separate specs with meta.is_alias=true.
+
+# Java-only blocks (MUST be null on Go-source specs per the schema's if/then/else discrimination).
+spring_config: null
+bidder_class: null
+code_naming: null                                    # ADR-001 D1 — populated when relevant on Go-source too (bilateral lifecycle renames).
+lifecycle: null                                      # Populated on the post-rename spec; carries the lifecycle.rename block.
+
+iab_category_storage:
+  storage_kind: none                                 # none | yaml-inlined | go-data-table | dynamic-fetched
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null                           # constructor-arg | static-init | null. ADR-001 D2 rename of legacy `injection`.
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none                                       # Go: none | go-unmarshaljson; Java: + jackson-* values.
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null                               # E.g., "reqInfo.ConvertCurrency(value, from, to) (float64, error)".
+    java_signature: null
+  injection: null                                    # function-arg (Go) | dependency (Java); separate from iab_category_storage.delivery_mechanism.
+  bid_request_passed_for_context: false              # Java passes bidRequest for time-context; Go does not.
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false
+  custom_headers: []
+  authentication_kind: none                          # none | basic-auth | bearer-token | hmac-digest | custom
+  authentication_input: []                           # YAML/config field paths used to compute the auth value.
+
+deploy_time_tokens: []                               # Each: { token, comment, valid_values? }. Bidders with unresolved tokens MUST set bidder_info.disabled=true.
+
+quirks: []                                           # Each: { id, file, line, summary, edge_case_taxon }. Taxon MUST be in behavior-taxonomy.yaml.
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/TODO/
+    package_name: TODO
+    bidder_constant: openrtb_ext.BidderTODO
+  java_artifacts:                                    # Stub on Go-source specs (orchestrator overwrites if Java side present).
+    bidder_dir: src/main/java/org/prebid/server/bidder/TODO/
+    bidder_class: TODOBidder
+    config_class: TODOConfiguration
+    yaml_path: src/main/resources/bidder-config/TODO.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/TODO/
+  go_specific_concerns: []                           # Free-text observations for porters.
+  java_specific_concerns: []
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: false                          # true on Java-source specs.
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage: null                                 # { source_language, source_pr, destination_language, destination_pr, fidelity_review_themes }
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
+
+registry: {}                                         # Open map: ad-hoc tracking sites (e.g., test-application.properties registry on Java).

@@ -1,0 +1,503 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: package-directory-mismatch
+      file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
+      line: 39
+      summary: "Class root is ElementalTV (TitleCase preserves the TV brand acronym in uppercase) while the package directory and yaml_name are 'elementaltv' (all lowercase). Conventional cases (Kobler/KoblerBidder) preserve a 1:1 case fold between class root and yaml_name; ElementalTV deliberately does not. Surfaced for cross-language port awareness — fields code_naming.preserves_acronym_case=true and the acronym-case-preservation taxon classify this as canonical and intentional, not a bug."
+    - type: cross-language-byte-divergence
+      file: src/main/resources/static/bidder-params/elementaltv.json
+      line: 1
+      summary: "Java elementaltv.json sha256=2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0 differs from Go elementaltv.json sha256=efdc3ed1c641e9dbe7265e0bf8b309c565508175894d05c708cfeb84ed03e792 due to whitespace formatting (Java uses 4-space indent in properties block; Go uses 6-space indent). Schema interpretation is byte-identical (single string adunit, required). Rule R5 cross-language structural parity violation surfaces here."
+
+meta:
+  bidder_name: elementaltv
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - adoppler                                    # Tilde-form alias-back: 'adoppler: ~' under elementaltv.aliases.
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.38.0"                 # PR #4326 merged 2026-01-12 in v3.38.0.
+
+bidder_info:
+  endpoint: "https://pbs.elementaltv.io/ads/processHeaderBid/{{AdUnit}}"
+  endpoint_construction:
+    kind: single-token-substitution
+    macros_used:
+      - "{{AdUnit}}"                              # Custom Java macro (NOT the Go-template-style {{.AdUnit}}); resolved via String.replace at request time using imp.ext.bidder.adunit.
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: "2.6"
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "support@elementaltv.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}
+  yaml_extra_fields:
+    aliases:
+      adoppler: ~                                 # Backward-compat alias to retain pre-rename name. Tilde-inherit form (Edge case #33 + alias-back-via-tilde tag).
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "ElementalTV Adapter Params",
+    "description": "A schema which validates params accepted by the ElementalTV adapter",
+    "type": "object",
+    "properties": {
+      "adunit": {
+        "type": "string",
+        "description": "AdUnit to bid against to."
+      }
+    },
+    "required": ["adunit"]
+  }
+bidder_params_sha256: 2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0
+
+params:
+  schema_interpretation:
+    properties:
+      - name: adunit
+        type: string
+        description: "AdUnit to bid against to."
+    required_fields:
+      - adunit
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.elementaltv
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/elementaltv/ExtImpElementalTV.java
+    type_name: ExtImpElementalTV                  # Class name preserves the TV acronym in uppercase. Edge case #27.
+    fields:
+      - name: adunit
+        json_tag: adunit
+        type_native: String
+        omitempty: false
+        notes:
+          - "@Value(staticConstructor=of)"
+          - "Lombok-derived getter: getAdunit() — used at ElementalTVBidder.java:80 and :89."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/elementaltv/ElementalTVBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: ElementalTVBidder             # TitleCase class root preserves 'TV' acronym uppercase.
+  directory_name: elementaltv                     # Package directory is all lowercase (matches yaml_name).
+  package_directory_mismatch: false               # Note: package directory is 'elementaltv' (lowercase) which folds to bidder_name 'elementaltv'; the class name 'ElementalTVBidder' is a non-trivial fold but matches the canonical Java convention for brand-acronym preservation. The mismatch flag is reserved for genuine package-name vs directory-name conflicts (Go edge case #1) — see warnings entry instead.
+  file_layout:
+    kind: multi-file                              # ElementalTVBidder.java + 3 model classes + 1 proto class. Multi-file because of the response-ext class hierarchy used to validate $.seatbid.bid.ext.ads.video presence.
+    files:
+      - name: ElementalTVBidder.java
+        role: implementation
+        loc: 181
+      - name: model/ElementalTVResponseExt.java
+        role: models
+        loc: 9
+      - name: model/ElementalTVResponseAdsExt.java
+        role: models
+        loc: 9
+      - name: model/ElementalTVResponseVideoAdsExt.java
+        role: models
+        loc: 9
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: false                           # Uses JacksonMapper directly via mapper.mapper().convertValue and mapper.decodeValue / mapper.mapper().treeToValue.
+    third_party:
+      - StringUtils                               # org.apache.commons.lang3.StringUtils — used at line 80 to validate adunit non-blank.
+  adapter_struct: null                            # Java uses bidder_class instead.
+  builder: null                                   # Java construction described in spring_config.
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp                           # Loop over request.getImp() at line 58 producing one HttpRequest per imp; each carries the corresponding URL with the imp's resolved adunit.
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true                       # request.toBuilder().id(updateRequestId).build() at line 62; outgoing imp list collapsed to singletonList(imp) at line 96.
+      entity_strategies:
+        Id: immutable-rebuild                     # request.id replaced with "{originalId}-{adunit}" suffix.
+        Imp: immutable-rebuild                    # Per-imp request carries Collections.singletonList(imp).
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid           # ELEMENTALTV_EXT_TYPE_REFERENCE: TypeReference<ExtPrebid<?, ExtImpElementalTV>> at line 41-43; mapper.mapper().convertValue(...).getBidder() at line 76.
+      target_type: ExtImpElementalTV
+      wrapper_type: null
+    endpoint_resolution:
+      kind: single-token-substitution
+      mechanism_go: null
+      mechanism_java: string-replace              # endpointTemplate.replace("{{AdUnit}}", HttpUtil.encodeUrl(extImp.getAdunit())) at lines 88-89.
+      macro_field_set:
+        - "{{AdUnit}}"                            # Bidder-defined macro form (custom-Java-style); not part of the canonical macros.EndpointTemplateParams set.
+      template_params_struct_field_count: null
+    helpers:
+      - name: parseAndValidateImpExt
+        signature: "private ExtImpElementalTV parseAndValidateImpExt(Imp imp)"
+      - name: resolveUrl
+        signature: "private String resolveUrl(ExtImpElementalTV extImp)"
+      - name: createSingleRequest
+        signature: "private HttpRequest<BidRequest> createSingleRequest(Imp imp, BidRequest request, String url)"
+      - name: decodeBodyToBidResponse
+        signature: "private BidResponse decodeBodyToBidResponse(BidderCall<BidRequest> httpCall)"
+      - name: getImpTypes
+        signature: "private Map<String, BidType> getImpTypes(BidRequest bidRequest)"
+      - name: createBid
+        signature: "private BidderBid createBid(Bid bid, Map<String, BidType> impTypes, String currency)"
+      - name: validateVideoBidExt
+        signature: "private void validateVideoBidExt(Bid bid)"
+      - name: parseResponseExt
+        signature: "private ElementalTVResponseExt parseResponseExt(ObjectNode ext)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: framework-default                     # No explicit status checks in makeBids; relies on framework default plus the seatbid stream pipeline filters Objects::nonNull.
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-imp-mediatype                # getImpTypes (lines 133-149) builds a Map<impId, BidType> by checking imp.getBanner / getVideo / getAudio / getXNative non-null in that order; later createBid line 154 throws if bidImpId not found in the map.
+          field: null
+          fallback_action: throw                  # createBid throws PreBidException("unknown impId: {id}") at line 155 when the bid's impid was not registered in the type map.
+      default_value: null
+      multi_format_detection: strict              # Only the FIRST non-null mediatype found wins (banner > video > audio > xNative); imps with multiple media types are not detected — first match returns. Throws on missing impId.
+    bid_pointer_pattern: flatten-streams          # bidResponse.getSeatbid().stream().filter(nonNull).map(SeatBid::getBid).filter(nonNull).flatMap(Collection::stream).map(...).toList() at lines 112-118.
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response  # BidderBid.of(bid, type, bidResponse.getCur()) at line 161.
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/elementaltv/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-elementaltv-bid-request-1.json
+        sha256: 64225df0623ba50588e339cf28f09aa241a09a77944c67930cefd7122279452e
+        bytes: 898
+        role: bidder-bid-request
+      - filename: test-elementaltv-bid-response-1.json
+        sha256: 6e459df5f587acc44c16231391126194165b08ffcc19430ca84685be715049df
+        bytes: 509
+        role: bidder-bid-response
+      - filename: test-auction-elementaltv-request.json
+        sha256: 8ef592af49ce57388494ab135018601adba99893034b9ba122e6f6f8e85f88ad
+        bytes: 292
+        role: auction-request
+      - filename: test-auction-elementaltv-response.json
+        sha256: 3bbfe9877383c4c3934d7305d343800ec4f1567d79c7c9c6d7fc05d6cc87cf2a
+        bytes: 959
+        role: auction-response
+  uses_canonical_harness: true                    # Extends VertxTest.
+  unit_test_methods_count: 7
+  unit_test_loc: 188
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldReturnErrorIfImpExtCouldNotBeParsed
+    - makeHttpRequestsShouldCreateCorrectURL
+    - makeHttpRequestsShouldCreateUrlWithDefaultAppParamIfClientIsMissing
+    - makeHttpRequestsShouldSetExpectedHeaders
+    - makeBidsShouldReturnErrorIfBidIdEmpty
+    - makeBidsShouldReturnErrorIfExtEmpty
+  fixture_handling: count-only
+  test_application_properties_entries_added: 2   # Two entries: adapters.elementaltv.{enabled, endpoint} in src/test/resources/org/prebid/server/it/test-application.properties. The adoppler tilde-alias is declared inside elementaltv.yaml (not in test-application.properties), so it adds no lines beyond the parent's two.
+  integration_test_class: ElementalTVTest         # File: src/test/java/org/prebid/server/it/ElementalTVTest.java — class root preserves TV acronym uppercase consistent with bidder_class.
+  integration_test_pattern: 4-file-split
+
+spring_config:
+  factory_class: ElementalTVConfiguration         # Class name preserves TV acronym uppercase. File at src/main/java/org/prebid/server/spring/config/bidder/ElementalTVConfiguration.java.
+  factory_method: elementaltvBidderDeps           # Bean method name uses ALL-LOWERCASE 'elementaltv' (matches bidder_name); diverges from bean qualifier 'elementalTVConfigurationProperties' which uses camelCase form preserving the acronym.
+  property_source_path: classpath:/bidder-config/elementaltv.yaml
+  bidder_creator_lambda: |
+    config -> new ElementalTVBidder(config.getEndpoint(), mapper)
+  configuration_properties_class:
+    name: BidderConfigurationProperties           # Default base class — no per-bidder subclass needed (no extra YAML fields beyond canonical set).
+    extends: null
+    extra_fields: []
+    nested_classes: []
+    lombok_annotations: []
+  bean_dependencies:
+    - name: elementalTVConfigurationProperties    # Bean qualifier mixes lowercase 'elemental' + uppercase 'TV' + 'ConfigurationProperties' — this is the camelCase form of ElementalTVConfigurationProperties (line 24 @Bean annotation).
+      type: BidderConfigurationProperties
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: ElementalTVBidder                         # Class root: ElementalTV (preserves TV acronym uppercase). Matches Edge case #27.
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 2
+    parameters:
+      - name: endpointTemplate
+        type: String
+        source: config.endpoint
+        role: properties
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields:
+    - name: ELEMENTALTV_EXT_TYPE_REFERENCE        # Constant name fully UPPERCASE (Java SCREAMING_SNAKE convention) — folds to 'ELEMENTALTV' not 'ELEMENTAL_TV', preserving the acronym non-segmentation.
+      type: TypeReference
+  helper_classes_co_located:
+    - ElementalTVResponseExt                      # src/main/java/org/prebid/server/bidder/elementaltv/model/ElementalTVResponseExt.java
+    - ElementalTVResponseAdsExt                   # src/main/java/org/prebid/server/bidder/elementaltv/model/ElementalTVResponseAdsExt.java
+    - ElementalTVResponseVideoAdsExt              # src/main/java/org/prebid/server/bidder/elementaltv/model/ElementalTVResponseVideoAdsExt.java
+  helper_classes_in_proto:
+    - ExtImpElementalTV                           # src/main/java/org/prebid/server/proto/openrtb/ext/request/elementaltv/ExtImpElementalTV.java
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: x-openrtb-version                    # HttpUtil.X_OPENRTB_VERSION_HEADER; value "2.5" hardcoded at line 97 — note the BIDDER YAML declares ortb-version "2.6" but the per-request header is "2.5". Possible inconsistency carried over from the pre-rename Adoppler implementation.
+      value: "2.5"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+# Java naming workaround block: ElementalTV is the canonical TitleCase
+# brand-acronym preservation case (Edge case #27). The yaml_name is fully
+# lowercase 'elementaltv'; the Java class root is 'ElementalTV' (preserves
+# the TV brand acronym in uppercase). Convention contrasts with the digit-
+# leading workaround documented in 152media (Edge case #26).
+code_naming:
+  yaml_name: elementaltv
+  class_name_root: ElementalTV
+  identifier_workaround: null                     # No identifier-rule workaround; the Java identifier 'ElementalTV' is valid.
+  preserves_acronym_case: true                    # 'TV' kept uppercase rather than folded to 'Tv'. Canonical example for the acronym-case-preservation taxon.
+  notes:
+    - "Brand 'ElementalTV' merges 'Elemental' (TitleCase) + 'TV' (uppercase acronym for television). Convention preserves the acronym form rather than CamelCase folding to 'ElementalTv'."
+    - "Surfaces in five places: ElementalTVBidder (class), ElementalTVConfiguration (config class), ElementalTVTest (IT class), ElementalTVBidderTest (unit test class), ExtImpElementalTV (proto class), and the three model classes ElementalTVResponse{,Ads,VideoAds}Ext."
+    - "The TypeReference constant is named ELEMENTALTV_EXT_TYPE_REFERENCE (line 41) — SCREAMING_SNAKE form folds the brand to ELEMENTALTV without inserting an underscore at the acronym boundary."
+    - "The factory method elementaltvBidderDeps (line 31) uses the all-lowercase yaml_name form, while the bean qualifier elementalTVConfigurationProperties (line 24) uses camelCase preserving 'TV' uppercase — TWO conventions co-exist within the same configuration class."
+    - "Sibling brand-acronym preservation cases: FeedAd, BidTheatre, IQX (capitalised IQ acronym)."
+
+# Java rename block: ElementalTV is the canonical bidder-rename-three-step
+# example (Edge case #33). Rename merged via PR #4326 (v3.38.0, 2026-01-12)
+# under the major-version umbrella with backward-compat alias-back to the
+# old name 'adoppler'.
+lifecycle:
+  rename:
+    old_name: adoppler
+    new_name: elementaltv
+    subtype: bilateral
+    pr: prebid/prebid-server-java#4326
+    release: v3.38.0
+    merged_at: "2026-01-12"
+    yaml_deletes:
+      - src/main/resources/bidder-config/adoppler.yaml
+      - src/main/resources/static/bidder-params/adoppler.json
+      - src/main/java/org/prebid/server/bidder/adoppler/AdopplerBidder.java
+      - src/main/java/org/prebid/server/spring/config/bidder/AdopplerConfiguration.java
+      - src/main/java/org/prebid/server/proto/openrtb/ext/request/adoppler/ExtImpAdoppler.java
+      - src/test/java/org/prebid/server/bidder/adoppler/AdopplerBidderTest.java
+      - src/test/java/org/prebid/server/it/AdopplerTest.java
+      - src/test/resources/org/prebid/server/it/openrtb2/adoppler/  # Fixture directory (4 files).
+    yaml_adds:
+      - src/main/resources/bidder-config/elementaltv.yaml
+      - src/main/resources/static/bidder-params/elementaltv.json
+      - src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
+      - src/main/java/org/prebid/server/bidder/elementaltv/model/ElementalTVResponseExt.java
+      - src/main/java/org/prebid/server/bidder/elementaltv/model/ElementalTVResponseAdsExt.java
+      - src/main/java/org/prebid/server/bidder/elementaltv/model/ElementalTVResponseVideoAdsExt.java
+      - src/main/java/org/prebid/server/spring/config/bidder/ElementalTVConfiguration.java
+      - src/main/java/org/prebid/server/proto/openrtb/ext/request/elementaltv/ExtImpElementalTV.java
+      - src/test/java/org/prebid/server/bidder/elementaltv/ElementalTVBidderTest.java
+      - src/test/java/org/prebid/server/it/ElementalTVTest.java
+      - src/test/resources/org/prebid/server/it/openrtb2/elementaltv/  # Fixture directory (4 files).
+    alias_back: true                              # The new YAML retains 'aliases: { adoppler: ~ }' for backward compatibility — old 'adoppler' bidder name continues to resolve.
+    alias_back_form: tilde_inherit                # Empty-tilde alias form means adoppler inherits every elementaltv field unchanged.
+    alias_back_yaml_path: src/main/resources/bidder-config/elementaltv.yaml
+    alias_back_yaml_line: 6
+    notes:
+      - "The pre-rename Adoppler bidder had identical bidding logic (the rename was strictly a brand change, not a behavioral change). All Java code was renamed in lockstep: package, class, configuration, test, IT class, fixture-dir, ExtImp, and model classes."
+      - "Both old (adoppler) and new (elementaltv) bidder names resolve through the SAME execution path — adoppler is a tilde-inherit alias under the elementaltv parent."
+      - "Cross-language fidelity: Go side carries the same rename via static/bidder-info/elementaltv.yaml plus retained adoppler files. Pattern tags from the reference list: bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, acronym-case-preservation."
+
+# Top-level aliases block: adoppler is a tilde-inherit child of elementaltv.
+# Java-side direction is parent->child (declared inside elementaltv.yaml under
+# aliases:); contrast with Go which would declare it child->parent inside the
+# child's static/bidder-info/adoppler.yaml.
+aliases:
+  - bidder_name: adoppler
+    parent: elementaltv
+    config_form: tilde_inherit                    # YAML value is ~ (null/empty); inherits all elementaltv fields.
+    parent_yaml_path: src/main/resources/bidder-config/elementaltv.yaml
+    parent_yaml_line: 6                           # The "adoppler: ~" line under elementaltv.aliases.
+    inherited_fields:                             # All elementaltv fields flow through unchanged.
+      - endpoint
+      - ortb-version
+      - meta-info.maintainer-email
+      - meta-info.app-media-types
+      - meta-info.site-media-types
+      - meta-info.vendor-id
+    overridden_fields: []                         # tilde_inherit form has no overrides.
+    test_assets:
+      it_class: null                              # No dedicated AdopplerTest.java in the post-rename tree (deleted as part of PR #4326).
+      it_class_file: null
+      fixture_dir: null
+      fixture_file_count: 0
+      naming_asymmetry: null
+    test_application_properties_entries: []       # No alias-specific lines in test-application.properties for adoppler (the alias-back is implicit through the parent's elementaltv lines).
+    rename_origin: true                           # This alias is the BACKWARD-COMPAT entry for the renamed old name (vs a sibling alias).
+
+quirks:
+  - id: acronym-case-preservation
+    file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
+    summary: "Class root preserves the 'TV' brand acronym in uppercase: ElementalTVBidder, ElementalTVConfiguration, ElementalTVTest, ExtImpElementalTV, and the three model classes ElementalTVResponse{,Ads,VideoAds}Ext. The yaml_name is fully lowercase 'elementaltv' and the package directory matches. Convention rejects CamelCase fold to 'Elementaltv' or 'ElementalTv'. Edge case #27; canonical example for the acronym-case-preservation taxon. Sibling cases: FeedAd, BidTheatre, IQX."
+    edge_case_taxon: acronym-case-preservation
+  - id: bidder-rename-three-step-adoppler-to-elementaltv
+    file: src/main/resources/bidder-config/elementaltv.yaml
+    summary: "ElementalTV is the v3.38.0 rename of the previous Adoppler bidder (PR #4326, merged 2026-01-12). The rename is a three-step refactor: DELETE all adoppler files (yaml + bidder-params + bidder/adoppler/* + spring config + proto + test classes + fixture directory); CREATE the equivalent elementaltv files with TitleCase brand-acronym preservation; alias-back via 'adoppler: ~' under elementaltv.aliases (tilde-inherit form keeps the old name resolving). All four pattern tags from the reference list apply: bidder-rename-major-version, alias-back-via-tilde, package-rename-fixture-dir-rename, acronym-case-preservation. Edge case #33; canonical example for the bidder-rename-three-step taxon."
+    edge_case_taxon: bidder-rename-three-step
+  - id: tilde-alias-back-to-deprecated-name
+    file: src/main/resources/bidder-config/elementaltv.yaml
+    summary: "Line 6 'adoppler: ~' under elementaltv.aliases declares the pre-rename bidder name as a tilde-inherit alias. The empty-tilde form ensures the deprecated 'adoppler' bidder name continues to route through the new ElementalTVBidder code with zero behavioral divergence. This is the canonical 'alias-back-via-tilde' pattern for bidder renames where backward compatibility is required."
+    edge_case_taxon: tilde-alias-syntax
+  - id: cross-language-byte-divergence
+    file: src/main/resources/static/bidder-params/elementaltv.json
+    summary: "Java elementaltv.json sha256=2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0; Go elementaltv.json sha256=efdc3ed1c641e9dbe7265e0bf8b309c565508175894d05c708cfeb84ed03e792. Whitespace formatting differs (Java uses 4-space indent for the properties block; Go uses 6-space). Schema interpretation is byte-identical — single string adunit, required. Cross-language R5 violation; surfaces as a port-fidelity concern even though the schema itself is identical."
+    edge_case_taxon: port-fidelity-divergence
+  - id: ortb-version-header-mismatch
+    file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
+    summary: "YAML declares ortb-version: '2.6' but ElementalTVBidder.java line 97 hardcodes the per-request x-openrtb-version header to '2.5'. The framework's ortb-version YAML field is informational metadata (advertised compatibility); the per-request header value is the operational version sent over the wire. Carry-over from the pre-rename Adoppler implementation; no behavior change in the rename PR."
+    edge_case_taxon: port-fidelity-divergence
+  - id: per-imp-request-id-suffix-rewrite
+    file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
+    summary: "Per-imp request fanout (lines 58-69) overwrites the BidRequest id with the form 'originalId-adunit' (line 61) — each downstream HTTP request carries a request id derived from the imp's adunit, not the original request id. Allows ElementalTV's exchange to disambiguate parallel imps from a single auction by suffix. Note: when the same adunit appears on multiple imps the resulting request ids will collide."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: video-ext-validation-strict
+    file: src/main/java/org/prebid/server/bidder/elementaltv/ElementalTVBidder.java
+    summary: "validateVideoBidExt (lines 164-172) requires the bid response carry $.seatbid.bid.ext.ads.video for every VIDEO-typed bid. The validation walks ElementalTVResponseExt -> ElementalTVResponseAdsExt -> ElementalTVResponseVideoAdsExt and throws PreBidException('$.seatbid.bid.ext.ads.video required') when any link is null. Banner/native/audio bids skip this check. The strict requirement explains the multi-file model layout (3 nested response-ext model classes for a single validation path)."
+    edge_case_taxon: multi-file-layout-justified
+  - id: factory-method-name-vs-bean-qualifier-mismatch
+    file: src/main/java/org/prebid/server/spring/config/bidder/ElementalTVConfiguration.java
+    summary: "Two naming conventions co-exist in the same configuration class: factory method elementaltvBidderDeps (line 31) uses the all-lowercase yaml_name form, while the bean qualifier elementalTVConfigurationProperties (line 24 @Bean annotation) uses camelCase preserving 'TV' uppercase. Both reference the same bidder. Asymmetry is canonical for ElementalTV-style brand-acronym names — bean-qualifier convention preserves the acronym to match the configuration-properties class name; factory-method convention follows the bidder yaml_name."
+    edge_case_taxon: acronym-case-preservation
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/elementaltv/
+    package_name: elementaltv                     # Go package matches yaml_name (no acronym preservation needed — Go package names are lowercase by convention).
+    bidder_constant: openrtb_ext.BidderElementalTV  # Go bidder constant DOES preserve the acronym uppercase even though the package is lowercase. Consistent with the canonical Go convention for brand-acronym constants.
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/elementaltv/
+    bidder_class: ElementalTVBidder
+    config_class: ElementalTVConfiguration
+    yaml_path: src/main/resources/bidder-config/elementaltv.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/elementaltv/
+  port_concerns:
+    aliases_inverted: true                        # Go child (adoppler) declares aliasOf: elementaltv in its own static/bidder-info/adoppler.yaml; Java parent (elementaltv) declares aliases: { adoppler: ~ } in bidder-config/elementaltv.yaml. Same fact, opposite direction.
+    yaml_unification: true                        # Java unifies bidder-info + endpoint + aliases under one bidder-config/elementaltv.yaml; Go splits adoppler alias-back into its own static/bidder-info/adoppler.yaml file.
+    mutation_idiom_divergence: true               # Java uses lombok-tobuilder for the request-id rewrite (line 62); Go side uses pointer-mutation idiom.
+    package_directory_mismatch: false
+    multi_file_layout: true                       # Java carries 3 model classes + 1 proto class beyond the main bidder file. Go carries elementaltv.go + elementaltv_test.go + params_test.go (3 files) — the model class hierarchy is collapsed into Go's go-struct equivalents.
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: null                         # Pre-rename adoppler exists in BOTH Go and Java; the rename was synchronised across both languages but is not a single-direction port. The PR list classifies the Java-side rename as PR #4326 in v3.38.0 with the bidder-rename-major-version pattern tag.
+    source_pr: null
+    destination_language: null
+    destination_pr: prebid/prebid-server-java#4326
+    fidelity_review_themes:
+      - bidder-rename-major-version
+      - alias-back-via-tilde
+      - package-rename-fixture-dir-rename
+      - acronym-case-preservation
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "ElementalTVBidder constructor (line 48) calls HttpUtil.validateUrl(endpointTemplate) — invalid URL triggers IllegalArgumentException at bean construction time (covered by creationShouldFailOnInvalidEndpointUrl test)."
+    - "ELEMENTALTV_EXT_TYPE_REFERENCE static TypeReference<ExtPrebid<?, ExtImpElementalTV>> is constructed once at class init; mapper.mapper().convertValue(imp.getExt(), ELEMENTALTV_EXT_TYPE_REFERENCE).getBidder() yields the params POJO (line 76)."
+    - "Per-imp request fanout: makeHttpRequests loops over request.getImp() and produces ONE outgoing HTTP request per imp, each with a different URL (resolved from that imp's adunit). Mirrors Go's elementaltv.go MakeRequests."
+    - "Request id is overwritten to '{originalId}-{adunit}' in the per-imp fanout (line 61) — ElementalTV's exchange disambiguates parallel imps from one auction via this suffix."
+    - "Custom Java macro form '{{AdUnit}}' (line 89) — NOT the canonical Go-template-style '{{.AdUnit}}'. Resolved via simple String.replace; bypasses the macros.EndpointTemplateParams registry. Cross-language port concern: the Go side uses {{.AdUnit}} via the canonical replacer."
+    - "validateVideoBidExt (lines 164-172) walks 3 nested response-ext classes (ElementalTVResponseExt -> ResponseAdsExt -> ResponseVideoAdsExt) to verify $.seatbid.bid.ext.ads.video is present. The strict requirement justifies the multi-file model layout."
+    - "Bid type resolution: imps with multiple media types fall to the FIRST non-null check in getImpTypes (banner > video > audio > xNative; lines 138-146). The bid's impid is then looked up in the resulting Map; throws PreBidException on miss (line 154). multi_format_detection=strict reflects this fail-fast posture."
+    - "x-openrtb-version request header is hardcoded '2.5' (line 97) while the YAML declares ortb-version '2.6'. Possible carry-over from the pre-rename Adoppler implementation."
+    - "stream pipeline in makeBids (lines 112-118) uses double Objects::nonNull filter — once on SeatBid and once on the seat's getBid (defensive against null entries). flatMap collapses the seat list into a stream of bids."
+    - "ExtImpElementalTV uses @Value(staticConstructor=of) yielding ExtImpElementalTV.of('adunit') factory (rare for params POJOs which more commonly use @Value @Builder)."
+    - "Class root case-preservation surfaces in seven artifacts: ElementalTVBidder, ElementalTVConfiguration, ElementalTVTest, ElementalTVBidderTest, ExtImpElementalTV, ElementalTVResponseExt, ElementalTVResponseAdsExt, ElementalTVResponseVideoAdsExt — eight including the SCREAMING_SNAKE constant ELEMENTALTV_EXT_TYPE_REFERENCE."
+    - "Naming-convention asymmetry inside ElementalTVConfiguration.java: bean qualifier 'elementalTVConfigurationProperties' (camelCase preserving TV uppercase) co-exists with factory method 'elementaltvBidderDeps' (all lowercase yaml_name form). The same configuration class uses two different conventions for the same bidder."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

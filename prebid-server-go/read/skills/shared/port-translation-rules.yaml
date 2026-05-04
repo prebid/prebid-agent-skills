@@ -1,0 +1,1662 @@
+rules_version: "0.2.0"
+intro: |-
+  46 explicit translation rules between Go and Java prebid-server adapter patterns, each anchored to an Adapter Specification field driver. Used by the future `port-go2java` and `port-java2go` skills as their translation contract. Two specs for the same bidder produced from each language MUST be consistent with these rules — a port that violates a rule surfaces as a port-fidelity warning.
+toc:
+- section: Bidder-params byte-fidelity
+  anchor: bidder-params-byte-fidelity-rules-2
+  rules: 38–39
+  topic: byte-fidelity / derived-view
+- section: Imp.ext unmarshaling
+  anchor: impext-unmarshaling-rules-3
+  rules: 1–3
+  topic: TypeReference / two-phase / free-form
+- section: Mutation
+  anchor: mutation-rules-4
+  rules: 4–7
+  topic: toBuilder / shallow-copy / schain / banner
+- section: HTTP request construction
+  anchor: http-request-construction-rules-3
+  rules: 8–10
+  topic: defaultRequest / Bidder<T> / per-imp
+- section: Endpoint resolution
+  anchor: endpoint-resolution-rules-5
+  rules: 11–15
+  topic: tokens / query / dev-prod / region / deploy-time
+- section: Multi-imp grouping
+  anchor: multi-imp-grouping-rules-3
+  rules: 16–18
+  topic: max-imps / pod / format-split
+- section: Header construction
+  anchor: header-construction-rules-4
+  rules: 19–21, 41
+  topic: HttpUtil / basic-auth / HMAC / bearer-token
+- section: Bid type resolution
+  anchor: bid-type-resolution-rules-6
+  rules: 22–26, 40
+  topic: by-mediatype / by-mtype / chain / by-shape / hardcoded / id-suffix-or-prefix
+- section: Error emission
+  anchor: error-emission-rules-3
+  rules: 27–29
+  topic: BadInput / BadServerResponse / FailedToMarshal
+- section: Status code handling
+  anchor: status-code-handling-rules-2
+  rules: 30–31
+  topic: canonical helpers / retcode-field
+- section: Currency conversion
+  anchor: currency-conversion-rules-1
+  rules: '32'
+  topic: reqInfo vs CurrencyConversionService
+- section: YAML and config
+  anchor: yaml-and-config-rules-3
+  rules: 33–35
+  topic: aliases / unification / config-subclass
+- section: Cross-language alignment
+  anchor: cross-language-alignment-rules-3
+  rules: 44–46
+  topic: alias-empire / disabled-alias / naming-convention
+- section: IAB-category storage
+  anchor: iab-category-storage-rules-1
+  rules: '42'
+  topic: Go data table ↔ Java YAML-inlined
+- section: Lifecycle
+  anchor: lifecycle-rules-1
+  rules: '43'
+  topic: bidder-rename three-step
+- section: Test fixture
+  anchor: test-fixture-rules-2
+  rules: 36–37
+  topic: httpCalls vs 4-file split / per-alias IT
+- section: Round-Trip Safety
+  anchor: round-trip-safety
+  rules: —
+  topic: lossy-direction asymmetries
+how_to_use: |-
+  Each rule names a Pattern, identifies the Adapter Specification field that drives the translation, shows a concrete master Go and Java code snippet pair, and notes edge cases. Rules are grouped by spec section. A porter consumes the spec, looks up each rule by its field driver, and applies the corresponding translation.
+
+  The rule numbers (1-46) are stable identifiers — port skills cite them by number in their output (e.g., "applied Rule 7: Multi-imp grouping per pod prefix").
+sections:
+- kind: rules
+  title: Bidder-params byte-fidelity rules (2)
+  driver: Driven by `bidder_params_json` + `bidder_params_sha256` and the read-vs-port boundary.
+  rules:
+  - id: 38
+    title: bidder_params_json byte-fidelity contract
+    pattern: The porter copies `static/bidder-params/{bidder}.json` bytes verbatim. Whitespace, indent style, trailing-newline
+      presence, and BOM marks are preserved exactly. The porter NEVER reformats the JSON.
+    spec_field_driver: '`bidder_params_json` (verbatim string) + `bidder_params_sha256`'
+    body: |-
+      **Go file** (`static/bidder-params/{xyz}.json` — bytes copied as-is):
+      ```json
+      {"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params","type":"object","properties":{"placementId":{"type":"string"}},"required":["placementId"]}
+      ```
+
+      **Java file** (`src/main/resources/static/bidder-params/{xyz}.json` — same bytes):
+      ```json
+      {"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params","type":"object","properties":{"placementId":{"type":"string"}},"required":["placementId"]}
+      ```
+
+      **Translation rule**: A port that produces a JSON file with different bytes (different whitespace, different indent, different newline style) violates R5 cross-language byte-equality. Both Go-side `bidder_params_sha256` and Java-side `bidder_params_sha256` MUST match for the same bidder. The `cross-language-byte-divergence` warning surfaces in the lossy direction.
+
+      **Round-trip considerations**: Round-trip-safe IFF the porter is the only writer and reads the file in binary mode (preserve trailing newlines, encoding). Optidigital and Appnexus port pairs in the wild fail this rule due to historical reformatting on the Java side; reviewers SHOULD reformat one side to restore byte parity rather than accept divergence. See `cross-skill-integration.md` §8.3 for canonical worked examples.
+
+      **Notes**: This is the strongest cross-language contract — even stronger than R2 (semantic schema equivalence). The porter MUST NOT pretty-print, MUST NOT add trailing newlines, MUST NOT collapse `\r\n` → `\n`. Use `cat` / `cp` / `Files.copy` (binary mode), never `json.Marshal(json.Unmarshal(bytes))`.
+  - id: 39
+    title: params.schema_interpretation is a derived view, not translated
+    pattern: '`params.schema_interpretation.{properties, combinators_used, required, ...}` is a NORMALIZED view of the JSON
+      Schema computed independently by each language''s reader from the verbatim `bidder_params_json` bytes. The porter never
+      re-parses or re-translates the schema interpretation across languages.'
+    spec_field_driver: '`params.schema_interpretation` (derived) + meta-rule about read-vs-port boundary'
+    body: |-
+      **Go side**: N/A — `schema_interpretation` is computed at read time by `read-bidder-params/` skill from the verbatim bytes; not emitted as code.
+
+      **Java side**: N/A — same. The Java `read-bidder-params/` skill computes its own `schema_interpretation` from the same verbatim bytes.
+
+      **Translation rule**: When porting Go→Java, the porter copies bytes per Rule 38 and STOPS — does NOT regenerate the Java spec's `schema_interpretation` block. The Java reader will compute it independently when the post-port spec is re-read. Two specs of the same bidder produced from each language MUST agree on `schema_interpretation` because the input bytes are byte-equal (Rule 38). Disagreement signals a Rule 38 violation upstream.
+
+      **Round-trip considerations**: Round-trip-safe iff Rule 38 holds. If `bidder_params_json` bytes diverge, `schema_interpretation` may also diverge but the divergence is downstream — a porter who corrects Rule 38 violations will see `schema_interpretation` agreement restore automatically.
+
+      **Notes**: This is a meta-rule clarifying that the read pipeline and the port pipeline have disjoint responsibilities. Read computes derived views from bytes; port copies bytes. A porter that re-derives `schema_interpretation` violates the boundary and risks introducing divergence (e.g., re-ordering `properties[]` keys, collapsing `oneOf` arms, normalizing `description` whitespace). The reader is the single source of truth for derived views; the porter is the single source of truth for byte-fidelity.
+- kind: rules
+  title: Imp.ext unmarshaling rules (3)
+  driver: Driven by `code.make_requests.imp_ext_unmarshal.kind` and `mechanism_*`.
+  rules:
+  - id: 1
+    title: Standard ExtPrebid two-phase wrapper
+    pattern: Two-phase unmarshal — first to framework wrapper, then to bidder-specific params type.
+    spec_field_driver: '`code.make_requests.imp_ext_unmarshal.kind: standard-two-phase`'
+    body: |-
+      **Go code**:
+      ```go
+      var bidderExt adapters.ExtImpBidder
+      if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil {
+          return nil, &errortypes.BadInput{Message: "Error parsing bidderExt object"}
+      }
+      var impExt openrtb_ext.ExtImpKobler
+      if err := jsonutil.Unmarshal(bidderExt.Bidder, &impExt); err != nil {
+          return nil, &errortypes.BadInput{Message: "Error parsing impExt object"}
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private static final TypeReference<ExtPrebid<?, ExtImpKobler>> KOBLER_EXT_TYPE_REFERENCE =
+              new TypeReference<>() {};
+
+      private ExtImpKobler parseImpExt(Imp imp) {
+          try {
+              return mapper.mapper().convertValue(imp.getExt(), KOBLER_EXT_TYPE_REFERENCE).getBidder();
+          } catch (IllegalArgumentException e) {
+              throw new PreBidException(e.getMessage());
+          }
+      }
+      ```
+
+      **Notes**: This is the canonical path. The framework wrapper is `adapters.ExtImpBidder` (Go) or `ExtPrebid<?, T>` (Java). The bidder-specific type is byte-equal across languages by class/struct shape (json tags ↔ jackson annotations on the same field set). When a Go spec has `mechanism_go: jsonutil-two-phase`, the Java port emits `mechanism_java: typeref-extprebid`.
+  - id: 2
+    title: Direct unmarshal to custom wrapper
+    pattern: Skip the framework wrapper; unmarshal `imp.Ext` directly into a custom wrapper class.
+    spec_field_driver: '`code.make_requests.imp_ext_unmarshal.kind: direct` + `wrapper_type: <name>`'
+    body: |-
+      **Go code**:
+      ```go
+      // Appnexus uses appnexusExtImp directly.
+      var appnexusExt appnexusExtImp
+      if err := jsonutil.Unmarshal(imp.Ext, &appnexusExt); err != nil {
+          return nil, &errortypes.BadInput{Message: err.Error()}
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private static final TypeReference<AppnexusExtImp> APPNEXUS_EXT_TYPE_REFERENCE =
+              new TypeReference<>() {};
+
+      private AppnexusExtImp parseImpExt(Imp imp) {
+          return mapper.mapper().convertValue(imp.getExt(), APPNEXUS_EXT_TYPE_REFERENCE);
+      }
+      ```
+
+      **Notes**: Used when the bidder cannot fit the standard `bidder.{...}` shape inside `imp.ext.bidder` — typically because of a legacy field layout. The wrapper class is co-located in the proto/ directory (Java) or `openrtb_ext/` (Go). When porting, the wrapper type's field set must be byte-compatible across languages.
+  - id: 3
+    title: Free-form (no proto)
+    pattern: Adapter has no bidder-specific params — `imp.ext` is not unmarshaled.
+    spec_field_driver: '`code.make_requests.imp_ext_unmarshal.kind: none`'
+    body: |-
+      **Go code**:
+      ```go
+      // Ogury — no imp.ext unmarshal; imps are filtered by presence of imp.ext.bidder.
+      for _, imp := range request.Imp {
+          if imp.Ext == nil { continue }
+          // ... pass through unchanged
+      }
+      ```
+
+      **Java code**:
+      ```java
+      // Ogury (Java) — no proto, no parseImpExt.
+      final List<Imp> filteredImps = bidRequest.getImp().stream()
+              .filter(imp -> imp.getExt() != null)
+              .toList();
+      ```
+
+      **Notes**: When `kind: none`, neither language emits an `ExtImp{Xyz}` POJO/struct. The Go spec has no file under `openrtb_ext/imp_{xyz}.go`; the Java spec has no class under `proto/openrtb/ext/request/{xyz}/`. A porter must NOT generate one.
+- kind: rules
+  title: Mutation rules (4)
+  driver: Driven by `code.make_requests.mutation.entity_strategies` (cross-language) + `mutation.go_idiom` / `mutation.java_idiom`
+    (per-language).
+  rules:
+  - id: 4
+    title: Imp.toBuilder rebuild ↔ imp value-mutation
+    pattern: Imp mutation reuses Lombok builder in Java and value-pointer mutation in Go.
+    spec_field_driver: '`code.make_requests.mutation.entity_strategies.Imp` + `mutation.{go|java}_idiom`'
+    body: |-
+      **Go code**:
+      ```go
+      // Kobler — mutate imp value via index access.
+      for i := range sanitizedRequest.Imp {
+          imp := &sanitizedRequest.Imp[i]
+          if imp.BidFloor > 0 && imp.BidFloorCur != "" && strings.ToUpper(imp.BidFloorCur) != supportedCurrency {
+              convertedValue, _ := reqInfo.ConvertCurrency(imp.BidFloor, imp.BidFloorCur, supportedCurrency)
+              imp.BidFloor = convertedValue
+              imp.BidFloorCur = supportedCurrency
+          }
+      }
+      ```
+
+      **Java code**:
+      ```java
+      // Kobler (Java) — toBuilder rebuild.
+      private Imp modifyImp(BidRequest bidRequest, Imp imp) {
+          final Price resolvedBidFloor = resolveBidFloor(imp, bidRequest);
+          return imp.toBuilder()
+                  .bidfloor(resolvedBidFloor.getValue())
+                  .bidfloorcur(resolvedBidFloor.getCurrency())
+                  .build();
+      }
+      ```
+
+      **Notes**: The cross-language strategy is `in-place` (Go) ↔ `immutable-rebuild` (Java). Lombok's `toBuilder()` produces a new instance with selected fields overridden; the Go pointer mutation modifies the existing slice element. A porter must confirm the Go side does NOT also mutate the input request received from the framework — Go specs that mutate `request.Imp[i]` directly without copying first violate Rule 5 (`current` Go-idiom flagged).
+  - id: 5
+    title: Site/App copy-then-mutate ↔ Site/App toBuilder rebuild
+    pattern: Site/App scrubbing (e.g., remove user-identifying fields) requires a copy in Go and a builder rebuild in Java.
+    spec_field_driver: '`code.make_requests.mutation.entity_strategies.Site` (or `.App`)'
+    body: |-
+      **Go code**:
+      ```go
+      // Optidigital — copy-then-mutate.
+      if request.Site != nil {
+          siteCopy := *request.Site
+          siteCopy.Publisher = &openrtb2.Publisher{ID: pubID}
+          request.Site = &siteCopy
+      }
+      ```
+
+      **Java code**:
+      ```java
+      // Optidigital (Java) — toBuilder rebuild.
+      final BidRequest modifiedRequest = bidRequest.toBuilder()
+              .site(bidRequest.getSite() != null
+                      ? bidRequest.getSite().toBuilder()
+                              .publisher(Publisher.builder().id(pubID).build())
+                              .build()
+                      : null)
+              .build();
+      ```
+
+      **Notes**: Strategy is `copy-then-mutate` (Go, `mutation.go_idiom: shallow-copy`) ↔ `immutable-rebuild` (Java, `mutation.java_idiom: lombok-tobuilder`). The Go port should use `ptrutil.Clone` for deep-copy when nested pointers (Publisher) are also mutated; the Java port handles deep-copy implicitly via builders.
+  - id: 6
+    title: Source schain manipulation
+    pattern: schain (supply-chain) manipulation in `request.Source` — typically appending a node.
+    spec_field_driver: '`code.make_requests.mutation.entity_strategies.Source`'
+    body: |-
+      **Go code**:
+      ```go
+      // Adapter appends a schain node.
+      sourceCopy := ptrutil.Clone(request.Source)
+      sourceCopy.Ext = appendSchainNode(sourceCopy.Ext, newNode)
+      request.Source = sourceCopy
+      ```
+
+      **Java code**:
+      ```java
+      final Source modifiedSource = bidRequest.getSource() != null
+              ? bidRequest.getSource().toBuilder()
+                      .ext(appendSchainNode(bidRequest.getSource().getExt(), newNode))
+                      .build()
+              : Source.builder().ext(...).build();
+
+      final BidRequest modifiedRequest = bidRequest.toBuilder().source(modifiedSource).build();
+      ```
+
+      **Notes**: schain manipulation requires deep-copy because `source.ext.schain.nodes` is a nested pointer. Go MUST use `ptrutil.Clone` (`mutation.go_idiom: ptrutil.Clone`); a `shallow-copy` here leaks mutations back into the framework's request. Java's `toBuilder` chain is deep-copy by default.
+  - id: 7
+    title: Banner format dimension promotion
+    pattern: When `imp.banner.w/h` are missing but `imp.banner.format[0]` has dimensions, promote the first format's dimensions
+      to top-level w/h.
+    spec_field_driver: '`code.make_requests.mutation.entity_strategies.Banner`'
+    body: |-
+      **Go code**:
+      ```go
+      if banner.W == nil && banner.H == nil && len(banner.Format) > 0 {
+          bannerCopy := *banner
+          w := banner.Format[0].W
+          h := banner.Format[0].H
+          bannerCopy.W = &w
+          bannerCopy.H = &h
+          imp.Banner = &bannerCopy
+      }
+      ```
+
+      **Java code**:
+      ```java
+      final Banner banner = imp.getBanner();
+      if (banner != null && banner.getW() == null && banner.getH() == null
+              && CollectionUtils.isNotEmpty(banner.getFormat())) {
+          final Format firstFormat = banner.getFormat().get(0);
+          final Banner modifiedBanner = banner.toBuilder()
+                  .w(firstFormat.getW())
+                  .h(firstFormat.getH())
+                  .build();
+          imp = imp.toBuilder().banner(modifiedBanner).build();
+      }
+      ```
+
+      **Notes**: Common pattern for adapters that send only top-level w/h (legacy bidder protocols). Both Go and Java specs emit `entity_strategies.Banner: copy-then-mutate` (Go) or `immutable-rebuild` (Java).
+- kind: rules
+  title: HTTP request construction rules (3)
+  driver: Driven by `code.make_requests.request_body.kind` and `bidder_class.parameterized_request_type` (Java).
+  rules:
+  - id: 8
+    title: BidderUtil.defaultRequest passthrough ↔ standard RequestData
+    pattern: A thin wrapper that produces a single OpenRTB-shaped request with default headers.
+    spec_field_driver: '`code.make_requests.request_body.kind: openrtb2-passthrough` + `code.make_requests.batching.rules:
+      [single-batched]`'
+    body: |-
+      **Go code**:
+      ```go
+      requestJSON, err := jsonutil.Marshal(modifiedRequest)
+      if err != nil { return nil, []error{err} }
+
+      headers := http.Header{}
+      headers.Add("Content-Type", "application/json;charset=utf-8")
+
+      return []*adapters.RequestData{{
+          Method:  http.MethodPost,
+          Uri:     a.endpoint,
+          Body:    requestJSON,
+          Headers: headers,
+          ImpIDs:  openrtb_ext.GetImpIDs(modifiedRequest.Imp),
+      }}, nil
+      ```
+
+      **Java code**:
+      ```java
+      final HttpRequest<BidRequest> httpRequest = BidderUtil.defaultRequest(modifiedRequest, endpoint, mapper);
+      return Result.of(Collections.singletonList(httpRequest), errors);
+      ```
+
+      **Notes**: Java has the `BidderUtil.defaultRequest` helper that bundles JSON marshal + headers + URL into one call. Go has no equivalent helper — the boilerplate is repeated per adapter. A porter going Java→Go must expand the helper inline; Go→Java must collapse the boilerplate to the helper call. ImpIDs is mandatory on Go's RequestData; Java's `BidderUtil.defaultRequest` populates impIDs internally.
+  - id: 9
+    title: Custom-typed body via Bidder<T> generic
+    pattern: Adapter's request body is NOT an OpenRTB BidRequest — it's a custom shape.
+    spec_field_driver: '`code.make_requests.request_body.kind: custom` + `bidder_class.parameterized_request_type: <CustomType>`
+      (Java) / `code.make_requests.request_body.custom_body_type: <type>` (Go)'
+    body: |-
+      **Go code**:
+      ```go
+      // Mediasquare — custom request body.
+      type msqParameters struct {
+          Codes []msqParametersCodes `json:"codes"`
+          Gdpr  *gdprBody         `json:"gdpr,omitempty"`
+      }
+
+      mediasquareReq := msqParameters{...}
+      requestJSON, err := jsonutil.Marshal(mediasquareReq)
+      ```
+
+      **Java code**:
+      ```java
+      // Mediasquare (Java) — Bidder<MediasquareRequest>.
+      public class MediasquareBidder implements Bidder<MediasquareRequest> {
+          @Override
+          public Result<List<HttpRequest<MediasquareRequest>>> makeHttpRequests(BidRequest bidRequest) {
+              final MediasquareRequest payload = MediasquareRequest.of(...);
+              // Framework will marshal MediasquareRequest, not BidRequest.
+          }
+      }
+      ```
+
+      **Notes**: Java parameterizes the `Bidder<T>` interface with the custom type, letting the framework handle marshal. Go has no parameterization — the adapter explicitly marshals the custom struct via `jsonutil.Marshal`. A porter must surface `imp-flatten-aggregate` in `batching.rules[]` when a multi-imp request collapses into a single custom payload (Mediasquare's `codes[]` array carries multiple imp-derived codes in one request).
+  - id: 10
+    title: Per-imp split with macro substitution
+    pattern: One HTTP request per imp, with the endpoint URL macro-substituted from imp-level ext data.
+    spec_field_driver: '`code.make_requests.batching.rules: [{ kind: per-imp }]` + `endpoint_resolution.kind: single-token-substitution`'
+    body: |-
+      **Go code**:
+      ```go
+      for i := range request.Imp {
+          impExt, _ := parseImpExt(&request.Imp[i])
+          endpoint := strings.Replace(a.endpointTemplate, "{{.AccountID}}", impExt.AccountID, 1)
+          // ... build single-imp body, append RequestData
+      }
+      ```
+
+      **Java code**:
+      ```java
+      final List<HttpRequest<BidRequest>> requests = new ArrayList<>();
+      for (Imp imp : bidRequest.getImp()) {
+          final ExtImpXyz impExt = parseImpExt(imp);
+          final String endpoint = endpointUrl.replace("{{.AccountID}}", impExt.getAccountId());
+          final BidRequest singleImpRequest = bidRequest.toBuilder().imp(List.of(imp)).build();
+          requests.add(BidderUtil.defaultRequest(singleImpRequest, endpoint, mapper));
+      }
+      ```
+
+      **Notes**: Per-imp split is structurally common but each instance must be examined: some bidders split per-imp ALWAYS (adagio); some split only on multi-format imps (adkernel multi-format); some split per-deal not per-imp (rubicon — see Rule 18). The spec's `batching.rules[]` ordered list disambiguates.
+- kind: rules
+  title: Endpoint resolution rules (5)
+  driver: Driven by `code.make_requests.endpoint_resolution.kind` + `mechanism_*`.
+  rules:
+  - id: 11
+    title: Single-token substitution
+    pattern: One macro field substituted at request time.
+    spec_field_driver: '`endpoint_resolution.kind: single-token-substitution` + `macro_field_set: [<field>]`'
+    body: |-
+      **Go code**:
+      ```go
+      // Adagio — uses text/template parsed at Builder time.
+      type adapter struct {
+          endpointTemplate *template.Template
+      }
+
+      func Builder(...) (adapters.Bidder, error) {
+          tmpl, err := template.New("endpoint").Parse(config.Endpoint)
+          if err != nil { return nil, err }
+          return &adapter{endpointTemplate: tmpl}, nil
+      }
+
+      func (a *adapter) buildEndpoint(accountID string) (string, error) {
+          var buf strings.Builder
+          err := a.endpointTemplate.Execute(&buf, macros.EndpointTemplateParams{AccountID: accountID})
+          return buf.String(), err
+      }
+      ```
+
+      **Java code**:
+      ```java
+      // Java equivalent — string-replace.
+      private String buildEndpoint(String accountId) {
+          return endpointUrl.replace("{{.AccountID}}", accountId);
+      }
+      ```
+
+      **Notes**: Go parses the template at Builder time (signal: `template_parsed_at_build: true` in spec). Java uses string replace. The macro field set MUST be a subset of `macros.EndpointTemplateParams` (18-field list — see `review/skills/shared/framework-utilities.md`). When porting, a porter must verify the Java `replace()` covers ALL macros the Go template accepts — silent missing macros resolve to empty string at runtime.
+  - id: 12
+    title: Query parameter augmentation
+    pattern: Endpoint URL has query params appended at request time.
+    spec_field_driver: '`endpoint_resolution.kind: query-parameter-augmentation` + `mechanism_go: net/url` / `mechanism_java:
+      URIBuilder`'
+    body: |-
+      **Go code**:
+      ```go
+      // Appnexus — member_id query param.
+      parsedURL, err := url.Parse(a.endpoint)
+      if err != nil { return nil, []error{err} }
+      q := parsedURL.Query()
+      q.Set("member_id", memberID)
+      parsedURL.RawQuery = q.Encode()
+      endpoint := parsedURL.String()
+      ```
+
+      **Java code**:
+      ```java
+      // Appnexus (Java) — URIBuilder.
+      final String endpoint;
+      try {
+          endpoint = new URIBuilder(endpointUrl)
+                  .addParameter("member_id", memberId)
+                  .build()
+                  .toString();
+      } catch (URISyntaxException e) {
+          throw new PreBidException(e.getMessage());
+      }
+      ```
+
+      **Notes**: Both languages use a structured URI builder rather than string concatenation (which would fail to URL-encode special characters). A porter must NOT translate to `endpoint + "?member_id=" + memberId` — that's a fidelity violation.
+  - id: 13
+    title: Dev-prod toggle
+    pattern: Endpoint chosen between two literal URLs based on a request-time flag.
+    spec_field_driver: '`endpoint_resolution.kind: dev-prod-toggle`'
+    body: |-
+      **Go code**:
+      ```go
+      // Kobler — testMode toggle.
+      endpoint := a.endpoint
+      if testMode { endpoint = a.devEndpoint }
+      ```
+
+      **Java code**:
+      ```java
+      // Kobler (Java) — same toggle.
+      final String endpoint = isTest(imps.getFirst(), errors) ? devEndpoint : endpointUrl;
+      ```
+
+      **Notes**: The dev endpoint is a SECOND literal URL stored in adapter state. In Go-Kobler it's a hardcoded `const devBidderEndpoint = "..."` (anti-pattern: surfaces as quirk `hardcoded-config-as-anti-pattern`). In Java-Kobler it's promoted to YAML `dev-endpoint:` config and injected via `KoblerConfigurationProperties.devEndpoint`. Cross-language ports SHOULD promote the dev endpoint to YAML config — Java did this for Kobler, fixing the Go-side anti-pattern. Surfaces as quirk `dev-endpoint-config-promotion`.
+  - id: 14
+    title: Region from country (runtime-region-selection)
+    pattern: Endpoint URL chosen at runtime based on a request-context field (typically `device.geo.country` or `regs.geo`).
+    spec_field_driver: '`endpoint_resolution.kind: runtime-region-selection`'
+    body: |-
+      **Go code**:
+      ```go
+      // Huaweiads — region routing.
+      func chooseEndpoint(country string) string {
+          switch country {
+          case "RU": return endpointEU
+          case "DE", "FR", "IT": return endpointEU
+          default: return endpointGlobal
+          }
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private String chooseEndpoint(BidRequest bidRequest) {
+          final String country = Optional.ofNullable(bidRequest.getDevice())
+                  .map(Device::getGeo).map(Geo::getCountry).orElse(null);
+          return switch (country) {
+              case "RU", "DE", "FR", "IT" -> endpointEu;
+              default -> endpointGlobal;
+          };
+      }
+      ```
+
+      **Notes**: Region routing tables MUST be config-driven (YAML `extra_info` field), NOT hardcoded constants. Reviewer convention from PR #4076 (AdUp Tech). Adapters that hardcode the country→region map are flagged with quirk `hardcoded-config-as-anti-pattern`.
+  - id: 15
+    title: Deploy-time tokens
+    pattern: Endpoint URL has a non-Go-template placeholder that the operator substitutes pre-deployment.
+    spec_field_driver: '`endpoint_resolution.kind: deploy-time-token` + `deploy_time_tokens[]`'
+    body: |-
+      **Go code**:
+      ```yaml
+      # static/bidder-info/rubicon.yaml — REGION token left for operator.
+      endpoint: "https://prebid-server.rubiconproject.com/openrtb2/auction?tk_xint=#{REGION}#"
+      disabled: true   # MUST be true while a deploy-time token is unresolved.
+      ```
+
+      **Java code**:
+      ```yaml
+      # src/main/resources/bidder-config/rubicon.yaml — same token shape.
+      adapters:
+        rubicon:
+          endpoint: "https://prebid-server.rubiconproject.com/openrtb2/auction?tk_xint=#{REGION}#"
+          enabled: false
+      ```
+
+      **Notes**: `#{REGION}#` is NOT a Go template macro — it's a placeholder the deployment operator substitutes via shell substitution / config templating before PBS starts. Adapters with unresolved deploy-time tokens MUST set `disabled: true` (Go) / `enabled: false` (Java) in YAML and include a comment block enumerating valid REGION values. Reference: PR #4502 appStockSSP `#{REGION}#`. The token surfaces in `deploy_time_tokens[]`, NOT `endpoint_construction.macros_used` (which is for runtime macros).
+- kind: rules
+  title: Multi-imp grouping rules (3)
+  driver: Driven by `code.make_requests.batching.rules[]`.
+  rules:
+  - id: 16
+    title: max-imps-per-request split
+    pattern: Imps split into batches of size N.
+    spec_field_driver: '`batching.rules: [{ kind: max-imps-per-request, max: <int> }]`'
+    body: |-
+      **Go code**:
+      ```go
+      // Appnexus — max 10 imps per request.
+      const maxImpsPerRequest = 10
+
+      func (a *adapter) splitImps(imps []openrtb2.Imp) [][]openrtb2.Imp {
+          var batches [][]openrtb2.Imp
+          for i := 0; i < len(imps); i += maxImpsPerRequest {
+              end := i + maxImpsPerRequest
+              if end > len(imps) { end = len(imps) }
+              batches = append(batches, imps[i:end])
+          }
+          return batches
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private List<List<Imp>> splitImps(List<Imp> imps) {
+          final List<List<Imp>> batches = new ArrayList<>();
+          for (int i = 0; i < imps.size(); i += MAX_IMPS_PER_REQUEST) {
+              batches.add(imps.subList(i, Math.min(i + MAX_IMPS_PER_REQUEST, imps.size())));
+          }
+          return batches;
+      }
+      ```
+
+      **Notes**: The `max` value is a per-bidder constant. Both languages emit one HTTP request per batch. When composed with `pod-grouping` (Rule 17), grouping happens FIRST, then size-split inside each group. Spec emits `batching.applied_in_order: true` and `rules: [{ kind: max-imps-per-request, max: 10 }, { kind: pod-grouping, ... }]` — the order matters.
+  - id: 17
+    title: Pod-grouping by imp.id prefix
+    pattern: Group imps by `imp.id` prefix-before-underscore (video adpod use case).
+    spec_field_driver: '`batching.rules: [{ kind: pod-grouping, key: imp.id-prefix-before-underscore }]`'
+    body: |-
+      **Go code**:
+      ```go
+      // Appnexus video adpod.
+      func groupByPod(imps []openrtb2.Imp) map[string][]openrtb2.Imp {
+          groups := map[string][]openrtb2.Imp{}
+          for _, imp := range imps {
+              prefix := strings.SplitN(imp.ID, "_", 2)[0]
+              groups[prefix] = append(groups[prefix], imp)
+          }
+          return groups
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private Map<String, List<Imp>> groupByPod(List<Imp> imps) {
+          return imps.stream().collect(Collectors.groupingBy(
+                  imp -> imp.getId().split("_", 2)[0]));
+      }
+      ```
+
+      **Notes**: Each pod becomes one HTTP request. Composes with `max-imps-per-request` (Rule 16) — Appnexus does both. Spec MUST list `pod-grouping` before `max-imps-per-request` to express "group first, then size-split each group" semantics.
+  - id: 18
+    title: Multi-format split (one request per media type)
+    pattern: Imps with multiple media types split into one HTTP request per media type.
+    spec_field_driver: '`batching.rules: [{ kind: format-split, formats: [banner, video, native, audio] }]`'
+    body: |-
+      **Go code**:
+      ```go
+      // Adkernel / Rubicon — one request per media type for multi-format imps.
+      for _, mediaType := range []openrtb_ext.BidType{BidTypeBanner, BidTypeVideo, BidTypeNative} {
+          filteredImps := filterByMediaType(imps, mediaType)
+          if len(filteredImps) == 0 { continue }
+          // ... build separate request per media type
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private List<HttpRequest<BidRequest>> splitByMediaType(BidRequest bidRequest) {
+          final List<HttpRequest<BidRequest>> requests = new ArrayList<>();
+          for (BidType mediaType : List.of(BidType.banner, BidType.video, BidType.xNative)) {
+              final List<Imp> filtered = bidRequest.getImp().stream()
+                      .filter(imp -> hasMediaType(imp, mediaType))
+                      .toList();
+              if (filtered.isEmpty()) continue;
+              // ... build separate request per media type
+          }
+          return requests;
+      }
+      ```
+
+      **Notes**: The `formats[]` order in the spec is significant — it determines the order of HTTP requests emitted. Composes with `deals-split` (Rubicon does both). When porting, the porter MUST preserve format order to keep deterministic test fixture matching.
+- kind: rules
+  title: Header construction rules (4)
+  driver: Driven by `headers_constructed`.
+  rules:
+  - id: 19
+    title: Standard headers via HttpUtil.headers / hand-rolled http.Header
+    pattern: 'Standard `Content-Type: application/json` + optional `Accept` + optional bidder-specific simple headers.'
+    spec_field_driver: '`headers_constructed.per_request_dynamic: true` + `authentication_kind: none`'
+    body: |-
+      **Go code**:
+      ```go
+      headers := http.Header{}
+      headers.Add("Content-Type", "application/json;charset=utf-8")
+      headers.Add("Accept", "application/json")
+      ```
+
+      **Java code**:
+      ```java
+      final MultiMap headers = HttpUtil.headers();
+      // HttpUtil.headers() pre-populates Content-Type and Accept.
+      ```
+
+      **Notes**: `HttpUtil.headers()` (Java) is the canonical helper. Go has no equivalent — the boilerplate is per-adapter. A porter going Java→Go must expand the helper to explicit `Add` calls; Go→Java must replace the boilerplate with the helper call.
+  - id: 20
+    title: Pre-built basic-auth header in constructor
+    pattern: Authorization header pre-computed at construction time (basic-auth, no per-request data).
+    spec_field_driver: '`headers_constructed.pre_built_in_constructor: true` + `authentication_kind: basic-auth` + `authentication_input:
+      [...]`'
+    body: |-
+      **Go code**:
+      ```go
+      type adapter struct {
+          endpoint    string
+          authHeader  string  // Pre-computed at Builder time.
+      }
+
+      func Builder(name openrtb_ext.BidderName, cfg config.Adapter, server config.Server) (adapters.Bidder, error) {
+          auth := base64.StdEncoding.EncodeToString([]byte(cfg.XAPI.Username + ":" + cfg.XAPI.Password))
+          return &adapter{endpoint: cfg.Endpoint, authHeader: "Basic " + auth}, nil
+      }
+      ```
+
+      **Java code**:
+      ```java
+      public class RubiconBidder implements Bidder<BidRequest> {
+          private final String authHeader;
+
+          public RubiconBidder(String endpoint, String username, String password, ...) {
+              this.authHeader = "Basic " + Base64.getEncoder().encodeToString(
+                      (username + ":" + password).getBytes(StandardCharsets.UTF_8));
+          }
+      }
+      ```
+
+      **Notes**: Pre-building avoids per-request CPU. Both languages compute the header once in the constructor. The `authentication_input` spec field lists the YAML config fields used (e.g., `["XAPI.Username", "XAPI.Password"]` for Rubicon — see `config.Adapter.XAPI` in `review/skills/shared/framework-utilities.md`).
+  - id: 21
+    title: Per-request HMAC digest
+    pattern: HMAC-SHA256 digest of the request body, included as a per-request header.
+    spec_field_driver: '`headers_constructed.per_request_dynamic: true` + `authentication_kind: hmac-digest`'
+    body: |-
+      **Go code**:
+      ```go
+      // Huaweiads — per-request HMAC.
+      mac := hmac.New(sha256.New, []byte(secret))
+      mac.Write(requestBody)
+      digest := hex.EncodeToString(mac.Sum(nil))
+      headers.Add("Authorization", "Digest "+digest)
+      ```
+
+      **Java code**:
+      ```java
+      final Mac hmac = Mac.getInstance("HmacSHA256");
+      hmac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+      final String digest = Hex.encodeHexString(hmac.doFinal(requestBody));
+      headers.set("Authorization", "Digest " + digest);
+      ```
+
+      **Notes**: Per-request HMAC requires `pre_built_in_constructor: false` (the body changes per request). The secret comes from YAML config; the spec emits `authentication_input: [<secret-field>]`.
+  - id: 41
+    title: Bearer-token authentication header
+    pattern: 'Authorization header carries a static bearer token (`Authorization: Bearer <token>`). Token is sourced from
+      YAML config (`extra_info` on Go; `BidderConfigurationProperties` subclass on Java). Pre-built in the constructor — does
+      NOT depend on per-request data.'
+    spec_field_driver: '`headers_constructed.pre_built_in_constructor: true` + `authentication_kind: bearer-token` + `authentication_input:
+      [<token-field>]`'
+    body: |-
+      **Go code**:
+      ```go
+      type adapter struct {
+          endpoint    string
+          authHeader  string  // Pre-computed at Builder time.
+      }
+
+      func Builder(name openrtb_ext.BidderName, cfg config.Adapter, server config.Server) (adapters.Bidder, error) {
+          var extra struct {
+              ApiToken string `json:"api_token"`
+          }
+          if cfg.ExtraAdapterInfo != "" {
+              if err := jsonutil.Unmarshal([]byte(cfg.ExtraAdapterInfo), &extra); err != nil {
+                  return nil, fmt.Errorf("invalid extra_info: %w", err)
+              }
+          }
+          return &adapter{endpoint: cfg.Endpoint, authHeader: "Bearer " + extra.ApiToken}, nil
+      }
+      ```
+
+      **Java code**:
+      ```java
+      @Validated
+      @Data
+      @EqualsAndHashCode(callSuper = true)
+      @NoArgsConstructor
+      private static class XyzConfigurationProperties extends BidderConfigurationProperties {
+          @NotBlank
+          private String apiToken;
+      }
+
+      public class XyzBidder implements Bidder<BidRequest> {
+          private final String authHeader;
+
+          public XyzBidder(String endpoint, String apiToken, ...) {
+              this.authHeader = "Bearer " + apiToken;
+          }
+      }
+      ```
+
+      **Translation rule**: The token field name uses Go's `extra_info` JSON convention (snake_case) and Java's typed `BidderConfigurationProperties` field (camelCase). A porter Go→Java promotes `extra_info.api_token` to a typed `@NotBlank private String apiToken` field on a `XyzConfigurationProperties` subclass (per Rule 35). A porter Java→Go demotes the typed field back to `extra_info` opaque JSON. The bearer prefix `"Bearer "` (with trailing space) is byte-identical on both sides; the token value flows through unchanged.
+
+      **Round-trip considerations**: Round-trip-safe iff Rule 35 (custom property subclass) round-trips correctly. A porter that drops the token from `extra_info` on Java→Go loses the auth — operational failure. Surfaces as `authentication_input` field divergence on the dual-spec assertion.
+
+      **Notes**: Bearer-token sits between basic-auth (Rule 20) and HMAC (Rule 21) on the per-request-dynamism axis: like basic-auth it's pre-built; unlike basic-auth the input is a single token (not user:pass). The behavior-taxonomy registry already lists `bearer-token` as an `authentication_kind` enum value but currently has no master sample — this rule is the contract for when one appears. Rule 41 also serves as the template for any future static-credential auth shapes (API-key headers, signed JWT, etc.) that follow the same constructor-time-precompute pattern.
+- kind: rules
+  title: Bid type resolution rules (6)
+  driver: Driven by `code.make_bids.bid_type_resolution.method_chain[]`.
+  rules:
+  - id: 22
+    title: by-imp-mediatype (default)
+    pattern: Look up the source `imp` (matched by `bid.impid`); the imp's first non-nil media-type field determines the bid
+      type.
+    spec_field_driver: '`bid_type_resolution.method_chain: [{ method: by-imp-mediatype, fallback_action: throw }]`'
+    body: |-
+      **Go code**:
+      ```go
+      func getMediaTypeForImp(impID string, imps []openrtb2.Imp) (openrtb_ext.BidType, error) {
+          for _, imp := range imps {
+              if imp.ID == impID {
+                  switch {
+                  case imp.Banner != nil: return openrtb_ext.BidTypeBanner, nil
+                  case imp.Video != nil:  return openrtb_ext.BidTypeVideo, nil
+                  case imp.Native != nil: return openrtb_ext.BidTypeNative, nil
+                  case imp.Audio != nil:  return openrtb_ext.BidTypeAudio, nil
+                  }
+              }
+          }
+          return "", &errortypes.BadServerResponse{Message: fmt.Sprintf("Unknown imp ID %s", impID)}
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private BidType resolveBidType(String impId, List<Imp> imps) {
+          return imps.stream()
+                  .filter(imp -> imp.getId().equals(impId))
+                  .findFirst()
+                  .map(imp -> {
+                      if (imp.getBanner() != null) return BidType.banner;
+                      if (imp.getVideo() != null) return BidType.video;
+                      if (imp.getXNative() != null) return BidType.xNative;
+                      if (imp.getAudio() != null) return BidType.audio;
+                      return null;
+                  })
+                  .orElseThrow(() -> new PreBidException("Unknown imp ID " + impId));
+      }
+      ```
+
+      **Notes**: Default first step. The fallback_action `throw` produces `BadServerResponse` (Go) or `BidderError.badServerResponse` (Java). Note Java's `getXNative()` (the Java POJO renames `native` due to keyword collision).
+  - id: 23
+    title: by-bid-mtype (canonical OpenRTB 2.6)
+    pattern: Use `bid.mtype` directly — the canonical OpenRTB 2.6 field.
+    spec_field_driver: '`bid_type_resolution.method_chain: [{ method: by-bid-mtype, fallback_action: ... }]`'
+    body: |-
+      **Go code**:
+      ```go
+      func getMediaTypeFromMType(bid openrtb2.Bid) (openrtb_ext.BidType, error) {
+          switch bid.MType {
+          case openrtb2.MarkupBanner: return openrtb_ext.BidTypeBanner, nil
+          case openrtb2.MarkupVideo:  return openrtb_ext.BidTypeVideo, nil
+          case openrtb2.MarkupAudio:  return openrtb_ext.BidTypeAudio, nil
+          case openrtb2.MarkupNative: return openrtb_ext.BidTypeNative, nil
+          }
+          return "", &errortypes.BadServerResponse{...}
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private BidType resolveBidType(Bid bid) {
+          return switch (bid.getMtype()) {
+              case 1 -> BidType.banner;
+              case 2 -> BidType.video;
+              case 3 -> BidType.audio;
+              case 4 -> BidType.xNative;
+              default -> throw new PreBidException("Unknown bid mtype " + bid.getMtype());
+          };
+      }
+      ```
+
+      **Notes**: Modern adapters use `bid.mtype` (canonical since OpenRTB 2.6, ~2022). Older adapters fall back to imp-mediatype lookup. A bidder that supports OpenRTB 2.6 SHOULD declare `ortb-version: "2.6"` in YAML (Java) — which is recorded in `bidder_info.ortb_version`.
+  - id: 24
+    title: by-bid-ext-typed-field with chain
+    pattern: Look up a typed field in `bid.ext` (e.g., `bid.ext.prebid.type`, `bid.ext.appnexus.bidAdType`).
+    spec_field_driver: '`bid_type_resolution.method_chain: [{ method: by-bid-ext-typed-field, fallback_action: next | return-default
+      }, ...]`'
+    body: |-
+      **Go code**:
+      ```go
+      // Kobler — bid.ext.prebid.type with default-banner fallback.
+      func getMediaTypeForBid(bid openrtb2.Bid) openrtb_ext.BidType {
+          if bid.Ext != nil {
+              var bidExt openrtb_ext.ExtBid
+              err := jsonutil.Unmarshal(bid.Ext, &bidExt)
+              if err == nil && bidExt.Prebid != nil {
+                  mediaType, err := openrtb_ext.ParseBidType(string(bidExt.Prebid.Type))
+                  if err == nil { return mediaType }
+              }
+          }
+          return openrtb_ext.BidTypeBanner   // fallback_action: return-default
+      }
+      ```
+
+      **Java code**:
+      ```java
+      // Kobler (Java) — same chain via Optional.
+      private BidType getBidType(Bid bid) {
+          return Optional.ofNullable(bid.getExt())
+                  .map(ext -> ext.get(EXT_PREBID))
+                  .filter(JsonNode::isObject)
+                  .map(ObjectNode.class::cast)
+                  .map(this::parseExtBidPrebid)
+                  .map(ExtBidPrebid::getType)
+                  .orElse(BidType.banner);   // fallback_action: return-default
+      }
+      ```
+
+      **Notes**: The Kobler chain is single-step with `return-default`. Aax has a 3-step chain (`by-bid-ext-typed-field → by-imp-mediatype → throw`). Each step's `fallback_action` is one of `next`, `return-default`, `throw` — a porter must preserve the chain order and fallback semantics.
+  - id: 25
+    title: by-response-payload-shape
+    pattern: Inspect the response payload structure to determine bid type (e.g., `bid.video != null` → video).
+    spec_field_driver: '`bid_type_resolution.method_chain: [{ method: by-response-payload-shape, fallback_action: ... }]`'
+    body: |-
+      **Go code**:
+      ```go
+      // Mediasquare custom response.
+      func mediaTypeFromMediasquareBid(bid msqResponseBids) openrtb_ext.BidType {
+          if bid.Video != nil { return openrtb_ext.BidTypeVideo }
+          if bid.Native != nil { return openrtb_ext.BidTypeNative }
+          return openrtb_ext.BidTypeBanner
+      }
+      ```
+
+      **Java code**:
+      ```java
+      private BidType mediaTypeFromMediasquareBid(MediasquareBid bid) {
+          if (bid.getVideo() != null) return BidType.video;
+          if (bid.getNative() != null) return BidType.xNative;
+          return BidType.banner;
+      }
+      ```
+
+      **Notes**: Used only when the response is NOT OpenRTB-shaped (e.g., Mediasquare's custom payload). When the spec has `code.make_bids.response_type: custom`, this resolution method is typical.
+  - id: 26
+    title: hardcoded fallback
+    pattern: Always return a fixed media type. Single-mediatype adapters typically use `by-imp-mediatype` instead — `hardcoded`
+      is rare and surfaces as a quirk for fidelity tracking.
+    spec_field_driver: '`bid_type_resolution.method_chain: [{ method: hardcoded }]` + `default_value: <type>`'
+    body: |-
+      **Go code**:
+      ```go
+      // Forced banner.
+      return openrtb_ext.BidTypeBanner, nil
+      ```
+
+      **Java code**:
+      ```java
+      return BidType.banner;
+      ```
+
+      **Notes**: Even single-mediatype adapters typically lookup by-imp-mediatype for safety. Hardcoded resolution surfaces as quirk `hardcoded-config-as-anti-pattern` because it skips imp validation.
+  - id: 40
+    title: by-imp-id-suffix and imp-prefix-lookup
+    pattern: Resolve bid type from a marker embedded IN the `imp.id` string itself — either a trailing suffix (e.g., `_b`
+      for banner, `_v` for video) or a leading prefix that maps back to the original imp pre-split. Used by adapters that
+      split a single multi-format imp into multiple single-format imps before dispatch (Adkernel) or that group video adpod
+      imps under a shared prefix (Appnexus).
+    spec_field_driver: '`bid_type_resolution.method_chain: [{ method: by-imp-id-suffix | imp-prefix-lookup, fallback_action:
+      ... }]`'
+    body: |-
+      **Go code** (Adkernel multi-format split — `by-imp-id-suffix`):
+      ```go
+      func mediaTypeFromImpIDSuffix(impID string) (openrtb_ext.BidType, error) {
+          switch {
+          case strings.HasSuffix(impID, "_b"): return openrtb_ext.BidTypeBanner, nil
+          case strings.HasSuffix(impID, "_v"): return openrtb_ext.BidTypeVideo, nil
+          case strings.HasSuffix(impID, "_n"): return openrtb_ext.BidTypeNative, nil
+          case strings.HasSuffix(impID, "_a"): return openrtb_ext.BidTypeAudio, nil
+          }
+          return "", &errortypes.BadServerResponse{Message: "Unable to resolve bid type for imp " + impID}
+      }
+      ```
+
+      **Go code** (Appnexus video adpod — `imp-prefix-lookup`):
+      ```go
+      func resolveImpFromPrefix(bidImpID string, originalImps []openrtb2.Imp) (*openrtb2.Imp, error) {
+          prefix := strings.SplitN(bidImpID, "_", 2)[0]
+          for i := range originalImps {
+              if strings.HasPrefix(originalImps[i].ID, prefix) {
+                  return &originalImps[i], nil
+              }
+          }
+          return nil, &errortypes.BadServerResponse{Message: "No imp matching prefix " + prefix}
+      }
+      ```
+
+      **Java code** (Adkernel — `by-imp-id-suffix`):
+      ```java
+      private BidType mediaTypeFromImpIdSuffix(String impId) {
+          if (impId.endsWith("_b")) return BidType.banner;
+          if (impId.endsWith("_v")) return BidType.video;
+          if (impId.endsWith("_n")) return BidType.xNative;
+          if (impId.endsWith("_a")) return BidType.audio;
+          throw new PreBidException("Unable to resolve bid type for imp " + impId);
+      }
+      ```
+
+      **Java code** (Appnexus video adpod — `imp-prefix-lookup`):
+      ```java
+      private Imp resolveImpFromPrefix(String bidImpId, List<Imp> originalImps) {
+          final String prefix = bidImpId.split("_", 2)[0];
+          return originalImps.stream()
+                  .filter(imp -> imp.getId().startsWith(prefix))
+                  .findFirst()
+                  .orElseThrow(() -> new PreBidException("No imp matching prefix " + prefix));
+      }
+      ```
+
+      **Translation rule**: Both methods preserve the suffix/prefix marker convention across languages — the marker characters MUST be byte-identical (a `_b` suffix on Go MUST stay `_b` on Java; renaming to `-b` breaks fixture parity). When `by-imp-id-suffix` composes with `format-split` batching (Rule 18), the porter MUST emit the suffix in `make_requests` AND consume it in `make_bids` symmetrically. When `imp-prefix-lookup` composes with `pod-grouping` batching (Rule 17), the prefix delimiter (typically `_`) MUST match between batching and resolution.
+
+      **Round-trip considerations**: Round-trip-safe — the suffix/prefix marker is structural data carried in the imp.id field, recovered identically on both sides.
+
+      **Notes**: These two methods fill the gap between Rules 22-26 (which cover canonical mediatype resolution) and the bidder-side string-marker conventions used by adapters that synthesize imp IDs. Adkernel's multi-format split adds the suffix during request build; Appnexus's adpod uses naturally-prefixed pod IDs. The porter MUST verify that the corresponding `batching.rules[]` entry produces matching markers — a `format-split` rule that emits no suffix paired with a `by-imp-id-suffix` resolution method is internally inconsistent and surfaces as a quirk.
+- kind: rules
+  title: Error emission rules (3)
+  driver: Driven by `code.make_requests` / `code.make_bids` error-return paths.
+  rules:
+  - id: 27
+    title: BadInput (publisher-fault errors)
+    pattern: Emit a `BadInput` error when the publisher's request is malformed.
+    spec_field_driver: every error path with `errortypes.BadInput` (Go) / `BidderError.badInput` (Java).
+    body: |-
+      **Go code**:
+      ```go
+      return nil, []error{&errortypes.BadInput{Message: "Invalid imp.ext for impression " + imp.ID}}
+      ```
+
+      **Java code**:
+      ```java
+      errors.add(BidderError.badInput("Invalid imp.ext for impression " + imp.getId()));
+      ```
+
+      **Notes**: Pointer form (`&errortypes.BadInput{...}`) is REQUIRED in Go — value form does not satisfy the error interface and won't compile. Java uses the static factory method `BidderError.badInput(...)`. Error messages should include the imp ID or index when generated inside an imp loop. Reference: `review/skills/shared/framework-utilities.md#error-type-taxonomy`.
+  - id: 28
+    title: BadServerResponse (bidder-fault errors)
+    pattern: Emit a `BadServerResponse` error when the upstream bidder returns invalid data.
+    spec_field_driver: every error path with `errortypes.BadServerResponse` (Go) / `BidderError.badServerResponse` (Java).
+    body: |-
+      **Go code**:
+      ```go
+      return nil, []error{&errortypes.BadServerResponse{
+          Message: fmt.Sprintf("Unexpected status code: %d. Run with request.debug = 1 for more info.", responseData.StatusCode),
+      }}
+      ```
+
+      **Java code**:
+      ```java
+      return Result.withError(BidderError.badServerResponse(
+              "Unexpected status code: %d. Run with request.debug = 1 for more info.".formatted(statusCode)));
+      ```
+
+      **Notes**: Pointer form required in Go. The 4xx/5xx case is typically auto-handled by the framework helpers (`adapters.CheckResponseStatusCodeForErrors` in Go, `HttpUtil.validateResponse` in Java) — but adapters with `http_status_handling.kind: legacy-raw-go` (e.g., kobler) hand-roll this.
+  - id: 29
+    title: FailedToMarshal / FailedToUnmarshal
+    pattern: Emit a typed error when adapter-side marshal/unmarshal fails.
+    spec_field_driver: every error path with `errortypes.FailedToMarshal` / `FailedToUnmarshal`.
+    body: |-
+      **Go code**:
+      ```go
+      requestJSON, err := jsonutil.Marshal(modifiedRequest)
+      if err != nil {
+          return nil, []error{&errortypes.FailedToMarshal{Message: err.Error()}}
+      }
+      ```
+
+      **Java code**:
+      ```java
+      try {
+          final byte[] body = mapper.encodeToBytes(modifiedRequest);
+      } catch (EncodeException e) {
+          errors.add(BidderError.badInput("Failed to encode: " + e.getMessage()));
+      }
+      ```
+
+      **Notes**: Marshaling errors MUST NEVER be silently swallowed — production has shown shared-memory corruption causing `Marshal` to fail. If swallowed, the adapter panics with no diagnostic. Reviewer convention from PR #4614 (Go-side). Java's equivalent is `EncodeException` from `JacksonMapper`. The Java side typically wraps it in `BidderError.badInput` rather than a distinct `FailedToMarshal` type — this is a port-translation asymmetry: Go has 4 typed error types (`BadInput`, `BadServerResponse`, `FailedToMarshal`, `FailedToUnmarshal`), Java collapses them into 2 (`badInput`, `badServerResponse`).
+- kind: rules
+  title: Status code handling rules (2)
+  driver: Driven by `code.make_bids.http_status_handling.kind` + `application_status_handling`.
+  rules:
+  - id: 30
+    title: Canonical 204+4xx framework helpers
+    pattern: Use framework helpers to short-circuit on 204 (no content) and 4xx/5xx (server errors).
+    spec_field_driver: '`http_status_handling.kind: canonical-go-helpers` (Go) / `framework-default` (Java)'
+    body: |-
+      **Go code**:
+      ```go
+      if adapters.IsResponseStatusCodeNoContent(responseData) { return nil, nil }
+      if err := adapters.CheckResponseStatusCodeForErrors(responseData); err != nil { return nil, []error{err} }
+      ```
+
+      **Java code**:
+      ```java
+      // Java framework auto-handles via HttpUtil.validateResponse — no adapter code needed.
+      // Optional empty-seatbid short-circuit:
+      if (CollectionUtils.isEmpty(bidResponse.getSeatbid())) return Collections.emptyList();
+      ```
+
+      **Notes**: Go canonical helpers were introduced ~2024; older adapters (kobler) still use `legacy-raw-go` style. A porter Go→Java should NOT include explicit status checks (Java framework handles it); a porter Java→Go SHOULD use the canonical helpers (NOT `legacy-raw-go`).
+  - id: 31
+    title: Application-layer retcode field
+    pattern: Adapter checks an application-layer status field IN the response body, distinct from HTTP status.
+    spec_field_driver: '`application_status_handling.kind: retcode-field` + `field` + `success_codes` + `error_codes`'
+    body: |-
+      **Go code**:
+      ```go
+      // Huaweiads — retcode field in response body.
+      type huaweiadsResponse struct {
+          Retcode int `json:"retcode"`
+          // ...
+      }
+
+      if response.Retcode != 200 {
+          return nil, []error{&errortypes.BadServerResponse{
+              Message: fmt.Sprintf("Application-level error: retcode=%d", response.Retcode),
+          }}
+      }
+      ```
+
+      **Java code**:
+      ```java
+      @Value(staticConstructor = "of")
+      public class HuaweiAdsResponse {
+          Integer retcode;
+          // ...
+      }
+
+      if (response.getRetcode() != 200) {
+          return Result.withError(BidderError.badServerResponse(
+                  "Application-level error: retcode=" + response.getRetcode()));
+      }
+      ```
+
+      **Notes**: Application-layer status is rare — Huaweiads is the canonical example. The HTTP status is typically 200 in these cases (the upstream returns success at the transport layer); the application error is in the body. Spec emits BOTH `http_status_handling` (typically `framework-default`) AND `application_status_handling` populated with the field path and success/error code sets.
+- kind: rules
+  title: Currency conversion rules (1)
+  driver: Driven by `currency_conversion`.
+  rules:
+  - id: 32
+    title: reqInfo.ConvertCurrency vs CurrencyConversionService.convertCurrency
+    pattern: Convert a currency value (typically `imp.bidfloor`) from request currency to bidder-supported currency.
+    spec_field_driver: '`currency_conversion.used: true` + `helper.{go|java}_signature`'
+    body: |-
+      **Go code**:
+      ```go
+      // Kobler.
+      func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) error {
+          if imp.BidFloor > 0 && imp.BidFloorCur != "" && strings.ToUpper(imp.BidFloorCur) != supportedCurrency {
+              convertedValue, err := reqInfo.ConvertCurrency(imp.BidFloor, imp.BidFloorCur, supportedCurrency)
+              if err != nil { return err }
+              imp.BidFloor = convertedValue
+              imp.BidFloorCur = supportedCurrency
+          }
+          return nil
+      }
+      ```
+
+      **Java code**:
+      ```java
+      // Kobler (Java).
+      private Price convertBidFloor(Price bidFloorPrice, BidRequest bidRequest) {
+          final BigDecimal convertedPrice = currencyConversionService.convertCurrency(
+                  bidFloorPrice.getValue(),
+                  bidRequest,                          // bidRequest passed for time-context.
+                  bidFloorPrice.getCurrency(),
+                  DEFAULT_BID_CURRENCY);
+          return Price.of(DEFAULT_BID_CURRENCY, convertedPrice);
+      }
+      ```
+
+      **Notes**: Critical asymmetry — Java passes `bidRequest` for time-context (currency rates can vary by `request.tmax` / time-of-bid); Go does NOT pass any context. The spec emits `bid_request_passed_for_context: true` (Java) / `false` (Go). A port-fidelity violation appears when Go is ported to Java without adding the bidRequest arg, or when Java is ported to Go expecting time-context that Go cannot provide. Surfaces as quirk `currency-conversion-bidrequest-context`. Go's `ConvertCurrency` is available ONLY in `MakeRequests` (which receives `*ExtraRequestInfo`); `MakeBids` does NOT receive currency conversion access — see `review/skills/shared/framework-utilities.md`.
+- kind: rules
+  title: YAML and config rules (3)
+  driver: Driven by `bidder_info` + `cross_language.port_concerns`.
+  rules:
+  - id: 33
+    title: Aliases inversion (child→parent vs parent→children)
+    pattern: 'Go declares aliases on the child YAML (`aliasOf: parent`); Java declares aliases on the parent YAML (`aliases:
+      { child: ~ }`).'
+    spec_field_driver: '`cross_language.port_concerns.aliases_inverted: true`'
+    body: |-
+      **Go YAML** (child file: `static/bidder-info/connektai.yaml`):
+      ```yaml
+      aliasOf: xeworks
+      gvlVendorID: 12345
+      ```
+
+      **Java YAML** (parent file: `src/main/resources/bidder-config/xeworks.yaml`):
+      ```yaml
+      adapters:
+        xeworks:
+          endpoint: "https://..."
+          aliases:
+            connektai: ~                            # tilde-syntax: inherit everything from xeworks.
+      ```
+
+      **Notes**: A porter Go→Java must MOVE the alias declaration from the child file (delete) to the parent file's `aliases:` map. A porter Java→Go must SPLIT the parent's `aliases:` map into separate child YAML files. Both directions touch multiple files — atomic refactor.
+  - id: 34
+    title: YAML unification (Go split vs Java unified)
+    pattern: Go splits adapter config across `static/bidder-info/{xyz}.yaml` (info) + main `config.yaml` (endpoint). Java
+      unifies into `src/main/resources/bidder-config/{xyz}.yaml`.
+    spec_field_driver: '`cross_language.port_concerns.yaml_unification: true`'
+    body: |-
+      **Go YAML** (`static/bidder-info/kobler.yaml`):
+      ```yaml
+      endpoint: "https://bid.essrtb.com/bid/prebid_server_rtb_call"
+      endpointCompression: gzip
+      maintainer: { email: bidding-support@kobler.no }
+      geoscope: [NOR, SWE, DNK]
+      capabilities:
+        site: { mediaTypes: [banner] }
+        app:  { mediaTypes: [banner] }
+      ```
+
+      **Java YAML** (`src/main/resources/bidder-config/kobler.yaml`):
+      ```yaml
+      adapters:
+        kobler:
+          endpoint: "https://bid.essrtb.com/bid/prebid_server_rtb_call"
+          dev-endpoint: "https://bid-service.dev.essrtb.com/bid/prebid_server_rtb_call"
+          endpoint-compression: gzip
+          geoscope: [NOR, SWE, DNK]
+          meta-info:
+            maintainer-email: bidding-support@kobler.no
+            site-media-types: [banner]
+            app-media-types: [banner]
+            vendor-id: 0
+      ```
+
+      **Notes**: Java's `meta-info` block flattens what Go nests under `capabilities.{site|app}.mediaTypes` into separate `site-media-types` / `app-media-types` lists. A porter Go→Java must transform the structure; Java→Go must split apart. Field name conventions also differ: Go uses camelCase (`endpointCompression`), Java uses kebab-case (`endpoint-compression`). The reader skills SHOULD detect mismatched field-name styles and surface as `yaml-field-name-typo` quirks.
+  - id: 35
+    title: Custom property subclass for extra YAML fields
+    pattern: Java declares custom YAML fields beyond the default `BidderConfigurationProperties` via a subclass. Go has no
+      equivalent — extra fields go in `static/bidder-info/{xyz}.yaml` `extra_info:` (opaque JSON).
+    spec_field_driver: '`spring_config.configuration_properties_class.extra_fields[]` (Java) / `bidder_info.yaml_extra_fields`
+      (Go)'
+    body: |-
+      **Java code**:
+      ```java
+      @Validated
+      @Data
+      @EqualsAndHashCode(callSuper = true)
+      @NoArgsConstructor
+      private static class KoblerConfigurationProperties extends BidderConfigurationProperties {
+          @NotBlank
+          private String devEndpoint;
+      }
+      ```
+
+      **Go YAML**:
+      ```yaml
+      # static/bidder-info/kobler.yaml — Go has no Spring DI; extra config goes in extra_info.
+      extra_info: '{"dev_endpoint": "https://bid-service.dev.essrtb.com/bid/prebid_server_rtb_call"}'
+      ```
+
+      **Notes**: Java's typed approach is preferred — gives validation (`@NotBlank`), type-safety, and field-level docs. Go's `extra_info` is opaque JSON parsed in the adapter. A porter Go→Java SHOULD promote each `extra_info` field into a typed `BidderConfigurationProperties` subclass field. Kobler's Java port did this for `devEndpoint` — fixing the Go-side `hardcoded-config-as-anti-pattern` quirk. Surfaces as quirk `dev-endpoint-config-promotion` (cross-language win).
+- kind: rules
+  title: Cross-language alignment rules (3)
+  driver: Cross-language patterns where Java and Go shape the same bidder family in structurally different ways. Per-language readers populate per-side facts and the dual-spec assertion file format joins them; cross-language coherence is verified by Phase 2.6 mechanizable lints.
+  rules:
+  - id: 44
+    title: Java alias-empire consolidation
+    pattern: 'When Java registers N siblings under a shared parent''s `aliases:` block (re-using the parent''s `Bidder<T>` instance via `BidderDepsAssembler.aliasesDeps()`) while Go registers them as YAMLs with `aliasOf: <parent>` against a single `adapters/<parent>/` package, treat the empire as one logical adapter family in both servers.'
+    spec_field_driver: '`meta.empire_canonical_master`, `meta.empire_parent_flavor`, `aliases[].relationship_flavor` (Phase 2 schema additions per ADR-001 D4) + existing `meta.is_alias`, `meta.alias_of`, and parent `aliases[]` blocks'
+    body: |-
+      **Three observational sub-flavors** (not separate rules — empire shapes that share one mechanism):
+
+      | Sub-flavor | Mechanism | Master sample |
+      |---|---|---|
+      | `endpoint-macro-substitution` | One `Bidder<T>` class; alias differentiates via `imp.ext.bidder.host` filling endpoint macros (`{{Host}}`, `{{PublisherID}}`) | limelightDigital (15 aliases) |
+      | `white-label-saas` | One `Bidder<T>` class; alias differentiates via per-alias `endpoint:` override pointing at the alias's SaaS host | smarthub/Attekmi (9 aliases), teqblaze (9 aliases) |
+      | `registration-only` | One `Bidder<T>` class; alias is purely a name registration with no behavioral override; parent endpoint serves all | nexx360 (4 aliases), adverxo (3 aliases) |
+
+      **Mechanism invariant** (across all three flavors):
+
+      - Java: parent's `*Configuration.java` registers `BidderConfigurationProperties` for the parent; `aliases:` block in `bidder-config/<parent>.yaml` lists children with optional per-alias YAML-merge overrides; `BidderDepsAssembler.aliasesDeps()` auto-iterates aliases and reuses the parent's `bidderCreator` lambda for each
+      - Go: each alias has its own `static/bidder-info/<alias>.yaml` with `aliasOf: <parent>`; routes to the parent's `adapters/<parent>/` package at request time
+
+      **Translation rule**: For each Go-side `aliasOf:` entry, the corresponding Java side MUST declare the alias under the same parent's `aliases:` block. A porter detecting a Java parent with N aliases generates N Go child YAMLs under `static/bidder-info/<child>.yaml`, each with `aliasOf: <parent>`; the porter does NOT generate per-child Go test directories (Go aliases need no test files per Rule 37). Empire migrations (`alias-reparent` events, e.g., Java PR #4356 ProgX→adkernel) require updating the parent reference on BOTH sides; partial migrations surface as cross-language alias-graph asymmetry warnings.
+
+      **Round-trip considerations**: Round-trip-safe IFF the parent flavor is consistent across languages. Empire-to-empire round-trip preserves the parent + child relationship in both directions. Cross-language alias-graph divergence (e.g., `mediafuse` on Go is a primary, on Java is an Appnexus alias) is NOT a Rule 44 case — it's a Rule 33 inversion plus the `cross_language.alias_graph_divergence` quirk.
+
+      **Mechanizable**: yes (Phase 2.6 `lint-port-rules.py`). For each Go-side `aliasOf:` entry, assert that the corresponding Java side declares the alias under the same parent's `aliases:` block (or accept divergence with a `cross_language.alias_graph_divergence` quirk).
+
+      **Notes**: Round 3 inventory: 32 Java parents, 95 Java aliases, 17 cross-language coherent + 79 asymmetric alias relationships. Master samples — canonical: `smarthub/Attekmi` (cleanest empire shape, 9 aliases, includes parent-rebrand event SmartHub→Attekmi which co-occurs with Rule 43 `bilateral` sub-type); smallest clean: `adverxo` (3 aliases, simple); complexity-high reference: `limelightDigital` (15 aliases, `endpoint-macro-substitution` flavor). Phase 5 prioritizes 3 empire pairs (smarthub, teqblaze, limelightDigital) to bring coverage to 8/32 (25%). Pattern Index tags (already in references): `alias-empire`, `alias-add`, `alias-reparent`, `cross-empire-migration`, `parent-rebrand`, `parent-evolve`, `registration-only-alias`, `white-label-saas`, `endpoint-macro-substitution-empire`. References: ADR-003; `BidderDepsAssembler.aliasesDeps()` in `src/main/java/org/prebid/server/spring/config/bidder/util/BidderDepsAssembler.java`.
+  - id: 45
+    title: Disabled-by-default Java alias
+    pattern: 'Java alias children of empire parents typically ship with `enabled: false` in the parent''s YAML `aliases:` block; publishers opt in by setting `enabled: true` in the deployment config. Go counterparts of the same alias typically ship enabled. This is **not** a port-fidelity violation — it''s a Java-side default policy that operators expect.'
+    spec_field_driver: 'Per-language `bidder_info.default_enabled` (existing) + per-language quirk `disabled-by-default-empire-alias` or `default-enabled-go-disabled-justified` + dual-spec assertion `bidder_info_default_enabled.rule_45_match`'
+    body: |-
+      **Statistical evidence** (Round 3 inventory across 350+330 cross-language bidders):
+
+      - 78 cross-language pairs with mismatched `default_enabled` values
+      - 72 follow the canonical pattern: Go-enabled, Java-disabled (`rule_45_match: go-enabled-java-disabled`)
+      - 6 inverse cases: Go-disabled, Java-enabled (`rule_45_match: go-disabled-java-enabled`) — typically reflect Go-side default-off due to white-label/legal concerns; Java enables
+
+      **Inverse-case examples**: adagio, audienceNetwork, avocet, dianomi, epom, mgidX. Each MUST carry a paired `quirks[]` entry with taxon `default-enabled-go-disabled-justified` documenting why (white-label, legal restriction, etc.).
+
+      **Dual-spec assertion shape** (existing `bidder_info_default_enabled` block, refined with `rule_45_match` field):
+      ```yaml
+      bidder_info_default_enabled:
+        go: true
+        java: false
+        equivalent: false
+        divergence_summary: "Java alias child ships enabled=false per Rule 45; publisher opt-in expected."
+        severity: pass                                # Pass because divergence is expected per Rule 45.
+        rule_45_match: go-enabled-java-disabled       # NEW field on dual-spec block.
+      ```
+
+      **Translation rule**: A porter detecting an empire alias on the Java side MUST emit `enabled: false` on the corresponding parent's `aliases:` entry. A porter detecting an inverse case (Go-disabled, Java-enabled) MUST surface `default-enabled-go-disabled-justified` as a quirk on the Go-side spec with the rationale (e.g., "Facebook white-label compliance — operator must opt in").
+
+      **Round-trip considerations**: `default_enabled` is in `R5_DIVERGENT_KEYS` (`scripts/round-trip-ci.py`). Rule 45 documents WHY this is divergent (it's expected, not a bug). R5 emits `WARN` only if the assertion declares `severity: pass` while runtime values disagree about direction (stale-assertion case).
+
+      **Mechanizable**: yes, partially (Phase 2.6 `lint-port-rules.py`). The lint can verify: if `meta.is_alias=true` AND `meta.empire_parent_flavor` is `white-label-saas` or `registration-only`, expect `rule_45_match: go-enabled-java-disabled`; inverse cases MUST carry the `default-enabled-go-disabled-justified` quirk.
+
+      **Notes**: Master samples — canonical: optidigital (already covered in goldens — see `cross-language-pairs/optidigital.dual-spec-assertions.yaml` `bidder_info_default_enabled` block); mass evidence: 72 alias-empire children. Inverse master: adagio. Related taxa: `enabled-false-default` (Pattern Index), already used for #4054 (optidigital). References: ADR-004.
+  - id: 46
+    title: Naming-convention normalization
+    pattern: 'When porting a Go bidder identifier to Java parent-YAML form, apply `lowercase + drop non-[a-z0-9] characters` to derive the Java parent-YAML filename and Spring bean key. Two allow-listed exceptions handle digit-leading and brand-acronym cases.'
+    spec_field_driver: 'Per-language `meta.bidder_name` (existing) + per-language quirk `naming-convention-normalization` (Java side) + dual-spec assertion `naming_asymmetry` block'
+    body: |-
+      **Mechanical transformation**:
+      ```python
+      def go_to_java_parent_yaml_name(go_name: str) -> str:
+          """Apply Rule 46 mechanical normalization."""
+          return go_name.lower().replace('_', '').replace('-', '')
+      ```
+
+      **Allow-listed exceptions** (cases the pure-mechanical rule cannot handle):
+
+      1. **Digit-leading workaround** — digit-leading names spell out the digit for the Java *class root* but the parent-YAML name still drops the digit. Example: `33across → thirtythreeacross.yaml + Thirtythree` class root; `152media → 152media` YAML alias under adkernel + `OneFiveTwoMedia` class root.
+      2. **Brand-acronym preservation** — TitleCase class root preserves brand acronyms; YAML name stays lowercase. Examples: `elementaltv → elementaltv.yaml + ElementalTV` class root; `feedad → feedad.yaml + FeedAd`; `bidscube → bidscube.yaml + BidsCube`.
+
+      **The 11 verified pairs** (Round 3 inventory; refined 2026-05-03 from 12 — `freewheel-ssp/freewheelssp` removed after Phase 5 empirical verification, see ADR-005 "Excluded cases"):
+
+      | Go (raw) | Java (raw) | Transformation |
+      |---|---|---|
+      | adkernelAdn | adkerneladn | `lowercase` |
+      | audienceNetwork | audiencenetwork | `lowercase` |
+      | boldwin_rapid | boldwinrapid | `underscore-drop` |
+      | emx_digital | emxdigital | `underscore-drop` (also Rule 43 lifecycle rebrand) |
+      | e_volution | evolution | `underscore-drop` |
+      | lm_kiviads | lmkiviads | `underscore-drop` |
+      | mgidX | mgidx | `lowercase` |
+      | sa_lunamedia | salunamedia | `underscore-drop` |
+      | sspBC | sspbc | `lowercase` |
+      | stroeerCore | stroeercore | `lowercase` |
+      | triplelift_native | tripleliftnative | `underscore-drop` |
+
+      **Dual-spec assertion shape** (NEW `naming_asymmetry` block alongside `bidder_params_sha256`, `bidder_info_capabilities`, etc.):
+      ```yaml
+      naming_asymmetry:                             # Optional. Populated when go and java bidder names differ.
+        go_name: boldwin_rapid                      # Verbatim Go YAML name.
+        java_name: boldwinrapid                     # Verbatim Java parent-YAML name.
+        transformation: underscore-drop             # Mechanical rule applied.
+        java_class_root: BoldwinRapid               # Java class root (TitleCase) when applicable.
+        rule_46_compliant: true                     # Whether the transformation matches Rule 46's mechanical formula.
+        severity: pass                              # Pass when rule_46_compliant=true; warn otherwise.
+      ```
+
+      **Translation rule**: A porter detecting a Go bidder name with mixed case or `_`/`-` separators MUST derive the Java parent-YAML name via `name.lower().replace('_','').replace('-','')`, surface `naming-convention-normalization` as a quirk on the Java-side spec with the matching transformation enum, and populate the dual-spec `naming_asymmetry` block.
+
+      **Why separate from Rule 43 (lifecycle rename)**: Rule 43 is *event-driven* (the moment of a rename). Rule 46 is *static* (the resting-state contract). The two can co-occur (a rename PR may also normalize). Cases that DON'T belong under Rule 43 (they belong under Rule 46): `33across/thirtythreeacross`, `freewheelssp/fwssp`. Cases that DON'T belong under Rule 46 (they're Go-only alias-stubs, not cross-language Rule 46 pairs): `freewheel-ssp/freewheelssp` — Go-only YAML alias-stub via top-level `aliasOf:` field; both canonical YAMLs use `freewheelssp` (refined 2026-05-03 per Phase 5 empirical evidence).
+
+      **Round-trip considerations**: Round-trip-safe IFF the dual-spec `naming_asymmetry` block is populated correctly. The mechanical transformation is deterministic; round-tripping `boldwinrapid` (Java) → `boldwin_rapid` (Go) requires consulting the assertion to recover the underscore.
+
+      **Mechanizable**: fully, for `lowercase | underscore-drop | hyphen-drop` sub-flavors. Phase 2.6 `lint-port-rules.py` verifies: given a Go YAML name, the corresponding Java YAML name MUST equal `name.lower().replace('_','').replace('-','')` UNLESS the bidder is in the allow-list (digit-leading or brand-acronym).
+
+      **Notes**: PR refs — Java #4285 (boldwinrapid canonical), #3829 (152media digit-leading), #4326 (elementaltv acronym), #4361 (360playvid digit-leading-yaml-only); Go #4211 (underscore-allowed), #4376 (package-name-lowercase). Existing taxa: `tilde-alias-syntax` (`behavior-taxonomy.md`), `acronym-case-preservation`. Related: `prebid-server-go/read/skills/read-bidder-params/references/schema-interpretation.md` TitleCase rule for `BidderName` constants — separate from Rule 46 since `BidderName` constants are case-rich on Go. References: ADR-005.
+- kind: rules
+  title: IAB-category storage rules (1)
+  driver: Driven by `iab_category_storage`.
+  rules:
+  - id: 42
+    title: IAB-categories storage cross-language translation
+    pattern: 'Adapters that map vendor-specific category codes to IAB taxonomy codes store the lookup table in two non-equivalent
+      forms. Go uses a co-located generated data file (`adapters/{xyz}/iab_categories.go`); Java inlines the table directly
+      in YAML config (`bidder-config/{xyz}.yaml: adapters.{xyz}.iab-categories: { ... }`). The translation between the two
+      forms is non-trivial — table representation, delivery mechanism, and cardinality all differ.'
+    spec_field_driver: '`iab_category_storage.storage_kind: go-data-table | yaml-inlined` + `delivery_mechanism: static-init | constructor-arg`
+      + `table_size`'
+    body: |-
+      **Go code** (msft — `adapters/msft/iab_categories.go`):
+      ```go
+      package msft
+
+      // Generated table — 95 entries mapping Microsoft category codes to IAB codes.
+      var iabCategoryMap = map[string]string{
+          "Auto":         "IAB2",
+          "Tech":         "IAB19",
+          "Sports":       "IAB17",
+          // ... 92 more entries
+      }
+      ```
+
+      **Java code** (Appnexus — `bidder-config/appnexus.yaml`):
+      ```yaml
+      adapters:
+        appnexus:
+          endpoint: "https://..."
+          iab-categories:
+            "1": "IAB20-3"
+            "2": "IAB18-3"
+            "3": "IAB10-1"
+            # ... 117 more entries (120 total)
+      ```
+
+      **Java configuration class**:
+      ```java
+      @Validated
+      @Data
+      @EqualsAndHashCode(callSuper = true)
+      @NoArgsConstructor
+      private static class AppnexusConfigurationProperties extends BidderConfigurationProperties {
+          private Map<String, String> iabCategories;
+      }
+      ```
+
+      **Translation rule**: Going Go→Java, the porter EXTRACTS the Go map literal entries and INLINES them as a YAML map under `adapters.{bidder}.iab-categories` AND emits a `BidderConfigurationProperties` subclass with `private Map<String, String> iabCategories` field per Rule 35. Going Java→Go, the porter EXTRACTS the YAML map entries and EMITS a Go data file with `package-level var iabCategoryMap = map[string]string{...}` AND records `delivery_mechanism: static-init` (the table is referenced directly from the bidder code, not constructor-injected). Cardinality (`table_size`) MUST be preserved across the translation — entry count is a fidelity invariant.
+
+      **Round-trip considerations**: Round-trip-LOSSY by default. The Go table is typed `map[string]string`; the Java YAML loads into a `Map<String, String>` of identical shape, so semantic equivalence holds. But the Go file may carry curation metadata (file-level comments, `// Generated by ...` header, source-of-truth annotations) that has no YAML equivalent. A porter Go→Java→Go round-trip loses the curation metadata. Surfaces as a per-port quirk. Conversely, YAML key ordering is non-deterministic; Go map literals preserve source order. Round-trip Java→Go→Java may reorder entries — semantic-equal but byte-divergent.
+
+      **Notes**: Cardinality examples in master: Appnexus 120 entries (Java YAML), msft 95 entries (Go data table). When porting Appnexus from Java→Go, the resulting Go file is `adapters/appnexus/iab_categories.go`. Delivery mechanism translates as: `constructor-arg` (Java — passed via `XyzConfigurationProperties`) ↔ `static-init` (Go — package-level var). The delivery-mechanism asymmetry surfaces in `iab_category_storage.delivery_mechanism` field; a porter MUST update this field on the destination spec.
+- kind: rules
+  title: Lifecycle rules (1)
+  driver: Driven by `lifecycle.rename`.
+  rules:
+  - id: 43
+    title: Bidder-rename three-step lifecycle
+    pattern: 'Renaming a bidder is a three-step refactor: (1) DELETE the old YAML + old code + old tests; (2) CREATE the new
+      YAML + new code + new tests under the new name; (3) handle backward-compatibility for operators with the old name in
+      their configs. Java does this via `aliases: { <old_name>: ~ }` tilde-inherit alias-back on the new YAML. Go does this
+      via `exchange/adapter_util.go` removed-bidder warning map (clean-delete pattern) — the canonical Adoppler→ElementalTV
+      case used PR `prebid/prebid-server-java#4326` (Java, alias-back) and PR `prebid/prebid-server#4639` (Go, clean-delete)
+      two months apart.'
+    spec_field_driver: '`lifecycle.rename.{old_name, new_name, alias_back, alias_back_form, yaml_deletes[], yaml_adds[], package_moves[],
+      fixture_dir_moves[]}`'
+    body: |-
+      **Go YAML** (post-rename — file `static/bidder-info/elementaltv.yaml`):
+      ```yaml
+      endpoint: "https://..."
+      maintainer: { email: ... }
+      geoscope: [USA]
+      capabilities: { site: { mediaTypes: [video] }, app: { mediaTypes: [video] } }
+      ```
+
+      **Go backward-compat** (`exchange/adapter_util.go`):
+      ```go
+      // Removed-bidder warning map — operators with adoppler in their config get
+      // a runtime warning pointing them at the new name.
+      "adoppler": `Bidder "adoppler" is no longer available in Prebid Server. ` +
+                  `If you're looking to use the Adoppler adapter, please rename ` +
+                  `it to "elementaltv" in your configuration.`,
+      ```
+
+      **Java YAML** (post-rename — file `src/main/resources/bidder-config/elementaltv.yaml`):
+      ```yaml
+      adapters:
+        elementaltv:
+          endpoint: "https://..."
+          aliases:
+            adoppler: ~                        # alias-back via tilde — Rule 33 form.
+          meta-info:
+            maintainer-email: ...
+            site-media-types: [video]
+            app-media-types: [video]
+      ```
+
+      **Translation rule**: The rename is atomic across BOTH languages but the backward-compat mechanism diverges. Java retains `adoppler: ~` as an alias; Go forces operator action via the removed-bidder map. A porter detecting `lifecycle.rename` on either side applies the matching three-step refactor on the destination side, choosing the destination's canonical backward-compat mechanism. Steps: (1) DELETE `yaml_deletes[]` paths; (2) CREATE `yaml_adds[]` paths; (3) ADD the alias-back declaration in the destination's appropriate form (`aliasOf: <old>` child YAML on Go's old form, OR removed-bidder warning entry on Go's new form; `aliases: { <old>: ~ }` parent map on Java per Rule 33). Package directory moves (`package_moves[]`) and fixture directory moves (`fixture_dir_moves[]`) are tracked separately — Java has both Java-package and test-resources moves; Go has only the YAML rename.
+
+      **Round-trip considerations**: Round-trip-safe iff both languages adopt the rename in lockstep AND use a consistent backward-compat mechanism. If only one language renames OR the languages choose divergent backward-compat strategies (Java alias-back vs Go clean-delete), the cross-language port becomes asymmetric — the port skill detects mismatched `meta.bidder_name` (Go: `adoppler`, Java: `elementaltv`) and surfaces a `bidder-rename-divergent-handling` warning. The `rename.merged_at` and `rename.release` fields anchor the lifecycle event; consumers compare these timestamps to detect lag. A porter that does the rename on the destination side MUST preserve operator-facing migration guidance.
+
+      **Sub-types** (`lifecycle.rename.subtype` field per ADR-006 — 5 sub-types refined 2026-05-03 from the original 3 after Phase 5 empirical verification of all 7 lifecycle pairs):
+
+      | Sub-type | Backward-compat side | Master sample | Porter implication |
+      |---|---|---|---|
+      | `bilateral` | Both sides | `adoppler → elementaltv` (Java 2026-01-12, Go 2026-03-04, ~52 days apart — bilateral but NOT lockstep). Plus `liftoff/vungle` phantom-rename (refined 2026-05-03 from go-leads — both sides canonical at vungle; Go has removed-bidder warning for liftoff, Java has tilde-inherit alias). | Apply three-step refactor on destination; preserve symmetric back-compat. |
+      | `java-leads` | Java only (tilde-alias) | `cadent_aperture_mx (Go) ↔ emxdigital (Java)` (Cadent/EMX acquisition; Go has dual-core registration of BOTH cadent_aperture_mx + emx_digital — topology more nuanced than simple "Go fossilizes legacy"). | Porter Go→Java: do NOT rename. Java already has the post-rebrand name; emit `cross_language.lifecycle.subtype: java-leads` quirk on the spec. |
+      | `go-leads` | Go only (removed-bidder warning) | NONE at SHAs `2fae16f3` (Go) / `a1fe64e1` (Java). Both originally-classified `go-leads` pairs were reclassified after Phase 5 empirical verification: liftoff/vungle → bilateral, equativ/smartadserver → mirror-topology. The subtype is preserved for future corpus expansion. | Porter Java→Go: do NOT rename. Go already has the post-rebrand name; emit `cross_language.lifecycle.subtype: go-leads` quirk. |
+      | `mirror-topology` (NEW 2026-05-03) | Both sides agree on parent name + alias name; defaults inverted | `magnite/rubicon` (both sides parent=rubicon, alias=magnite; Go: parent disabled / alias enabled; Java: parent enabled / alias disabled). `equativ/smartadserver` (both sides parent=smartadserver, alias=equativ; same defaults pattern). | The rebrand is acknowledged in metadata but neither side adopted the new name as canonical. No rename required when porting; carry the alias declaration; flip the enable-default if destination convention prefers the inverse. |
+      | `inverted-parent` (NEW 2026-05-03) | Go parent ≠ Java parent; each side picked the opposite canonical | `conversant (Go) ↔ epsilon (Java)` (Go parent=conversant, Java parent=epsilon; both names live on both sides via aliasOf/aliases blocks). `intenze/gothamads` with Go-led removal (Go parent=intenze with `gothamads` in removed-warn map; Java parent=gothamads with intenze disabled-alias — Go LEADS in opposite direction of Java parent). | Porting requires deliberate canonical choice. Each side records its own canonical via `meta.bidder_name`; emit `cross_language.lifecycle.subtype: inverted-parent` quirk. If Go has actively removed the other name (sub-flavor), also note `go_removed: true`. |
+
+      **What does NOT belong under Rule 43**: `33across (Go) ↔ thirtythreeacross (Java)` is pure naming-normalization (Rule 46), not a lifecycle event. `mediafuse (Go alias) ↔ appnexus (Java parent declaring mediafuse alias)` is alias-graph divergence (Rule 33), not a rename. `freewheel-ssp/freewheelssp` is a Go-only YAML alias-stub (refined 2026-05-03; see Rule 46 above). The terminology note: `bilateral` accurately describes "both sides eventually rename" — it was originally drafted as `synchronized` but renamed in pre-execution audit because the two languages renaming 52 days apart is bilateral cooperation, NOT lockstep timing.
+
+      **Notes**: Adoppler→ElementalTV is the canonical example. Java edge case #33; PR `prebid/prebid-server-java#4326`; release v3.38.0; merged 2026-01-12. Go-side rename PR `prebid/prebid-server#4639`; merged 2026-03-04 (two months later). The two PRs were independent — neither auto-propagated. The `lifecycle.rename` block is populated only on the post-rename spec (the new-name spec); the alias-back entry on the same spec carries `rename_origin: true` to signal the backward-compat origin. Reference: `adapter-spec.md` lines 410-430 for the `lifecycle.rename` schema; `behavior-taxonomy.md` `bidder-rename-three-step` taxon for the quirk pairing.
+- kind: round_trip_safety
+  title: Round-Trip Safety
+  intro: |-
+    Not every spec field round-trips losslessly across Go→Java→Go (or Java→Go→Java). Some fields are language-specific: a porter cannot reconstruct what is not in the source language. This section enumerates the known asymmetries with a recommended action per direction.
+  verdict_table:
+    subheading: Round-trip verdict per field path
+    columns:
+    - Field path
+    - Source-of-truth side
+    - Lossy direction
+    - Verdict
+    - Recommendation
+    rows:
+    - - '`code.builder.errors_returned[]`'
+      - Go-only
+      - Java→Go→Java
+      - Lossy
+      - 'Java has no `Builder()` function — Spring DI creates the bidder; constructor-time errors are silent. Java→Go can
+        synthesize a default `errors_returned: []` but cannot recover bidder-specific Builder errors.'
+    - - '`tests.unit_test_methods_count`'
+      - Java-only
+      - Go→Java→Go
+      - Lossy
+      - Go uses JSON-fixture harness with no `@Test` method count concept. Round-trip can't recover the original count.
+    - - '`tests.unit_test_loc`'
+      - Java-only
+      - Go→Java→Go
+      - Lossy
+      - Same reasoning.
+    - - '`mutation.go_idiom`'
+      - Go-only sibling
+      - Java→Go→Java
+      - Partially-lossy
+      - Idiom selected at port time. Round-trip can rechoose; not necessarily original choice.
+    - - '`mutation.java_idiom`'
+      - Java-only sibling
+      - Go→Java→Go
+      - Partially-lossy
+      - Mirror of the above — `flexible-extension-fillExtension` is Java-only.
+    - - '`code.adapter_struct.*`'
+      - Go-only
+      - Java→Go→Java
+      - Asymmetric
+      - Translates via Rule 8/Rule 35 mappings; field ORDER may rearrange on round-trip.
+    - - '`code.builder.template_parsed_at_build`'
+      - Go-only
+      - Java→Go→Java
+      - Lossy
+      - No Java equivalent of the build-vs-runtime template-parse phase distinction.
+    - - '`spring_config.*`'
+      - Java-only
+      - Go→Java→Go
+      - Lossy
+      - Spring DI is wholly Java-specific — factory class, `@PropertySource`, `bean_dependencies` all dropped.
+    - - '`bidder_class.*`'
+      - Java-only
+      - Go→Java→Go
+      - Lossy
+      - Java class hierarchy + override methods + helper-class co-location dropped. Helper structure CAN be reconstructed
+        from `code.file_layout.files[].role` but not always faithfully.
+    - - '`bidder_info.ortb_version`'
+      - Java-only
+      - Go→Java→Go
+      - Lossy
+      - Go specs always emit null. Round-trip drops the value.
+    - - '`provenance.warnings[]` (language-specific subset)'
+      - Per-language
+      - Cross-language
+      - Partially-lossy
+      - Go-only types (`legacy-encoding-json-direct-usage`, `legacy-test-helpers-imported`, `bidder-name-rebrand`) and Java-only
+        types (`pom-version-mismatch`, `class-yaml-name-mismatch`, `test-application-properties-missing-entries`, `ref-resolution-failure`,
+        `missing-expected-file`) drop on round-trip.
+    - - '`aliases[].test_assets.*`'
+      - Java-only
+      - Go→Java→Go
+      - Lossy
+      - Go aliases have no IT class or fixture set; Java aliases require both (Rule 37). Round-trip drops the synthesized
+        IT class metadata.
+    - - '`aliases[].test_application_properties_entries[]`'
+      - Java-only
+      - Go→Java→Go
+      - Lossy
+      - Go has no `test-application.properties` registry.
+    - - '`cross_language.go_specific_concerns[]`'
+      - Go-source spec
+      - Java→Go→Java
+      - Lossy
+      - Closure memoization, Go-specific helpers, Go-only library imports — all dropped on Go→Java.
+    - - '`cross_language.java_specific_concerns[]`'
+      - Java-source spec
+      - Go→Java→Go
+      - Lossy
+      - FlexibleExtension subclasses, Spring `@Autowired` quirks, Lombok choices — language-specific.
+    - - '`iab_category_storage.delivery_mechanism`'
+      - Per-language
+      - Cross-language
+      - Lossless-with-translation
+      - '`constructor-arg` (Java) ↔ `static-init` (Go) is a deterministic mapping (Rule 42).'
+    - - '`bidder_params_json` (verbatim bytes)'
+      - Cross-language
+      - None
+      - Lossless
+      - Per Rule 38 — bytes copied verbatim. Round-trip-safe IFF Rule 38 is enforced.
+  implications_subheading: Implications for porters
+  implications: |-
+    A porter MUST surface lossy-direction asymmetries as `cross_language.<source>_specific_concerns[]` entries on the SOURCE spec, AND emit a TODO on the destination side noting the dropped field. A round-trip-validation harness comparing round-tripped specs to originals MUST exempt the lossy fields from byte-equality assertions — see `cross-skill-integration.md` §6.3 for R4 round-trip determinism semantics, and §8 for the bounded-fidelity caveats that survive the contract.
+
+    The dual-spec assertion harness at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` codifies which fields MUST be byte-equal, semantically-equivalent, or per-language-divergent — Rule 38 (bidder_params_json) and Rule 39 (schema_interpretation) drive the must-match set; lossy-direction fields are explicitly exempted via the R5-divergent key list.
+- kind: rules
+  title: Test fixture rules (2)
+  driver: Driven by `tests`.
+  rules:
+  - id: 36
+    title: Go httpCalls array vs Java 4-file split
+    pattern: Go test fixtures embed request/response inside a single JSON file's `httpCalls[]` array; Java splits each test
+      case into 4 separate files.
+    spec_field_driver: '`tests.fixture_inventory.exemplary[]` (Go) / `tests.fixture_inventory.integration[]` (Java)'
+    body: |-
+      **Go fixture** (`adapters/kobler/koblertest/exemplary/site-simple_banner.json`):
+      ```json
+      {
+        "mockBidRequest": { "id": "test", "imp": [...], "site": {...} },
+        "httpCalls": [
+          {
+            "expectedRequest": { "uri": "...", "body": {...} },
+            "mockResponse":    { "status": 200, "body": {"seatbid": [...]} }
+          }
+        ],
+        "expectedBidResponses": [...]
+      }
+      ```
+
+      **Java fixture** (4-file split under `src/test/resources/org/prebid/server/it/openrtb2/kobler/`):
+      - `test-kobler-bid-request.json` — the outbound bid request to Kobler
+      - `test-kobler-bid-response.json` — the mock response from Kobler
+      - `test-auction-kobler-request.json` — the inbound auction request to PBS
+      - `test-auction-kobler-response.json` — the expected outbound auction response
+
+      **Notes**: When porting test fixtures, the porter MUST split the Go single-file fixture into 4 Java files (or merge 4 Java files into 1 Go file). The cross-language test harness checks structural parity: same number of cases on both sides, equivalent mock responses. Reference: see `review/skills/adapter-code-pr-review/references/adapter-code-index.md` for the Go fixture format details.
+  - id: 37
+    title: Per-alias IT class requirement (Java-only)
+    pattern: Each Java alias REQUIRES its own integration-test class + 4-file fixture set. Go aliases need NO test files (the
+      parent's tests cover them).
+    spec_field_driver: '`aliases[].test_assets.{it_class, fixture_dir, fixture_file_count}` (Java) / `aliases[]` empty in
+      Go'
+    body: |-
+      **Go YAML** (alias only):
+      ```yaml
+      # static/bidder-info/connektai.yaml — single file, no tests.
+      aliasOf: xeworks
+      ```
+
+      **Java setup** (alias requires 7 files):
+      ```
+      src/main/resources/bidder-config/xeworks.yaml          # parent declares aliases: { connektai: ~ }
+      src/test/java/org/prebid/server/it/ConnektaiTest.java   # NEW IT class per alias.
+      src/test/resources/org/prebid/server/it/openrtb2/connektai/
+          test-connektai-bid-request.json
+          test-connektai-bid-response.json
+          test-auction-connektai-request.json
+          test-auction-connektai-response.json
+      src/test/resources/test-application.properties          # MODIFIED: append 2-4 lines.
+      ```
+
+      **Notes**: This is the dominant Java-vs-Go test-fixture-cost asymmetry. Java alias PRs are ~7 files; Go alias PRs are ~1 file. A porter Go-alias→Java-alias must generate the IT class + 4 fixtures. The IT class name uses identifier-rule workarounds for digit-leading bidders (Rule 46 digit-leading-workaround: `152media` → `OneFiveTwoMediaTest`). The `test-application.properties` registry append is a separate concern — central registry edit.
+summary: |-
+  46 unique port-translation rules total (Rules 1-46, with Rules 5, 8, 9, 19, 29, 32, 33, 34, 35, 36, 37, 38, 39, 42, 43, 44, 45, 46 being the cross-language asymmetry rules that surface as quirks in either direction). Each rule is keyed by an Adapter Specification field; a porter consumes the spec and applies rules in the order the spec emits them. The Round-Trip Safety section documents per-field lossy-direction asymmetries that survive the contract.
+
+  Cross-skill consumers:
+
+  - **`port-go2java`** — reads a Go-source spec, applies rules in Go→Java direction.
+  - **`port-java2go`** — reads a Java-source spec, applies rules in Java→Go direction.
+  - **Read skills** — emit specs that satisfy the rules' field drivers; flag quirks for cross-language asymmetries that cannot be auto-translated.
+  - **Future `diff-spec` skill** — compares two specs for the same bidder across commits or languages, citing rule numbers in the output.
+
+  For framework-level reference (helpers, error types, anti-patterns, EndpointTemplateParams 18-field list), see `review/skills/shared/framework-utilities.md`. For canonical schema, see `adapter-spec.md`. For enumerated values used in the spec, see `behavior-taxonomy.md`.
+sources:
+- 'Phase 2 reconnaissance findings (in conversation): 17 Go edge cases + 17 Java edge cases identified across `optidigital,
+  kobler, 33across, mediasquare, msft, appnexus, adkernel` (Go) and `kobler, adverxo, ogury, feedad, seedtag, optidigital,
+  mediasquare, elementaltv, 152media` (Java) plus the broader 9-adapter Java behavior taxonomy stress-test (`appnexus, rubicon,
+  generic, aax, adview, kobler, mediasquare, nextmillennium, huaweiads`).'
+- '`prebid/prebid-server` master at v4.1.0 (commit `d7f8515b86258688304b0d9b6668c6a0e258bc9e` as of 2026-04-27).'
+- '`prebid/prebid-server-java` master at v3.41.0 (commit `69b1993c39ed3212ca63012a8c0924fdfa0b5d4a` as of 2026-04-22).'
+- '`prebid-server-go/references/new-bid-adapter-prs.md` — 92 reference PRs (44 currently tagged with `Patterns Demonstrated`).'
+- '`prebid-server-java/references/new-bid-adapter-prs.md` — 49 reference PRs with `Patterns Demonstrated` tags.'
+- 'Sibling shared file: `prebid-server-go/review/skills/shared/framework-utilities.md`.'
+- 'Sibling shared file: `prebid-server-go/read/skills/shared/adapter-spec.md`.'
+- 'Sibling shared file: `prebid-server-go/read/skills/shared/behavior-taxonomy.md`.'
+- 'ADR-003 (Rule 44 — alias-empire consolidation), ADR-004 (Rule 45 — disabled-by-default Java alias), ADR-005 (Rule 46 — naming-convention normalization), ADR-006 (Rule 43 sub-categorization) — see `docs/decisions/`.'
+- 'Round 3 cross-language inventory: 358 Go bidders + 350 Java bidders; 32 Java alias-empire parents (95 children); 78 disabled-asymmetric pairs; 11 naming-convention pairs (refined 2026-05-03 from 12 — freewheel-ssp/freewheelssp removed; see ADR-005); 8 lifecycle-rename pairs.'

@@ -1,6 +1,7 @@
 ---
 name: adapter-code-pr-review
 description: Reviews changes to adapter Go code, adapter tests, JSON test fixtures (exemplary/supplemental/amp/video/videosupplemental), and bidder registration entries. USE WHEN a PR touches adapters/{bidder}/*.go (excluding params_test.go), any {bidder}test/**/*.json, exchange/adapter_builders.go, or openrtb_ext/bidders.go. Do NOT use for static/bidder-info/*.yaml, static/bidder-params/*.json, openrtb_ext/imp_*.go, or params_test.go — those are owned by sibling skills.
+version: 1.0.0
 ---
 
 # Adapter Code PR Review
@@ -134,7 +135,7 @@ There are two categories of tasks:
 - **Dependency check**: If `go.mod` or `go.sum` is modified, verify new dependencies are reasonable and necessary
 - **Naming consistency**: Bidder name matches across all files (directory name, package name, test directory name, builder registration, bidder constant)
 - **Cross-file JSON tag consistency**: When the PR includes both `openrtb_ext/imp_{bidder}.go` AND adapter Go files in `adapters/{bidder}/`, cross-verify that JSON tag spellings are consistent across files (publisher-facing struct tags vs adapter outgoing-payload struct tags). Mismatch examples: `pubclick` in one file but `pub_click` in another. Severity: **FAIL** on detected mismatch. (Triggered post-merge in PR #4592 Microsoft.)
-- **YAML capabilities ↔ Go MType drift**: Cross-read `static/bidder-info/{bidder}.yaml` capabilities and the adapter's `MakeBids` bid-type resolution. Every YAML-declared media type must have a Go return path; every Go-handled media type should be in YAML. See the canonical rule at [../../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift](../../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift). Severity: **FAIL** when YAML declares a type Go cannot return; **WARN** for the dead-branch direction.
+- **YAML capabilities ↔ Go MType drift**: Cross-read `static/bidder-info/{bidder}.yaml` capabilities and the adapter's `MakeBids` bid-type resolution. Every YAML-declared media type must have a Go return path; every Go-handled media type should be in YAML. See the canonical rule at [../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift](../shared/framework-utilities.md#yaml-capabilities--go-mtype-drift). Severity: **FAIL** when YAML declares a type Go cannot return; **WARN** for the dead-branch direction.
 
 **2. Item-level tasks (one per changed item):** For each changed function, entry, or test fixture, look up the matching Verification Workflow:
 
@@ -199,7 +200,7 @@ After all tasks are complete, produce a review summary:
 2. **Endpoint from config**: The adapter struct should store `config.Endpoint`, not a hardcoded URL
 3. **No hardcoded credentials**: Builder must not embed API keys, passwords, or secrets. Configuration should come from `config.Adapter` or `server` parameters
 4. **Error handling**: If the builder performs validation (e.g., URL template parsing), errors should be returned, not panicked
-5. **Template macros**: If the endpoint URL uses template macros (e.g., `{{.AccountID}}`), verify the builder resolves them using `macros.NewStringIndexBasedReplacer()` or similar. Supported `EndpointTemplateParams` fields (18 total — see [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros) for canonical list): `Host`, `PublisherID`, `ZoneID`, `SourceId`, `AccountID`, `AdUnit`, `MediaType`, `GvlID`, `PageID`, `SupplyId`, `ImpID`, `SspId`, `SspID`, `SeatID`, `TokenID`, `PartnerId`, `Region`, `PlacementID`. **`ExternalURL` is NOT an endpoint macro** — it belongs only to user-sync URL templates. Flag any unsupported macro names as FAIL
+5. **Template macros**: If the endpoint URL uses template macros (e.g., `{{.AccountID}}`), verify the builder resolves them using `macros.NewStringIndexBasedReplacer()` or similar. Supported `EndpointTemplateParams` fields (18 total — see [../shared/framework-utilities.md#endpoint-template-macros](../shared/framework-utilities.md#endpoint-template-macros) for canonical list): `Host`, `PublisherID`, `ZoneID`, `SourceId`, `AccountID`, `AdUnit`, `MediaType`, `GvlID`, `PageID`, `SupplyId`, `ImpID`, `SspId`, `SspID`, `SeatID`, `TokenID`, `PartnerId`, `Region`, `PlacementID`. **`ExternalURL` is NOT an endpoint macro** — it belongs only to user-sync URL templates. Flag any unsupported macro names as FAIL
 
 ### Workflow: MakeRequests Changed
 
@@ -236,9 +237,9 @@ After all tasks are complete, produce a review summary:
     - `if site == nil && app == nil { error }` — same capability filtering
     - Re-validating bidder-params with `minLength`/regex/required — schema validation runs upstream
     - `hasSiteOrAppID` style helpers — capability filtering already guarantees this
-    - **Specific-field defensive checks ARE valid**: PBS only enforces `Site.ID || Site.Page` (not `Site.ID` alone), does NOT enforce `App.ID`, does NOT enforce `Publisher.ID`. If your endpoint specifically needs one of these fields, KEEP the defensive check — see [../../shared/framework-utilities.md#site--app-id--nuanced-enforcement](../../shared/framework-utilities.md#site--app-id--nuanced-enforcement) for the full table.
+    - **Specific-field defensive checks ARE valid**: PBS only enforces `Site.ID || Site.Page` (not `Site.ID` alone), does NOT enforce `App.ID`, does NOT enforce `Publisher.ID`. If your endpoint specifically needs one of these fields, KEEP the defensive check — see [../shared/framework-utilities.md#site--app-id--nuanced-enforcement](../shared/framework-utilities.md#site--app-id--nuanced-enforcement) for the full table.
     
-    See [../../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this](../../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this) for the canonical list.
+    See [../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this](../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this) for the canonical list.
 
 ### Workflow: MakeBids Changed
 
@@ -409,7 +410,7 @@ After all tasks are complete, produce a review summary:
 **Triggers when:** Adapter Go code reads an endpoint URL from `imp.ext.bidder.endpoint` (or any publisher-controlled field) instead of from `config.Endpoint`.
 
 1. **Reject open-URL pattern**: Endpoints MUST come from `static/bidder-info/{bidder}.yaml` `endpoint:` field. Acceptable: hardcoded URL, predefined enum, subdomain template via `{{.Host}}`. Unacceptable: full URL from publisher input. Severity: **FAIL**.
-2. **Reviewer policy citation**: see [../../shared/framework-utilities.md#open-url-endpoint-policy](../../shared/framework-utilities.md#open-url-endpoint-policy) for the canonical rule and the PR #4233 quote.
+2. **Reviewer policy citation**: see [../shared/framework-utilities.md#open-url-endpoint-policy](../shared/framework-utilities.md#open-url-endpoint-policy) for the canonical rule and the PR #4233 quote.
 
 ---
 
@@ -458,7 +459,7 @@ This skill may read files owned by other skills for context, but does NOT create
 - `openrtb_ext/imp_{bidder}.go` — read to verify adapter code uses the correct imp ext struct type and field names
 - `adapters/{bidder}/params_test.go` — read to verify naming consistency
 
-For framework-wide concerns (helper function names, error types, marshaling safety, endpoint template macros, anti-pattern lists, test harness contract), this skill references the shared file at [../../shared/framework-utilities.md](../../shared/framework-utilities.md) — do not duplicate that content here.
+For framework-wide concerns (helper function names, error types, marshaling safety, endpoint template macros, anti-pattern lists, test harness contract), this skill references the shared file at [../shared/framework-utilities.md](../shared/framework-utilities.md) — do not duplicate that content here.
 
 ---
 

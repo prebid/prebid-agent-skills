@@ -1,0 +1,1123 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-orchestrator: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: endpoint-placeholder-unresolved
+      file: src/main/resources/bidder-config/rubicon.yaml
+      line: 7
+      summary: "Endpoint contains literal token `REGION` (not a Java template macro). Operator must substitute with regional subdomain pre-deployment (exapi-us-east | exapi-us-west | exapi-apac | exapi-eu). Surfaced separately under deploy_time_tokens[]."
+
+meta:
+  bidder_name: rubicon
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - magnite
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://REGION.rubiconproject.com/a/api/exchange"
+  endpoint_construction:
+    kind: deploy-time-token
+    macros_used: []
+    placeholders_unresolved:
+      - REGION
+  endpoint_compression: gzip
+  ortb_version: "2.6"
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "header-bidding@rubiconproject.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope:
+    - global
+  gvl_vendor_id: 52
+  user_sync:
+    cookie-family-name: rubicon
+    redirect:
+      url: GET_FROM_globalsupport@magnite.com
+      support-cors: false
+  yaml_extra_fields:
+    aliases:
+      magnite:
+        enabled: false
+    ortb:
+      multiformat-supported: true
+    meta-info:
+      supported-vendors:
+        - activeview
+        - comscore
+        - doubleverify
+        - integralads
+        - moat
+        - sizemek
+        - whiteops
+    apex-renderer-url: "https://video-outstream.rubiconproject.com/apex-2.2.1.js"
+    XAPI:
+      Username: GET_FROM_globalsupport@magnite.com
+      Password: GET_FROM_globalsupport@magnite.com
+  yaml_field_name_quirks:
+    - field: ortb-version
+      observed: "ortb-version: \"2.6\""
+      summary: "Java unifies ortb-version under adapters.rubicon root; Go expresses same intent via openrtb.version + openrtb.gpp-supported under bidder-info."
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Rubicon Adapter Params",
+    "description": "A schema which validates params accepted by the Rubicon adapter",
+    "type": "object",
+    "properties": {
+      "accountId": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "pattern": "^\\d+$",
+        "minimum": 1,
+        "description": "An ID which identifies the publisher's account"
+      },
+      "siteId": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "pattern": "^\\d+$",
+        "minimum": 1,
+        "description": "An ID which identifies the site selling the impression"
+      },
+      "zoneId": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "pattern": "^\\d+$",
+        "minimum": 1,
+        "description": "An ID which identifies the sub-section of the site where the impression is located"
+      },
+      "inventory": {
+        "type": "object",
+        "description": "An object defining arbitrary targeting key/value pairs related to the page",
+        "additionalProperties": {
+          "type": "array"
+        }
+      },
+      "bidonmultiformat": {
+        "type": "boolean",
+        "description": "It determines if the request should be processed in multi format way."
+      },
+      "visitor": {
+        "type": "object",
+        "description": "An object defining arbitrary targeting key/value pairs related to the visitor",
+        "additionalProperties": {
+          "type": "array"
+        }
+      },
+      "pchain": {
+        "type": "string",
+        "description": "A payment ID chain string"
+      },
+      "video": {
+        "type": "object",
+        "description": "An object defining additional Rubicon video parameters",
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "Language of the ad - should match content video"
+          },
+          "playerHeight": {
+            "type": ["integer", "string"],
+            "description": "Height in pixels of the video player"
+          },
+          "playerWidth": {
+            "type": ["integer", "string"],
+            "description": "Width in pixels of the video player"
+          },
+          "size_id": {
+            "type": "integer",
+            "description": "Rubicon size_id, used to describe type of video ad (preroll, postroll, etc)"
+          },
+          "skip": {
+            "type": "integer",
+            "description": "Can this ad be skipped ( 0 = no, 1 = yes)"
+          },
+          "skipdelay": {
+            "type": "integer",
+            "description": "number of seconds until the ad can be skipped"
+          }
+        }
+      }
+    },
+    "required": [
+      "accountId",
+      "siteId",
+      "zoneId"
+    ]
+  }
+bidder_params_sha256: 382bb51ff23caa9305f4351b15c0f1fe7f249bdbf1308398cd912c95ce10d41f
+
+params:
+  schema_interpretation:
+    properties:
+      - name: accountId
+        type: ["integer", "string"]
+        description: "An ID which identifies the publisher's account"
+        pattern: "^\\d+$"
+        minimum: 1
+      - name: siteId
+        type: ["integer", "string"]
+        description: "An ID which identifies the site selling the impression"
+        pattern: "^\\d+$"
+        minimum: 1
+      - name: zoneId
+        type: ["integer", "string"]
+        description: "An ID which identifies the sub-section of the site where the impression is located"
+        pattern: "^\\d+$"
+        minimum: 1
+      - name: inventory
+        type: object
+        description: "An object defining arbitrary targeting key/value pairs related to the page"
+      - name: bidonmultiformat
+        type: boolean
+        description: "It determines if the request should be processed in multi format way."
+      - name: visitor
+        type: object
+        description: "An object defining arbitrary targeting key/value pairs related to the visitor"
+      - name: pchain
+        type: string
+        description: "A payment ID chain string"
+      - name: video
+        type: object
+        description: "An object defining additional Rubicon video parameters"
+    required_fields:
+      - accountId
+      - siteId
+      - zoneId
+    flexible_types:
+      - accountId
+      - siteId
+      - zoneId
+      - video.playerHeight
+      - video.playerWidth
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.rubicon
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/rubicon/ExtImpRubicon.java
+    type_name: ExtImpRubicon
+    fields:
+      - name: accountId
+        json_tag: accountId
+        type_native: Integer
+        omitempty: false
+        notes:
+          - "@JsonProperty(\"accountId\")"
+      - name: siteId
+        json_tag: siteId
+        type_native: Integer
+        omitempty: false
+        notes:
+          - "@JsonProperty(\"siteId\")"
+      - name: zoneId
+        json_tag: zoneId
+        type_native: Integer
+        omitempty: false
+        notes:
+          - "@JsonProperty(\"zoneId\")"
+      - name: bidOnMultiFormat
+        json_tag: bidonmultiformat
+        type_native: Boolean
+        omitempty: false
+        notes:
+          - "@JsonProperty(\"bidonmultiformat\") (Java casing differs from JSON: lowercase JSON key)"
+      - name: sizes
+        json_tag: sizes
+        type_native: List<Integer>
+        omitempty: false
+      - name: inventory
+        json_tag: inventory
+        type_native: ObjectNode
+        omitempty: false
+      - name: visitor
+        json_tag: visitor
+        type_native: ObjectNode
+        omitempty: false
+      - name: video
+        json_tag: video
+        type_native: RubiconVideoParams
+        omitempty: false
+      - name: keywords
+        json_tag: keywords
+        type_native: List<String>
+        omitempty: false
+      - name: formats
+        json_tag: formats
+        type_native: Set<ImpMediaType>
+        omitempty: false
+      - name: debug
+        json_tag: debug
+        type_native: ExtImpRubiconDebug
+        omitempty: false
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/rubicon/RubiconBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: RubiconBidder
+  directory_name: rubicon
+  package_directory_mismatch: false
+  file_layout:
+    kind: multi-file
+    files:
+      - name: RubiconBidder.java
+        role: implementation
+        loc: 1751
+      - name: proto/request/RubiconAppExt.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconBannerExt.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconBannerExtRp.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconDeviceExt.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconDeviceExtRp.java
+        role: types
+        loc: 11
+      - name: proto/request/RubiconExtPrebidBidders.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconExtPrebidBiddersBidder.java
+        role: types
+        loc: 15
+      - name: proto/request/RubiconExtPrebidBiddersBidderDebug.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconImpExt.java
+        role: types
+        loc: 26
+      - name: proto/request/RubiconImpExtPrebid.java
+        role: types
+        loc: 13
+      - name: proto/request/RubiconImpExtRp.java
+        role: types
+        loc: 18
+      - name: proto/request/RubiconImpExtRpRtb.java
+        role: types
+        loc: 12
+      - name: proto/request/RubiconImpExtRpTrack.java
+        role: types
+        loc: 11
+      - name: proto/request/RubiconNative.java
+        role: types
+        loc: 15
+      - name: proto/request/RubiconPubExt.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconPubExtRp.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconSiteExt.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconSiteExtRp.java
+        role: types
+        loc: 12
+      - name: proto/request/RubiconTargeting.java
+        role: types
+        loc: 13
+      - name: proto/request/RubiconTargetingExt.java
+        role: types
+        loc: 9
+      - name: proto/request/RubiconTargetingExtRp.java
+        role: types
+        loc: 11
+      - name: proto/request/RubiconUserExt.java
+        role: types
+        loc: 11
+      - name: proto/request/RubiconUserExtRp.java
+        role: types
+        loc: 10
+      - name: proto/request/RubiconVideoExt.java
+        role: types
+        loc: 15
+      - name: proto/request/RubiconVideoExtRp.java
+        role: types
+        loc: 9
+      - name: proto/response/RubiconBid.java
+        role: types
+        loc: 67
+      - name: proto/response/RubiconBidResponse.java
+        role: types
+        loc: 26
+      - name: proto/response/RubiconSeatBid.java
+        role: types
+        loc: 22
+  imports:
+    has_template_engine: false
+    has_currency_helper: true
+    has_jsonutil: false
+    third_party:
+      - CollectionUtils
+      - ObjectUtils
+      - StringUtils
+      - NumberUtils
+      - URIBuilder
+      - ConditionalLogger
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: format-split
+          formats:
+            - banner
+            - video
+            - xNative
+            - audio
+          notes: "RubiconBidder.createMultiFormatRequests (line 258) splits a single multi-format imp into one request per media type when ExtImpRubicon.bidonmultiformat=true. Activated via isMultiformatEnabled (line 412); default false."
+          gate_field: "imp.ext.bidder.bidonmultiformat (ExtImpRubicon.bidOnMultiFormat)"
+        - kind: deals-split
+          deal_field: "imp.pmp.deals[].ext.line.id"
+          notes: "RubiconBidder.createDealsRequests (line 1451) emits one request per ExtDeal.getLine() when imp.pmp.deals is non-empty. Applied per-imp AFTER format-split inside createImpHttpRequests (line 303)."
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Site: immutable-rebuild
+        App: immutable-rebuild
+        Source: immutable-rebuild
+        Imp: immutable-rebuild
+        Banner: immutable-rebuild
+        Device: immutable-rebuild
+        User: immutable-rebuild
+        Regs: immutable-rebuild
+        Cur: replace-with-null
+      go_idiom: null
+      java_idiom: lombok-tobuilder
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpRubicon
+      wrapper_type: null
+    endpoint_resolution:
+      kind: query-parameter-augmentation
+      mechanism_go: null
+      mechanism_java: URIBuilder
+      macro_field_set: []
+      template_params_struct_field_count: null
+      notes: "makeUri (line 450) takes endpointUrl and conditionally appends ?tk_xint=<integration> via URIBuilder when bidRequest.ext.prebid.integration is non-blank. Endpoint itself uses deploy-time-token (REGION); see endpoint_construction.kind."
+    helpers:
+      - name: extractValidImps
+        signature: "private List<Imp> extractValidImps(BidRequest bidRequest, List<BidderError> errors)"
+      - name: createMultiFormatRequests
+        signature: "private List<BidRequest> createMultiFormatRequests(BidRequest bidRequest, Imp imp, ExtImpRubicon impExt, String pbBidId, String language, List<BidderError> errors)"
+      - name: splitByMediaType
+        signature: "private Map<ImpMediaType, Imp> splitByMediaType(Imp imp)"
+      - name: createImpHttpRequests
+        signature: "private List<HttpRequest<BidRequest>> createImpHttpRequests(Imp imp, List<BidRequest> impBidRequests, String uri)"
+      - name: createSingleRequest
+        signature: "private BidRequest createSingleRequest(BidRequest bidRequest, Imp imp, ExtImpRubicon extImpRubicon, String pbBidId, Set<ImpMediaType> formats, String impLanguage, List<BidderError> errors)"
+      - name: makeUri
+        signature: "private String makeUri(BidRequest bidRequest)"
+      - name: makeImp
+        signature: "private Imp makeImp(Imp imp, ExtImpRubicon extImpRubicon, BidRequest bidRequest, String pbImpId, Set<ImpMediaType> formats, List<BidderError> errors)"
+      - name: convertToXAPICurrency
+        signature: "private BigDecimal convertToXAPICurrency(BigDecimal value, String fromCurrency, Imp imp, BidRequest bidRequest)"
+      - name: convertBidFloorCurrency
+        signature: "private BigDecimal convertBidFloorCurrency(BigDecimal bidFloor, String bidFloorCurrency, Imp imp, BidRequest bidRequest)"
+      - name: createDealsRequests
+        signature: "private List<HttpRequest<BidRequest>> createDealsRequests(BidRequest bidRequest, String uri)"
+      - name: createLineItemBidRequest
+        signature: "private BidRequest createLineItemBidRequest(ExtDealLine lineItem, BidRequest bidRequest, Imp imp)"
+      - name: createHttpRequest
+        signature: "private HttpRequest<BidRequest> createHttpRequest(BidRequest bidRequest, String uri)"
+      - name: hasDeals
+        signature: "private static boolean hasDeals(Imp imp)"
+      - name: headers
+        signature: "private static MultiMap headers(String xapiUsername, String xapiPassword)"
+      - name: authHeader
+        signature: "private static String authHeader(String xapiUsername, String xapiPassword)"
+      - name: bidType
+        signature: "private static BidType bidType(BidRequest bidRequest)"
+      - name: impType
+        signature: "private static ImpMediaType impType(Imp imp)"
+      - name: copyProperties
+        signature: "private static <T extends FlexibleExtension> T copyProperties(T source, T target)"
+      - name: extractTargeting
+        signature: "public Map<String, String> extractTargeting(ObjectNode extBidBidder)"
+  make_bids:
+    response_type: RubiconBidResponse
+    custom_response_type: "org.prebid.server.bidder.rubicon.proto.response.RubiconBidResponse"
+    http_status_handling:
+      kind: framework-default
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-imp-mediatype
+          field: "bidRequest.imp[0]"
+          fallback_action: throw
+          notes: "RubiconBidder.bidType (line 1736) resolves BidType from imp[0] media-type via the impType helper (line 943). Throws PreBidException(`Unsupported bid mediaType`) when impType returns audio (impType collapses to banner/video/xNative only)."
+      default_value: null
+      multi_format_detection: strict
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/rubicon/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-rubicon-bid-request.json
+        sha256: 8ec24fa403729a34c69966912a97a4f3b80d432181d3e43855ee7e9a255eb748
+        bytes: 1580
+        role: bidder-bid-request
+      - filename: test-rubicon-bid-response.json
+        sha256: 6432f9fdd3f96a4e65a1c1b1c8e010314f3da2c4e6495f37882fdaefed84af2d
+        bytes: 661
+        role: bidder-bid-response
+      - filename: test-auction-rubicon-request.json
+        sha256: fff320c9244b37b9d5802ddf95ed67e81c8fad4b05d1e70fc9e37e444462896d
+        bytes: 1072
+        role: auction-request
+      - filename: test-auction-rubicon-response.json
+        sha256: 50963dd1d7bf728c4d53cf5b5240cc7fc2c41b5a1e5a8db481fe61f1562ecad7
+        bytes: 1039
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 145
+  unit_test_loc: 4116
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldFillMethodAndUrlAndExpectedHeaders
+    - makeHttpRequestsShouldFilterImpressionsWithInvalidTypes
+    - makeHttpRequestsShouldFilterAllImpressionsAndReturnErrorMeessagesWithoutRequests
+    - makeHttpRequestsShouldCreateSeparateRequestForEachMediaTypeForMultiFormatImps
+    - makeHttpRequestsShouldSetImpExtRpRtbFormatsToImpExtFormats
+    - makeHttpRequestsShouldNotSetImpExtRpRtbFormatsToImpFormatsWhenImpContainsOnlyOneFormat
+    - makeHttpRequestsShouldSetImpExtRpRtbFormatsToSuppliedImpFormatsWhenBidOnMultiFormatTrue
+    - makeHttpRequestsShouldCreateSeparateRequestsOnlyForMultiformatImps
+    - makeHttpRequestsShouldReplaceDefaultParametersWithExtPrebidBiddersBidder
+    - makeHttpRequestsShouldAddMaxbidsAttributeFromExtPrebidMultibid
+    - makeHttpRequestsShouldPassBadvField
+    - makeHttpRequestsShouldPassBappField
+    - makeHttpRequestsShouldPassBcatField
+    - makeHttpRequestsShouldPassBannerBtypeField
+    - makeHttpRequestsShouldPassBannerBattrField
+    - makeHttpRequestsShouldPassVideoBattrField
+    - makeHttpRequestsShouldPassNativeBattrField
+    - makeHttpRequestsShouldAddMaxbidsAttributeAsNullIfExtPrebidMultibidMaxBidsIsNotPresent
+    - makeHttpRequestsShouldFillImpExt
+    - makeHttpRequestsShouldPassBannerFormat
+    - makeHttpRequestsShouldSetMobilePortrait67SizeIdFotInterstitialNotValidSize
+    - makeHttpRequestsShouldCreateBannerRequestIfImpHasBannerAndVideoButNoRequiredVideoFieldsPresent
+    - makeHttpRequestsShouldCreateVideoRequestIfImpHasBannerAndVideoButAllRequiredVideoFieldsPresent
+    - makeHttpRequestsShouldResolveImpBidFloorCurrencyIfNotUSDAndCallCurrencyService
+    - makeHttpRequestsShouldResolveImpBidFloorCurrencyIfNotUSDAndBidFloorIsZero
+    - makeHttpRequestsShouldNotSetBidFloorCurrencyToUSDIfNull
+    - makeHttpRequestsShouldIgnoreBidRequestIfCurrencyServiceThrowsAnException
+    - shouldNotSetSizeIfBidderParamsIsMissingSizeId
+    - makeHttpRequestsShouldNotFailIfVideoParamIsNull
+    - makeHttpRequestsShouldFillImpExt
+    - makeHttpRequestsShouldFillVideoExt
+    - makeHttpRequestsShouldRemoveStypesPpuidSha256emailDmp
+    - makeHttpRequestsShouldCreateUserIdIfMissingFromFirstUidStypePpuid
+    - makeHttpRequestsShouldNotCreateUserIdIfMissingWhenNoUidWithPpuidType
+    - makeHttpRequestsShouldFillUserIfUserAndConsentArePresent
+    - makeHttpRequestsShouldMoveUserConsentToUserExtConsent
+    - makeHttpRequestsShouldFillUserExtIfUserAndVisitorPresent
+    - makeHttpRequestsShouldCreateUserIfVisitorPresent
+    - makeHttpRequestsShouldNotCreateUserIfVisitorAndConsentNotPresent
+    - makeHttpRequestsShouldNotFillUserExtRpWhenVisitorAndInventoryIsEmpty
+    - makeHttpRequestsShouldCreateUserExtEidsWithAdServerEidSource
+    - makeHttpRequestsShouldNotCreateUserExtTpIdWithAdServerEidSourceIfExtRtiPartnerMissed
+    - makeHttpRequestsShouldNotCreateUserExtTpIdWithUnknownEidSource
+    - makeHttpRequestsShouldFillUserExtRpWithIabAttributeIfSegtaxEqualsFour
+    - makeHttpRequestsShouldFillUserExtRpWithSegtaxValuesWithNoMoreThanHundredEntries
+    - makeHttpRequestsShouldFillUserExtRpWithSegtaxValuesWithNoMoreThanHundredEntriesFromDifferentSources
+    - makeHttpRequestsShouldFillSiteExtRpWithSegtaxValuesWithNoMoreThanHundredEntries
+    - makeHttpRequestsShouldFillSiteExtRpWithSegtaxValuesWithNoMoreThanHundredEntriesFromDifferentSources
+    - makeHttpRequestsShouldIgnoreNotIntSegtaxProperty
+    - makeHttpRequestsShouldUseGivenUserIdIfOtherExtUserFieldsPassed
+    - makeHttpRequestsShouldNormalizeAndCopyUserExtDataFieldsToUserExtRp
+    - makeHttpRequestsShouldMergeUserExtDataFieldsToUserExtRp
+    - makeHttpRequestsShouldCopyUserExtDataToUserExtRpTarget
+    - makeHttpRequestsShouldCopyDataSearchToRubiconImpExtRpTargetSearch
+    - makeHttpRequestsShouldCopyAppExtDataFieldsToRubiconImpExtRpTarget
+    - makeHttpRequestsShouldCopyAppExtDataFieldToRubiconImpExtRpTarget
+    - makeHttpRequestsShouldCopySiteExtDataFieldsToRubiconImpExtRpTarget
+    - makeHttpRequestsShouldCopySiteExtDataFieldToRubiconImpExtRpTarget
+    - makeHttpRequestsShouldFillSiteExtIfSitePresent
+    - makeHttpRequestsShouldFillAppExtIfAppPresent
+    - makeHttpRequestsShouldFillDeviceExtIfDevicePresent
+    - makeHttpRequestsShouldFillRegsIfRegsAndGdprArePresent
+    - makeHttpRequestsShouldNotModifyRegs
+    - makeHttpRequestsShouldMergeImpExtRubiconAndDataKeywordsToRubiconImpExtRpTargetKeywords
+    - makeHttpRequestsShouldCopySiteKeywords
+    - makeHttpRequestsShouldCopyAppKeywords
+    - makeHttpRequestsShouldCopyUserKeywords
+    - makeHttpRequestsShouldOverridePbadslotIfPresentInRequestImpExt
+    - makeHttpRequestsShouldOverrideDfpAdunitCodeIfAdslotPresentInImpExtDataAndAndAdserverNameIsGam
+    - makeHttpRequestsShouldMergeSiteAttributesAndCopyToRubiconImpExtRpTarget
+    - makeHttpRequestsShouldCopyAndModifyDataFieldsToRubiconImpExtRpTarget
+    - makeHttpRequestsShouldCopyImpExtVideoLanguageToSiteContentLanguage
+    - makeHttpRequestsShouldPassThroughImpExtGpid
+    - makeHttpRequestsShouldPassSiteExtAmpIfPresent
+    - makeHttpRequestsShouldRemoveAppExtData
+    - makeHttpRequestsShouldRemoveSiteExtData
+    - makeHttpRequestsShouldRemoveSiteContentDataObject
+    - makeHttpRequestsShouldRemoveUserDataObject
+    - makeHttpRequestsShouldRemoveUserGenderYobGeoExtData
+    - makeHttpRequestsShouldSuppressCurrenciesIfPresent
+    - makeHttpRequestsShouldSuppressExtIfPresent
+    - makeHttpRequestsShouldIgnoreLiverampIdIfMissingEidUidId
+    - makeHttpRequestsShouldIgnoreRewardedVideoFlag
+    - makeHttpRequestsShouldIgnoreRewardedVideoLogic
+    - makeHttpRequestsShouldIgnoreRewardedVideoLogicIfRewardedInventoryIsNotOne
+    - makeHttpRequestsShouldTransferRewardedVideoFlagIntoRewardedVideoObject
+    - makeHttpRequestsShouldSetXapiFieldsToRubiconImpExtRpTarget
+    - makeHttpRequestsShouldProcessMetricsAndFillViewabilityVendor
+    - makeHttpRequestsShouldNotValidateNativeObjectIfVersionIsOneDotOne
+    - makeHttpRequestsShouldNotValidateNativeObjectIfVersionIsOneDotZero
+    - makeHttpRequestsShouldPassValidNativeRequestToRequestNativeObjectIfVersionIsOneDotTwo
+    - makeHttpRequestsShouldPassValidNativeRequestToRequestNativeObjectIfVersionNotSet
+    - makeHttpRequestsShouldReturnErrorIfNativeObjectVersionIsOneDotTwoAndRequestContextIsNotInt
+    - makeHttpRequestsShouldReturnErrorIfNativeObjectVersionIsOneDotTwoAndRequestEventtrackersAreMissed
+    - makeHttpRequestsShouldReturnErrorIfNativeObjectVersionIsOneDotTwoAndRequestEventtrackersAreNotArray
+    - makeHttpRequestsShouldReturnErrorIfNativeObjectVersionIsOneDotTwoAndRequestFieldCanNotBeParsed
+    - makeHttpRequestsShouldReturnErrorIfNativeObjectVersionIsOneDotTwoAndRequestFieldIsNull
+    - makeHttpRequestsShouldReturnErrorIfNativeObjectVersionIsOneDotTwoAndRequestPlacementIsNotInt
+    - makeHttpRequestsShouldReturnErrorIfNativeObjectVersionIsOneDotTwoAndRequestPlacementIsNotPresent
+    - makeHttpRequestsShouldNotReturnErrorIfRequestContextIsMissed
+    - makeHttpRequestsShouldReturnErrorIfNoImpFormatWidthAndHeight
+    - makeHttpRequestsShouldReturnErrorIfImpExtCouldNotBeParsed
+    - makeHttpRequestsShouldReturnOnlyLineItemRequestsWithExpectedFieldsWhenImpPmpDealsArePresent
+    - makeHttpRequestsShouldMoveSourceSchain
+    - makeHttpRequestsShouldConvertBidFloor
+    - makeHttpRequestsShouldCreateRequestPerImp
+    - makeBidsShouldRemoveBidsWithNotParsedExtAndAddError
+    - makeBidsShouldReturnBidWithBidIdReturnedFromXAPIWhenImpCanNotBeMatched
+    - makeBidsShouldReturnBidWithBidIdFieldFromImpExtRpPbBidId
+    - makeBidsShouldReturnVideoBidIfRequestImpHasVideo
+    - makeBidsShouldReturnVideoBidIfRequestImpHasBannerAndVideoButAllRequiredVideoFieldsPresent
+    - makeBidsShouldReturnNativeBidIfNativeIsPresent
+    - makeBidsShouldReturnBannerBidIfRequestImpHasNoVideo
+    - makeBidsShouldReturnBannerBidIfRequestImpHasBannerAndVideoButNoRequiredVideoFieldsPresent
+    - makeBidsShouldReturnBidWithCurrencyFromBidResponse
+    - makeBidsShouldNotReduceBidderAmountForBidsWithSameImpId
+    - makeBidsShouldReturnErrorIfResponseBodyCouldNotBeParsed
+    - makeBidsShouldTolerateMismatchedBidImpId
+    - makeBidsShouldReturnBidWithOverriddenCpmFromImp
+    - makeBidsShouldReturnBidWithOverriddenCpmFromRequest
+    - makeBidsShouldReturnBidMetaFromRequest
+    - makeBidsShouldSetSeatBuyerToMetaNetworkId
+    - makeBidsShouldNotSetZeroSeatBuyerToMetaNetworkId
+    - makeBidsShouldNotSetNegativeSeatBuyerToMetaNetworkId
+    - makeBidsShouldTolerateWithNotIntegerBuyerValue
+    - makeBidsShouldTolerateWithNotParsibleBuyerValue
+    - makeBidsShouldSetSeatToMetaSeat
+    - makeBidsShouldSetBidExtRpAdvidToMetaAdvertiserId
+    - makeBidsShouldSetBidAdomainToMetaAdvertiserDomains
+    - makeBidsShouldReplaceNotPresentAdmWithAdmNative
+    - makeBidsShouldNotReplacePresentAdmWithAdmNative
+    - makeBidsShouldSetApexRendererUrlToMetaRendererUrlForOutputStreamVideoBidResponse
+    - makeBidsShouldSetApexRendererUrlToMetaRendererUrlWhenMetaMediaTypeIsVideoAndVideoIsPresent
+    - makeBidsShouldNotSetApexRendererUrlToMetaRendererUrlWhenApexRendererIsDefinedAsFalse
+    - makeBidsShouldNotSetApexRendererUrlToMetaRendererUrlWhenApexRendererIsNotDefined
+    - makeBidsShouldNotSetApexRendererUrlToMetaRendererUrlWhenBidResponseIsNotVideo
+    - makeBidsShouldNotSetApexRendererUrlToMetaRendererUrlWhenMetaMediaTypeIsVideoAndVideoIsAbsent
+    - makeBidsShouldNotSetApexRendererUrlToMetaRendererUrlWhenVideoPlacementIsOne
+    - makeBidsShouldNotSetApexRendererUrlToMetaRendererUrlWhenVideoPlcmtIsOne
+    - extractTargetingShouldReturnNotEmptyTargetingMap
+    - extractTargetingShouldIgnoreEmptyTargetingValuesList
+    - extractTargetingShouldReturnEmptyMapForEmptyExtension
+    - extractTargetingShouldReturnEmptyMapForInvalidExtension
+    - extractTargetingShouldReturnEmptyMapForNullRp
+    - extractTargetingShouldReturnEmptyMapForNullTargeting
+  fixture_handling: count-only
+  test_application_properties_entries_added: 9
+  integration_test_class: RubiconTest
+  integration_test_pattern: 4-file-split
+
+spring_config:
+  factory_class: RubiconConfiguration
+  factory_method: rubiconBidderDeps
+  property_source_path: classpath:/bidder-config/rubicon.yaml
+  bidder_creator_lambda: |
+    config -> new RubiconBidder(
+            BIDDER_NAME,
+            config.getEndpoint(),
+            externalUrl,
+            config.getXapi().getUsername(),
+            config.getXapi().getPassword(),
+            config.getMetaInfo().getSupportedVendors(),
+            config.getGenerateBidId() == null || config.getGenerateBidId(),
+            config.getApexRendererUrl(),
+            currencyConversionService,
+            floorResolver,
+            versionProvider,
+            new UUIDIdGenerator(),
+            mapper)
+  configuration_properties_class:
+    name: RubiconConfigurationProperties
+    extends: BidderConfigurationProperties
+    extra_fields:
+      - name: xapi
+        type: XAPI
+        validations:
+          - "@Valid"
+          - "@NotNull"
+        default_value: "new XAPI()"
+      - name: generateBidId
+        type: Boolean
+        validations: []
+      - name: apexRendererUrl
+        type: String
+        validations:
+          - "@NotNull"
+    nested_classes:
+      - name: XAPI
+        visibility: private static
+        lombok_annotations:
+          - Data
+          - NoArgsConstructor
+        fields:
+          - name: username
+            type: String
+            validations:
+              - "@NotNull"
+          - name: password
+            type: String
+            validations:
+              - "@NotNull"
+    lombok_annotations:
+      - Validated
+      - Data
+      - EqualsAndHashCode(callSuper = true)
+      - NoArgsConstructor
+  bean_dependencies:
+    - name: rubiconConfigurationProperties
+      type: RubiconConfigurationProperties
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url}) @NotBlank"
+    - name: currencyConversionService
+      type: CurrencyConversionService
+      source: framework-injected
+    - name: floorResolver
+      type: PriceFloorResolver
+      source: framework-injected
+    - name: versionProvider
+      type: PrebidVersionProvider
+      source: framework-injected
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: RubiconBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+    - extractTargeting
+  constructor:
+    arity: 13
+    parameters:
+      - name: bidderName
+        type: String
+        source: factory-constant
+        role: properties
+      - name: endpoint
+        type: String
+        source: config.endpoint
+        role: properties
+      - name: externalUrl
+        type: String
+        source: "@Value(${external-url})"
+        role: properties
+      - name: xapiUsername
+        type: String
+        source: config.xapi.username
+        role: authentication-input
+      - name: xapiPassword
+        type: String
+        source: config.xapi.password
+        role: authentication-input
+      - name: supportedVendors
+        type: List<String>
+        source: config.metaInfo.supportedVendors
+        role: properties
+      - name: generateBidId
+        type: boolean
+        source: config.generateBidId (defaults true)
+        role: properties
+      - name: apexRendererUrl
+        type: String
+        source: config.apexRendererUrl
+        role: properties
+      - name: currencyConversionService
+        type: CurrencyConversionService
+        source: framework-injected
+        role: helper-collaborator
+      - name: floorResolver
+        type: PriceFloorResolver
+        source: framework-injected
+        role: helper-collaborator
+      - name: versionProvider
+        type: PrebidVersionProvider
+        source: framework-injected
+        role: helper-collaborator
+      - name: idGenerator
+        type: IdGenerator
+        source: factory-instantiated (new UUIDIdGenerator())
+        role: helper-collaborator
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields:
+    - name: logger
+      type: Logger
+    - name: missingVideoSizeLogger
+      type: ConditionalLogger
+    - name: TK_XINT_QUERY_PARAMETER
+      type: String
+      value: "tk_xint"
+    - name: PREBID_SERVER_USER_AGENT
+      type: String
+      value: "prebid-server/1.0"
+    - name: FPD_GPID_FIELD
+      type: String
+      value: "gpid"
+    - name: FPD_SKADN_FIELD
+      type: String
+      value: "skadn"
+    - name: FPD_PAGE_FIELD
+      type: String
+      value: "page"
+    - name: FPD_DATA_FIELD
+      type: String
+      value: "data"
+    - name: FPD_DATA_PBADSLOT_FIELD
+      type: String
+      value: "pbadslot"
+    - name: FPD_ADSERVER_FIELD
+      type: String
+      value: "adserver"
+    - name: FPD_ADSERVER_NAME_GAM
+      type: String
+      value: "gam"
+    - name: FPD_KEYWORDS_FIELD
+      type: String
+      value: "keywords"
+    - name: DFP_ADUNIT_CODE_FIELD
+      type: String
+      value: "dfp_ad_unit_code"
+    - name: STYPE_FIELD
+      type: String
+      value: "stype"
+    - name: TID_FIELD
+      type: String
+      value: "tid"
+    - name: PREBID_EXT
+      type: String
+      value: "prebid"
+    - name: PBS_LOGIN
+      type: String
+      value: "pbs_login"
+    - name: PBS_VERSION
+      type: String
+      value: "pbs_version"
+    - name: PBS_URL
+      type: String
+      value: "pbs_url"
+    - name: PPUID_STYPE
+      type: String
+      value: "ppuid"
+    - name: SHA256EMAIL_STYPE
+      type: String
+      value: "sha256email"
+    - name: DMP_STYPE
+      type: String
+      value: "dmp"
+    - name: XAPI_CURRENCY
+      type: String
+      value: "USD"
+    - name: MAX_NUMBER_OF_SEGMENTS
+      type: int
+      value: 100
+    - name: SEGTAX_IAB
+      type: String
+      value: "iab"
+    - name: SEGTAX_TAX
+      type: String
+      value: "tax"
+    - name: SEGTAX
+      type: String
+      value: "segtax"
+    - name: USER_SEGTAXES
+      type: "Set<Integer>"
+      value: "Set.of(4)"
+    - name: SITE_SEGTAXES
+      type: "Set<Integer>"
+      value: "Set.of(1, 2, 5, 6, 7)"
+    - name: STYPE_TO_REMOVE
+      type: "Set<String>"
+      value: "{ppuid, sha256email, dmp}"
+    - name: RUBICON_EXT_TYPE_REFERENCE
+      type: "TypeReference<ExtPrebid<ExtImpPrebid, ExtImpRubicon>>"
+    - name: EXT_PREBID_TYPE_REFERENCE
+      type: "TypeReference<ExtPrebid<ExtBidPrebid, ObjectNode>>"
+    - name: DEFAULT_MULTIFORMAT_VALUE
+      type: boolean
+      value: "false"
+  helper_classes_co_located:
+    - RubiconAppExt
+    - RubiconBannerExt
+    - RubiconBannerExtRp
+    - RubiconDeviceExt
+    - RubiconDeviceExtRp
+    - RubiconExtPrebidBidders
+    - RubiconExtPrebidBiddersBidder
+    - RubiconExtPrebidBiddersBidderDebug
+    - RubiconImpExt
+    - RubiconImpExtPrebid
+    - RubiconImpExtRp
+    - RubiconImpExtRpRtb
+    - RubiconImpExtRpTrack
+    - RubiconNative
+    - RubiconPubExt
+    - RubiconPubExtRp
+    - RubiconSiteExt
+    - RubiconSiteExtRp
+    - RubiconTargeting
+    - RubiconTargetingExt
+    - RubiconTargetingExtRp
+    - RubiconUserExt
+    - RubiconUserExtRp
+    - RubiconVideoExt
+    - RubiconVideoExtRp
+    - RubiconBid
+    - RubiconBidResponse
+    - RubiconSeatBid
+  helper_classes_in_proto:
+    - ExtImpRubicon
+    - ExtImpRubiconDebug
+    - RubiconVideoParams
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-builder
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: null
+    java_signature: "currencyConversionService.convertCurrency(value, bidRequest, from, to) BigDecimal"
+  injection: dependency
+  bid_request_passed_for_context: true
+
+headers_constructed:
+  pre_built_in_constructor: true
+  per_request_dynamic: false
+  custom_headers:
+    - name: Authorization
+      value: "Basic <base64(xapiUsername:xapiPassword)>"
+    - name: User-Agent
+      value: "prebid-server/1.0"
+  authentication_kind: basic-auth
+  authentication_input:
+    - xapi.username
+    - xapi.password
+
+deploy_time_tokens:
+  - token: REGION
+    file: src/main/resources/bidder-config/rubicon.yaml
+    line: 7
+    notes: |
+      Operator must substitute REGION with one of {exapi-us-east, exapi-us-west, exapi-apac, exapi-eu}
+      pre-deployment per the YAML comment (line 5-6). The token is NOT a Java template macro - it
+      is a literal substring in the endpoint URL: `https://REGION.rubiconproject.com/a/api/exchange`.
+      No runtime substitution exists in RubiconBidder; endpoint is read verbatim from cfg.getEndpoint()
+      via the bidder_creator_lambda (RubiconConfiguration line 54). Distinct from runtime
+      template-macro endpoint construction.
+
+quirks:
+  - id: deploy-time-region-token
+    file: src/main/resources/bidder-config/rubicon.yaml
+    summary: "Endpoint URL contains literal `REGION` placeholder that operator must substitute pre-deployment to one of {exapi-us-east, exapi-us-west, exapi-apac, exapi-eu}. Not a Java template macro. Surfaced separately under deploy_time_tokens[]."
+    edge_case_taxon: port-fidelity-divergence
+  - id: format-split-deals-split-composition
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "makeHttpRequests applies TWO ordered batching rules: (1) format-split via createMultiFormatRequests (line 258) when ExtImpRubicon.bidonmultiformat=true, AND (2) deals-split via createDealsRequests (line 1451) when imp.pmp.deals is non-empty. Composition is per-imp inside createImpHttpRequests (line 303): format-split first, then deals-split applied to each format-specific request."
+    edge_case_taxon: port-fidelity-divergence
+  - id: pre-built-basic-auth-header
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "Authorization: Basic <base64(xapiUsername:xapiPassword)> is constructed once in the constructor at line 222 via headers(xapiUsername, xapiPassword) helper (lines 382-390) and stored in MultiMap headers field. Every HttpRequest reuses the same MultiMap (line 1441). Pre-built once, not per-request."
+    edge_case_taxon: port-fidelity-divergence
+  - id: xapi-credentials-as-yaml-extra-fields
+    file: src/main/resources/bidder-config/rubicon.yaml
+    summary: "YAML declares `XAPI.Username` and `XAPI.Password` under adapters.rubicon (lines 41-43). These are mapped to a private static nested XAPI class inside RubiconConfigurationProperties (RubiconConfiguration lines 85-94) and surfaced via cfg.getXapi().getUsername()/getPassword() in the bidder_creator_lambda. Not present in the standard BidderConfigurationProperties surface."
+    edge_case_taxon: port-fidelity-divergence
+  - id: xapi-tracker-yaml-only
+    file: src/main/resources/bidder-config/rubicon.yaml
+    summary: "Go yaml has `xapi.tracker: SAME_AS_USERNAME` field; Java yaml does NOT include `tracker` and the Java RubiconConfiguration.XAPI nested class has no tracker field. Cross-language asymmetry — Go side stores tracker but Java side discards it."
+    edge_case_taxon: port-fidelity-divergence
+  - id: currency-conversion-bidrequest-context
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "convertBidFloorCurrency (line 657-668) calls currencyConversionService.convertCurrency(bidFloor, bidRequest, bidFloorCurrency, XAPI_CURRENCY) — 4-arg Java signature with bidRequest passed for time-context. Go counterpart uses 3-arg ConvertCurrency. Cross-language port concern."
+    edge_case_taxon: currency-conversion-bidrequest-context
+  - id: mutation-idiom-tobuilder
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "Mutation throughout uses Lombok toBuilder().build() — Imp (line 437), Banner (line 1476), Source (line 1399), Regs (line 1429), Metric (line 577), as well as createSingleRequest's bidRequest.toBuilder() (line 437). Every entity is rebuilt immutably; the input BidRequest is never mutated."
+    edge_case_taxon: mutation-idiom-tobuilder
+  - id: tk-xint-query-augmentation-via-uribuilder
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "makeUri (line 450) appends ?tk_xint=<integration> via org.apache.http.client.utils.URIBuilder when bidRequest.ext.prebid.integration is non-blank. URI construction with URIBuilder rather than string-replace is rare in Java adapters."
+    edge_case_taxon: port-fidelity-divergence
+  - id: bidtype-from-imp0-throws-on-audio
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "bidType helper (line 1736) resolves response BidType from bidRequest.imp[0]'s media-type only — first-imp-only resolution. Throws PreBidException(`Unsupported bid mediaType`) on imp[0] audio (impType collapses audio→banner only when banner==null && xNative==null path doesn't match — coverage gap)."
+    edge_case_taxon: port-fidelity-divergence
+  - id: response-type-custom-rubicon
+    file: src/main/java/org/prebid/server/bidder/rubicon/proto/response/RubiconBidResponse.java
+    summary: "makeBids decodes to RubiconBidResponse (line 318) — a custom Lombok @Value @Builder type, not com.iab.openrtb.response.BidResponse. RubiconBid carries extra fields (admNative, wratio, hratio, qagmediarating, language) on top of standard Bid. Java pattern of custom response type."
+    edge_case_taxon: port-fidelity-divergence
+  - id: flexible-extension-property-copy
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "copyProperties helper (line 1405-1411) carries unknown properties from source FlexibleExtension to a target FlexibleExtension via getProperties()/addProperties(). Used in makeSource (line 1397) and makeRegs (line 1427) to preserve unknown ext fields after rebuild."
+    edge_case_taxon: port-fidelity-divergence
+  - id: heaviest-multi-file-layout
+    file: src/main/java/org/prebid/server/bidder/rubicon/
+    summary: "29 Java source files: 1 implementation (RubiconBidder.java, 1751 LOC) + 25 proto/request DTOs + 3 proto/response DTOs. Heaviest multi-file adapter in the Java codebase. All DTOs are co-located under bidder/rubicon/proto/{request,response}/."
+    edge_case_taxon: multi-file-layout-justified
+  - id: 145-handwritten-test-methods
+    file: src/test/java/org/prebid/server/bidder/rubicon/RubiconBidderTest.java
+    summary: "RubiconBidderTest declares 145 @Test methods across 4116 LOC — by far the largest unit test suite for any Java bidder. setUp uses @BeforeEach (not counted)."
+    edge_case_taxon: multi-file-layout-justified
+  - id: aliases-not-inverted
+    file: src/main/resources/bidder-config/rubicon.yaml
+    summary: "Java declares `magnite` as alias of rubicon under adapters.rubicon.aliases.magnite (lines 11-13). Go has no `magnite` alias. Asymmetric alias surface — Java parent surface differs from Go (where magnite is a separate adapter or absent)."
+    edge_case_taxon: port-fidelity-divergence
+  - id: cur-suppressed-not-mutated
+    file: src/main/java/org/prebid/server/bidder/rubicon/RubiconBidder.java
+    summary: "createSingleRequest (line 444) sets `.cur(null)` to suppress the upstream currency list and `.ext(null)` to suppress the upstream ExtRequest. Comment on line 444: `// suppress currencies`."
+    edge_case_taxon: port-fidelity-divergence
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/rubicon/
+    package_name: rubicon
+    bidder_constant: openrtb_ext.BidderRubicon
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/rubicon/
+    bidder_class: RubiconBidder
+    config_class: RubiconConfiguration
+    yaml_path: src/main/resources/bidder-config/rubicon.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/rubicon/
+  port_concerns:
+    aliases_inverted: true
+    yaml_unification: true
+    mutation_idiom_divergence: true
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: shared-genesis
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - currency-conversion-bidrequest-context
+      - mutation-idiom-tobuilder
+      - basic-auth-header-construction
+      - format-split-deals-split-composition
+      - deploy-time-region-token
+  go_specific_concerns:
+    - "Go side keeps `xapi.tracker` field; Java side discards it. Port concern: if Java grows a feature using tracker, this YAML field would need to be added to the XAPI nested class in RubiconConfiguration."
+    - "Go static/bidder-params/rubicon.json has NO trailing newline (2608 bytes); Java has trailing newline (2610 bytes). Go also normalizes the description text `Can this ad be skipped (0 = no, 1 = yes)` (no leading space inside parens) while Java keeps `Can this ad be skipped ( 0 = no, 1 = yes)` (extra space). SHA differs (Go: f1aa818fa0af09c4cf5143f3c70edba541500f43f2f7e9e121cb4f865d379380; Java: 382bb51ff23caa9305f4351b15c0f1fe7f249bdbf1308398cd912c95ce10d41f) — R5 cross-language SHA contract VIOLATED. Operationally the schemas express the same constraints; the only diff is whitespace and one description string. A reconciliation PR could collapse these on either side."
+    - "Go yaml has `disabled: true` (line 8); Java yaml has no `disabled` field (Java defaults to `enabled: true`). Cross-language deployment-state asymmetry: Go ships rubicon disabled-by-default; Java ships it enabled."
+    - "Go capabilities split has both `app` and `site` mediaTypes; Java identical. Confirmed cross-language parity for `bidder_info.capabilities`."
+    - "Go gvl_vendor_id=52; Java gvl_vendor_id=52. Confirmed parity."
+  java_specific_concerns:
+    - "RubiconConfiguration.XAPI nested class has no `tracker` field; Java side cannot consume the Go yaml `xapi.tracker: SAME_AS_USERNAME` value. If a future port adds tracker dependency, the nested class must grow a field."
+    - "RubiconBidder constructor at line 195 has 13 parameters — heaviest Java constructor. The bidder_creator_lambda passes BIDDER_NAME ('rubicon') as the first arg (used for floorResolver context line 558) — port concern: Go's RubiconAdapter struct does not carry bidderName, suggesting it inlines `\"rubicon\"` directly."
+    - "RubiconConfigurationProperties.apexRendererUrl carries @NotNull validation but DEFAULT_VALUE is the YAML field `apex-renderer-url`. The bidder_creator_lambda forwards config.getApexRendererUrl() to the bidder constructor (line 60). Used by makeBids in resolveRendererUrl (line 1638) to set ExtBidPrebidMeta.rendererUrl on outstream video bids."
+    - "Pre-built basic-auth header lives in MultiMap field on the bidder instance — consequence: the bidder is NOT thread-safe with respect to header mutation, but because MultiMap is read-only after construction this is fine. Go side computes auth header per-request inside makeRequest (or similar) — divergent threading model."
+    - "extractTargeting override (line 326) is a Rubicon-specific Bidder interface method — most Java adapters do NOT override extractTargeting. Used in AMP flow to inject Rubicon-specific RubiconTargetingExtRp.targeting key/values into the AMP response. Distinguishes Rubicon as the de facto AMP-targeting reference."
+    - "29-file proto layout (25 request + 3 response + 1 implementation): Java's heaviest multi-file adapter. All DTOs use Lombok @Value @Builder, suggesting they were ported from Go's struct definitions one-by-one rather than synthesized."
+    - "test-application.properties registers 9 entries for rubicon (lines 487-495) including alias `adapters.rubicon.aliases.magnite.endpoint` for IT exercising the alias mapping."
+  reviewer_cohort:
+    go: []
+    java:
+      - AntoxaAntoxic
+      - osulzhenko
+      - sangarbe
+    cross_language_coordinator: bretg

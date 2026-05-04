@@ -1,0 +1,127 @@
+dual_spec_assertion_version: 1
+bidder_name: mediasquare
+go_spec: prebid-server-go/read/test-fixtures/mediasquare.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/mediasquare.golden.spec.yaml
+go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+
+assertions:
+  bidder_params_sha256:
+    go: 798a251b3a6b11aa42036a129f8f61b3f0a13335babe539a96658b01ddd44f4d
+    java: 946207d8154ae56cf5b08d007b746cf75d4921a9650d2be5d6cf2f1893bf55a8
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only
+    divergence_summary: |
+      Byte-only whitespace divergence in static/bidder-params/mediasquare.json.
+      Go-side file (515 bytes): formats `required` as a single-line array
+      `"required": ["owner", "code"]` — compact form.
+      Java-side file (527 bytes): formats `required` as a 4-line block
+      `"required": [\n    "owner",\n    "code"\n  ]` — multi-line form.
+      Both files use 2-space indent and terminate with `\n}\n`. Parsing both as
+      JSON yields semantically identical ASTs: same 2 properties (owner, code)
+      with identical type=string + minLength=1 + descriptions, same
+      required=[owner, code]. This is a pure whitespace/formatting divergence
+      on a single field's array layout — classified as Phase D R5 byte-only
+      failure with semantic equivalence.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    java:
+      site: []
+      app: [banner, video, native]
+    equivalent: false
+    divergence_summary: |
+      CAPABILITY DIVERGENCE: Java bidder-config/mediasquare.yaml omits
+      `site-media-types` entirely (yields empty list on MetaInfo POJO). Go
+      static/bidder-info/mediasquare.yaml declares both site AND app
+      capabilities with [banner, video, native]. Effectively, the Java
+      configuration restricts mediasquare to app-only inventory while the Go
+      configuration also accepts site inventory. This is a real cross-language
+      capability divergence with operational impact — the same publisher
+      request from a website would route to mediasquare on a Go PBS but be
+      rejected on a Java PBS. Reviewers should reconcile: either add
+      site-media-types to the Java YAML to match Go, or remove site from the
+      Go YAML to match Java. Phase D agents flagged this as port-fidelity
+      asymmetry not just whitespace; severity warn (operational asymmetry,
+      not a hard fail because site capability omission is a legal YAML config).
+    severity: warn
+
+  bidder_info_gvl_vendor_id:
+    go: 791
+    java: 791
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: tech@mediasquare.fr
+    java: tech@mediasquare.fr
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_modifying_vast_xml_allowed:
+    go: true
+    java: true
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [owner, code]
+    java_required_fields: [owner, code]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [owner, code]
+    java_properties: [owner, code]
+    equivalent: true
+    severity: pass
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: null
+    destination_pr: null
+    fidelity_review_themes: []
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: divergent-byte-only
+  blocker_count: 0
+  warning_count: 2
+  notes: |
+    Mediasquare carries TWO distinct cross-language divergences. (1) bidder_params_json
+    is byte-divergent due to the `required` array's single-line vs multi-line layout —
+    semantically equivalent, just whitespace. (2) bidder_info.capabilities.site is empty
+    on Java but populated [banner, video, native] on Go; this is a real configuration
+    asymmetry where the Java port restricts inventory to app-only while Go allows site
+    too. Schema content (owner, code, both required, both minLength=1), GVL ID 791,
+    maintainer, geoscope all match. Both sides correctly opt-in to
+    modifying_vast_xml_allowed:true. Behavioral implementations diverge significantly
+    in idiom (Go: 4-file multi-file with custom msqParameters; Java: 10-class layout
+    with Bidder<MediasquareRequest> generic + MediasquareCode/MediasquareMediaTypes
+    type tree) but the cross-language behavioral parity holds (imp-flatten-aggregate
+    batching, custom request body, by-response-payload-shape bid type resolution).
+    Porter advice: (a) reformat one of the bidder-params JSON files for byte parity,
+    (b) reconcile site-media-types — since the Go side is the older/canonical
+    declaration, recommend adding `site-media-types: [banner, video, native]` to the
+    Java bidder-config/mediasquare.yaml. Both fixes are small (1-line changes) and
+    can ship as a parity-restoration housekeeping PR. The Java side's mtype computation
+    via `bidType.ordinal() + 1` is a fragility worth noting (any reorder of the
+    BidType enum breaks the wire-format mapping) — Go is explicit per-case.

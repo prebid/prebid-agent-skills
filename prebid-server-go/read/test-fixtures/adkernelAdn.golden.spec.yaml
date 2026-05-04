@@ -1,0 +1,388 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: "2026-05-02T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: internal-go-naming-asymmetry
+      file: adapters/adkernelAdn/adkerneladntest/
+      line: 0
+      summary: "Internal Go naming asymmetry: package and main filenames use camelCase `adkernelAdn` but the test fixture root directory is `adkerneladntest/` (LOWERCASE). Mirrors the cadent pattern (`cadent_aperture_mxtest/`). The Go test driver in `adkernelAdn_test.go` references `\"adkerneladntest\"` as the fixture-root argument to `adapterstest.RunJSONBidderTest`."
+    - type: independent-bidder-shared-vendor
+      file: openrtb_ext/bidders.go
+      line: 0
+      summary: "BOTH `BidderAdkernel` (`adkernel`) and `BidderAdkernelAdn` (`adkernelAdn`) are registered as core bidders, but they are COMPLETELY INDEPENDENT integrations from the same vendor. Different schemas (zoneId vs pubId), different endpoint hosts (pbs.adksrv.com vs pbs2.adksrv.com), different paths (/hb vs /rtbpub), different capabilities. Neither is alias of the other; neither is in `GetDisabledBidderWarningMessages`. Naming similarity is coincidental."
+
+meta:
+  bidder_name: adkernelAdn
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+  empire_canonical_master: false
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://pbs2.adksrv.com/rtbpub?account={{.PublisherID}}"
+  endpoint_construction:
+    kind: template-macro
+    macros_used: ["PublisherID"]
+    macro_syntax: go-template                # Go template engine `{{.PublisherID}}` dot-syntax. Java side uses plain `{{PublisherID}}` (no dot) and resolves via String.replace.
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: prebid-dev@adkernel.com
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+    app:
+      mediaTypes:
+        - banner                              # NOTE: app supports only banner; site supports banner+video. Asymmetric capabilities — distinct from the parent adkernel which supports app+site banner/video/audio/native.
+  geoscope: []
+  gvl_vendor_id: 14
+  user_sync:
+    redirect:
+      url: "https://tag.adkernel.com/syncr?gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&r={{.RedirectURL}}"
+      userMacro: "{UID}"                     # Plain `{UID}` — Java uses Spring `${UID}` form (cross-language uid-macro syntax divergence)
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "AdkernelAdn Adapter Params",
+    "description": "A schema which validates params accepted by the AdkernelAdn adapter",
+
+    "type": "object",
+    "properties": {
+        "pubId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Publisher Id to use."
+        }
+    },
+    "required": ["pubId"]
+  }
+bidder_params_sha256: 2264b66d4b4f56eff24c381e5941f7b02029a0754d602319757ad56396bbe3ed
+
+params:
+  schema_interpretation:
+    properties:
+      - name: pubId
+        type: integer
+        minimum: 1
+        description: "Publisher Id to use."
+        notes:
+          - "Required field; minimum 1. Validated server-side via `pubId >= 1` check before request build."
+    required_fields:
+      - pubId
+    flexible_types: []                        # Pure integer — no string-to-number coercion (distinct from cadent's stringified bidfloor)
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_adkernelAdn.go      # CamelCase filename — note Go ext filename keeps camelCase, mirroring the package
+    type_name: ExtImpAdkernelAdn
+    fields:
+      - name: PublisherID
+        json_tag: pubId
+        type_native: int
+        omitempty: false
+        notes:
+          - "Native Go field name `PublisherID` (PascalCase) maps to JSON tag `pubId` (camelCase). Java's lowercase `pubId` field uses @JsonProperty(\"pubId\")."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/adkernelAdn/params_test.go     # NOTE: search of upstream confirms `params_test.go` is NOT present in this adapter dir at the pinned commit (only `adkernelAdn_test.go` for unit tests). This field reflects the canonical-pluralised path; absence at upstream is acceptable.
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: openrtb_ext.BidderAdkernelAdn
+
+code:
+  package_or_class: adkernelAdn               # CamelCase package name (matches directory)
+  directory_name: adkernelAdn
+  package_directory_mismatch: false           # Both camelCase
+  file_layout:
+    kind: single-file
+    files:
+      - name: adkernelAdn.go
+        role: implementation
+        loc: 320
+  imports:
+    has_template_engine: true                 # text/template via macros.ResolveMacros for endpoint URL substitution
+    has_currency_helper: false                # No requestInfo.ConvertCurrency usage
+    has_jsonutil: true                        # util/jsonutil for imp.ext unmarshal
+    third_party:
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adkernelAdnAdapter             # CamelCase (lowercase first char): unexported but with "Adapter" suffix. Distinct from cadent's bare `adapter` and vungle's `adapter`.
+    type_visibility: unexported
+    fields:
+      - name: EndpointTemplate
+        type: "*template.Template"            # Compiled Go template stored on the adapter struct (unlike cadent's plain string endpoint)
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: true            # Builder parses config.Endpoint as a text/template at startup; reused per-request
+    errors_returned:
+      - "template parse error if config.Endpoint is malformed"
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-key                       # Imps are grouped by `ExtImpAdkernelAdn{PublisherID}` (unique pubId values). One outbound HTTP request per unique pubId.
+          group_key: imp.ext.bidder.pubId
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place                         # `imp.Ext = nil` (strip after extraction); Banner deep-copy + format-list slicing; clears Video/Audio/Native on banner imps; clears Banner/Audio/Native on video imps
+        Banner: deep-copy-then-mutate         # `bannerCopy := *imp.Banner`; if W&H both nil, lift Format[0] into W/H, slice Format[1:]
+        Video: deep-copy-then-mutate          # Video kept as-is on video imps; banner/audio/native cleared
+        Site: deep-copy-then-mutate           # `siteCopy := *imp.Site`; sets Publisher = nil, Domain = ""
+        App: deep-copy-then-mutate            # `appCopy := *imp.App`; sets Publisher = nil (Domain NOT cleared, distinct from Site)
+        Source: none
+        Device: none
+        User: none
+        Cur: none
+      go_idiom: shallow-copy-then-mutate
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase        # Read imp.ext into adapters.ExtImpBidder, then unmarshal `bidderExt.Bidder` into ExtImpAdkernelAdn
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImpAdkernelAdn
+      wrapper_type: null
+    endpoint_resolution:
+      kind: template-macro
+      mechanism_go: text-template-resolve-macros
+      mechanism_java: null
+      macros_used: ["PublisherID"]
+    helpers:
+      - name: dispatchImpressions
+        signature: "func (a *adkernelAdnAdapter) dispatchImpressions(...) (map[ExtImpAdkernelAdn][]openrtb2.Imp, []error)"
+      - name: validateImpression
+        signature: "func validateImpression(imp *openrtb2.Imp, ext *openrtb_ext.ExtImpAdkernelAdn) error"
+      - name: compatImpression
+        signature: "func compatImpression(imp openrtb2.Imp) (openrtb2.Imp, error)"
+      - name: compatBannerImpression
+        signature: "func compatBannerImpression(imp *openrtb2.Imp) error"
+      - name: compatVideoImpression
+        signature: "func compatVideoImpression(imp *openrtb2.Imp)"
+      - name: getExtImp
+        signature: "func getExtImp(imp openrtb2.Imp) (openrtb_ext.ExtImpAdkernelAdn, error)"
+      - name: getMediaTypeForImpID
+        signature: "func getMediaTypeForImpID(impID string, imps []openrtb2.Imp) openrtb_ext.BidType"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: imp-id-correlation          # `getMediaTypeForImpID(impID, imps)` iterates source imps; if matching imp had banner → BidTypeBanner, else BidTypeVideo. NO bid.MType, NO seat.Ext, NO native classification.
+          hardcoded_value: null
+          fallback_action: classify-as-video
+      default_value: video
+      multi_format_detection: none
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: range-index
+    currency_overwrite_safety: drops-response-cur   # Go does NOT propagate `bidResponse.Cur` to BidderResponse.Currency (left empty). Java DOES forward it. Cross-language asymmetry.
+
+tests:
+  test_root_directory: adkerneladntest        # LOWERCASE (despite camelCase package). Internal Go naming asymmetry — `adkernelAdn_test.go` references this lowercase root via `adapterstest.RunJSONBidderTest(t, "adkerneladntest", bidder)`.
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - multiformat-impression
+      - single-banner-impression
+      - single-video-impression
+    supplemental:
+      - 204status
+      - banner-impression-nosizes
+      - http-err-status
+      - native-impression
+      - no-imps
+      - two-impressions-two-seatbids
+      - wrong-imp-ext-1
+      - wrong-imp-ext-2
+      - wrong-imp-ext-3
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true                # adkernelAdn_test.go calls adapterstest.RunJSONBidderTest
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+aliases: []
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+lifecycle:
+  rename: null                                # No rename history. Pure Rule 46 naming-convention divergence between Go camelCase and Java lowercase YAML keys.
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false                  # Headers are static (Content-Type, Accept, x-openrtb-version) — no per-request injection from request.Device
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+    - name: x-openrtb-version                 # LOWERCASE header name on Go side; Java uses `X-OpenRTB-Version` via HttpUtil.X_OPENRTB_VERSION_HEADER. HTTP headers are case-insensitive, but byte-level comparison would diverge.
+      value: "2.5"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: rule-46-multi-form-naming
+    file: openrtb_ext/bidders.go
+    summary: "Rule 46 lowercase normalization holds (`adkernelAdn` lowercased = `adkerneladn`), BUT the corpus reality is multi-form: Go uses camelCase for package/file/yaml/struct/registry-key, but lowercase for the test fixture root `adkerneladntest/`. Internal asymmetry within Go side itself (similar to cadent's tri-form Go naming)."
+    edge_case_taxon: yaml-field-name-typo
+  - id: per-pubid-grouped-batching
+    file: adkernelAdn.go
+    line: 80
+    summary: "MakeRequests groups imps by `ExtImpAdkernelAdn{PublisherID}` (one bucket per unique pubId), then emits one HTTP request per bucket. Distinct from per-imp (one request per imp) and per-batch (one request for all imps). Cross-language symmetric — Java does the same `Map<ExtImpAdkernelAdn, List<Imp>>` grouping."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: imp-ext-strip-after-extraction
+    file: adkernelAdn.go
+    summary: "After extracting ExtImpAdkernelAdn, the adapter sets `imp.Ext = nil` to suppress forwarding the prebid wrapper to AdKernel's platform. Comment in code: `// do not forward ext to adkernel platform`. Cross-language symmetric — Java does `impBuilder.ext(null)`."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: response-validation-exactly-one-seatbid
+    file: adkernelAdn.go
+    summary: "MakeBids requires `len(bidResp.SeatBid) == 1` exactly. More than one OR zero seatbids → BadServerResponse error. Cross-language symmetric on Java side. Distinct from typical adapters that tolerate multiple seatbids."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: banner-format-list-slicing
+    file: adkernelAdn.go
+    summary: "compatBannerImpression: if banner.W and banner.H are both nil, lifts Format[0] into W/H and slices Format[1:] (truncating the first format from the list). Cross-language symmetric — Java does `subList(1, ...)` or `emptyList()`."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: site-publisher-and-domain-cleared
+    file: adkernelAdn.go
+    summary: "On Site, MakeRequests deep-copies and sets `Publisher = nil` AND `Domain = \"\"`. Both cleared. Distinct from App handling (only Publisher cleared, Domain preserved). Cross-language symmetric on Java side."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: app-publisher-only-cleared
+    file: adkernelAdn.go
+    summary: "On App, MakeRequests deep-copies and sets `Publisher = nil` ONLY (Domain preserved). Asymmetric with Site handling (where both Publisher and Domain are cleared). Cross-language symmetric on Java side."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: hardcoded-currency-empty
+    file: adkernelAdn.go
+    summary: "Go side does NOT propagate `bidResponse.Cur` to BidderResponse.Currency (left as default empty string). Java side DOES forward `bidResponse.getCur()` per-bid via `BidderBid.of(bid, type, bidResponse.getCur())`. Cross-language behavioral asymmetry."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: bid-type-imp-id-correlation-default-video
+    file: adkernelAdn.go
+    summary: "getMediaTypeForImpID iterates source imps to find a match by ID. If match has banner → BidTypeBanner. Otherwise → BidTypeVideo (HARDCODED fallback). NO bid.MType lookup, NO native classification. Cross-language symmetric. Note: native-impression supplemental fixture exists, but native bids would be miscategorized as video by this method chain."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: x-openrtb-version-lowercase-header
+    file: adkernelAdn.go
+    summary: "Header name added as `\"x-openrtb-version\"` (LOWERCASE). Java uses `HttpUtil.X_OPENRTB_VERSION_HEADER` which is `\"X-OpenRTB-Version\"`. HTTP headers are case-insensitive over the wire, but byte-level comparison of outbound requests would diverge."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/adkernelAdn/
+    package_name: adkernelAdn
+    bidder_constant: openrtb_ext.BidderAdkernelAdn
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/adkerneladn/
+    bidder_class: AdkernelAdnBidder
+    config_class: AdkernelAdnConfiguration
+    yaml_path: src/main/resources/bidder-config/adkerneladn.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/adkerneladn/
+  port_concerns:
+    aliases_inverted: false                   # No aliases on either side (independent bidder, not part of an empire)
+    yaml_unification: false
+    mutation_idiom_divergence: true           # Go shallow-copy-then-mutate vs Java Lombok toBuilder immutable rebuild
+    package_directory_mismatch: false         # Go: package adkernelAdn in dir adkernelAdn (camelCase both). Java: package adkerneladn in dir adkerneladn (lowercase both). Cross-LANGUAGE mismatch but no INTRA-language mismatch.
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - rule-46-naming-normalization-master
+      - rule-46-multi-form-internal
+      - currency-propagation-java-only
+      - bid-type-imp-id-correlation
+      - per-pubid-grouped-batching
+      - x-openrtb-version-header-casing
+  go_specific_concerns:
+    - "Internal Go naming asymmetry: package `adkernelAdn` (camelCase) vs test fixture root `adkerneladntest/` (LOWERCASE). The test driver references the lowercase form via `adapterstest.RunJSONBidderTest(t, \"adkerneladntest\", bidder)`. Mirrors cadent's `cadent_aperture_mxtest/` pattern."
+    - "Per-pubId grouped batching: imps are bucketed by `ExtImpAdkernelAdn{PublisherID}`, one HTTP request per unique pubId. Distinct from per-imp and per-batch. Cross-language symmetric."
+    - "imp.Ext = nil after extraction (strip pattern): adapter does NOT forward the prebid wrapper to AdKernel's platform. Cross-language symmetric."
+    - "Currency: Go does NOT propagate `bidResponse.Cur` to BidderResponse.Currency. Java DOES forward `bidResponse.getCur()`. Cross-language asymmetry — Java-only currency propagation (same pattern as cadent_aperture_mx pair)."
+    - "Bid-type imp-id correlation defaults to video (hardcoded fallback). Native bids would be miscategorized despite a `native-impression` fixture existing. Cross-language symmetric."
+    - "`x-openrtb-version` header is added in lowercase (Go side); Java uses `X-OpenRTB-Version` (mixed case via HttpUtil constant). Wire-level case-insensitive, but byte comparison would diverge."
+    - "URL macro syntax: Go uses `{{.PublisherID}}` (Go template dot-syntax) resolved via `macros.ResolveMacros`. Java uses `{{PublisherID}}` (plain placeholder) resolved via `String.replace`. Same effective input/output."
+    - "Adapter struct field `EndpointTemplate *template.Template` (compiled at builder-time and reused). Distinct from cadent's plain `endpoint string`. Template-parsed-at-build pattern."
+    - "Independent bidder (NOT alias of `adkernel`): different schema (`pubId` vs adkernel's `zoneId`), different endpoint host (`pbs2.adksrv.com` vs adkernel's `pbs.adksrv.com`), different paths (`/rtbpub` vs `/hb`). Same vendor only."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

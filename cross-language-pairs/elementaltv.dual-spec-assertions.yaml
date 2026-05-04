@@ -1,0 +1,183 @@
+dual_spec_assertion_version: 1
+bidder_name: elementaltv
+go_spec: prebid-server-go/read/test-fixtures/elementaltv.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/elementaltv.golden.spec.yaml
+go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+
+assertions:
+  bidder_params_sha256:
+    go: efdc3ed1c641e9dbe7265e0bf8b309c565508175894d05c708cfeb84ed03e792
+    java: 2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only
+    divergence_summary: |
+      Byte-only whitespace divergence in static/bidder-params/elementaltv.json.
+      Both files use 2-space top-level indent, but they differ in the indent
+      of the inner `properties.adunit` block:
+
+      Go file (13 lines, 274 bytes): inner properties uses 6-space indent
+        "properties": {
+            "adunit": {
+              "type": "string",
+              ...
+
+      Java file (14 lines, 282 bytes): inner properties uses 4-space indent
+        "properties": {
+          "adunit": {
+            "type": "string",
+            ...
+
+      Parsing both as JSON yields semantically identical ASTs: single property
+      `adunit` of type string with description "AdUnit to bid against to.",
+      and `required: ["adunit"]`. This is a pure whitespace/formatting
+      divergence — classified as Phase D R5 byte-only failure with semantic
+      equivalence.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    java:
+      site: [banner, video, native]
+      app: [banner, video, native]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 0
+    java: 0
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: support@elementaltv.com
+    java: support@elementaltv.com
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_endpoint_compression:
+    go: gzip
+    java: null
+    equivalent: false
+    divergence_summary: "Go-side `static/bidder-info/elementaltv.yaml` declares `endpointCompression: gzip`; Java-side `bidder-config/elementaltv.yaml` omits the field entirely (defaults to none). Likely a Java upstream gap — the rename PR (Java #4326) didn't carry the compression setting forward. Real port-fidelity divergence but tracked as warn rather than fail because the fix lives in Java upstream, not in this repo."
+    severity: warn
+
+  bidder_info_endpoint_construction:
+    go_kind: single-token-substitution
+    java_kind: single-token-substitution
+    go_macros: [AdUnit]
+    java_macros: ["{{AdUnit}}"]
+    equivalent: true
+    notes: |
+      Both languages use the AdUnit macro at endpoint:
+      "https://pbs.elementaltv.io/ads/processHeaderBid/{{AdUnit}}".
+      Go uses the canonical Go-template form `{{.AdUnit}}` (with leading dot)
+      via the macros.EndpointTemplateParams replacer; Java uses a custom form
+      `{{AdUnit}}` (no leading dot) via plain String.replace. Same observable
+      substitution behavior; mechanism is different. Cross-language port note:
+      the Java macro form bypasses the canonical macros.EndpointTemplateParams
+      registry — a porter Go->Java should preserve the {{AdUnit}} form here
+      rather than introducing new macros, since the upstream YAML is the
+      authoritative form.
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [adunit]
+    java_required_fields: [adunit]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [adunit]
+    java_properties: [adunit]
+    equivalent: true
+    severity: pass
+
+  lifecycle_rename:
+    java_old_name: adoppler
+    java_new_name: elementaltv
+    java_rename_pr: prebid/prebid-server-java#4326
+    java_rename_release: v3.38.0
+    java_rename_merged_at: 2026-01-12
+    alias_back: true
+    alias_back_form: tilde_inherit
+    notes: |
+      ElementalTV is the v3.38.0 rename of the previous Adoppler bidder
+      (PR #4326, merged 2026-01-12). The rename is the canonical bidder-rename-
+      three-step pattern: DELETE all adoppler files (yaml + bidder-params +
+      bidder/adoppler/* + spring config + proto + test classes + fixture
+      directory); CREATE the equivalent elementaltv files with TitleCase
+      brand-acronym preservation (ElementalTV preserves the TV uppercase
+      acronym across class names: ElementalTVBidder, ElementalTVConfiguration,
+      ElementalTVTest, ExtImpElementalTV, ElementalTVResponse{,Ads,VideoAds}Ext);
+      alias-back via 'adoppler: ~' under elementaltv.aliases (tilde-inherit
+      form keeps the old name resolving). Cross-language fidelity: Go side
+      carries the same rename via static/bidder-info/elementaltv.yaml plus
+      retained adoppler files. Pattern tags from the reference list:
+      bidder-rename-major-version, alias-back-via-tilde,
+      package-rename-fixture-dir-rename, acronym-case-preservation.
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: null
+    destination_pr: prebid/prebid-server-java#4326
+    fidelity_review_themes:
+      - bidder-rename-major-version
+      - alias-back-via-tilde
+      - package-rename-fixture-dir-rename
+      - acronym-case-preservation
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: divergent-byte-only
+  blocker_count: 0
+  warning_count: 1
+  notes: |
+    ElementalTV is byte-divergent on bidder_params_json (different inner
+    properties indent — 6-space on Go vs 4-space on Java) but semantically
+    equivalent: single string `adunit` property, required. Capabilities
+    (site+app banner/video/native), GVL ID 0, maintainer
+    support@elementaltv.com, geoscope all match. Endpoint construction also
+    matches — both use AdUnit macro substitution at the same URL template.
+
+    The notable cross-language story for elementaltv is the bidder-rename
+    lifecycle event (Adoppler -> ElementalTV) shipped via PR #4326 in
+    v3.38.0 (2026-01-12). The Java side handled this with the canonical
+    three-step rename pattern: delete all adoppler files, create equivalent
+    elementaltv files with TitleCase brand-acronym preservation
+    (ElementalTV keeps TV uppercase across 8+ class artifacts:
+    ElementalTVBidder, ElementalTVConfiguration, ElementalTVTest,
+    ExtImpElementalTV, ElementalTVResponse{,Ads,VideoAds}Ext, the
+    ELEMENTALTV_EXT_TYPE_REFERENCE constant), and alias-back via
+    `adoppler: ~` under elementaltv.aliases. The Go side mirrors the
+    rename via static/bidder-info/elementaltv.yaml. Operational concern:
+    the per-request `x-openrtb-version` header is hardcoded to "2.5"
+    (line 97) while the YAML declares ortb-version "2.6" — possible
+    carry-over from the pre-rename Adoppler implementation; not a port
+    bug, but a Java-side cleanup item.
+
+    Porter advice: (a) reformat one of the bidder-params JSON files for
+    byte parity (the Java 4-space inner indent is inconsistent with the
+    file's own 2-space outer indent — recommend changing Java to 4-space
+    throughout, or matching Go's 6-space inner if the outer is 4-space);
+    (b) when reviewing bidder rename PRs going forward, follow the
+    elementaltv pattern as the reference for the four-tag combo
+    (bidder-rename-major-version, alias-back-via-tilde, package-rename-
+    fixture-dir-rename, acronym-case-preservation).

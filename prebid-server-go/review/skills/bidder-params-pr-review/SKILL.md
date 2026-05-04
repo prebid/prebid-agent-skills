@@ -1,6 +1,7 @@
 ---
 name: bidder-params-pr-review
 description: Reviews changes to bidder parameter schemas (static/bidder-params/*.json), impression extension Go structs (openrtb_ext/imp_*.go), and parameter validation tests (adapters/*/params_test.go). USE WHEN any of those files are added/modified/removed. Verifies JSON Schema draft-04 correctness, Go struct alignment, reserved-OpenRTB-field exclusions, jsonutil.StringInt usage for flexible types, and test coverage. Do NOT use for adapters/{bidder}/{bidder}.go (adapter implementation), static/bidder-info/*.yaml, or non-imp_*.go files in openrtb_ext/.
+version: 1.0.0
 ---
 
 # Bidder Params PR Review
@@ -191,7 +192,7 @@ After all tasks are complete, produce a review summary:
 2. **Avoid `interface{}`**: A struct field type of `interface{}` (or `any`) handles polymorphic types but loses type safety and forces every adapter caller to type-assert. Flag as **WARN** with recommendation to use `jsonutil.StringInt`.
 3. **Avoid bidder-specific decoders**: Don't write a custom `UnmarshalJSON` for this — `jsonutil.StringInt` already handles both forms. Flag custom decoders as **WARN**.
 
-See [../../shared/framework-utilities.md](../../shared/framework-utilities.md) for the framework helper table.
+See [../shared/framework-utilities.md](../shared/framework-utilities.md) for the framework helper table.
 
 ### Workflow: Schema Metadata Changed
 
@@ -282,4 +283,4 @@ See [params-type-index.md](references/params-type-index.md) for:
 - Common parameter patterns across existing adapters
 - Alias behavior (inherits parent params)
 
-For framework-wide concerns (helper functions including `jsonutil.StringInt`, error types, marshal-error-safety, anti-patterns), see [../../shared/framework-utilities.md](../../shared/framework-utilities.md) — this skill references that file rather than duplicating its content.
+For framework-wide concerns (helper functions including `jsonutil.StringInt`, error types, marshal-error-safety, anti-patterns), see [../shared/framework-utilities.md](../shared/framework-utilities.md) — this skill references that file rather than duplicating its content.

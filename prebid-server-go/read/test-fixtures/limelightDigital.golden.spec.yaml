@@ -1,0 +1,369 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: "2026-05-02T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: limelightDigital
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - filmzie
+    - iionads
+    - evtech
+    - adsyield
+    - greedygame
+    - appstock
+    - xtrmqb
+    - embimedia
+    - tgm
+    - streamlyn
+    - streamvision
+    - orangeclickmedia
+    - velonium
+    - adtg_org
+    - performist
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+  empire_canonical_master: true               # ADR-003: limelightDigital is the complexity-high reference for endpoint-macro-substitution flavor (largest empire today, 15 aliases).
+  empire_parent_flavor: endpoint-macro-substitution
+
+bidder_info:
+  endpoint: "http://ads-pbs.ortb.net/openrtb/{{.PublisherID}}?host={{.Host}}"
+  endpoint_construction:
+    kind: multi-token-substitution
+    macros_used:
+      - PublisherID
+      - Host
+    macro_syntax: go-template
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "engineering@project-limelight.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}                               # Go YAML omits userSync entirely; some aliases declare their own
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Limelight Digital Adapter Params",
+    "description": "A schema which validates params accepted by the Limelight Digital adapter",
+    "type": "object",
+
+    "properties": {
+      "host": {
+        "type": "string",
+        "description": "Ad network's RTB host",
+        "format": "hostname",
+        "pattern": "^.+\\..+$"
+      },
+      "publisherId": {
+        "type": ["integer", "string"],
+        "description": "Publisher ID",
+        "minimum": 1,
+        "pattern": "^[1-9][0-9]*$"
+      }
+    },
+
+    "required": ["host", "publisherId"]
+  }
+bidder_params_sha256: 98c86237505947407a1dc320630d8d92276ab70b14b04940f2b0e594283bae33
+
+params:
+  schema_interpretation:
+    properties:
+      - name: host
+        type: string
+        description: "Ad network's RTB host"
+        format: hostname
+        pattern: '^.+\..+$'
+      - name: publisherId
+        type: ["integer", "string"]            # FLEXIBLE TYPE — first corpus example with this Go-side capture
+        description: "Publisher ID"
+        minimum: 1
+        pattern: '^[1-9][0-9]*$'
+    required_fields:
+      - host
+      - publisherId
+    flexible_types:
+      - publisherId                            # First corpus example — schema declares `["integer", "string"]` for publisherId. Go uses json.Number to handle both shapes; Java uses Integer (less flexible).
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_limelightDigital.go
+    type_name: ImpExtLimelightDigital          # Legacy ImpExt* form. Single-cap `LimelightDigital` (vs Java's CamelCase `LimeLightDigital`).
+    fields:
+      - name: Host
+        json_tag: host
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: PublisherID
+        json_tag: publisherId
+        type_native: json.Number               # Critical: Go uses json.Number to handle the integer-OR-string flexibility from the schema's `["integer", "string"]` type. encoding/json's standard json.Number type unmarshals both forms. PublisherID.String() yields the canonical decimal-string form for endpoint URL substitution.
+        omitempty: false
+        notes:
+          - "json.Number handles the schema's flexible-type `[\"integer\", \"string\"]` for publisherId — Go's standard mechanism (vs jsonutil.StringInt/IntString)"
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/limelightDigital/params_test.go
+    valid_cases_count: 6
+    invalid_cases_count: 12
+    bidder_constant_referenced: openrtb_ext.BidderLimelightDigital
+
+code:
+  package_or_class: limelightDigital            # Package name preserves camelCase YAML form
+  directory_name: limelightDigital
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: limelightDigital.go
+        role: implementation
+        loc: 200
+  imports:
+    has_template_engine: true                  # text/template
+    has_currency_helper: true                  # uses requestInfo.ConvertCurrency
+    has_jsonutil: true
+    third_party:
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpointTemplate
+        type: "*template.Template"
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: true
+    errors_returned:
+      - "Endpoint  adapter parameter is not provided"   # Note: literal "Endpoint  adapter" with double-space — upstream typo, preserved in golden
+      - "unable to parse endpoint url template: %v"
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp                       # Rule 10
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place                         # imp value-copy from `for _, imp := range request.Imp` then directly mutated (BidFloor, BidFloorCur, Ext)
+        Cur: none
+      go_idiom: shallow-copy                  # `requestCopy := *request` per loop iteration
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase        # Rule 1
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtLimelightDigital
+      wrapper_type: null
+    endpoint_resolution:
+      kind: multi-token-substitution
+      mechanism_go: text/template
+      mechanism_java: null
+      macros_used:
+        - Host
+        - PublisherID
+      template_params_struct_field_count: 2
+    helpers:
+      - name: getImpressionExt
+        signature: "func getImpressionExt(imp *openrtb2.Imp) (*openrtb_ext.ImpExtLimelightDigital, error)"
+      - name: buildEndpointURL
+        signature: "func (a *adapter) buildEndpointURL(params *openrtb_ext.ImpExtLimelightDigital) (string, error)"
+      - name: getMediaTypeForBid
+        signature: "func getMediaTypeForBid(impId string, imps []openrtb2.Imp) (openrtb_ext.BidType, error)"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: legacy-raw-go                     # Explicit per-status: 204 (no content), 400 (BadInput), other non-200 (BadServerResponse). Plus empty-body short-circuit returning (nil, nil).
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-imp-mediatype            # Rule 22 — match impID to source imp; first non-nil mediatype field determines bid type
+          field: imp.banner|video|audio|native
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    bid_pointer_pattern: indexed-iteration    # `for i, bid := range seatBid.Bid { ... &seatBid.Bid[i] ... }` — index-based pointer to avoid range-var aliasing
+    bid_pointer_go_sibling: range-index
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: limelightDigitaltest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+aliases: []                                   # 15 Go aliases live as separate static/bidder-info/<name>.yaml files with `aliasOf: limelightDigital`.
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+lifecycle: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: true
+  helper:
+    go_signature: "requestInfo.ConvertCurrency(value, from, to) (float64, error)"
+    java_signature: null
+  injection: function-arg
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false                  # adapter does NOT add headers; RequestData.Headers is left unset (nil)
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: imp-ext-strip-post-extraction
+    file: limelightDigital.go
+    line: 121
+    summary: "After extracting imp.Ext into ImpExtLimelightDigital, the adapter sets `imp.Ext = nil` (line 121) — STRIPS the ext from the outgoing request rather than passing it through. ADR-007 F5 imp-ext-strip-post-extraction master sample. Both Go AND Java sides do this; symmetric pattern. Distinct from teqblaze's REPACK pattern (teqblaze rewrites with new fields; limelightDigital removes entirely)."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: request-id-derived-per-imp
+    file: limelightDigital.go
+    line: 80
+    summary: "Per-imp split mutates the request copy's ID: `requestCopy.ID = request.ID + \"-\" + imp.ID`. Each per-imp HTTP request carries a derived ID combining the original request ID and the imp ID. Unusual pattern — most per-imp adapters preserve the original request ID. Java side does NOT do this (the Java port preserves request.id verbatim per imp). Cross-language asymmetry."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: request-ext-stripped
+    file: limelightDigital.go
+    line: 81
+    summary: "`requestCopy.Ext = nil` strips the request-level Ext (not just imp.Ext) before serialization. Drops any auction-level ext fields the publisher added. Cross-language symmetric — Java side also drops via builder."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: flexible-type-via-json-number
+    file: openrtb_ext/imp_limelightDigital.go
+    summary: "PublisherID is `json.Number` — handles the schema's `[\"integer\", \"string\"]` flexible-type via Go's standard encoding/json mechanism. Distinct from jsonutil.StringInt/IntString (which the bidder-params SKILL documents as the canonical Go flexible-type idiom). First corpus example of json.Number for flexibility."
+    edge_case_taxon: incomplete-classification
+  - id: legacy-impext-naming
+    file: openrtb_ext/imp_limelightDigital.go
+    summary: "Type name `ImpExtLimelightDigital` uses legacy `ImpExt*` form (vs newer `ExtImp*` form). Common to older adapters; not a regression."
+    edge_case_taxon: legacy-impext-naming
+  - id: builder-error-message-typo
+    file: limelightDigital.go
+    line: 28
+    summary: "Builder returns `errors.New(\"Endpoint  adapter parameter is not provided\")` — note the DOUBLE-space between `Endpoint` and `adapter`. Upstream typo preserved verbatim in source; doesn't affect functionality but reviewers often miss in code review."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/limelightDigital/
+    package_name: limelightDigital
+    bidder_constant: openrtb_ext.BidderLimelightDigital
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/limelightdigital/   # NOTE: lowercase package vs Go's camelCase
+    bidder_class: LimeLightDigitalBidder                                    # NOTE: CamelCase double-cap (LimeLight) vs Go single-cap (Limelight)
+    config_class: LimeLightDigitalConfiguration
+    yaml_path: src/main/resources/bidder-config/limelightDigital.yaml       # camelCase matches Go YAML
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/limelightdigital/
+  port_concerns:
+    aliases_inverted: true                    # Java parent.aliases[15] vs Go per-alias YAMLs — Rule 33
+    yaml_unification: false
+    mutation_idiom_divergence: true           # Java imp.toBuilder().ext(null).build() ↔ Go in-place imp.Ext = nil + shallow-copy
+    package_directory_mismatch: false         # Go: package=dir=limelightDigital. Java: dir=limelightdigital, class=LimeLightDigital — separate concern (multi-form naming).
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: prebid/prebid-server-java#2228
+    destination_language: null
+    destination_pr: prebid/prebid-server#2539
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-endpoint-macro-substitution
+      - imp-ext-strip-post-extraction
+      - flexible-type-publisher-id
+      - multi-form-naming-asymmetry
+  go_specific_concerns:
+    - "PublisherID is `json.Number` (encoding/json's standard) — handles schema's flexible-type `[\"integer\", \"string\"]` for the field. Java side uses `Integer` (less flexible — would fail on a string-form publisher ID input). Cross-language asymmetry: schema is more permissive than the Java type system."
+    - "Per-imp split via `requestCopy := *request` shallow-copy + `requestCopy.Imp = []openrtb2.Imp{imp}` + `requestCopy.ID = request.ID + \"-\" + imp.ID`. The request ID is MUTATED per imp (derived). Java side preserves request.id verbatim per imp."
+    - "imp.Ext = nil (line 121, in getImpressionExt) AND requestCopy.Ext = nil (line 81, before serialization) — both ext fields stripped before sending to bidder. Java side mirrors via imp.toBuilder().ext(null).build(). ADR-007 F5 imp-ext-strip-post-extraction master sample."
+    - "MakeRequests does NOT URL-encode the macro-substituted host/publisher_id values when building endpoint URL via macros.ResolveMacros. Java side DOES url-encode (HttpUtil.encodeUrl on both substitutions). Cross-language asymmetry — could surface as wire-format URL divergence for hosts containing reserved URL characters."
+    - "Builder returns error \"Endpoint  adapter parameter is not provided\" with double-space (line 28). Upstream typo; preserved verbatim."
+    - "15 aliases (filmzie, iionads, evtech, adsyield, greedygame, appstock, xtrmqb, embimedia, tgm, streamlyn, streamvision, orangeclickmedia, velonium, adtg_org, performist). adtg_org has UNDERSCORE — Go YAML accepts (per PR #4211). Java IT class name is `AdtgorgTest` (no underscore — Java identifier-rule workaround). performist alias has truncated endpoint (`/openrtb/{{PublisherID}}` only, NO `?host={{Host}}` query) — distinct from sibling aliases."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

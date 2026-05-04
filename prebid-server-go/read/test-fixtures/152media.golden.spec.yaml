@@ -1,0 +1,205 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: alias-only-no-bidder-constant
+      file: openrtb_ext/bidders.go
+      line: null
+      summary: "152media is registered as an alias of adkernel purely at runtime via SetAliasBidderName (config/bidderinfo.go:336); no Bidder152Media constant exists in openrtb_ext/bidders.go because Go identifiers cannot lead with a digit. The alias is appended to coreBidderNames at YAML-load time. Informational — this is the canonical handling for digit-leading aliases."
+
+meta:
+  bidder_name: 152media
+  is_alias: true
+  alias_of: adkernel
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+# Step 4 alias short-circuit: bidder_info populated from the alias YAML; fields not declared
+# on the alias YAML are inherited from the parent (adkernel) via processBidderAliases at
+# config/bidderinfo.go runtime. The spec captures the inherited shape so downstream
+# consumers (write/, port-go2java/) see the resolved view.
+bidder_info:
+  endpoint: "http://pbs.adksrv.com/hb?zone={{.ZoneID}}"  # inherited from adkernel
+  endpoint_construction:
+    kind: single-token-substitution
+    macros_used:
+      - ZoneID
+    placeholders_unresolved: []
+  endpoint_compression: gzip  # inherited from adkernel (endpointCompression: GZIP normalized to lowercase)
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid-dev@adkernel.com"  # inherited from adkernel
+  capabilities:  # inherited from adkernel
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - audio
+        - native
+  geoscope: []
+  gvl_vendor_id: 1111  # OVERRIDDEN by 152media.yaml (parent adkernel.yaml has gvlVendorID: 14)
+  user_sync:  # inherited from adkernel
+    redirect:
+      url: "https://sync.adkernel.com/user-sync?t=image&gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&gpp={{.GPP}}&gpp_sid={{.GPPSID}}&r={{.RedirectURL}}"
+      userMacro: "{UID}"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+# Alias short-circuit: 152media has NO own static/bidder-params/152media.json file. The parent's
+# static/bidder-params/adkernel.json applies byte-for-byte at validation time (PBS resolves
+# imp.ext.bidder against the parent's schema). bidder_params_json + sha are populated from the
+# parent's file so the cross-language R2 / R5 contract holds.
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Adkernel Adapter Params",
+    "description": "A schema which validates params accepted by the Adkernel adapter",
+
+    "type": "object",
+    "properties": {
+        "zoneId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Publisher Id to use."
+        }
+    },
+    "required": ["zoneId"]
+  }
+bidder_params_sha256: 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed
+
+# params interpretation also comes from the parent (adkernel.json) — same bytes, same shape.
+# A consumer that needs the full ext_struct / params_test detail should resolve the parent's
+# spec; here we capture the schema_interpretation only since the alias has no own ext_struct
+# nor params_test file.
+params:
+  schema_interpretation:
+    properties:
+      - name: zoneId
+        type: integer
+        description: "Publisher Id to use."
+        constraints:
+          minimum: 1
+    required_fields:
+      - zoneId
+    flexible_types: []
+    combinators_used: []
+  ext_struct: null  # alias has no own openrtb_ext/imp_152media.go — parent's ExtImpAdkernel applies
+  params_test: null  # alias has no own params_test.go
+
+# Alias short-circuit: code is null. 152media has NO adapters/152media/ directory; runtime
+# dispatch routes 152media impressions through adapters/adkernel via the alias→parent map.
+code: null
+
+# Alias short-circuit: tests is null. 152media has NO own test fixtures; the parent's
+# adkernel/adkerneltest fixtures cover the alias path implicitly.
+tests: null
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: alias-only-runtime-registration
+    file: static/bidder-info/152media.yaml
+    summary: "152media is a digit-leading alias of adkernel. Go cannot mint a Bidder152Media constant (identifiers may not start with a digit), so the alias is registered exclusively at runtime via openrtb_ext.SetAliasBidderName invoked from config/bidderinfo.go:336 during YAML load. coreBidderNames is appended dynamically; aliasBidderToParent[BidderName(\"152media\")] = BidderAdkernel. Java side uses an identifier-rule workaround for the IT class (OneFiveTwoMediaTest) — that workaround is Java-only."
+    edge_case_taxon: identifier-rule-workaround
+  - id: gvl-vendor-id-override
+    file: static/bidder-info/152media.yaml
+    summary: "152media.yaml overrides only gvlVendorID (1111) from the parent adkernel.yaml (14). All other fields (endpoint, capabilities, maintainer, user_sync, endpointCompression) are inherited via processBidderAliases."
+    edge_case_taxon: tilde-alias-syntax
+
+cross_language:
+  go_artifacts:
+    bidder_dir: null  # alias has no own adapters/152media/ directory
+    package_name: null  # no Go package — runtime alias only
+    bidder_constant: null  # no Bidder152Media constant — runtime-registered via SetAliasBidderName
+  java_artifacts:
+    bidder_dir: null  # Java aliases have NO own bidder/152media/ directory; the parent's Bidder class handles dispatch
+    bidder_class: null  # no class — runtime alias only on Java side too
+    config_class: null
+    yaml_path: null  # alias declared inside parent's bidder-config/adkernel.yaml
+    proto_dir: null
+    declared_in: src/main/resources/bidder-config/adkernel.yaml  # tilde-syntax under aliases:
+  port_concerns:
+    aliases_inverted: true  # Go child→parent (152media.yaml: aliasOf: adkernel) vs Java parent→children (adkernel.yaml: aliases: { 152media: ~ })
+    yaml_unification: true  # Go splits info+params, Java unifies into bidder-config
+    mutation_idiom_divergence: false  # alias has no code path of its own
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  go_specific_concerns:
+    - "Alias is a single 2-line YAML file (aliasOf: adkernel + gvlVendorID: 1111). No Go code artifact exists — registration is runtime-dynamic via SetAliasBidderName."
+    - "Digit-leading bidder name (152media) cannot be referenced as a Go constant; downstream tooling that expects openrtb_ext.Bidder<Name> must special-case digit-leading aliases (look up via aliasBidderToParent map instead)."
+    - "Inherited capabilities span all four media types (banner/video/audio/native) on both site and app — porter must NOT narrow these on the Java side."
+  java_specific_concerns:
+    - "Java declares 152media inside parent adkernel.yaml under aliases: with tilde-syntax (inherits everything). A Java IT class would require identifier-rule workaround (OneFiveTwoMediaTest) due to digit-leading name."
+    - "Per Rule 37, a Java alias normally requires its own IT class + 4 fixtures + test-application.properties append. As of resolved_commit, 152media has no IT class (no fixtures listed in src/test/resources/org/prebid/server/it/openrtb2/152media/ in the Java tree at the dual-spec resolved commit) — the alias relies on parent's tests."
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes:
+      - aliases-inverted
+      - identifier-rule-workaround
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

@@ -1,0 +1,16 @@
+# Test/CI dependencies for scripts/round-trip-ci.py and scripts/tests/.
+# Install with: pip install -r requirements.txt
+#
+# Versions are pinned exactly (==) to prevent silent supply-chain pulls
+# from compromised patch releases. dependabot keeps them current via
+# weekly PRs (.github/dependabot.yml). Bump only via reviewed PR.
+#
+# Future hardening: switch to --require-hashes once we add transitive-
+# dep pinning (pip-compile --generate-hashes). Currently the direct deps
+# are pinned; transitive deps (referencing-validator, attrs, jsonschema-
+# specifications, rpds-py, etc.) still float, so a compromised
+# transitive could be pulled.
+PyYAML==6.0.1
+# jsonschema 4.18+ required for full JSON Schema 2020-12 support
+# (used by adapter-spec.schema.json validation in Phase 2+).
+jsonschema==4.23.0

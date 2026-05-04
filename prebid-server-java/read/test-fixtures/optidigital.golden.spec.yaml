@@ -1,0 +1,399 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/claude-opus-4-7[1m]
+  warnings:
+    - type: bidder-params-sha-conflict
+      file: src/main/resources/static/bidder-params/optidigital.json
+      line: null
+      summary: "Java bidder-params JSON sha256 (93bad2a9790ba8dd6e38d2c88206910e10a9c682af7be2b726b5d64318bc6832) differs from Go-side sha (6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31). Files are SEMANTICALLY identical (same properties, types, descriptions, required) but byte-divergent: Go uses 4-space indent with stray blank line and no trailing newline; Java uses 2-space indent with trailing newline. R5 cross-language parity FAIL — port-fidelity violation that should be reconciled by reformatting one side to match the other."
+
+meta:
+  bidder_name: optidigital
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0-SNAPSHOT"
+
+bidder_info:
+  endpoint: "https://pbs.optidigital.com/bidder/openrtb2"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: "2.6"
+  default_enabled: false
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@optidigital.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+    app:
+      mediaTypes:
+        - banner
+    dooh:
+      mediaTypes:
+        - banner
+  geoscope: []
+  gvl_vendor_id: 915
+  user_sync:
+    cookie-family-name: optidigital
+    iframe:
+      url: "https://scripts.opti-digital.com/js/presyncs2s.html?endpoint=optidigital&gdpr={{gdpr}}&gdpr_consent={{gdpr_consent}}&us_privacy={{us_privacy}}&gpp={{gpp}}&gpp_sid={{gpp_sid}}&redir={{redirect_url}}"
+      support-cors: false
+      uid-macro: "$UID"
+  yaml_extra_fields:
+    meta-info:
+      supported-vendors: null
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Optidigital Adapter Params",
+    "description": "A schema which validates params accepted by the Optidigital adapter",
+    "type": "object",
+    "properties": {
+      "publisherId": {
+        "type": "string",
+        "minLength": 2,
+        "description": "Publisher ID"
+      },
+      "placementId": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Placement ID"
+      },
+      "divId": {
+        "type": "string",
+        "description": "Div ID"
+      },
+      "pageTemplate": {
+        "type": "string",
+        "description": "Page Template"
+      }
+    },
+    "required": [
+      "publisherId",
+      "placementId"
+    ]
+  }
+bidder_params_sha256: 93bad2a9790ba8dd6e38d2c88206910e10a9c682af7be2b726b5d64318bc6832
+
+params:
+  schema_interpretation:
+    properties:
+      - name: publisherId
+        type: string
+        description: "Publisher ID"
+        constraints:
+          minLength: 2
+      - name: placementId
+        type: string
+        description: "Placement ID"
+        constraints:
+          minLength: 1
+      - name: divId
+        type: string
+        description: "Div ID"
+      - name: pageTemplate
+        type: string
+        description: "Page Template"
+    required_fields:
+      - publisherId
+      - placementId
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: null
+    file: null
+    type_name: null
+    fields: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/optidigital/OptidigitalBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: OptidigitalBidder
+  directory_name: optidigital
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: OptidigitalBidder.java
+        role: implementation
+        loc: 66
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: false
+    third_party:
+      - CollectionUtils
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-passthrough
+      custom_body_type: null
+    mutation:
+      mutates_request: false
+      entity_strategies: {}
+      go_idiom: null
+      java_idiom: none
+    imp_ext_unmarshal:
+      kind: none
+      mechanism_go: null
+      mechanism_java: null
+      target_type: null
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers: []
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: hardcoded
+          hardcoded_value: BidType.banner
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: none
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/optidigital/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-optidigital-bid-request.json
+        sha256: 2da2c8d3a1030020ca66567aba06b75a28cd32095b145754f0b61b827ef55df3
+        bytes: 948
+        role: bidder-bid-request
+      - filename: test-optidigital-bid-response.json
+        sha256: 0e565e1881f3731c885129d53d06146a41524a7b49bf9d42b431bd58516b7563
+        bytes: 331
+        role: bidder-bid-response
+      - filename: test-auction-optidigital-request.json
+        sha256: bd0c50003a47806a3f475dcec44af0c8ec4e2fd2fa6dade29aca2dd964539f77
+        bytes: 329
+        role: auction-request
+      - filename: test-auction-optidigital-response.json
+        sha256: 51c96ff49d34ee46eebb26d5b3faec46823d91711ee47bcb4f28dcd6901f482d
+        bytes: 784
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 6
+  unit_test_loc: 153
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldNotModifyIncomingRequest
+    - makeBidsShouldReturnErrorIfResponseBodyCouldNotBeParsed
+    - makeBidsShouldReturnEmptyListIfBidResponseIsNull
+    - makeBidsShouldReturnEmptyListIfBidResponseSeatBidIsNull
+    - makeBidsShouldReturnBidderBidWithNoErrors
+  fixture_handling: count-only
+  test_application_properties_entries_added: 2
+  integration_test_class: OptidigitalTest
+  integration_test_pattern: 4-file-split
+
+spring_config:
+  factory_class: OptidigitalConfiguration
+  factory_method: optidigitalBidderDeps
+  property_source_path: classpath:/bidder-config/optidigital.yaml
+  bidder_creator_lambda: |
+    config -> new OptidigitalBidder(config.getEndpoint(), mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: optidigitalConfigurationProperties
+      type: BidderConfigurationProperties
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: OptidigitalBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 2
+    parameters:
+      - name: endpointUrl
+        type: String
+        source: config-field
+        role: properties
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields: []
+  helper_classes_co_located: []
+  helper_classes_in_proto: []
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: null
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: bidder-params-sha-conflict-with-go
+    file: src/main/resources/static/bidder-params/optidigital.json
+    summary: "Java bidder-params JSON is byte-divergent from Go-side optidigital.json (Java sha 93bad2a9..., Go sha 6bc97780...). Same JSON Schema content but reformatted: Go uses 4-space indent with stray blank line + no trailing newline; Java uses 2-space indent + trailing newline. R5 cross-language parity FAIL."
+    edge_case_taxon: port-fidelity-divergence
+  - id: hardcoded-banner-bid-type
+    file: src/main/java/org/prebid/server/bidder/optidigital/OptidigitalBidder.java
+    summary: "bidsFromResponse hardcodes BidType.banner for every bid (line 62: BidderBid.of(bid, BidType.banner, bidResponse.getCur())); cannot return non-banner even if upstream replied with one. Mirrors Go-side optidigital hardcoded-bid-type behavior."
+    edge_case_taxon: hardcoded-bid-type
+  - id: enabled-false-opt-in
+    file: src/main/resources/bidder-config/optidigital.yaml
+    summary: "YAML declares enabled: false (line 3), flipping the default-enabled bit to false. Operators must opt-in by setting adapters.optidigital.enabled=true. Canonical Java edge case #30 (enabled-false-default)."
+    edge_case_taxon: incomplete-classification
+  - id: ortb-version-quoted-string
+    file: src/main/resources/bidder-config/optidigital.yaml
+    summary: "YAML declares ortb-version: \"2.6\" as a quoted string (line 6) so the YAML parser yields a String, not the float 2.6. Canonical Java edge case #29 (ortb-version-quoted)."
+    edge_case_taxon: incomplete-classification
+  - id: dooh-platform-declared
+    file: src/main/resources/bidder-config/optidigital.yaml
+    summary: "YAML declares dooh-media-types: [banner] (line 14) — Optidigital is one of the few Java adapters declaring DOOH platform support alongside site/app. Mirrors Go-side capabilities.dooh."
+    edge_case_taxon: incomplete-classification
+  - id: no-proto-no-imp-ext-parse
+    file: src/main/java/org/prebid/server/bidder/optidigital/OptidigitalBidder.java
+    summary: "OptidigitalBidder does NOT parse imp.ext.bidder — there is NO ExtImpOptidigital POJO under proto/openrtb/ext/request/optidigital/ (the directory does not exist). makeHttpRequests delegates entirely to BidderUtil.defaultRequest(bidRequest, endpointUrl, mapper) and passes the bidRequest through unchanged. The Go-side adapter ALSO does not parse imp.ext (matching behavior), but Go DOES carry an ImpExtOptidigital struct in openrtb_ext/imp_optidigital.go for params validation. Java skips the POJO entirely; the bidder-params JSON Schema is the only validation surface."
+    edge_case_taxon: port-fidelity-divergence
+  - id: bidder-class-url-validation-at-construction
+    file: src/main/java/org/prebid/server/bidder/optidigital/OptidigitalBidder.java
+    summary: "Constructor invokes HttpUtil.validateUrl(Objects.requireNonNull(endpointUrl)) at line 30 — invalid URL triggers IllegalArgumentException at bean construction time. Covered by creationShouldFailOnInvalidEndpointUrl test."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/optidigital/
+    package_name: optidigital
+    bidder_constant: openrtb_ext.BidderOptidigital
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/optidigital/
+    bidder_class: OptidigitalBidder
+    config_class: OptidigitalConfiguration
+    yaml_path: src/main/resources/bidder-config/optidigital.yaml
+    proto_dir: null
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: prebid/prebid-server-java#4054
+    fidelity_review_themes:
+      - port-from-go
+      - dooh-platform-declared
+      - enabled-false-default
+      - ortb-version-quoted
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "OptidigitalBidder constructor calls HttpUtil.validateUrl(Objects.requireNonNull(endpointUrl)) at line 30 — invalid URL triggers IllegalArgumentException at bean construction (covered by creationShouldFailOnInvalidEndpointUrl test). Go has no equivalent — Builder() returns nil/error rather than throwing."
+    - "makeHttpRequests at line 35-37 collapses to a single delegating call: Result.withValue(BidderUtil.defaultRequest(bidRequest, endpointUrl, mapper)). Go expands this inline (jsonutil.Marshal + http.Header.Add + RequestData{} struct construction + ImpIDs population)."
+    - "extractBids/bidsFromResponse pipeline at lines 49-64 uses the Java stream + flatMap idiom with three Objects::nonNull defensive filters across SeatBid, SeatBid.bid, and the flatMap output. Go side uses indexed iteration (for i := range seatBid.Bid) which never visits nil-element slots, so these defensive filters have no Go counterpart."
+    - "Empty-seatbid shortcircuit at line 50-52 (CollectionUtils.isEmpty(bidResponse.getSeatbid()) → Collections.emptyList()) is paired with framework-default HTTP status handling — the framework auto-handles 204/4xx/5xx via HttpUtil.validateResponse and the adapter only handles the empty-body case explicitly."
+    - "Currency passthrough via bidResponse.getCur() (line 62: BidderBid.of(bid, BidType.banner, bidResponse.getCur())) is the canonical Java passthrough-from-response idiom. Go-side optidigital sets bidResponse.Currency = response.Cur unconditionally (unguarded-currency-overwrite quirk); Java idiom is implicit per-bid currency assignment without overwriting any aggregate state — different shape, equivalent result when response.Cur is non-empty."
+    - "OptidigitalConfiguration uses the BASE BidderConfigurationProperties without subclassing (no @Validated inner class declaring extra fields). Spring DI passes the framework-default property set; @PropertySource annotation points at classpath:/bidder-config/optidigital.yaml."
+    - "OptidigitalBidder has NO co-located helper classes and NO proto/openrtb/ext/request/optidigital/ directory at all — the imp.ext.bidder payload is never deserialized into a typed POJO. JSON Schema (static/bidder-params/optidigital.json) is the only param validation surface. The Java bidder is structurally minimal: just constructor + makeHttpRequests delegate + makeBids three-method-chain."
+    - "Hardcoded BidType.banner inside the per-bid map closure (line 62) means BidType resolution does NOT consult bid.mtype, bid.ext.prebid.type, or imp.banner/video/native discrimination — every bid is unconditionally tagged banner. Go-side optidigital has the same hardcoded behavior; surfaces as quirk hardcoded-bid-type on both sides."
+    - "Test class OptidigitalBidderTest extends VertxTest (canonical Java unit-test harness) with 6 hand-written @Test methods covering: invalid-endpoint-construction, request-passthrough, bad-response-decode, null-bidresponse, empty-seatbid, and a happy-path with USD currency assertion (BidderBid.of(..., BidType.banner, \"USD\"))."
+    - "Integration test OptidigitalTest extends IntegrationTest with a single @Test method openrtb2AuctionShouldRespondWithBidsFromOptidigital. WireMock stubs POST /optidigital-exchange (the local mock URL) with the test-optidigital-bid-request.json body match and the test-optidigital-bid-response.json mock response. The 4 IT fixtures sum 2392 bytes."
+  reviewer_cohort:
+    go: []
+    java:
+      - CTMBNara
+    cross_language_coordinator: bretg

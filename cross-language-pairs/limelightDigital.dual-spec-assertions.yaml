@@ -1,0 +1,292 @@
+dual_spec_assertion_version: 1
+bidder_name: limelightDigital
+go_spec: prebid-server-go/read/test-fixtures/limelightDigital.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/limelightDigital.golden.spec.yaml
+go_resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+java_resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+
+assertions:
+  bidder_params_sha256:
+    go: 98c86237505947407a1dc320630d8d92276ab70b14b04940f2b0e594283bae33
+    java: b72e79654cfa5afe7105855d7cdaa67d93340a69dfc96d49ae95e7965b1c468f
+    byte_equal: false
+    semantically_equal: true
+    divergence_kind: byte-only
+    divergence_summary: |
+      Same JSON Schema content (same `$schema`, properties, required, types,
+      flexible-type publisherId). Bytes differ in two ways:
+      (1) Go uses single-line form for `"type": ["integer", "string"]` (one-line array);
+          Java expands to multi-line (each `"integer"` and `"string"` on own indented line).
+      (2) Go has blank lines between sections; Java doesn't.
+      Trailing newlines: both end with `}\n`.
+    severity: warn
+
+  bidder_info_capabilities:
+    go:
+      site: [banner, video, audio, native]
+      app: [banner, video, audio, native]
+    java:
+      site: [banner, video, audio, native]
+      app: [banner, video, audio, native]
+    equivalent: true
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 0
+    java: 0
+    equivalent: true
+    severity: pass
+
+  bidder_info_maintainer:
+    go: engineering@project-limelight.com
+    java: engineering@project-limelight.com
+    equivalent: true
+    severity: pass
+
+  bidder_info_geoscope:
+    go: []
+    java: []
+    equivalent: true
+    severity: pass
+
+  bidder_info_endpoint:
+    go: "http://ads-pbs.ortb.net/openrtb/{{.PublisherID}}?host={{.Host}}"
+    java: "http://ads-pbs.ortb.net/openrtb/{{PublisherID}}?host={{Host}}"
+    byte_equal: false
+    semantically_equal: false
+    divergence_kind: macro-form-divergence
+    divergence_summary: |
+      Same observable URL pattern; Go uses Go-template form `{{.X}}` (resolved via
+      `macros.ResolveMacros`); Java uses string-replace form `{{X}}` (resolved via
+      two chained `String.replace` calls). Same canonical Rule 11 cross-language
+      asymmetry. Plus: Java URL-encodes the substituted values via
+      HttpUtil.encodeUrl; Go does NOT — wire-format may diverge for hosts
+      containing reserved URL characters.
+    severity: warn
+
+  bidder_info_default_enabled:
+    go: true
+    java: true
+    equivalent: true
+    rule_45_match: n/a                        # parent enabled both sides; the 15 alias children flip to enabled=false on Java per Rule 45
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: [host, publisherId]
+    java_required_fields: [host, publisherId]
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: [publisherId]          # Go captures via json.Number type
+    java_flexible_types: [publisherId]        # Java captures the schema declaration but Java type is `Integer` (won't deserialize string-form)
+    go_properties: [host, publisherId]
+    java_properties: [host, publisherId]
+    equivalent: true
+    severity: pass
+    note: |
+      First corpus example with non-empty `flexible_types[]` on BOTH sides. Schema
+      declares publisherId as `["integer", "string"]`. Go's ImpExtLimelightDigital uses
+      `json.Number` (handles both forms via encoding/json's standard mechanism). Java's
+      ExtImpLimeLightDigital uses `Integer` — Java side would fail to deserialize a
+      string-form publisherId. Cross-language fidelity gap captured as a quirk on the
+      Java spec (`integer-only-publisher-id`).
+
+  alias_graph:
+    go_aliases:
+      - filmzie
+      - iionads
+      - evtech
+      - adsyield
+      - greedygame
+      - appstock
+      - xtrmqb
+      - embimedia
+      - tgm
+      - streamlyn
+      - streamvision
+      - orangeclickmedia
+      - velonium
+      - adtg_org
+      - performist
+    java_aliases:
+      - filmzie
+      - iionads
+      - evtech
+      - adsyield
+      - greedygame
+      - appstock
+      - xtrmqb
+      - embimedia
+      - tgm
+      - streamlyn
+      - streamvision
+      - orangeclickmedia
+      - velonium
+      - adtg_org
+      - performist
+    aliases_match: true
+    rule_33_inversion: true
+    rule_44_empire_flavor: endpoint-macro-substitution
+    severity: pass
+
+  empire_consolidation:
+    rule_44_canonical_master: true            # ADR-003: limelightDigital is the complexity-high reference for endpoint-macro-substitution
+    parent_flavor: endpoint-macro-substitution
+    child_flavor_coherence:
+      filmzie: endpoint-macro-substitution    # tilde_inherit (no override)
+      iionads: endpoint-macro-substitution
+      evtech: endpoint-macro-substitution     # most-elaborated (own usersync)
+      adsyield: endpoint-macro-substitution
+      greedygame: endpoint-macro-substitution
+      appstock: endpoint-macro-substitution
+      xtrmqb: endpoint-macro-substitution
+      embimedia: endpoint-macro-substitution
+      tgm: endpoint-macro-substitution        # tilde_inherit
+      streamlyn: endpoint-macro-substitution
+      streamvision: endpoint-macro-substitution
+      orangeclickmedia: endpoint-macro-substitution
+      velonium: endpoint-macro-substitution
+      adtg_org: endpoint-macro-substitution   # underscore in name + Java identifier-rule workaround on IT class
+      performist: endpoint-macro-substitution # truncated endpoint (no ?host= query)
+    severity: pass
+
+  alias_test_coverage:
+    java_aliases_with_it_class: 14            # 14 of 15 (missing: evtech)
+    java_aliases_missing_it_class: [evtech]
+    java_aliases_with_fixture_dir: 14
+    severity: warn
+    note: |
+      evtech is the most-elaborated alias config (own endpoint + iframe usersync +
+      redirect usersync) but lacks an IT class + fixture dir. The other 14 aliases
+      all have IT classes (some with name divergence: AppStockSspTest for appstock,
+      AdtgorgTest for adtg_org, GreedyGameTest for greedygame).
+
+  imp_ext_strip:
+    both_sides_strip: true                    # Both Go and Java strip imp.ext after extraction
+    go_mechanism: "imp.Ext = nil (line 121, in getImpressionExt)"
+    java_mechanism: "imp.toBuilder().ext(null).build() (modifyImp, line 95)"
+    severity: pass
+    note: |
+      ADR-007 F5 imp-ext-strip-post-extraction master sample (both languages).
+      Distinct from teqblaze's REPACK pattern (rewrites with new fields).
+
+  multi_form_naming:
+    yaml_name:           limelightDigital     # camelCase single-cap (both languages)
+    go_package:          limelightDigital     # camelCase
+    go_bidder_constant:  BidderLimelightDigital   # TitleCase single-cap
+    go_ext_type:         ImpExtLimelightDigital   # legacy ImpExt* form, single-cap
+    java_package:        limelightdigital     # lowercase (Java identifier-rule lowercase package)
+    java_class_root:     LimeLightDigital     # CamelCase DOUBLE-cap (LimeLight)
+    java_config_class:   LimeLightDigitalConfiguration
+    java_config_props:   "adapters.limelightdigital"   # @ConfigurationProperties — lowercase
+    java_yaml_key:       "adapters.limelightDigital"   # YAML key — camelCase
+    java_bean_name:      limelightDigitalConfigurationProperties   # camelCase
+    severity: warn
+    note: |
+      Five distinct naming forms across both sides for one bidder:
+        (1) Go camelCase package/YAML/constant: limelightDigital / Limelight
+        (2) Go ext type single-cap: ImpExtLimelightDigital
+        (3) Java lowercase package: limelightdigital
+        (4) Java CamelCase double-cap class root: LimeLightDigital
+        (5) Java @ConfigurationProperties lowercase: adapters.limelightdigital
+      Java's @Bean and YAML use camelCase; @ConfigurationProperties uses lowercase.
+      Spring's relaxed binding makes the case-insensitive mismatch work, but it
+      reads as a code-organization smell. Adjacent to Java edge case #19 + #27.
+
+  bid_type_resolution:
+    go_method_chain: [{ method: by-imp-mediatype, supports: [banner, video, audio, native] }]
+    java_method_chain: [{ method: by-imp-mediatype, supports: [banner, video, audio, native] }]
+    equivalent: true
+    severity: pass
+    note: "Both sides match impID to source imp + first non-nil mediatype. All 4 OpenRTB media types supported on both sides."
+
+  request_id_handling:
+    go_per_imp: "request.ID + '-' + imp.ID"   # Go derives a NEW request ID per imp
+    java_per_imp: "request.id (preserved verbatim)"   # Java preserves original
+    equivalent: false
+    severity: warn
+    note: |
+      Cross-language asymmetry: Go mutates the per-imp request copy's ID to
+      `request.ID + "-" + imp.ID`. Java preserves request.id verbatim across
+      per-imp HTTP calls. Wire-format divergence — upstream Limelight backend
+      may receive different request IDs depending on which language proxies
+      the request.
+
+  url_encoding:
+    go_url_encodes_macros: false
+    java_url_encodes_macros: true
+    severity: warn
+    note: |
+      Java HttpUtil.encodeUrl on both substitutions (line 89 of LimeLightDigitalBidder).
+      Go's macros.ResolveMacros substitutes verbatim. For hosts/publisher IDs containing
+      reserved URL characters, the wire-format URL would differ across languages. In
+      practice the aliases use clean hostnames + numeric publisher IDs so the divergence
+      is latent rather than active.
+
+  port_lineage:
+    direction: shared-genesis
+    source_pr: prebid/prebid-server-java#2228
+    destination_pr: prebid/prebid-server#2539
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-endpoint-macro-substitution
+      - imp-ext-strip-post-extraction
+      - flexible-type-publisher-id
+      - multi-form-naming-asymmetry
+      - url-encoding-divergence
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: []
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned-with-known-divergence
+  blocker_count: 0
+  warning_count: 5
+  notes: |
+    LimelightDigital is the Phase 5 P2 #1 fixture for ADR-003 Rule 44
+    `endpoint-macro-substitution` empire flavor — the largest empire today
+    (15 aliases) and ADR-003's complexity-high reference. Distinguished from
+    smarthub/teqblaze (white-label-saas) by:
+      (1) parent endpoint is functional with macros (`{{.PublisherID}}`,
+          `{{.Host}}`); aliases inherit and may override the endpoint while
+          keeping the macro shape.
+      (2) Macros come from imp.ext.bidder.host + imp.ext.bidder.publisherId
+          fields — not from operator config or request fields.
+      (3) Two aliases (filmzie, tgm) inherit parent endpoint VERBATIM
+          (config_form: tilde_inherit); 13 override.
+
+    Five warn-level findings:
+      (1) bidder_params_sha byte-divergence (multi-line vs single-line type array).
+      (2) bidder_info_endpoint macro-form divergence (Go-template vs string-replace,
+          plus URL-encoding asymmetry).
+      (3) alias_test_coverage: evtech missing IT class.
+      (4) multi_form_naming: 5 distinct casings across both sides.
+      (5) request_id_handling: Go derives per-imp ID; Java preserves request.id.
+
+    Plus the publisherId flexible-type observation (first corpus example) — Java
+    typed Integer; Go json.Number. Schema permits string-form but Java would fail.
+    Latent cross-language fidelity gap.
+
+    Patterns captured for the first time:
+      - endpoint-macro-substitution flavor (was 0/3 ADR-003 deep-dived flavors;
+        now 3/3 covered: registration-only, white-label-saas, endpoint-macro-substitution).
+      - imp-ext-strip-post-extraction (ADR-007 F5) on BOTH sides — distinct from
+        teqblaze's repack pattern.
+      - flexible_types[] populated on both spec sides — first corpus example.
+      - multi-form Java naming (lowercase package + CamelCase class + camelCase YAML +
+        lowercase @ConfigurationProperties).
+      - request-id-mutation per imp on Go side.
+      - URL-encoding asymmetry on macro substitution.
+      - 14 distinct alias IT class name patterns (Java identifier-rule workarounds:
+        AppStockSspTest, AdtgorgTest, GreedyGameTest, OrangeClickMediaTest).
+
+    All three Rule 44 empire flavors now have master samples in the corpus:
+      - registration-only: adverxo (3 aliases)
+      - white-label-saas: smarthub (9) + teqblaze (10, parent non-functional)
+      - endpoint-macro-substitution: limelightDigital (15)
+
+    Phase 5 next: P2 #2 (vungle/vungle — Rule 43 `bilateral` phantom-rename
+    same-name pair; refined 2026-05-03 from `liftoff/vungle` cross-name
+    `go-leads` expectation per Phase 5 empirical evidence — see CHANGELOG
+    `## Unreleased — ADR corrections (no version bump)`).

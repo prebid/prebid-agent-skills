@@ -1,0 +1,1851 @@
+#!/usr/bin/env python3
+"""
+Round-trip CI harness for the read-skill suite (R1-R10).
+
+Validates the correctness invariants documented in
+prebid-server-go/read/skills/shared/adapter-spec.md against every golden
+spec under prebid-server-{go,java}/read/test-fixtures/.
+
+Usage (from repo root):
+    python3 scripts/round-trip-ci.py
+    python3 scripts/round-trip-ci.py --json
+    python3 scripts/round-trip-ci.py --check-network        # opt-in R1 GitHub fetch
+    python3 scripts/round-trip-ci.py --strict-r3            # tighten R3 keyword pairing
+
+Exit codes:
+    0  every rule passed (warnings allowed)
+    1  one or more rules emitted at least one FAIL
+    2  no FAIL but at least one WARN
+"""
+
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import glob
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from collections import OrderedDict
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+try:
+    import yaml  # PyYAML
+except ImportError:  # pragma: no cover
+    sys.stderr.write("ERROR: PyYAML is required (pip install pyyaml)\n")
+    sys.exit(3)
+
+
+# ---------------------------------------------------------------------------
+# Repo layout (paths are absolute and stable; the repo lives under prebid-agent-skills)
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+GO_FIXTURES = os.path.join(REPO_ROOT, "prebid-server-go", "read", "test-fixtures")
+JAVA_FIXTURES = os.path.join(REPO_ROOT, "prebid-server-java", "read", "test-fixtures")
+DUAL_SPECS_DIR = os.path.join(REPO_ROOT, "cross-language-pairs")
+TAXONOMY_PATH = os.path.join(
+    REPO_ROOT, "prebid-server-go", "read", "skills", "shared", "behavior-taxonomy.md"
+)
+
+
+# ---------------------------------------------------------------------------
+# Severity model
+# ---------------------------------------------------------------------------
+
+SEV_PASS = "pass"
+SEV_WARN = "warn"
+SEV_FAIL = "fail"
+SEV_SKIP = "skip"
+
+
+@dataclasses.dataclass
+class Finding:
+    rule: str
+    spec: str
+    severity: str
+    detail: str
+
+    def short(self) -> str:
+        return f"  [{self.rule}] {self.severity.upper():4s} {self.spec}: {self.detail}"
+
+
+# ---------------------------------------------------------------------------
+# Spec loading
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class Spec:
+    path: str
+    bidder: str
+    language: str  # "go" or "java"
+    raw: Dict[str, Any]
+    raw_text: str
+
+    @property
+    def label(self) -> str:
+        return f"{self.language}/{self.bidder}"
+
+    def get(self, dotted: str, default: Any = None) -> Any:
+        node: Any = self.raw
+        for part in dotted.split("."):
+            if isinstance(node, dict) and part in node:
+                node = node[part]
+            else:
+                return default
+        return node
+
+
+def load_spec(path: str, language: str) -> Optional[Spec]:
+    bidder = os.path.basename(path).replace(".golden.spec.yaml", "")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            raw_text = fh.read()
+        raw = yaml.safe_load(raw_text)
+    except (OSError, yaml.YAMLError) as exc:
+        print(
+            f"ERROR: cannot load spec {path}: {exc}",
+            file=sys.stderr,
+        )
+        return None
+    if not isinstance(raw, dict):
+        print(
+            f"ERROR: spec {path} did not parse as a YAML mapping",
+            file=sys.stderr,
+        )
+        return None
+    return Spec(path=path, bidder=bidder, language=language, raw=raw, raw_text=raw_text)
+
+
+def discover_specs() -> List[Spec]:
+    specs: List[Spec] = []
+    for path in sorted(glob.glob(os.path.join(GO_FIXTURES, "*.golden.spec.yaml"))):
+        s = load_spec(path, "go")
+        if s is not None:
+            specs.append(s)
+    for path in sorted(glob.glob(os.path.join(JAVA_FIXTURES, "*.golden.spec.yaml"))):
+        s = load_spec(path, "java")
+        if s is not None:
+            specs.append(s)
+    return specs
+
+
+# ---------------------------------------------------------------------------
+# Quirk taxa registry (R9 source-of-truth, parsed from behavior-taxonomy.md)
+# ---------------------------------------------------------------------------
+
+
+class TaxaRegistryUnreachable(Exception):
+    """Raised by `parse_taxa_registry` when the behavior-taxonomy.md file
+    is missing, unreadable, or contains no parseable taxa registry. R3b
+    cannot enforce the closed registry without it; main() catches at
+    startup and exits 3 (mirrors the GhApiUnreachable Wave 10 recipe).
+
+    Wave 11b post-review fix (2b): the prior behavior was to return an
+    empty list and emit per-spec SEV_WARN "could not load taxa registry
+    — skipped" on every golden, producing CI runs that exited 2 with
+    "0 failures" while R3b was silently disabled. Reviewers reading
+    those runs trusted the gate was holding when it wasn't. Fail-loud
+    abort prevents that trust gap.
+    """
+
+
+def parse_taxa_registry(taxonomy_md_path: str) -> List[str]:
+    """Extract the list of allowed `edge_case_taxon` values from the markdown.
+
+    Raises TaxaRegistryUnreachable on any condition that would have
+    silently degraded R3b in the prior implementation: missing file,
+    no registry section, empty registry. Caller MUST catch (in main())
+    at startup so the workflow aborts with a clear diagnostic instead
+    of running per-spec checks against an empty allowlist."""
+    if not os.path.isfile(taxonomy_md_path):
+        raise TaxaRegistryUnreachable(
+            f"taxa registry not found at {taxonomy_md_path}; "
+            f"behavior-taxonomy.md was renamed/moved/deleted, or the "
+            f"YAML→MD render is stale (run scripts/render-taxonomy.py)"
+        )
+    with open(taxonomy_md_path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    # Find the registry section (case- and back-tick-tolerant).
+    pattern = re.compile(r"^##\s+quirks\s+`?edge_case_taxon`?[^\n]*$", re.MULTILINE | re.IGNORECASE)
+    m = pattern.search(text)
+    if not m:
+        raise TaxaRegistryUnreachable(
+            f"taxa registry section (## quirks edge_case_taxon) not found in "
+            f"{taxonomy_md_path}; the markdown structure was edited or the "
+            f"render is broken — run scripts/render-taxonomy.py"
+        )
+    section = text[m.end():]
+    # Stop at the next H2.
+    next_h2 = re.search(r"^##\s", section, re.MULTILINE)
+    if next_h2:
+        section = section[: next_h2.start()]
+    taxa: List[str] = []
+    for line in section.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        # Skip header and divider rows.
+        if line.startswith("| Taxon") or set(line.replace("|", "").strip()) <= set("-: "):
+            continue
+        cells = [c.strip().strip("`") for c in line.strip("|").split("|")]
+        if not cells:
+            continue
+        candidate = cells[0]
+        # Filter out empty / non-identifier rows. Allow dots (e.g. `pre-1.22`).
+        if candidate and re.match(r"^[a-z0-9][a-z0-9\-_.]+$", candidate):
+            taxa.append(candidate)
+    # De-duplicate while preserving order.
+    seen: Dict[str, None] = OrderedDict()
+    for t in taxa:
+        seen.setdefault(t, None)
+    result = list(seen.keys())
+    if not result:
+        raise TaxaRegistryUnreachable(
+            f"taxa registry at {taxonomy_md_path} parsed to an empty list; "
+            f"the table structure may have changed (column order, table "
+            f"format) — re-render via scripts/render-taxonomy.py and verify"
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def walk_paths(node: Any, prefix: str = "") -> Iterable[Tuple[str, Any]]:
+    """Yield (dotted_path, leaf_value) for every leaf in `node`."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            sub = f"{prefix}.{k}" if prefix else str(k)
+            yield from walk_paths(v, sub)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            sub = f"{prefix}[{i}]"
+            yield from walk_paths(v, sub)
+    else:
+        yield prefix, node
+
+
+# Fields where `custom` is an enum value (per behavior-taxonomy.md). Each entry is
+# the dotted path of the field carrying the enum; for list-elements we use the
+# trailing `[].kind` / `[].method` / `[]` marker to indicate per-item leaves.
+CUSTOM_ENABLED_FIELDS = (
+    # Rules-list fields
+    "code.make_requests.batching.rules[].kind",
+    "code.make_bids.bid_type_resolution.method_chain[].method",
+    # Scalar enum fields
+    "code.make_requests.request_body.kind",
+    "code.make_requests.imp_ext_unmarshal.kind",
+    "code.make_requests.endpoint_resolution.kind",
+    "code.make_bids.response_type",
+    "code.make_bids.http_status_handling.kind",
+    "code.make_bids.application_status_handling.kind",
+    "bidder_info.endpoint_construction.kind",
+    "headers_constructed.authentication_kind",
+    "tests.go_directory_naming",
+    "tests.java_it_folder_naming",
+    "ext_pojo_construction.custom_unmarshal.kind",
+    # List-of-enum fields
+    "params.schema_interpretation.combinators_used[]",
+)
+
+
+def find_custom_values(spec: Spec) -> List[str]:
+    """Return dotted paths where the enum value is `custom`."""
+    findings: List[str] = []
+    for dotted, value in walk_paths(spec.raw):
+        if value != "custom":
+            continue
+        # Filter to only paths that match a known enum field pattern.
+        normalized = re.sub(r"\[\d+\]", "[]", dotted)
+        for field_pattern in CUSTOM_ENABLED_FIELDS:
+            if normalized == field_pattern:
+                findings.append(dotted)
+                break
+        else:
+            # Unknown path emitted `custom` — still surface it; it's a fishy state.
+            findings.append(dotted)
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R1: file-reachability
+# ---------------------------------------------------------------------------
+
+
+# Plausible path prefixes per language (purely structural validation).
+GO_PATH_PREFIXES = (
+    "adapters/",
+    "openrtb_ext/",
+    "config/",
+    "static/",
+    "macros/",
+    "endpoints/",
+    "exchange/",
+    "errortypes/",
+    "metrics/",
+    "yaml/",
+    "test/",
+)
+JAVA_PATH_PREFIXES = (
+    "src/main/",
+    "src/test/",
+)
+# Special filenames seen in goldens (bare basenames without a directory).
+PLAUSIBLE_BARE_BASENAMES = re.compile(r"^[A-Za-z0-9_./\-]+\.(go|java|json|yaml|md|properties)$")
+
+
+def collect_file_refs(spec: Spec) -> List[Tuple[str, str]]:
+    """Return [(yaml_dotted_path, file_path)] for every spec field named `file`."""
+    refs: List[Tuple[str, str]] = []
+    for dotted, value in walk_paths(spec.raw):
+        if not isinstance(value, str):
+            continue
+        # Match leaves whose key is `file` (possibly inside indexed lists).
+        if dotted.endswith(".file") or dotted == "file":
+            refs.append((dotted, value))
+    return refs
+
+
+def r1_check(spec: Spec, network_check: bool, gh_cache: Dict[Tuple[str, str], bool]) -> List[Finding]:
+    """Validate file-reachability of every `file:` field reference."""
+    findings: List[Finding] = []
+    refs = collect_file_refs(spec)
+    if not refs:
+        return [Finding("R1", spec.label, SEV_PASS, "no file refs to check")]
+    repo = (spec.get("provenance.source.repo") or "").strip()
+    sha = (spec.get("provenance.source.resolved_commit") or "").strip()
+    if not repo or not sha:
+        return [
+            Finding("R1", spec.label, SEV_FAIL, "missing provenance.source.repo or resolved_commit")
+        ]
+    plausible_prefixes: Tuple[str, ...]
+    if spec.language == "go":
+        plausible_prefixes = GO_PATH_PREFIXES
+    else:
+        plausible_prefixes = JAVA_PATH_PREFIXES
+    for dotted, path in refs:
+        if not path.strip():
+            findings.append(Finding("R1", spec.label, SEV_FAIL, f"empty file path at {dotted}"))
+            continue
+        # Reject paths that contain placeholder syntax that should never reach R1.
+        if "{{" in path or "<" in path or "$" in path:
+            findings.append(
+                Finding(
+                    "R1",
+                    spec.label,
+                    SEV_FAIL,
+                    f"unresolved placeholder in file path at {dotted}: {path}",
+                )
+            )
+            continue
+        # Reject path traversal — `..` as any segment AND absolute paths are hard fails.
+        path_parts = path.split("/")
+        if any(p == ".." for p in path_parts) or path.startswith("/"):
+            findings.append(
+                Finding(
+                    "R1",
+                    spec.label,
+                    SEV_FAIL,
+                    f"path traversal/absolute path forbidden at {dotted}: {path}",
+                )
+            )
+            continue
+        # Structural plausibility: the path either starts with one of the per-language
+        # prefixes, OR is a bare basename inside the adapter directory (e.g., `kobler.go`),
+        # OR is a relative path with one of the file extensions we recognise.
+        is_plausible = (
+            path.startswith(plausible_prefixes)
+            or PLAUSIBLE_BARE_BASENAMES.match(path) is not None
+        )
+        if not is_plausible:
+            findings.append(
+                Finding(
+                    "R1",
+                    spec.label,
+                    SEV_FAIL,
+                    f"implausible file path at {dotted}: {path}",
+                )
+            )
+            continue
+        if network_check:
+            ok = gh_path_exists(repo, sha, path, gh_cache)
+            if ok is None:
+                findings.append(
+                    Finding(
+                        "R1",
+                        spec.label,
+                        SEV_WARN,
+                        f"network check unavailable for {path}",
+                    )
+                )
+            elif ok is False:
+                findings.append(
+                    Finding(
+                        "R1",
+                        spec.label,
+                        SEV_FAIL,
+                        f"file not reachable at {sha[:8]}: {path}",
+                    )
+                )
+    if not findings:
+        findings.append(
+            Finding(
+                "R1",
+                spec.label,
+                SEV_PASS,
+                f"{len(refs)} file refs structurally plausible",
+            )
+        )
+    return findings
+
+
+class GhApiUnreachable(Exception):
+    """Raised by `gh_path_exists` when the gh CLI is unauthenticated,
+    rate-limited, network-failed, or otherwise can't reach the API.
+    DISTINCT from a genuine HTTP 404 (file doesn't exist at the ref,
+    returns False) AND from `gh` not installed (returns None — the
+    expected fallback when --check-network can't be honored).
+
+    Wave 10 incident, recipe mirrored from audit-golden.py: missing
+    GH_TOKEN in CI caused unauthenticated `gh api` calls to rate-limit
+    or 401, and the prior gh_path_exists treated every non-zero
+    returncode as 404. R1 reported "file not reachable" for every
+    upstream path on every spec — a silent false-FAIL flood that masked
+    real upstream-drift signals. The fix: distinguish failure modes by
+    inspecting stderr; raise this typed exception on auth/network/rate-
+    limit failures so main() aborts with exit 3 rather than emitting a
+    flood of misleading FAILs.
+    """
+
+
+def gh_path_exists(
+    repo: str, sha: str, path: str, cache: Dict[Tuple[str, str], bool]
+) -> Optional[bool]:
+    """Best-effort path existence check via `gh api`.
+
+    Returns:
+        - True on HTTP 200 (path exists at the ref).
+        - False on genuine HTTP 404 (path does not exist at the ref).
+        - None when `gh` CLI is not on PATH (network check unavailable;
+          R1 falls back to structural-plausibility-only and emits WARN).
+
+    Raises:
+        GhApiUnreachable on any non-404 failure (auth missing, rate
+        limit, timeout, network error, malformed response). main()
+        catches this at the top level and exits 3 — propagating ensures
+        the audit aborts rather than silently emitting false FAILs.
+    """
+    key = (repo, sha + ":" + path)
+    if key in cache:
+        return cache[key]
+    if shutil.which("gh") is None:
+        cache[key] = None  # type: ignore[assignment]
+        return None
+    try:
+        proc = subprocess.run(
+            ["gh", "api", f"repos/{repo}/contents/{path}?ref={sha}"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except FileNotFoundError as exc:
+        raise GhApiUnreachable(f"gh CLI vanished mid-run: {exc}")
+    except subprocess.TimeoutExpired:
+        raise GhApiUnreachable(f"timeout fetching {repo}/{path}@{sha}")
+    except Exception as exc:  # noqa: BLE001
+        raise GhApiUnreachable(
+            f"gh subprocess failed for {repo}/{path}@{sha}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+    if proc.returncode == 0:
+        cache[key] = True
+        return True
+    stderr = (proc.stderr or "").strip()
+    # `gh api` exits non-zero with stderr "gh: Not Found (HTTP 404)" for
+    # genuine 404s. Auth failures, rate limits, and network errors
+    # surface as different stderr text — propagate as GhApiUnreachable
+    # so the audit aborts rather than treating "API unreachable" as
+    # "every file is missing" (the Wave 10 false-FAIL flood incident).
+    if "HTTP 404" in stderr or "Not Found" in stderr:
+        cache[key] = False
+        return False
+    raise GhApiUnreachable(
+        f"gh api failed for {repo}/{path}@{sha} (returncode={proc.returncode}): "
+        f"{stderr or '<empty stderr>'}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# R2: bidder_params_sha256 integrity
+# ---------------------------------------------------------------------------
+
+
+def r2_check(spec: Spec) -> List[Finding]:
+    text = spec.raw.get("bidder_params_json")
+    declared = spec.raw.get("bidder_params_sha256")
+    if not isinstance(text, str) or not isinstance(declared, str):
+        return [
+            Finding(
+                "R2",
+                spec.label,
+                SEV_FAIL,
+                "bidder_params_json or bidder_params_sha256 missing or non-string",
+            )
+        ]
+    actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if actual != declared:
+        return [
+            Finding(
+                "R2",
+                spec.label,
+                SEV_FAIL,
+                f"sha mismatch: computed={actual} declared={declared}",
+            )
+        ]
+    return [Finding("R2", spec.label, SEV_PASS, f"sha={actual[:12]}")]
+
+
+# ---------------------------------------------------------------------------
+# R3: `custom` enum value requires paired quirk
+# ---------------------------------------------------------------------------
+
+
+# Shorthand keywords that should appear in a quirk id/summary if it is the
+# corresponding witness for a `custom` enum value at a given path. The lookup
+# is best-effort; a custom value with NO quirks at all is always FAIL.
+R3_PAIRING_HINTS = {
+    "code.make_requests.request_body.kind": (
+        "request_body",
+        "request-body",
+        "request body",
+        "custom-request",
+        "custom request",
+        "non-openrtb",
+    ),
+    "code.make_bids.response_type": (
+        "response",
+        "custom-response",
+        "custom response",
+        "response_type",
+        "custom-payload",
+    ),
+    "code.make_requests.batching.rules": (
+        "batching",
+        "batched",
+        "imp-flatten",
+        "flatten",
+        "split",
+    ),
+    "code.make_bids.bid_type_resolution.method_chain": (
+        "bid_type",
+        "bid-type",
+        "method_chain",
+        "method-chain",
+        "mtype",
+        "mediatype",
+    ),
+    "code.make_requests.imp_ext_unmarshal.kind": (
+        "imp_ext",
+        "imp-ext",
+        "impext",
+        "unmarshal",
+    ),
+    "code.make_requests.endpoint_resolution.kind": (
+        "endpoint",
+        "url",
+        "uri",
+    ),
+    "code.make_bids.http_status_handling.kind": (
+        "status",
+        "http",
+    ),
+    "code.make_bids.application_status_handling.kind": (
+        "retcode",
+        "status",
+        "application",
+    ),
+    "bidder_info.endpoint_construction.kind": (
+        "endpoint",
+        "url",
+    ),
+    "headers_constructed.authentication_kind": (
+        "auth",
+        "header",
+    ),
+    "tests.go_directory_naming": (
+        "test",
+        "directory",
+    ),
+    "tests.java_it_folder_naming": (
+        "test",
+        "folder",
+        "directory",
+    ),
+    "ext_pojo_construction.custom_unmarshal.kind": (
+        "unmarshal",
+        "deserialize",
+        "deserializer",
+    ),
+    "params.schema_interpretation.combinators_used": (
+        "combinator",
+        "oneof",
+        "anyof",
+    ),
+}
+
+
+def r3_check(spec: Spec, strict: bool = False) -> List[Finding]:
+    customs = find_custom_values(spec)
+    quirks = spec.raw.get("quirks") or []
+    findings: List[Finding] = []
+    if not customs:
+        findings.append(Finding("R3", spec.label, SEV_PASS, "no `custom` values"))
+        return findings
+    if not isinstance(quirks, list) or len(quirks) == 0:
+        for path in customs:
+            findings.append(
+                Finding(
+                    "R3",
+                    spec.label,
+                    SEV_FAIL,
+                    f"`custom` at {path} has no paired quirks[] entry",
+                )
+            )
+        return findings
+    # In non-strict mode: any non-empty quirks list satisfies pairing for every custom.
+    # In strict mode: require at least one quirk whose id/summary contains a hint keyword.
+    unpaired: List[str] = []
+    for path in customs:
+        normalized = re.sub(r"\[\d+\]", "", path)
+        # Trim trailing field marker for hint lookup.
+        for field, hints in R3_PAIRING_HINTS.items():
+            if normalized.startswith(field):
+                hint_set = hints
+                break
+        else:
+            hint_set = ()
+        if strict and hint_set:
+            paired = False
+            for q in quirks:
+                blob = " ".join(
+                    str(q.get(k, "")) for k in ("id", "summary", "edge_case_taxon")
+                ).lower()
+                if any(h in blob for h in hint_set):
+                    paired = True
+                    break
+            if not paired:
+                unpaired.append(path)
+        # Non-strict: pairing satisfied by quirks list being non-empty.
+    if unpaired:
+        for path in unpaired:
+            findings.append(
+                Finding(
+                    "R3",
+                    spec.label,
+                    SEV_FAIL,
+                    f"`custom` at {path}: no quirk summary mentions field; strict pairing failed",
+                )
+            )
+        return findings
+    findings.append(
+        Finding(
+            "R3",
+            spec.label,
+            SEV_PASS,
+            f"{len(customs)} `custom` values, {len(quirks)} quirks (paired)",
+        )
+    )
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R4: round-trip determinism
+# ---------------------------------------------------------------------------
+
+
+# Fields excluded from the determinism diff per the spec.
+DETERMINISM_IGNORED_KEYS = (
+    "provenance.read.timestamp_utc",
+    "provenance.read.operator",
+)
+
+
+def normalize_for_determinism(spec_raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a deep copy with the ignored keys deleted."""
+    copy = json.loads(json.dumps(spec_raw, sort_keys=True, default=str))
+
+    def delete(obj: Any, dotted: str) -> None:
+        parts = dotted.split(".")
+        for p in parts[:-1]:
+            if not isinstance(obj, dict) or p not in obj:
+                return
+            obj = obj[p]
+        if isinstance(obj, dict):
+            obj.pop(parts[-1], None)
+
+    for path in DETERMINISM_IGNORED_KEYS:
+        delete(copy, path)
+    return copy
+
+
+def r4_check(spec: Spec) -> List[Finding]:
+    """Round-trip determinism: load → normalize → dump three times; assert
+    dump2 == dump3 (idempotent under round-trip).
+
+    This catches goldens whose structure shifts under re-serialization
+    (sets-as-lists, datetime objects, anchor reuse, non-stable map orderings).
+    Compare passes 2 and 3 (not 1 and 2) — pass 1 may differ from passes 2+
+    because the original raw spec carries comments / formatting that the YAML
+    dumper drops.
+    """
+    try:
+        # Pass 1: spec.raw → normalize → dump.
+        norm1 = normalize_for_determinism(spec.raw)
+        dump1 = yaml.safe_dump(norm1, sort_keys=True, default_flow_style=False)
+        # Pass 2: load dump1 → normalize → dump.
+        loaded2 = yaml.safe_load(dump1)
+        norm2 = normalize_for_determinism(loaded2)
+        dump2 = yaml.safe_dump(norm2, sort_keys=True, default_flow_style=False)
+        # Pass 3: load dump2 → normalize → dump.
+        loaded3 = yaml.safe_load(dump2)
+        norm3 = normalize_for_determinism(loaded3)
+        dump3 = yaml.safe_dump(norm3, sort_keys=True, default_flow_style=False)
+    except (TypeError, ValueError, yaml.YAMLError) as exc:
+        return [Finding("R4", spec.label, SEV_FAIL, f"non-deterministic serialization: {exc}")]
+    if dump2 != dump3:
+        return [Finding("R4", spec.label, SEV_FAIL,
+            "round-trip not idempotent (dump2 != dump3)")]
+    return [Finding("R4", spec.label, SEV_PASS, "round-trip idempotent")]
+
+
+# ---------------------------------------------------------------------------
+# R5: cross-language structural parity for port pairs
+# ---------------------------------------------------------------------------
+
+
+def deep_eq(a: Any, b: Any) -> bool:
+    """Order-insensitive equality for lists where order is unstable (e.g. combinators_used)."""
+    return json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
+
+
+def _list_set_eq(a: Any, b: Any) -> bool:
+    """Set-equality for list-valued runtime fields where order is not
+    semantically load-bearing. Wave 11b B5 #2: corrects the false-positive
+    class where Go's `sort.Strings()` and Java's `LinkedHashSet` produce
+    legitimately different iteration orders for the same set.
+
+    Both None → equal. Both lists → set-equal (compared via JSON-serialized
+    member representations to admit nested dicts/lists). Mixed types or
+    non-lists fall through to deep_eq."""
+    if a is None and b is None:
+        return True
+    if not isinstance(a, list) or not isinstance(b, list):
+        return deep_eq(a, b)
+    return sorted(json.dumps(x, sort_keys=True, default=str) for x in a) == \
+           sorted(json.dumps(x, sort_keys=True, default=str) for x in b)
+
+
+def _maintainer_eq(a: Any, b: Any) -> bool:
+    """Maintainer-block equality: only the email is the runtime invariant.
+    Wave 11b B5 #2: prevents stale-FAILs when one language adds extra
+    maintainer fields (phone, team, slack handle) the other doesn't carry.
+    Both None → equal. Compares case-insensitive email after stripping
+    whitespace; missing email on either side compares as empty string."""
+    em_a = (a or {}).get("email") if isinstance(a, dict) else None
+    em_b = (b or {}).get("email") if isinstance(b, dict) else None
+    return (em_a or "").strip().lower() == (em_b or "").strip().lower()
+
+
+# Wave 11b B5 #2: R5_STRICT_KEYS refactored from flat (spec_field, dual_key)
+# tuples to (spec_field, dual_key, comparator) three-tuples. Per-key
+# comparator selection prevents false positives:
+# - LIST-VALUED keys (capabilities, geoscope, schema_interpretation.*)
+#   use _list_set_eq (order-independent set equality).
+# - PROSE-BEARING keys (maintainer) use _maintainer_eq (compares only the
+#   runtime-invariant subfield, not advisory fields).
+# - PURE-DATA keys (gvl_vendor_id, endpoint_compression, modifying_vast_xml_allowed)
+#   use deep_eq (scalar equality).
+#
+# When the dual-spec assertion says severity:warn, downgrade to WARN.
+# When dual-spec says severity:pass but runtime disagrees → FAIL (stale-pass).
+R5_STRICT_KEYS = (
+    ("bidder_info.capabilities",                       "bidder_info_capabilities",                _list_set_eq),
+    # params.schema_interpretation is decomposed into runtime-invariant
+    # subfields only. The whole block contains prose-bearing fields
+    # (properties[].description, properties[].notes) that legitimately
+    # differ across languages — Java may reference Pattern.matches semantics,
+    # Go may reference regexp substring semantics, etc. Comparing the whole
+    # block via deep_eq fired stale-pass FAILs on dual-spec assertions that
+    # were correctly capturing semantic equivalence (e.g., thetradedesk).
+    ("params.schema_interpretation.required_fields",   "params_schema_interpretation",            _list_set_eq),
+    ("params.schema_interpretation.combinators_used",  "params_schema_interpretation",            _list_set_eq),
+    ("params.schema_interpretation.flexible_types",    "params_schema_interpretation",            _list_set_eq),
+    ("bidder_info.gvl_vendor_id",                      "bidder_info_gvl_vendor_id",               deep_eq),
+    ("bidder_info.endpoint_compression",               "bidder_info_endpoint_compression",        deep_eq),
+    ("bidder_info.geoscope",                           "bidder_info_geoscope",                    _list_set_eq),
+    ("bidder_info.maintainer",                         "bidder_info_maintainer",                  _maintainer_eq),
+    ("bidder_info.modifying_vast_xml_allowed",         "bidder_info_modifying_vast_xml_allowed",  deep_eq),
+)
+# Wave 11b B4 C1: R5 divergent keys split into two buckets.
+#
+# R5_FORM_DIVERGENT_KEYS: macro form differs by language but the URL/value
+# after normalization MUST be equal. normalize_endpoint_macros() canonicalizes
+# Go's `{{.X}}` template form, Java's `${X}` printf, Spring EL `#{X}`, and
+# raw `{{X}}` to a single `{{X}}` form. Real semantic divergence (different
+# macro names, different URL paths) surfaces as FAIL after normalization.
+# Absence of dual-spec assertion when normalized values DIFFER → FAIL
+# `assertion_missing` (Wave 11b strictness; aax's bidder_info_endpoint
+# assertion was added as prerequisite to land this gate).
+R5_FORM_DIVERGENT_KEYS = (
+    ("bidder_info.endpoint",                    "bidder_info_endpoint"),
+)
+
+# R5_ADVISORY_DIVERGENT_KEYS: cross-language-metadata that legitimately
+# diverges per-language; honor only the assertion's severity (no runtime
+# FAIL on divergence; absence of assertion is silent — these are
+# documentation-only checks). bidder_info.endpoint_construction stays here
+# because the divergence is SEMANTIC (different macro NAMES per language,
+# e.g., adverxo Go uses `AdUnit` / Java uses `adUnitId`) not just macro
+# syntax — normalization can't paper that over and the dual-spec is the
+# right surface to document the per-language idiom.
+R5_ADVISORY_DIVERGENT_KEYS = (
+    ("bidder_info.endpoint_construction",       "bidder_info_endpoint_construction"),
+    ("bidder_info.default_enabled",             "bidder_info_default_enabled"),
+    ("meta.alias_metadata",                     "alias_metadata"),
+    (None,                                      "lifecycle_rename"),
+    (None,                                      "port_lineage"),
+    (None,                                      "reviewer_cohort"),
+    (None,                                      "test_fixture_cost"),
+)
+
+
+def normalize_endpoint_macros(s: Any) -> Any:
+    """Normalize endpoint URL macro syntax across languages to canonical
+    `{{X}}` form. Used by R5_FORM_DIVERGENT_KEYS check so that pure-syntax
+    divergence (Go template vs Java property reference) doesn't fire false
+    structural-parity FAILs.
+
+    Recognized forms:
+      - `{{.X}}`     → `{{X}}`   (Go html/text template)
+      - `${X}`       → `{{X}}`   (Java property reference / shell-style)
+      - `#{X}`       → `{{X}}`   (Spring Expression Language)
+      - `{{X}}`      → `{{X}}`   (already canonical)
+
+    `%s` (printf positional) is intentionally NOT normalized — it has no
+    name to canonicalize against, so any pair using `%s` on one side and
+    `{{X}}` on the other will surface as a real divergence (and should be
+    documented in dual-spec or fixed in the corpus).
+    """
+    if not isinstance(s, str):
+        return s
+    s = re.sub(r"\{\{\.(\w+)\}\}", r"{{\1}}", s)   # Go {{.X}} → {{X}}
+    s = re.sub(r"\$\{(\w+)\}",      r"{{\1}}", s)   # Java ${X} → {{X}}
+    s = re.sub(r"#\{([^}]+)\}",     r"{{\1}}", s)   # Spring EL #{X} → {{X}}
+    return s
+
+
+def r5_check(go_spec: Optional[Spec], java_spec: Optional[Spec],
+             dual_specs: Dict[str, Dict[str, Any]]) -> List[Finding]:
+    """Cross-language structural parity. Runtime values are the source of truth;
+    the dual-spec assertion is an EXPECTATION verified against runtime, not a
+    free pass.
+
+    Polarity contract: runtime takes precedence. When dual-spec says severity:pass
+    but runtime values disagree, FAIL — the assertion is stale. Always run
+    deep_eq; never short-circuit on the assertion's own claim.
+    """
+    # Determine bidder name from whichever side has a spec.
+    primary = go_spec or java_spec
+    if primary is None:
+        return []
+    bidder = primary.bidder
+    findings: List[Finding] = []
+
+    dual = dual_specs.get(bidder) or {}
+    raw_assertions = dual.get("assertions") if isinstance(dual.get("assertions"), dict) else {}
+    assertions: Dict[str, Any] = raw_assertions if isinstance(raw_assertions, dict) else {}
+    overall = dual.get("overall") or {}
+
+    # Honor overall.cross_language_state + blocker_count.
+    cls_state = (overall.get("cross_language_state") or "").lower()
+    blocker_count = overall.get("blocker_count") or 0
+    if cls_state == "divergent-semantic" and isinstance(blocker_count, int) and blocker_count > 0:
+        findings.append(Finding(
+            "R5", f"pair/{bidder}", SEV_FAIL,
+            f"overall.cross_language_state=divergent-semantic with {blocker_count} blocker(s)",
+        ))
+    elif cls_state.startswith("divergent") and isinstance(blocker_count, int) and blocker_count > 0:
+        findings.append(Finding(
+            "R5", f"pair/{bidder}", SEV_WARN,
+            f"overall.cross_language_state={cls_state} with {blocker_count} blocker(s)",
+        ))
+
+    # bidder_params_sha256 — load-bearing R5 contract.
+    go_sha = go_spec.raw.get("bidder_params_sha256") if go_spec else None
+    java_sha = java_spec.raw.get("bidder_params_sha256") if java_spec else None
+    sha_assert = assertions.get("bidder_params_sha256") if isinstance(assertions, dict) else None
+
+    if go_spec is not None and java_spec is not None:
+        if go_sha == java_sha and go_sha is not None:
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_PASS,
+                f"bidder_params_sha256 equal ({go_sha[:12]})"))
+        else:
+            # Runtime SHAs disagree. Determine severity from the dual-spec
+            # assertion if present.
+            severity = SEV_WARN
+            explanation = "differs"
+            if isinstance(sha_assert, dict):
+                sev = (sha_assert.get("severity") or "").lower()
+                if sev in ("fail", "error"):
+                    severity = SEV_FAIL
+                elif sev == "pass":
+                    # POLARITY INVERSION: runtime says different but dual-spec
+                    # claims byte_equal — the assertion is stale. FAIL.
+                    severity = SEV_FAIL
+                    explanation = "stale-pass-assertion (dual-spec claims byte_equal but runtime SHAs differ)"
+                elif sev in ("warn", "warning"):
+                    severity = SEV_WARN
+                if explanation == "differs":
+                    kind = sha_assert.get("divergence_kind") or ""
+                    if sha_assert.get("semantically_equal") is True:
+                        explanation = f"byte-only divergence ({kind})" if kind else "byte-only divergence"
+                    elif sha_assert.get("semantically_equal") is False:
+                        explanation = f"semantic divergence ({kind})" if kind else "semantic divergence"
+                    else:
+                        explanation = kind or explanation
+            else:
+                # Heuristic fallback: scan quirks for byte-vs-semantic signals.
+                blobs = [
+                    " ".join(str(q.get(k, "")) for k in ("id", "summary", "edge_case_taxon")).lower()
+                    for q in (go_spec.raw.get("quirks") or []) + (java_spec.raw.get("quirks") or [])
+                    if isinstance(q, dict)
+                ]
+                byte_divergence = any("byte" in b and "divergen" in b for b in blobs)
+                semantic_divergence = any(
+                    "semantic" in b and "divergen" in b
+                    and "semantically identical" not in b
+                    and "semantic match" not in b
+                    for b in blobs
+                )
+                if semantic_divergence:
+                    severity = SEV_FAIL
+                    explanation = "semantic divergence (per quirk)"
+                elif byte_divergence:
+                    severity = SEV_WARN
+                    explanation = "whitespace/byte divergence (per quirk)"
+            findings.append(Finding("R5", f"pair/{bidder}", severity,
+                f"bidder_params_sha256 {explanation}: go={go_sha or 'none'} java={java_sha or 'none'}"))
+    elif sha_assert is not None:
+        # One side missing a fixture; surface the asymmetry (PASS — informational).
+        findings.append(Finding("R5", f"pair/{bidder}", SEV_PASS,
+            f"only-one-side fixture; dual-spec sha-assertion noted (severity={sha_assert.get('severity', '?') if isinstance(sha_assert, dict) else '?'})"))
+
+    # R5-strict keys: runtime divergence FAILs unless dual-spec downgrades to WARN.
+    # Wave 11b B5 #2: per-key comparator selection (set-equality for list-valued
+    # keys, email-only for maintainer, deep_eq for pure-data scalars).
+    for spec_field, dual_key, eq_fn in R5_STRICT_KEYS:
+        if go_spec is None or java_spec is None:
+            continue
+        a = go_spec.get(spec_field)
+        b = java_spec.get(spec_field)
+        if a is None and b is None:
+            continue
+        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
+        if not eq_fn(a, b):
+            severity = SEV_FAIL
+            stale = False
+            if isinstance(dual_assert, dict):
+                sev = (dual_assert.get("severity") or "").lower()
+                if sev in ("warn", "warning"):
+                    severity = SEV_WARN
+                elif sev == "pass":
+                    stale = True
+            if stale:
+                findings.append(Finding(
+                    "R5", f"pair/{bidder}", SEV_FAIL,
+                    f"{spec_field} runtime divergence but dual-spec claims pass — stale",
+                ))
+            else:
+                findings.append(Finding("R5", f"pair/{bidder}", severity,
+                    f"{spec_field} differs across languages"))
+
+    # R5_FORM_DIVERGENT keys: normalize macro syntax + deep_eq. Real
+    # divergence (different macro names, different URLs) FAILs unless the
+    # dual-spec assertion documents it; absence of assertion when normalized
+    # values differ → FAIL assertion_missing (Wave 11b B4 C1 strictness).
+    for spec_field, dual_key in R5_FORM_DIVERGENT_KEYS:
+        if go_spec is None or java_spec is None:
+            continue
+        a = go_spec.get(spec_field)
+        b = java_spec.get(spec_field)
+        if a is None and b is None:
+            continue
+        a_norm = normalize_endpoint_macros(a) if isinstance(a, str) else a
+        b_norm = normalize_endpoint_macros(b) if isinstance(b, str) else b
+        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
+        if a_norm == b_norm:
+            # Normalized forms agree; emit per assertion if present.
+            if isinstance(dual_assert, dict):
+                sev = (dual_assert.get("severity") or "").lower()
+                if sev in ("fail", "error"):
+                    findings.append(Finding(
+                        "R5", f"pair/{bidder}", SEV_FAIL,
+                        f"{spec_field}: dual-spec claims divergence but normalized forms equal — stale-fail-assertion",
+                    ))
+                # severity=pass or warn with normalized-equal: no finding (correct).
+            continue
+        # Normalized forms still differ — real divergence beyond macro syntax.
+        if not isinstance(dual_assert, dict):
+            findings.append(Finding(
+                "R5", f"pair/{bidder}", SEV_FAIL,
+                f"{spec_field}: assertion_missing — normalized forms differ but no dual-spec entry "
+                f"under '{dual_key}' (Wave 11b B4 C1: FORM_DIVERGENT keys require explicit assertion)",
+            ))
+            continue
+        sev = (dual_assert.get("severity") or "").lower()
+        summary = dual_assert.get("divergence_summary") or "divergent per dual-spec"
+        if sev in ("fail", "error"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_FAIL, f"{spec_field}: {summary}"))
+        elif sev in ("warn", "warning"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_WARN, f"{spec_field}: {summary}"))
+        elif sev == "pass":
+            # Polarity inversion: assertion claims pass but normalized forms differ.
+            findings.append(Finding(
+                "R5", f"pair/{bidder}", SEV_FAIL,
+                f"{spec_field}: stale-pass-assertion — normalized forms differ "
+                f"(assertion claims equivalent: {summary})",
+            ))
+
+    # R5_ADVISORY_DIVERGENT keys: honor only the assertion severity. No
+    # runtime FAIL on divergence; silent on absence (these are
+    # cross-language metadata where divergence is documentation, not contract).
+    for spec_field, dual_key in R5_ADVISORY_DIVERGENT_KEYS:
+        dual_assert = assertions.get(dual_key) if isinstance(assertions, dict) else None
+        if not isinstance(dual_assert, dict):
+            continue
+        sev = (dual_assert.get("severity") or "").lower()
+        summary = dual_assert.get("divergence_summary") or "divergent per dual-spec"
+        if sev in ("fail", "error"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_FAIL, f"{dual_key}: {summary}"))
+        elif sev in ("warn", "warning"):
+            findings.append(Finding("R5", f"pair/{bidder}", SEV_WARN, f"{dual_key}: {summary}"))
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R6: bidder_name == package_name
+# ---------------------------------------------------------------------------
+
+
+def r6_check(spec: Spec) -> List[Finding]:
+    bidder_name = (spec.get("meta.bidder_name") or "").strip()
+    if not bidder_name:
+        return [Finding("R6", spec.label, SEV_FAIL, "missing meta.bidder_name")]
+    cl = spec.raw.get("cross_language") or {}
+    go_arts = cl.get("go_artifacts") or {}
+    java_arts = cl.get("java_artifacts") or {}
+    pkg = go_arts.get("package_name")
+    java_dir = java_arts.get("bidder_dir") or ""
+    java_dir_basename = java_dir.rstrip("/").rsplit("/", 1)[-1]
+    findings: List[Finding] = []
+    # Detect rebrand acknowledgment once — used by both package_name and
+    # bidder_constant checks to suppress false-positive findings.
+    warnings = spec.get("provenance.warnings") or []
+    rebrand = any(
+        (w.get("type") or "").startswith("bidder-name-rebrand")
+        for w in warnings if isinstance(w, dict)
+    )
+    # Alias suppression: when meta.is_alias=true, cross_language artifacts
+    # route through the parent's package/dir (Go aliases live under the
+    # parent's adapters/<parent>/ package; Java alias-only YAMLs register
+    # under the parent's bidder dir). Compare package_name and bidder_dir
+    # against meta.alias_of (the parent), not the alias's own bidder_name.
+    is_alias = bool(spec.get("meta.is_alias"))
+    alias_of = (spec.get("meta.alias_of") or "").strip()
+    expected_pkg_name = alias_of if (is_alias and alias_of) else bidder_name
+    alias_note = f" (parent={alias_of})" if is_alias and alias_of else ""
+    if pkg and pkg != expected_pkg_name:
+        # Real-world divergence: msft uses BidderMicrosoft constant but bidder dir is msft.
+        # The test is package_name == bidder_name (or alias's parent); package_name
+        # should match the directory the adapter code lives in.
+        findings.append(
+            Finding(
+                "R6",
+                spec.label,
+                SEV_WARN,
+                f"meta.bidder_name={bidder_name} != go_artifacts.package_name={pkg}{alias_note}",
+            )
+        )
+    if java_dir_basename and java_dir_basename.lower() != expected_pkg_name.lower():
+        findings.append(
+            Finding(
+                "R6",
+                spec.label,
+                SEV_WARN,
+                f"meta.bidder_name={bidder_name} != java_artifacts.bidder_dir basename={java_dir_basename}{alias_note}",
+            )
+        )
+    # Validate cross_language.go_artifacts.bidder_constant on Go-source specs.
+    # For aliases, inherit the parent's expected constant.
+    bidder_constant = go_arts.get("bidder_constant") or ""
+    expected_constant = f"openrtb_ext.Bidder{expected_pkg_name.capitalize()}"
+    if bidder_constant and bidder_constant.lower() != expected_constant.lower() and not rebrand:
+        findings.append(
+            Finding(
+                "R6", spec.label, SEV_WARN,
+                f"go_artifacts.bidder_constant={bidder_constant} != expected {expected_constant}",
+            )
+        )
+    if not findings:
+        findings.append(Finding("R6", spec.label, SEV_PASS, f"bidder_name={bidder_name}"))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R7: bidder-constant-mismatch detection (warn, not fail)
+# ---------------------------------------------------------------------------
+
+
+def r7_check(spec: Spec) -> List[Finding]:
+    """Surface bidder-constant-mismatch on three surfaces:
+    (1) params.params_test.bidder_constant_referenced ≠ canonical (Go-only);
+    (2) provenance.warnings[].type == bidder-constant-mismatch;
+    (3) quirks[].edge_case_taxon == bidder-constant-mismatch.
+
+    Each occurrence becomes a separate WARN finding. Kobler's two copy-paste
+    bugs (kobler_test.go:12 BidderKargo + params_test.go:47 BidderKrushmedia)
+    surface as two findings — surfaces 2 and 1 respectively.
+    """
+    findings: List[Finding] = []
+    warnings = spec.get("provenance.warnings") or []
+    rebrand = any(
+        (w.get("type") or "").startswith("bidder-name-rebrand")
+        for w in warnings if isinstance(w, dict)
+    )
+
+    # Surfaces 2 & 3 apply regardless of language — Java specs can carry
+    # bidder-constant-mismatch quirks (kobler-java has 2 such quirks
+    # documenting the Go-side bugs).
+    for w in warnings:
+        if isinstance(w, dict) and (w.get("type") or "") == "bidder-constant-mismatch":
+            location = f"{w.get('file', '?')}:{w.get('line', '?')}"
+            findings.append(Finding(
+                "R7", spec.label, SEV_WARN,
+                f"bidder-constant-mismatch warning at {location}: {w.get('summary', '')}",
+            ))
+    for q in (spec.raw.get("quirks") or []):
+        if isinstance(q, dict) and q.get("edge_case_taxon") == "bidder-constant-mismatch":
+            findings.append(Finding(
+                "R7", spec.label, SEV_WARN,
+                f"bidder-constant-mismatch quirk: {q.get('id', '?')} — {q.get('summary', '')}",
+            ))
+
+    # Surface 1: params_test.bidder_constant_referenced (Go-only — Java has no constant).
+    if spec.language == "go":
+        bidder = (spec.get("meta.bidder_name") or "").strip()
+        referenced = spec.get("params.params_test.bidder_constant_referenced")
+        if bidder and referenced:
+            expected_a = f"openrtb_ext.Bidder{bidder.capitalize()}"
+            if not referenced.startswith("openrtb_ext.Bidder"):
+                findings.append(Finding("R7", spec.label, SEV_WARN,
+                    f"unexpected constant: {referenced}"))
+            elif referenced.lower() != expected_a.lower() and not rebrand:
+                findings.append(Finding(
+                    "R7", spec.label, SEV_WARN,
+                    f"bidder-constant-mismatch (params_test): referenced={referenced} expected≈{expected_a}",
+                ))
+
+    if not findings:
+        findings.append(Finding("R7", spec.label, SEV_PASS, "no bidder-constant-mismatch surfaces"))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R8: endpoint placeholder unresolved warnings
+# ---------------------------------------------------------------------------
+
+
+# Wave 11b post-review (3d): macro registries lifted from inline Python
+# literals to data at `prebid-server-go/read/skills/shared/endpoint-macros.yaml`.
+# Adding a new macro is now a YAML edit, not a code change.
+ENDPOINT_MACROS_PATH = os.path.join(
+    REPO_ROOT, "prebid-server-go", "read", "skills", "shared", "endpoint-macros.yaml"
+)
+
+
+def _load_endpoint_macros() -> Dict[str, frozenset]:
+    """Load the four R8 macro registries from endpoint-macros.yaml.
+
+    Returns a dict with keys go_template_macros, java_template_macros,
+    user_sync_macros, openrtb_macros — each mapped to a frozenset of
+    macro names. Raises FileNotFoundError if the YAML is missing (a
+    deeply-broken state; the script can't run R8 without the registry).
+    """
+    if not os.path.isfile(ENDPOINT_MACROS_PATH):
+        raise FileNotFoundError(
+            f"endpoint-macros.yaml not found at {ENDPOINT_MACROS_PATH}; "
+            f"R8 cannot recognize macros without it"
+        )
+    with open(ENDPOINT_MACROS_PATH, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    out: Dict[str, frozenset] = {}
+    for key in ("go_template_macros", "java_template_macros",
+                "user_sync_macros", "openrtb_macros"):
+        values = data.get(key) or []
+        if not isinstance(values, list):
+            raise ValueError(
+                f"endpoint-macros.yaml: expected `{key}` to be a list, "
+                f"got {type(values).__name__}"
+            )
+        out[key] = frozenset(values)
+    return out
+
+
+_MACRO_REGISTRIES = _load_endpoint_macros()
+GO_TEMPLATE_MACROS = _MACRO_REGISTRIES["go_template_macros"]
+JAVA_TEMPLATE_MACROS = _MACRO_REGISTRIES["java_template_macros"]
+USER_SYNC_MACROS = _MACRO_REGISTRIES["user_sync_macros"]
+OPENRTB_MACROS = _MACRO_REGISTRIES["openrtb_macros"]
+del _MACRO_REGISTRIES
+PLACEHOLDER_RE = re.compile(r"\{\{\.?([A-Za-z_][A-Za-z0-9_]*)\}\}|#\{([A-Za-z_][A-Za-z0-9_]*)\}#|\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _collect_endpoint_strings(spec: Spec) -> List[Tuple[str, str]]:
+    """Return (path, value) tuples for every endpoint-bearing string in the
+    spec that should be walked for placeholder recognition.
+
+    Wave 11b B5 #7 expansion: prior r8_check walked ONLY bidder_info.endpoint,
+    missing user-sync URLs, hardcoded Java static-field macros, and
+    deploy-time-token strings. Now covers:
+
+    - bidder_info.endpoint
+    - bidder_info.user_sync.{iframe,redirect}.url
+    - bidder_info.user_sync.{iframe,redirect}.uid_macro (redirect.* only)
+    - bidder_info.user_sync.{iframe_url,redirect_url}  (legacy flat form)
+    - bidder_class.static_fields[*].value (Java hardcoded macro literals)
+
+    SKIPS prose paths where placeholder-shaped strings are quotes of code,
+    not real macros: cross_language.{go,java}_specific_concerns[],
+    quirks[].summary, provenance.warnings[].summary.
+
+    deploy_time_tokens[*].token strings ARE the placeholders being
+    substituted; not walked here (they're treated as authoritative
+    deploy-time tokens by the placeholder-recognition pass)."""
+    out: List[Tuple[str, str]] = []
+    raw = spec.raw
+
+    bi = raw.get("bidder_info") or {}
+    if isinstance(bi, dict):
+        ep = bi.get("endpoint")
+        if isinstance(ep, str) and ep:
+            out.append(("bidder_info.endpoint", ep))
+
+        us = bi.get("user_sync") or {}
+        if isinstance(us, dict):
+            for sub in ("iframe", "redirect"):
+                v = us.get(sub) or {}
+                if isinstance(v, dict):
+                    s_url = v.get("url")
+                    if isinstance(s_url, str) and s_url:
+                        out.append((f"bidder_info.user_sync.{sub}.url", s_url))
+                    if sub == "redirect":
+                        um = v.get("uid_macro")
+                        if isinstance(um, str) and um:
+                            out.append(("bidder_info.user_sync.redirect.uid_macro", um))
+            for fld in ("iframe_url", "redirect_url"):
+                s = us.get(fld)
+                if isinstance(s, str) and s:
+                    out.append((f"bidder_info.user_sync.{fld}", s))
+
+    bc = raw.get("bidder_class") or {}
+    if isinstance(bc, dict):
+        for sf in (bc.get("static_fields") or []):
+            if isinstance(sf, dict):
+                v = sf.get("value")
+                if isinstance(v, str) and v:
+                    name = sf.get("name") or "?"
+                    out.append((f"bidder_class.static_fields[{name}].value", v))
+
+    return out
+
+
+def r8_check(spec: Spec) -> List[Finding]:
+    """Wave 11b B5 #7: expanded from single-field walk (bidder_info.endpoint)
+    to recursive collection across user-sync URLs, hardcoded static-field
+    macros, and the original endpoint. Each placeholder is recognized
+    against per-language macro registries plus deploy-time-token names."""
+    leaves = _collect_endpoint_strings(spec)
+    if not leaves:
+        return [Finding("R8", spec.label, SEV_PASS, "no endpoint-bearing strings to check")]
+    macros = GO_TEMPLATE_MACROS if spec.language == "go" else JAVA_TEMPLATE_MACROS
+    warnings = spec.get("provenance.warnings") or []
+    has_warning = any(
+        (w.get("type") or "") == "endpoint-placeholder-unresolved"
+        for w in warnings
+        if isinstance(w, dict)
+    )
+    # Build the deploy-time-token NAME set (extract name from token strings
+    # like `#{REGION}#`, not the full token string). Pre-Wave-11b code had
+    # a latent bug here: it stored the full token string then compared
+    # against extracted placeholder names — never matched. B5 #7 fixes
+    # this incidentally by extracting names from the token strings.
+    deploy_token_names: set = set()
+    for t in (spec.get("deploy_time_tokens") or []):
+        if isinstance(t, dict):
+            tok = t.get("token")
+            if isinstance(tok, str):
+                for m in PLACEHOLDER_RE.finditer(tok):
+                    n = m.group(1) or m.group(2) or m.group(3)
+                    if n:
+                        deploy_token_names.add(n)
+
+    findings: List[Finding] = []
+    seen_unrecognised = 0
+    for path, value in leaves:
+        # User-sync URL macros are recognized in addition to the per-language
+        # endpoint macro set. Wave 11b B5 #7 introduces USER_SYNC_MACROS to
+        # admit GDPR/GDPRConsent/USPrivacy/GPP/etc. when walking user-sync
+        # path leaves. OPENRTB_MACROS apply everywhere (AUCTION_PRICE etc.
+        # may appear in any endpoint-bearing string per OpenRTB 2.5 §4.1).
+        path_macros = macros | OPENRTB_MACROS
+        if "user_sync" in path:
+            path_macros |= USER_SYNC_MACROS
+        for m in PLACEHOLDER_RE.finditer(value):
+            name = m.group(1) or m.group(2) or m.group(3)
+            if not name:
+                continue
+            if name in path_macros or name in deploy_token_names:
+                continue
+            seen_unrecognised += 1
+            if has_warning:
+                findings.append(Finding(
+                    "R8", spec.label, SEV_PASS,
+                    f"placeholder {{{{.{name}}}}} at {path} unrecognised but warning emitted",
+                ))
+            else:
+                findings.append(Finding(
+                    "R8", spec.label, SEV_WARN,
+                    f"placeholder {{{{.{name}}}}} at {path} not in macro registry and no provenance warning",
+                ))
+    if not findings:
+        findings.append(Finding(
+            "R8", spec.label, SEV_PASS,
+            f"{len(leaves)} endpoint-bearing string(s) checked; all placeholders recognised",
+        ))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R3b: quirk taxa registry (renamed from R9 — see CHANGELOG of Wave 4)
+# ---------------------------------------------------------------------------
+
+
+def r_taxa_check(spec: Spec, registered: List[str], lenient: bool = False) -> List[Finding]:
+    """R3b: every quirks[].edge_case_taxon must be in the closed registry.
+
+    Each violation becomes a separate Finding (split per-spec — was previously
+    joined into a single ;-delimited detail string >1000 chars). Empty quirks
+    list → PASS.
+    """
+    quirks = spec.raw.get("quirks") or []
+    if not isinstance(quirks, list):
+        return [Finding("R3b", spec.label, SEV_FAIL, "quirks is not a list")]
+    if not quirks:
+        return [Finding("R3b", spec.label, SEV_PASS, "no quirks")]
+    if not registered:
+        # Wave 11b post-review fix (2b): this branch is now defensive only —
+        # parse_taxa_registry raises TaxaRegistryUnreachable on missing/empty
+        # registry, which main() catches at startup with exit 3. If we somehow
+        # reach this with an empty list, the upstream guard failed and we
+        # should fail loudly per spec rather than silently SEV_WARN.
+        return [Finding("R3b", spec.label, SEV_FAIL,
+            "internal: r_taxa_check called with empty registered list "
+            "(should have been caught by main()'s TaxaRegistryUnreachable "
+            "abort; this Finding indicates a control-flow regression)")]
+    findings: List[Finding] = []
+    bad_severity = SEV_WARN if lenient else SEV_FAIL
+    for i, q in enumerate(quirks):
+        if not isinstance(q, dict):
+            findings.append(Finding("R3b", spec.label, bad_severity,
+                f"quirk #{i}: not a mapping"))
+            continue
+        taxon = q.get("edge_case_taxon")
+        qid = q.get("id", "?")
+        if taxon is None or taxon == "":
+            findings.append(Finding("R3b", spec.label, bad_severity,
+                f"quirk #{i} ({qid}): missing edge_case_taxon"))
+            continue
+        if taxon not in registered:
+            findings.append(Finding("R3b", spec.label, bad_severity,
+                f"quirk #{i} ({qid}): unregistered taxon `{taxon}`"))
+    if not findings:
+        findings.append(Finding("R3b", spec.label, SEV_PASS,
+            f"{len(quirks)} quirks, all taxa registered"))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R9: legacy encoding/json direct-usage detection
+# ---------------------------------------------------------------------------
+
+
+def r9_check(spec: Spec) -> List[Finding]:
+    """R9: detect Go specs that use encoding/json directly (no jsonutil) without
+    a paired quirk/warning surfacing the legacy pattern.
+
+    Walks code.imports.has_jsonutil + code.file_layout.files[].uses_marshal.
+    When direct json.Marshal usage is detected without a paired
+    legacy-encoding-json-direct-usage quirk OR warning, surface a finding so
+    reviewers know to flag.
+    """
+    if spec.language != "go":
+        return [Finding("R9", spec.label, SEV_PASS, "skip — Java spec")]
+    findings: List[Finding] = []
+    has_jsonutil = spec.get("code.imports.has_jsonutil")
+    files = spec.get("code.file_layout.files") or []
+    uses_marshal = [
+        f.get("name") or f.get("path", "?") for f in files
+        if isinstance(f, dict) and f.get("uses_marshal") is True
+    ]
+    has_quirk = any(
+        (q.get("edge_case_taxon") or "") == "legacy-encoding-json-direct-usage"
+        for q in (spec.raw.get("quirks") or []) if isinstance(q, dict)
+    )
+    has_warning = any(
+        (w.get("type") or "") == "legacy-encoding-json-direct-usage"
+        for w in (spec.get("provenance.warnings") or []) if isinstance(w, dict)
+    )
+    if has_jsonutil is False and uses_marshal and not (has_quirk or has_warning):
+        for path in uses_marshal:
+            findings.append(Finding(
+                "R9", spec.label, SEV_WARN,
+                f"legacy encoding/json usage at {path} but no quirk/warning surfaced",
+            ))
+    if not findings:
+        findings.append(Finding("R9", spec.label, SEV_PASS, "no legacy encoding/json drift"))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# R10: tests.uses_canonical_harness == false triggers warning
+# ---------------------------------------------------------------------------
+
+
+def r10_check(spec: Spec) -> List[Finding]:
+    is_alias = bool(spec.get("meta.is_alias"))
+    tests = spec.raw.get("tests")
+    if is_alias and tests is None:
+        # Aliases inherit the parent's tests block; harness flag is N/A.
+        return [Finding("R10", spec.label, SEV_PASS, "alias spec; tests inherited from parent")]
+    uses = spec.get("tests.uses_canonical_harness")
+    warnings = spec.get("provenance.warnings") or []
+    has_warning = any(
+        (w.get("type") or "") == "legacy-test-helpers-imported"
+        for w in warnings
+        if isinstance(w, dict)
+    )
+    has_quirk = any(
+        (q.get("edge_case_taxon") or "") == "legacy-test-helpers-imported"
+        for q in (spec.raw.get("quirks") or [])
+        if isinstance(q, dict)
+    )
+    if uses is None:
+        return [Finding("R10", spec.label, SEV_FAIL, "tests.uses_canonical_harness missing")]
+    if uses is True:
+        return [Finding("R10", spec.label, SEV_PASS, "uses_canonical_harness=true")]
+    # uses_canonical_harness == False: must surface as warning OR quirk.
+    if has_warning or has_quirk:
+        return [
+            Finding(
+                "R10",
+                spec.label,
+                SEV_PASS,
+                "uses_canonical_harness=false; warning/quirk present",
+            )
+        ]
+    return [
+        Finding(
+            "R10",
+            spec.label,
+            SEV_FAIL,
+            "uses_canonical_harness=false but no legacy-test-helpers-imported warning/quirk",
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Dual-spec assertions loader
+# ---------------------------------------------------------------------------
+
+
+def load_dual_specs() -> Dict[str, Dict[str, Any]]:
+    """Load every dual-spec assertion file. Returns {bidder: yaml_doc}."""
+    out: Dict[str, Dict[str, Any]] = {}
+    if not os.path.isdir(DUAL_SPECS_DIR):
+        return out
+    for path in sorted(glob.glob(os.path.join(DUAL_SPECS_DIR, "*.dual-spec-assertions.yaml"))):
+        bidder = os.path.basename(path).replace(".dual-spec-assertions.yaml", "")
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                doc = yaml.safe_load(fh)
+            if isinstance(doc, dict):
+                out[bidder] = doc
+        except (OSError, yaml.YAMLError) as exc:
+            print(f"WARN: cannot load dual-spec {path}: {exc}", file=sys.stderr)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Aggregation + reporting
+# ---------------------------------------------------------------------------
+
+
+RULE_ORDER = ["R1", "R2", "R3", "R3b", "R4", "R5", "R6", "R7", "R8", "R9", "R10"]
+
+
+def aggregate(findings: List[Finding]) -> Dict[str, Dict[str, int]]:
+    """Return {rule: {pass: N, warn: N, fail: N}}."""
+    counts: Dict[str, Dict[str, int]] = {}
+    for f in findings:
+        bucket = counts.setdefault(f.rule, {SEV_PASS: 0, SEV_WARN: 0, SEV_FAIL: 0, SEV_SKIP: 0})
+        bucket[f.severity] += 1
+    return counts
+
+
+def render_text(
+    findings: List[Finding],
+    spec_count: int,
+    pair_count: int,
+    dual_count: int,
+    counts: Dict[str, Dict[str, int]],
+    show_all: bool,
+) -> Tuple[str, int]:
+    lines: List[str] = []
+    lines.append("=== Round-trip CI: read-skill suite ===")
+    lines.append(
+        f"Goldens checked: {spec_count} ({pair_count} port pairs, {dual_count} dual-spec assertions)"
+    )
+    lines.append("")
+    # Rule labels are short for table-formatting; documented enforcement
+    # below.  Wave 11b tightened all three previously-advisory rules; the
+    # caveats here describe what now lands:
+    #
+    # R3 — keyword pairing strict by default post-Wave-11b B5 #3
+    #      (--strict-r3 default-on; round-2 audit confirmed 40/0/0 on
+    #      corpus). --lenient-r3 opts back to the advisory mode.
+    # R5 — Wave 11b B5 #2 refactored R5_STRICT_KEYS to per-key
+    #      comparators: list-set-equality for capabilities/geoscope/
+    #      schema_interpretation list keys; email-only equality for
+    #      maintainer; deep_eq for pure-data scalars. Wave 11b B4 C1
+    #      split the divergent-keys bucket into FORM_DIVERGENT (endpoint
+    #      with normalize_endpoint_macros) + ADVISORY_DIVERGENT.
+    # R8 — Wave 11b B5 #7 expanded the walker from single-field
+    #      (bidder_info.endpoint) to multi-path collector covering
+    #      user-sync URLs (iframe/redirect.url + uid_macro + flat forms),
+    #      bidder_class.static_fields[*].value, plus the original
+    #      endpoint. USER_SYNC_MACROS + OPENRTB_MACROS registries admit
+    #      well-known macros without noise.
+    rule_descriptions = {
+        "R1": "file-reachability",
+        "R2": "sha integrity",
+        "R3": "custom-quirk pairing (strict by default; --lenient-r3 to relax)",
+        "R3b": "quirk taxa registered",
+        "R4": "round-trip determinism",
+        "R5": "cross-language structural parity (per-key comparators)",
+        "R6": "bidder_name / package / constant",
+        "R7": "bidder-constant-mismatch surfaces",
+        "R8": "endpoint placeholder (recursive walker — endpoint + user_sync + static_fields)",
+        "R9": "legacy encoding/json direct usage",
+        "R10": "canonical-harness flag",
+    }
+    for rule in RULE_ORDER:
+        bucket = counts.get(rule, {})
+        p = bucket.get(SEV_PASS, 0)
+        w = bucket.get(SEV_WARN, 0)
+        f_ = bucket.get(SEV_FAIL, 0)
+        s = bucket.get(SEV_SKIP, 0)
+        total = p + w + f_ + s
+        line = f"{rule} {rule_descriptions[rule]:<35s} pass={p} warn={w} fail={f_}"
+        if s:
+            line += f" skip={s}"
+        line += f" (n={total})"
+        lines.append(line)
+    lines.append("")
+    # Detail block: surface every WARN/FAIL (and PASS too if --verbose).
+    detail_lines: List[str] = []
+    for f in findings:
+        if f.severity in (SEV_WARN, SEV_FAIL) or show_all:
+            detail_lines.append(f.short())
+    if detail_lines:
+        lines.append("--- findings ---")
+        lines.extend(detail_lines)
+        lines.append("")
+    total_fail = sum(c.get(SEV_FAIL, 0) for c in counts.values())
+    total_warn = sum(c.get(SEV_WARN, 0) for c in counts.values())
+    if total_fail:
+        lines.append(f"OVERALL: {total_fail} failure(s), {total_warn} warning(s)")
+    elif total_warn:
+        lines.append(f"OVERALL: 0 failures, {total_warn} warning(s)")
+    else:
+        lines.append("OVERALL: all checks pass")
+    if total_fail:
+        exit_code = 1
+    elif total_warn:
+        exit_code = 2
+    else:
+        exit_code = 0
+    lines.append(f"EXIT CODE: {exit_code}")
+    return "\n".join(lines), exit_code
+
+
+def render_json(
+    findings: List[Finding],
+    spec_count: int,
+    pair_count: int,
+    dual_count: int,
+    counts: Dict[str, Dict[str, int]],
+) -> Tuple[str, int]:
+    total_fail = sum(c.get(SEV_FAIL, 0) for c in counts.values())
+    total_warn = sum(c.get(SEV_WARN, 0) for c in counts.values())
+    if total_fail:
+        exit_code = 1
+    elif total_warn:
+        exit_code = 2
+    else:
+        exit_code = 0
+    payload = {
+        "goldens_checked": spec_count,
+        "port_pairs": pair_count,
+        "dual_specs": dual_count,
+        "rules": {
+            rule: {
+                "pass": counts.get(rule, {}).get(SEV_PASS, 0),
+                "warn": counts.get(rule, {}).get(SEV_WARN, 0),
+                "fail": counts.get(rule, {}).get(SEV_FAIL, 0),
+                "skip": counts.get(rule, {}).get(SEV_SKIP, 0),
+            }
+            for rule in RULE_ORDER
+        },
+        "findings": [
+            {"rule": f.rule, "spec": f.spec, "severity": f.severity, "detail": f.detail}
+            for f in findings
+        ],
+        "summary": {
+            "fail": total_fail,
+            "warn": total_warn,
+            "exit_code": exit_code,
+        },
+    }
+    return json.dumps(payload, indent=2, sort_keys=False), exit_code
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-parseable JSON instead of human-readable text",
+    )
+    parser.add_argument(
+        "--check-network",
+        action="store_true",
+        help="Run R1 against GitHub via `gh api` (requires authenticated gh)",
+    )
+    parser.add_argument(
+        "--strict-r3",
+        action="store_true",
+        default=True,
+        help="(Wave 11b default-on) Require quirk id/summary keyword pairing for every `custom` enum value. Round-2 audit confirmed 40 pass / 0 fail across corpus; safe to default-on.",
+    )
+    parser.add_argument(
+        "--lenient-r3",
+        action="store_false",
+        dest="strict_r3",
+        help="(Wave 11b opt-out) Disable strict R3 keyword-pairing; falls back to advisory mode (any non-empty quirks list satisfies). Use only when quirks are deliberately under-documented.",
+    )
+    parser.add_argument(
+        "--lenient-r3b",
+        action="store_true",
+        dest="lenient_r3b",
+        help="Downgrade unregistered taxa from FAIL to WARN (use while taxonomy lags goldens). R3b is the quirks-taxa-registry rule.",
+    )
+    # Wave 11b post-review fix (2a): --lenient-r9 was a misnamed alias —
+    # the flag controls R3b (taxa registry), but R9 is "legacy encoding/json
+    # direct usage" with no lenient mode. Anyone reading --help and passing
+    # --lenient-r9 hoping to relax R9 silently relaxed R3b instead. Renamed
+    # to --lenient-r3b; --lenient-r9 kept as a deprecated alias that emits
+    # a stderr warning, with intent to remove in a future wave.
+    parser.add_argument(
+        "--lenient-r9",
+        action="store_true",
+        dest="lenient_r3b",
+        help=argparse.SUPPRESS,  # hide deprecated alias from --help
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print every finding (including PASS) in text mode",
+    )
+    parser.add_argument(
+        "--allow-known-broken-pairs",
+        default="",
+        metavar="LIST",
+        help=(
+            "Comma-separated list of cross-language-pair bidder names "
+            "whose dual-spec FAILs are downgraded to informational (do not "
+            "set exit code 1). Used in CI to admit intentional severity:fail "
+            "assertions while still gating on unexpected regressions."
+        ),
+    )
+    args = parser.parse_args(argv)
+    known_broken = {
+        b.strip() for b in (args.allow_known_broken_pairs or "").split(",")
+        if b.strip()
+    }
+
+    specs = discover_specs()
+    if not specs:
+        print(
+            "ERROR: no goldens found under prebid-server-{go,java}/read/test-fixtures/",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Index by bidder per-language for R5 pairing.
+    by_lang_bidder: Dict[Tuple[str, str], Spec] = {(s.language, s.bidder): s for s in specs}
+    go_bidders = {s.bidder for s in specs if s.language == "go"}
+    java_bidders = {s.bidder for s in specs if s.language == "java"}
+    pair_bidders = sorted(go_bidders & java_bidders)
+
+    # Wave 11b post-review fix (2b): fail loudly when the taxa registry can't
+    # load. Mirrors the GhApiUnreachable Wave 10 recipe. Prior behavior was
+    # to return [] and let r_taxa_check emit SEV_WARN per-spec ("skipped"),
+    # producing CI runs with "0 failures" while R3b was silently disabled.
+    try:
+        registered_taxa = parse_taxa_registry(TAXONOMY_PATH)
+    except TaxaRegistryUnreachable as exc:
+        print(f"ERROR: R3b taxa registry unreachable: {exc}", file=sys.stderr)
+        print("R3b cannot enforce the closed taxa registry without it.",
+              file=sys.stderr)
+        print("Aborting to prevent silent gate degradation.", file=sys.stderr)
+        return 3
+
+    # Wave 11b post-review fix (2a): emit deprecation warning when the old
+    # --lenient-r9 flag was passed (still wired via dest=lenient_r3b).
+    if "--lenient-r9" in sys.argv:
+        print("DEPRECATED: --lenient-r9 is renamed to --lenient-r3b; "
+              "the old name will be removed in a future wave",
+              file=sys.stderr)
+
+    dual_specs = load_dual_specs()
+
+    findings: List[Finding] = []
+    gh_cache: Dict[Tuple[str, str], bool] = {}
+
+    # Per-spec rules — wrap each call in try/except so a crash on one rule
+    # doesn't void the others, and a crash on one spec doesn't void the run.
+    per_spec_rules = [
+        ("R1",  lambda s: r1_check(s, args.check_network, gh_cache)),
+        ("R2",  r2_check),
+        ("R3",  lambda s: r3_check(s, strict=args.strict_r3)),
+        ("R3b", lambda s: r_taxa_check(s, registered_taxa, lenient=args.lenient_r3b)),
+        ("R4",  r4_check),
+        ("R6",  r6_check),
+        ("R7",  r7_check),
+        ("R8",  r8_check),
+        ("R9",  r9_check),
+        ("R10", r10_check),
+    ]
+    # R5: per port pair OR per dual-spec entry (run even when one side is missing).
+    all_r5_bidders = sorted(set(pair_bidders) | set(dual_specs.keys()))
+    try:
+        for spec in specs:
+            for rule_name, fn in per_spec_rules:
+                try:
+                    findings.extend(fn(spec))
+                except GhApiUnreachable:
+                    raise  # propagate to top-level handler below
+                except Exception as exc:  # noqa: BLE001
+                    findings.append(Finding(
+                        rule_name, spec.label, SEV_FAIL,
+                        f"rule crashed: {type(exc).__name__}: {exc}",
+                    ))
+
+        for bidder in all_r5_bidders:
+            go_spec = by_lang_bidder.get(("go", bidder))
+            java_spec = by_lang_bidder.get(("java", bidder))
+            try:
+                findings.extend(r5_check(go_spec, java_spec, dual_specs))
+            except GhApiUnreachable:
+                raise  # propagate to top-level handler
+            except Exception as exc:  # noqa: BLE001
+                findings.append(Finding(
+                    "R5", f"pair/{bidder}", SEV_FAIL,
+                    f"rule crashed: {type(exc).__name__}: {exc}",
+                ))
+    except GhApiUnreachable as exc:
+        # Wave 10 recipe: distinguish "API unreachable" from "file doesn't
+        # exist". Aborting with exit 3 prevents the silent false-FAIL flood
+        # the prior swallowed-non-zero behavior produced.
+        print(f"ERROR: GitHub API unreachable during R1 network check: {exc}",
+              file=sys.stderr)
+        print("Common causes:", file=sys.stderr)
+        print("  - GH_TOKEN missing or insufficient scope", file=sys.stderr)
+        print("  - rate limit exceeded", file=sys.stderr)
+        print("  - network unavailable", file=sys.stderr)
+        print("Aborting to avoid emitting misleading FAILs against reachable files.",
+              file=sys.stderr)
+        return 3
+    if not all_r5_bidders:
+        findings.append(Finding("R5", "n/a", SEV_PASS, "no port pairs to compare"))
+
+    # Apply --allow-known-broken-pairs: downgrade FAIL→WARN for findings whose
+    # spec label is `pair/<bidder>` or `<lang>/<bidder>` for any bidder in the
+    # known-broken list. The pair file's intentional severity:fail still
+    # surfaces in output (now as WARN) but doesn't drive the exit code to 1.
+    if known_broken:
+        downgraded = []
+        for f in findings:
+            spec_bidder = f.spec.split("/", 1)[-1] if "/" in f.spec else f.spec
+            if f.severity == SEV_FAIL and spec_bidder in known_broken:
+                downgraded.append(Finding(
+                    f.rule, f.spec, SEV_WARN,
+                    f.detail + " [downgraded by --allow-known-broken-pairs]",
+                ))
+            else:
+                downgraded.append(f)
+        findings = downgraded
+
+    counts = aggregate(findings)
+
+    if args.json:
+        text, code = render_json(findings, len(specs), len(pair_bidders), len(dual_specs), counts)
+    else:
+        text, code = render_text(
+            findings,
+            len(specs),
+            len(pair_bidders),
+            len(dual_specs),
+            counts,
+            show_all=args.verbose,
+        )
+    print(text)
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

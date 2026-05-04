@@ -1,0 +1,440 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: "2026-05-02T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: dual-core-bidder-registration
+      file: openrtb_ext/bidders.go
+      line: 0
+      summary: "BOTH `BidderCadentApertureMX` (cadent_aperture_mx) AND `BidderEmxDigital` (emx_digital) are registered as core bidders in `coreBidderNames`. They share the same `cadentaperturemx.Builder` function via separate entries in `exchange/adapter_builders.go`. Each has its own `static/bidder-info/<name>.yaml` (byte-identical, sha256 8ee63ad8171be58806cd796650525fc0056669ee9111d879ab5b828da9803a5f) and its own `static/bidder-params/<name>.json` (semantically equivalent, byte-different). Neither name is in `exchange/adapter_util.go::GetDisabledBidderWarningMessages` — both remain currently-supported core bidders. This is co-registration, NOT alias-back."
+    - type: emx-digital-params-description-typo
+      file: static/bidder-params/emx_digital.json
+      line: 4
+      summary: "The companion `emx_digital.json` (sibling registration) has its title correctly set to `EMX Digital Adapter Params` BUT the description still says `validates params accepted by the Cadent Aperture MX adapter` — copy-paste leak from the cadent file. The cadent file itself is internally consistent."
+
+meta:
+  bidder_name: cadent_aperture_mx
+  is_alias: false
+  alias_of: null
+  parent_aliases: []                          # Go has NO YAML aliases under cadent_aperture_mx; the legacy `emx_digital` lives as a sibling core bidder, not a child alias
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+  empire_canonical_master: false
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://hb.emxdgt.com"           # No trailing slash, no path; the adapter appends `?t=<timeout>&ts=<unix>&src=pbserver` at request build time. Note: hostname retains the legacy EMX domain (`emxdgt.com`) even though the maintainer is on `cadent.tv` — SSP infrastructure was not rebranded along with the company name.
+  endpoint_construction:
+    kind: url-with-query                      # `endpoint?t=<tmax>&ts=<unix>&src=pbserver` — query params built at runtime via sprintf
+    macros_used: ["t", "ts", "src"]
+    macro_syntax: printf
+    placeholders_unresolved: []
+  endpoint_compression: null                  # Not declared in upstream YAML
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: contactaperturemx@cadent.tv        # Cadent (post-acquisition) maintainer address; bidder name still uses legacy emx + new cadent dual-registration
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+    app:
+      mediaTypes:
+        - banner
+        - video
+  geoscope: []                                # No geo restriction on cadent_aperture_mx parent. Java has [USA, CAN] on its `cadent_aperture_mx` ALIAS (alias-only field).
+  gvl_vendor_id: 183
+  user_sync:
+    iframe:
+      url: "https://cs.emxdgt.com/um?ssp=pbs&gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&redirect={{.RedirectURL}}"
+      userMacro: "$UID"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+      "$schema": "http://json-schema.org/draft-04/schema#",
+      "title": "Cadent Aperture MX Adapter Params",
+      "description": "A schema which validates params accepted by the Cadent Aperture MX adapter",
+      "type": "object",
+      "properties": {
+        "tagid" : {
+          "type": "string",
+          "description": "The id of an inventory target"
+        },
+        "bidfloor": {
+          "type": "string",
+          "description": "The minimum price acceptable for a bid"
+        }
+      },
+
+      "required": ["tagid"]
+    }
+bidder_params_sha256: 737b0ab2b135ac90a610212736bc1915e98b5a452d87cdebaee7c682e51957a6
+
+params:
+  schema_interpretation:
+    properties:
+      - name: tagid
+        type: string
+        description: "The id of an inventory target"
+        notes:
+          - "String type but parsed at runtime via strconv.ParseInt — must be a numeric string. Empty or zero rejected."
+      - name: bidfloor
+        type: string
+        description: "The minimum price acceptable for a bid"
+        notes:
+          - "String type but parsed at runtime via strconv.ParseFloat — flexible-types coercion (string-to-float)"
+    required_fields:
+      - tagid
+    flexible_types:
+      - field: tagid
+        declared_type: string
+        runtime_parse: int64
+        rejection_kind: parse-error-or-zero
+      - field: bidfloor
+        declared_type: string
+        runtime_parse: float64
+        rejection_kind: silent-zero-on-parse-error
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_cadent_aperture_mx.go
+    type_name: ExtImpCadentApertureMX        # Note: `MX` all-caps in the type name. Java diverges (`ExtImpEmxDigital` is the Java POJO; there is NO ExtImpCadentApertureMx Java class — alias has no Java code).
+    fields:
+      - name: TagID
+        json_tag: tagid
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: BidFloor
+        json_tag: bidfloor
+        type_native: string
+        omitempty: false
+        notes:
+          - "String type holds a stringified float; parsed via strconv.ParseFloat at runtime in addImpProps"
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/cadent_aperture_mx/params_test.go      # Canonical plural form (NOT vungle's singular `param_test.go` quirk)
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: openrtb_ext.BidderCadentApertureMX
+
+code:
+  package_or_class: cadentaperturemx          # Go convention drops underscores for package names
+  directory_name: cadent_aperture_mx
+  package_directory_mismatch: true            # Package `cadentaperturemx` lives in dir `cadent_aperture_mx/`. File names also drop underscores: `cadentaperturemx.go`, `cadentaperturemx_test.go`. ASYMMETRIC: the test fixture root keeps underscores: `cadent_aperture_mxtest/`. Tri-form within the same bidder.
+  file_layout:
+    kind: single-file
+    files:
+      - name: cadentaperturemx.go
+        role: implementation
+        loc: 319
+  imports:
+    has_template_engine: false                # Static endpoint with sprintf-style query-param appending
+    has_currency_helper: false                # No requestInfo.ConvertCurrency usage
+    has_jsonutil: true                        # util/jsonutil
+    third_party:
+      - github.com/prebid/openrtb/v20/adcom1
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpoint                        # LOWERCASE/unexported (vungle has uppercase Endpoint — divergence)
+        type: string
+      - name: testing                         # Test-only stabilization flag; set true via test entry point cadentaperturemx_test.go::setTesting. Java has NO equivalent.
+        type: bool
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-batch                     # SINGLE HTTP request for the entire batch — all imps go in one body. NOT per-imp.
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: in-place                         # imp value-copy from range loop, then BidFloor + TagID + Secure mutated in-place; appended to resImps slice; resImps replaces request.Imp at end
+        Banner: deep-copy-then-mutate         # `bannerCopy := *imp.Banner`; if W&H both nil, lift Format[0] into W/H, slice Format[1:]
+        Video: deep-copy-then-mutate          # `videoCopy := *imp.Video`; cleanProtocol filters out CreativeVAST40 (protocol 7)
+        Site: none
+        App: none
+        Source: none
+        Device: none
+        User: none
+        Cur: none
+      go_idiom: shallow-copy-then-mutate
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ExtImpCadentApertureMX
+      wrapper_type: null
+    endpoint_resolution:
+      kind: dynamic-template-string
+      mechanism_go: sprintf-with-runtime-values
+      mechanism_java: null
+      macros_used:
+        - "t (TMax milliseconds, defaults to 1000 if 0)"
+        - "ts (unix epoch seconds — testing-mode override pins to 2060541160)"
+        - "src (literal `pbserver`)"
+    helpers:
+      - name: buildEndpoint
+        signature: "func buildEndpoint(endpoint string, testing bool, timeout int64) string"
+      - name: preprocess
+        signature: "func preprocess(request *openrtb2.BidRequest) []error"
+      - name: unpackImpExt
+        signature: "func unpackImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImpCadentApertureMX, error)"
+      - name: addImpProps
+        signature: "func addImpProps(imp *openrtb2.Imp, secure *int8, cadentExt *openrtb_ext.ExtImpCadentApertureMX)"
+      - name: buildImpBanner
+        signature: "func buildImpBanner(imp *openrtb2.Imp) error"
+      - name: buildImpVideo
+        signature: "func buildImpVideo(imp *openrtb2.Imp) error"
+      - name: cleanProtocol
+        signature: "func cleanProtocol(protocols []adcom1.MediaCreativeSubtype) []adcom1.MediaCreativeSubtype"
+      - name: addHeaderIfNonEmpty
+        signature: "func addHeaderIfNonEmpty(headers http.Header, headerName string, headerValue string)"
+      - name: getBidType
+        signature: "func getBidType(bidAdm string) openrtb_ext.BidType"
+      - name: ContainsAny
+        signature: "func ContainsAny(raw string, keys []string) bool"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers               # 204 → no bids; non-200/204 → BadServerResponse
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: string-sniff-adm-substring  # Custom: `strings.ToLower(raw)` then ContainsAny([`<?xml`, `<vast`]) — substring match. Java side does NOT lowercase — case-sensitivity divergence.
+          hardcoded_value: null
+          fallback_action: classify-as-banner
+      default_value: banner
+      multi_format_detection: none
+    bid_pointer_pattern: indexed-iteration    # `for i := range sb.Bid { ... &sb.Bid[i] ... }` — pointer to slice element
+    bid_pointer_go_sibling: range-index
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: cadent_aperture_mxtest  # KEEPS underscores (unlike package/file names). Tri-form Go naming within the same bidder.
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - banner-and-video-app
+      - banner-and-video-site
+      - banner-app
+      - minimal-banner
+      - video-app
+      - video-ctv
+      - video-site
+    supplemental: []                          # 17 supplemental fixtures (bidfloor, app/site URL parsing, bad-imp variants, no-imp, server errors) — count-only mode
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true                # cadentaperturemx_test.go calls adapterstest.RunJSONBidderTest
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+aliases: []                                   # Go has NO YAML aliases under cadent_aperture_mx. The "alias" relationship lives at the bidder-registration layer (emx_digital is a sibling core bidder, NOT a YAML child).
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+lifecycle:
+  rename:
+    old_name: emx_digital
+    new_name: cadent_aperture_mx
+    subtype: java-leads                       # ADR-006 sub-type. Java retains `emxdigital` as canonical parent (with `cadent_aperture_mx` as a disabled, geo-restricted alias under it). Go has NOT consolidated — both `cadent_aperture_mx` and `emx_digital` are registered as fully-enabled core bidders sharing one Builder. The label "java-leads" is defensible under the parent-canonical interpretation (Java has chosen a canonical name; Go has not), though strictly the rename is partial on both sides.
+    alias_back: false                         # Go does NOT use a YAML alias-back for emx_digital; it co-registers BOTH names as core bidders.
+    alias_back_form: dual-core-bidder-registration
+    package_moves: []
+    fixture_dir_moves: []
+    yaml_deletes: []
+    yaml_adds: []
+    merged_at: null                           # No discrete rename PR — Cadent acquired EMX Digital and the Cadent Aperture MX brand was added alongside the legacy emx_digital registration. Both still functional.
+    release: null
+    notes:
+      - "Cadent acquired EMX Digital; the SSP/exchange product was rebranded to 'Cadent Aperture MX'. Maintainer email is `contactaperturemx@cadent.tv`."
+      - "Endpoint hostname `hb.emxdgt.com` retains the legacy EMX domain — the SSP infrastructure was apparently not rebranded along with the company name."
+      - "Go side: BOTH `BidderCadentApertureMX` (`cadent_aperture_mx`) and `BidderEmxDigital` (`emx_digital`) are registered as core bidders in `coreBidderNames`. They share the same `cadentaperturemx.Builder` function (separate entries in `exchange/adapter_builders.go`). Each has its own `static/bidder-info/<name>.yaml` (byte-identical sha256 8ee63ad8…) and its own `static/bidder-params/<name>.json` (semantically equivalent, byte-different — emx_digital file has a copy-paste bug saying 'Cadent Aperture MX adapter' in description)."
+      - "Go side: NEITHER name is in `exchange/adapter_util.go::GetDisabledBidderWarningMessages` — both are currently-supported, not deprecated/removed. This contrasts with the vungle/liftoff phantom-rename pattern where the legacy name lives in the removed-bidder warning map."
+      - "Java side handles the rename via tilde-inherit alias `aliases: { cadent_aperture_mx: { enabled: false, geoscope: [USA, CAN] } }` under emxdigital.yaml (default-disabled — Rule 45 instance + Rule 44-adjacent alias-back with geo-restriction). Maintainer email is identical on both sides."
+      - "Asymmetric topology: Go has dual-core-bidder-registration (cadent_aperture_mx + emx_digital as siblings); Java has parent-with-disabled-alias (emxdigital parent + cadent_aperture_mx alias). Both retain both names but with different organizational primacy."
+      - "Per ADR-006 LIFECYCLE_PAIRS: ('cadent_aperture_mx', 'emxdigital', 'java-leads', 'Cadent acquired EMX'). The label is empirically defensible (Java has designated a canonical) but the topology — neither side has fully completed the rename — is more nuanced than a simple java-leads framing."
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: dual-core-bidder-registration
+    file: openrtb_ext/bidders.go
+    summary: "Both `BidderCadentApertureMX` (cadent_aperture_mx) and `BidderEmxDigital` (emx_digital) are registered as core bidders sharing one Builder. Each has its own bidder-info yaml (byte-identical) and bidder-params json (semantically equal, byte-different). NOT an alias-back; neither name is deprecated. Go's pre-empt of full rename consolidation. Java side has only ONE bidder (emxdigital) with cadent_aperture_mx as a disabled+geo-restricted alias."
+    edge_case_taxon: bidder-rename-three-step
+  - id: imp-id-clobbered-from-bid-id
+    file: cadentaperturemx.go
+    line: 281
+    summary: "MakeBids clobbers `sb.Bid[i].ImpID = sb.Bid[i].ID` before appending the typed bid. The Cadent server response apparently emits Bid.ID matching the original imp.id; Go preempts and writes ImpID. Java side does NOT do this — cross-language behavioral asymmetry."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: bid-type-string-sniff-adm-lowercased
+    file: cadentaperturemx.go
+    line: 294
+    summary: "getBidType lowercases AdM via `strings.ToLower(raw)` then substring-matches `<?xml` or `<vast` (lowercase needles). Match → BidTypeVideo, else → BidTypeBanner. Pure AdM string-sniffing; no imp-correlation, no bid.MType lookup, NEVER returns native or audio. Java side does NOT lowercase — `StringUtils.containsAny(bidAdm, '<?xml', '<vast')` is case-sensitive (Java would miss `<VAST>` uppercase). Real Cadent VAST responses likely use lowercase, so this is a latent fidelity gap rather than a current bug."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: testing-mode-fixed-timestamp
+    file: cadentaperturemx.go
+    line: 30
+    summary: "Adapter struct has a `testing bool` field. When set, buildEndpoint returns a fixed `?t=1000&ts=2060541160` query string for golden test stability. Set true only via cadentaperturemx_test.go::setTesting (test-only side door). Java side has NO such flag — IT tests rely on `${json-unit.any-number}` placeholders for timestamp variance."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: banner-format-list-slicing
+    file: cadentaperturemx.go
+    line: 134
+    summary: "buildImpBanner: if banner.W and banner.H are both nil, lifts Format[0] into W/H and slices Format[1:] (truncating the first format from the list). Cross-language symmetric — Java does the same via subList(1, ...)."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: vast40-protocol-filter
+    file: cadentaperturemx.go
+    line: 168
+    summary: "cleanProtocol filters out adcom1.CreativeVAST40 (protocol 7) from imp.Video.Protocols. Cadent server doesn't support VAST 4.0; protocols are silently stripped. Cross-language symmetric — Java filters literal `7`."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: hardcoded-src-pbserver-query
+    file: cadentaperturemx.go
+    line: 34
+    summary: "URL appends `&src=pbserver` literal to identify the request source. Cross-language symmetric — Java uses the same literal."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: secure-flag-from-url-scheme
+    file: cadentaperturemx.go
+    line: 222
+    summary: "preprocess derives `secure` flag (1 or 0) by parsing `request.Site.Page` OR `request.App.Domain` OR `request.App.StoreURL` (in that priority) via url.Parse and checking if scheme is `https`. Cross-language symmetric — Java uses startsWith('https')."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: dnt-header-always-when-non-nil
+    file: cadentaperturemx.go
+    line: 67
+    summary: "Adds DNT header from request.Device.DNT regardless of value (0 or 1) when Device.DNT is non-nil. Most adapters skip DNT=0; this one always sends. Cross-language symmetric — Java uses Objects.toString(device.getDnt(), null)."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: package-directory-mismatch-tri-form
+    file: adapters/cadent_aperture_mx/cadentaperturemx.go
+    summary: "Three naming forms within one Go bidder: directory `cadent_aperture_mx/` (with underscores), package `cadentaperturemx` (no underscores), test fixtures root `cadent_aperture_mxtest/` (with underscores again). Distinct from typical Go bidders that drop underscores consistently across all three layers."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/cadent_aperture_mx/
+    package_name: cadentaperturemx
+    bidder_constant: openrtb_ext.BidderCadentApertureMX
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/emxdigital/
+    bidder_class: EmxDigitalBidder
+    config_class: EmxDigitalConfiguration
+    yaml_path: src/main/resources/bidder-config/emxdigital.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/emxdigital/
+  port_concerns:
+    aliases_inverted: true                    # Java declares cadent_aperture_mx as disabled+geo-restricted alias under emxdigital. Go has NO YAML alias — co-registers both as core bidders with shared Builder. Cross-language asymmetry on the alias mechanism (Rule 33-adjacent).
+    yaml_unification: false                   # Go has TWO yaml files (cadent_aperture_mx.yaml + emx_digital.yaml, byte-identical). Java has ONE yaml file (emxdigital.yaml with alias block).
+    mutation_idiom_divergence: true
+    package_directory_mismatch: true          # Go: package cadentaperturemx in dir cadent_aperture_mx (drops underscores). Java: package emxdigital in dir emxdigital (no mismatch on Java side; mismatch is Go-only).
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - bidder-rename-cadent-acquired-emx
+      - dual-core-bidder-registration-go
+      - parent-with-disabled-alias-java
+      - bid-type-string-sniff-case-sensitivity
+      - imp-id-clobber-go-only
+      - currency-propagation-java-only
+      - tri-form-go-naming
+  go_specific_concerns:
+    - "Go has dual-core-bidder-registration: BOTH `cadent_aperture_mx` and `emx_digital` are registered as core bidders in `coreBidderNames`, sharing the `cadentaperturemx.Builder`. Each has its own bidder-info yaml (byte-identical, sha256 8ee63ad8…) and bidder-params json (semantically equal, byte-different — emx file has a copy-paste bug saying 'Cadent Aperture MX adapter' in description)."
+    - "Adapter struct fields are LOWERCASE/unexported (`endpoint`, `testing`). Most other Go adapters use uppercase exported fields. The lowercase form is consistent with the unexported `adapter` struct name. Builder has access via package-internal struct literal."
+    - "ImpID clobbering: `sb.Bid[i].ImpID = sb.Bid[i].ID` (line 281) — Go assumes the Cadent server emits Bid.ID matching the original imp.id. Java side does NOT do this clobber — cross-language behavioral asymmetry."
+    - "Bid-type AdM sniffing: `strings.ToLower(raw)` then `Contains(`<?xml`)` or `Contains(`<vast`)`. Java side does NOT lowercase — case-sensitivity divergence (Java would miss `<VAST>` uppercase variant). Real Cadent VAST responses likely use lowercase, so this is a latent fidelity gap rather than a current bug."
+    - "Testing-mode fixed timestamp: `testing bool` on adapter struct produces `?t=1000&ts=2060541160` for golden test stability. Java has no equivalent — relies on `${json-unit.any-number}` placeholders in fixtures."
+    - "Hardcoded `&src=pbserver` query parameter to identify the request source. Cross-language symmetric."
+    - "Currency: Go does NOT propagate `bidResponse.cur` to TypedBid (TypedBid has no currency field). Java sets `BidderBid.cur = bidResponse.getCur()` — Java-only currency propagation."
+    - "VAST 4.0 protocol filter: `cleanProtocol` strips `adcom1.CreativeVAST40` (protocol 7) from imp.Video.Protocols. Cross-language symmetric (Java filters literal `7`)."
+    - "Test root directory `cadent_aperture_mxtest` KEEPS underscores even though the package `cadentaperturemx` and main file `cadentaperturemx.go` drop them. Tri-form Go naming within the same bidder."
+    - "Builder signature accepts `bidderName openrtb_ext.BidderName` as the first parameter but does NOT branch on it — both BidderCadentApertureMX and BidderEmxDigital callers receive an identical adapter struct (only `endpoint` from config differs, but they share the same yaml content)."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

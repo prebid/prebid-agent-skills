@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Read-skill spec workspace (recomputed per-machine; see read-adapter-orchestrator SKILL.md)
+prebid-server-go/read/specs/
+prebid-server-java/read/specs/
+
+# Sync-from-upstream output (regenerated per-run; uploaded as a workflow artifact)
+scripts/output/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Teal-flow / one-shot orchestration transient specs (pr-triage prior_source_spec convention)
+.tmp/

@@ -1,0 +1,92 @@
+# Endpoint placeholder macros recognized by R8 in scripts/round-trip-ci.py.
+#
+# Wave 11b post-review fix (item 3d): lifted from Python literals to YAML
+# data so adding a new macro (e.g., a new prebid-server-go template macro,
+# a new OpenRTB billing macro, a new alias-specific user-sync macro) does
+# NOT require a round-trip-ci.py code change. Reviewers approve macro
+# additions as data PRs — clearer signal than a behavioral-code change.
+#
+# Each top-level key here is consumed by a corresponding frozenset in
+# round-trip-ci.py via _load_endpoint_macros() at startup. R8 admits a
+# placeholder name when it appears in:
+#
+#   - go_template_macros (Go-source endpoint paths)
+#   - java_template_macros (Java-source endpoint paths)
+#   - user_sync_macros (any path containing 'user_sync')
+#   - openrtb_macros (any endpoint-bearing path)
+#   - the spec's own deploy_time_tokens[*].token names (extracted at runtime)
+#
+# Names NOT in any registry surface as R8 WARN unless the spec carries a
+# corresponding `provenance.warnings[].type: endpoint-placeholder-unresolved`
+# entry that documents the deviation.
+
+# Macros known to prebid-server-go's macros.EndpointTemplateParams (subset;
+# canonical). Used in URL strings as `{{.X}}` form (Go html/text template).
+go_template_macros:
+  - AccountID
+  - AdUnit
+  - BidderCode
+  - GvlID
+  - Host
+  - MediaType
+  - PageID
+  - PartnerID
+  - PlacementID
+  - PublisherID
+  - RegionID
+  - SiteID
+  - SourceID
+  - TagID
+  - Username
+  - ZoneID
+
+# Java template macros used in URL replacement. Form: `{{X}}` (no leading dot)
+# — Java's String.replace flow does not consume the Go-template `.` prefix.
+java_template_macros:
+  - PREBID_SERVER_ENDPOINT
+  - AdUnit
+  - Host
+  - PartnerId
+  - PageID
+  - PartnerCode
+  - PublisherId
+  - RegionId
+  - ZoneId
+  - AccountId
+  - Source
+  - GvlId
+
+# User-sync URL macros. Admitted on user_sync paths only (R8 walker scopes
+# this set to paths containing 'user_sync'). Both Go PascalCase and Java
+# snake_case forms — same canonical concepts under different casings.
+user_sync_macros:
+  # Go casings (PascalCase) — prebid-server-go usersync package
+  - GDPR
+  - GDPRConsent
+  - USPrivacy
+  - GPP
+  - GPPSID
+  - RedirectURL
+  - BidderName
+  - UID
+  # Java casings (snake_case) — prebid-server-java usersync flow
+  - gdpr
+  - gdpr_consent
+  - us_privacy
+  - gpp
+  - gpp_sid
+  - redirect_url
+  - bidder
+  - uid
+
+# OpenRTB 2.5 §4.1 standard macros (notably nurl/burl billing macros).
+# Admitted everywhere — these are spec-defined and cross-language.
+openrtb_macros:
+  - AUCTION_PRICE
+  - AUCTION_BID_ID
+  - AUCTION_IMP_ID
+  - AUCTION_AD_ID
+  - AUCTION_LOSS
+  - AUCTION_MIN_TO_WIN
+  - AUCTION_SEAT_ID
+  - AUCTION_CURRENCY

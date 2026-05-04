@@ -1,0 +1,94 @@
+dual_spec_assertion_version: 1
+bidder_name: kobler
+go_spec: prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml
+java_spec: prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml
+go_resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+java_resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+
+assertions:
+  bidder_params_sha256:
+    go: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+    java: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+    byte_equal: true
+    semantically_equal: true
+    divergence_kind: none
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_capabilities:
+    go:
+      site: [banner]
+      app: [banner]
+    java:
+      site: [banner]
+      app: [banner]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_gvl_vendor_id:
+    go: 0
+    java: 0
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_maintainer:
+    go: bidding-support@kobler.no
+    java: bidding-support@kobler.no
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  bidder_info_geoscope:
+    go: [NOR, SWE, DNK]
+    java: [NOR, SWE, DNK]
+    equivalent: true
+    divergence_summary: null
+    severity: pass
+
+  params_schema_interpretation:
+    go_required_fields: []
+    java_required_fields: []
+    go_combinators_used: []
+    java_combinators_used: []
+    go_flexible_types: []
+    java_flexible_types: []
+    go_properties: [test]
+    java_properties: [test]
+    equivalent: true
+    severity: pass
+
+  port_lineage:
+    direction: go-to-java
+    source_pr: prebid/prebid-server#3904
+    destination_pr: prebid/prebid-server-java#3684
+    fidelity_review_themes:
+      - port-fidelity
+      - currency-conversion-bidrequest-context
+      - mutation-idiom-tobuilder
+      - dev-endpoint-config-promotion
+
+  reviewer_cohort:
+    go_reviewers: []
+    java_reviewers: [AntoxaAntoxic, osulzhenko]
+    cross_language_coordinator: bretg
+
+overall:
+  cross_language_state: aligned
+  blocker_count: 0
+  warning_count: 0
+  notes: |
+    Kobler is the canonical clean port pair and the ONLY pair in this set with byte-equal
+    bidder_params_json across languages (R5 hard-pass). Schema content is trivial (single
+    optional `test` boolean), capabilities, geoscope, GVL ID, maintainer email all match
+    exactly. The Java port is a deliberate Go-to-Java translation (PR #3904 -> PR #3684);
+    the Java side improved on the Go source by promoting devBidderEndpoint from a Go
+    package-level const into KoblerConfigurationProperties.devEndpoint (@NotBlank), fixing
+    the Go-side hardcoded-config-as-anti-pattern quirk. Currency conversion idiom diverges
+    intentionally (Java passes bidRequest for time-context; Go does not) but this is a
+    per-language asymmetry covered by Rule 32, NOT a port-fidelity violation. Porter advice:
+    use kobler as the reference fixture for cross-language R5 contract verification — any
+    new port pair should aim for byte-equal bidder_params (write Java JSON in the Go
+    canonical style: literal block, double-quoted single-line `required` array, terminal
+    newline, etc.).

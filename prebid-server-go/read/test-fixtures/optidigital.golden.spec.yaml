@@ -1,0 +1,314 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: "2026-04-27T14:58:02Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: optidigital
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://pbs.optidigital.com/bidder/openrtb2"
+  endpoint_construction:
+    kind: static
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: gzip
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@optidigital.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+    app:
+      mediaTypes:
+        - banner
+    dooh:
+      mediaTypes:
+        - banner
+  geoscope: []
+  gvl_vendor_id: 915
+  user_sync:
+    supports:
+      - iframe
+    iframe:
+      url: "https://scripts.opti-digital.com/js/presyncs2s.html?endpoint=optidigital&gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&gpp={{.GPP}}&gpp_sid={{.GPPSID}}&redir={{.RedirectURL}}"
+      userMacro: "$UID"
+  yaml_extra_fields:
+    openrtb:
+      version: 2.6
+  yaml_field_name_quirks: []
+
+# NOTE: encoded as YAML double-quoted scalar (rather than the schema example's `|` literal block)
+# to preserve byte-fidelity. The original file contains trailing whitespace on one blank line
+# ("  \n") and no terminal newline; both nuances would be lost by a `|` block. The double-quoted
+# form makes sha256(bidder_params_json) == bidder_params_sha256 exactly (R2 contract).
+bidder_params_json: "{\n    \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n    \"title\": \"Optidigital Adapter Params\",\n    \"description\": \"A schema which validates params accepted by the Optidigital adapter\",\n    \"type\": \"object\",\n  \n    \"properties\": {\n        \"publisherId\": {\n            \"type\": \"string\",\n            \"minLength\": 2,\n            \"description\": \"Publisher ID\"\n        },\n        \"placementId\": {\n            \"type\": \"string\",\n            \"minLength\": 1,\n            \"description\": \"Placement ID\"\n        },\n        \"divId\": {\n            \"type\": \"string\",\n            \"description\": \"Div ID\"\n        },\n        \"pageTemplate\": {\n            \"type\": \"string\",\n            \"description\": \"Page Template\"\n        }\n    },\n\n    \"required\":[\n        \"publisherId\",\n        \"placementId\"\n    ]\n  }"
+bidder_params_sha256: 6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31
+
+params:
+  schema_interpretation:
+    properties:
+      - name: publisherId
+        type: string
+        description: "Publisher ID"
+        constraints:
+          minLength: 2
+      - name: placementId
+        type: string
+        description: "Placement ID"
+        constraints:
+          minLength: 1
+      - name: divId
+        type: string
+        description: "Div ID"
+      - name: pageTemplate
+        type: string
+        description: "Page Template"
+    required_fields:
+      - publisherId
+      - placementId
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_optidigital.go
+    type_name: ImpExtOptidigital
+    fields:
+      - name: PublisherID
+        json_tag: publisherId
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: PlacementID
+        json_tag: placementId
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: PageTemplate
+        json_tag: pageTemplate
+        type_native: string
+        omitempty: true
+        notes: []
+      - name: DivID
+        json_tag: divId
+        type_native: string
+        omitempty: true
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/optidigital/params_test.go
+    valid_cases_count: 5
+    invalid_cases_count: 11
+    bidder_constant_referenced: openrtb_ext.BidderOptidigital
+
+code:
+  package_or_class: optidigital
+  directory_name: optidigital
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: optidigital.go
+        role: implementation
+        loc: 71
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: true
+    third_party: []
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpoint
+        type: string
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-passthrough
+      custom_body_type: null
+    mutation:
+      mutates_request: false
+      entity_strategies: {}
+      go_idiom: none
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: none
+      mechanism_go: null
+      mechanism_java: null
+      target_type: null
+      wrapper_type: null
+    endpoint_resolution:
+      kind: static
+      mechanism_go: null
+      mechanism_java: null
+      macro_field_set: []
+      template_params_struct_field_count: null
+    helpers: []
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: hardcoded
+          hardcoded_value: BidTypeBanner
+          fallback_action: return-default
+      default_value: banner
+      multi_format_detection: none
+    # Per behavior-taxonomy.md: optidigital is the canonical example of `pointer-iteration`
+    # (`&seatBid.Bid[i]` value-pointer reference) and `range-value-pointer` for the Go sibling.
+    bid_pointer_pattern: pointer-iteration
+    bid_pointer_go_sibling: range-value-pointer
+    currency_overwrite_safety: unguarded
+
+tests:
+  test_root_directory: optidigitaltest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary:
+      - filename: banner.json
+        sha256: bc9323891f7bfc12c9934484e01c646397682dfb21f2cee0c1f861d382537135
+        bytes: 2301
+    supplemental:
+      - filename: bad_request.json
+        sha256: 105d5e153ab1d431d8f4a92b0419e90078110663bcbbaf50a60b6cbae444e24e
+        bytes: 1247
+      - filename: bad_response.json
+        sha256: 2ba3ca5e1bda35603248a018e0ab7f5feb4f669bbd94875f35a243e0d4635da1
+        bytes: 1273
+      - filename: no_response.json
+        sha256: 009081ea5dc00babdbbba05a1fc64a3d1558cad039f1675fa93fe7afe77574f6
+        bytes: 1121
+      - filename: other_error.json
+        sha256: 36dcf426ef2c92a97ae6853c43998446ee42a2b0e9a7979c1ac5f6a2a05841a2
+        bytes: 1247
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+spring_config: null
+
+bidder_class: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: false
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: legacy-impext-naming
+    file: openrtb_ext/imp_optidigital.go
+    summary: "Uses legacy ImpExt{Bidder} naming pattern (ImpExtOptidigital). Canonical convention is ExtImp{Bidder}."
+    edge_case_taxon: legacy-impext-naming
+  - id: hardcoded-banner-bid-type
+    file: optidigital.go
+    summary: "MakeBids hardcodes BidTypeBanner for every bid; cannot return non-banner even if server replied with one."
+    edge_case_taxon: hardcoded-bid-type
+  - id: unguarded-currency-overwrite
+    file: optidigital.go
+    summary: "bidResponse.Currency = response.Cur is unguarded — overwrites default USD with empty string if response.Cur is empty."
+    edge_case_taxon: unguarded-currency-overwrite
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/optidigital/
+    package_name: optidigital
+    bidder_constant: openrtb_ext.BidderOptidigital
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/optidigital/
+    bidder_class: OptidigitalBidder
+    config_class: OptidigitalConfiguration
+    yaml_path: src/main/resources/bidder-config/optidigital.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/optidigital/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: prebid/prebid-server-java#4054
+    fidelity_review_themes: []
+  reviewer_cohort:
+    go: [bsardo, ccorbo, przemkaczmarek]
+    java: []
+    cross_language_coordinator: bretg

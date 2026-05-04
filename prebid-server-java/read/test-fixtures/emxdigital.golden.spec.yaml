@@ -1,0 +1,488 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: "2026-05-02T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings:
+    - type: java-edge-case-19-alternate-naming
+      file: src/main/java/org/prebid/server/bidder/emxdigital/
+      line: 0
+      summary: "The bidder package contains ONLY one class: `EmxDigitalBidder.java`. There is NO `EmxDigitalUtil.java`, no separate request/response model classes — Java edge case #19 (alternate naming form: package has only the Bidder-suffix class). Distinct from canonical Java bidders that ship Bidder + Util/Helper classes in the same package."
+    - type: tri-form-java-naming
+      file: src/main/resources/bidder-config/emxdigital.yaml
+      line: 0
+      summary: "Three name forms within the Java side: (1) BIDDER_NAME constant `emx_digital` (underscore — used as Prebid routing identifier and as params filename `emx_digital.json`); (2) YAML/Spring property key `emxdigital` (no underscore — used in `bidder-config/emxdigital.yaml` and `@ConfigurationProperties(\"adapters.emxdigital\")`); (3) Java class names `EmxDigital*` PascalCase (`EmxDigitalBidder`, `EmxDigitalConfiguration`, `ExtImpEmxDigital`). Rule 46 normalization happens INSIDE the Java side itself, not just cross-language. Additionally, the integration test classes break casing further: `EmxdigitalTest` (not `EmxDigitalTest`) and `CadentApertureMxTest` (not `CadentApertureMXTest`)."
+
+meta:
+  bidder_name: emxdigital
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - cadent_aperture_mx                      # Single alias under emxdigital — disabled by default, geo-restricted to [USA, CAN]
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: false              # Only ONE alias — doesn't qualify as empire (typical empire has 3+)
+  empire_parent_flavor: null
+
+bidder_info:
+  endpoint: "https://hb.emxdgt.com"           # Hostname retains legacy EMX domain (`emxdgt.com`) even though maintainer is on `cadent.tv`. Cross-language symmetric with Go side.
+  endpoint_construction:
+    kind: url-with-query                      # `endpoint?t=<tmax>&ts=<unix>&src=pbserver` — query params built at runtime via String.format
+    macros_used: ["t", "ts", "src"]
+    macro_syntax: printf
+    placeholders_unresolved: []
+  endpoint_compression: null                  # Not declared in upstream YAML
+  ortb_version: null
+  default_enabled: true                       # `enabled` field is the Java-side default — true at the parent level
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: contactaperturemx@cadent.tv        # Cross-language identical with Go side
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+    app:
+      mediaTypes:
+        - banner
+        - video
+  geoscope: []                                # Parent has no geo restriction; alias `cadent_aperture_mx` has [USA, CAN] (alias-only field captured under `aliases:`)
+  gvl_vendor_id: 183
+  user_sync:
+    cookie_family_name: emx_digital           # UNDERSCORED form (matches Go's `emx_digital` core bidder name) — distinct from the YAML key `emxdigital` used by Spring
+    iframe:
+      url: "https://cs.emxdgt.com/um?ssp=pbs&gdpr={{gdpr}}&gdpr_consent={{gdpr_consent}}&us_privacy={{us_privacy}}&redirect={{redirect_url}}"
+      support_cors: false                     # Java-only YAML field (no Go equivalent)
+      uid_macro: "$UID"
+  yaml_extra_fields:
+    supported_vendors: null                   # YAML key is present with a null value (`supported-vendors:` empty entry)
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "EMX Digital Adapter Params",
+    "description": "A schema which validates params accepted by the EMX Digital adapter",
+    "type": "object",
+    "properties": {
+      "tagid" : {
+        "type": "string",
+        "description": "The id of an inventory target"
+      },
+      "bidfloor": {
+        "type": "string",
+        "description": "The minimum price acceptable for a bid"
+      }
+    },
+    "required": ["tagid"]
+  }
+bidder_params_sha256: 0e1252c73f997b35a99dbfaabc83ccf602a0c60de8e9253c0eecdac971dfd6de
+
+params:
+  schema_interpretation:
+    properties:
+      - name: tagid
+        type: string
+        description: "The id of an inventory target"
+        notes:
+          - "String type but parsed at runtime via Integer.parseInt — must be a numeric string. NumberFormatException → PreBidException; tagidNumber == 0 → PreBidException."
+      - name: bidfloor
+        type: string
+        description: "The minimum price acceptable for a bid"
+        notes:
+          - "String type but parsed at runtime via new BigDecimal(String). NumberFormatException is silently swallowed (no error logged); imp returned without bidfloor in that case."
+    required_fields:
+      - tagid
+    flexible_types:
+      - field: tagid
+        declared_type: string
+        runtime_parse: Integer
+        rejection_kind: parse-error-or-zero
+      - field: bidfloor
+        declared_type: string
+        runtime_parse: BigDecimal
+        rejection_kind: silent-skip-on-parse-error
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.emxdigital
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/emxdigital/ExtImpEmxDigital.java
+    type_name: ExtImpEmxDigital
+    fields:
+      - name: tagid
+        json_tag: tagid                       # Lombok @Value field name matches JSON tag (lowercase Java field, lowercase JSON key) — no @JsonProperty needed
+        type_native: String
+        omitempty: true
+        notes:
+          - "Java field is lowercase `tagid` (matching the JSON key directly) — distinct from the typical Java convention of camelCase fields with @JsonProperty annotations"
+      - name: bidfloor
+        json_tag: bidfloor
+        type_native: String
+        omitempty: true
+        notes:
+          - "Lowercase Java field (matches JSON key); String type holds a stringified decimal; parsed via new BigDecimal(String) at runtime"
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: EmxDigitalBidder
+  directory_name: emxdigital
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: EmxDigitalBidder.java           # SOLE class in the package — Java edge case #19 alternate naming (no separate Util/Helper/Model classes)
+        role: implementation
+        loc: 268
+  imports:
+    has_jsonutil: false
+    has_template_engine: false
+    has_currency_helper: false
+  make_requests:
+    request_body:
+      kind: openrtb2-modified
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-batch                     # SINGLE HTTP request for the entire batch — all imps go in one body. Cross-language symmetric with Go.
+    mutation:
+      mutates_request: true
+      go_idiom: null
+      java_idiom: lombok-tobuilder            # request.toBuilder().imp(modifiedImps).build() — whole-request immutable rebuild via Lombok builder
+      entity_strategies:
+        Imp: immutable-rebuild                # imp.toBuilder() then chain setters (tagid, secure, banner/video, bidfloor)
+        Banner: immutable-rebuild             # banner.toBuilder() then format(subList)
+        Video: immutable-rebuild              # video.toBuilder() then protocols(filtered)
+        Site: none
+        App: none
+        Source: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid       # `mapper.mapper().convertValue(imp.getExt(), TypeReference<ExtPrebid<?, ExtImpEmxDigital>>{}).getBidder()`
+      target_type: ExtImpEmxDigital
+      wrapper_type: null
+    endpoint_resolution:
+      kind: dynamic-template-string
+      mechanism_go: null
+      mechanism_java: stringformat-with-instant-now
+      macros_used:
+        - "t (TMax milliseconds, defaults to 1000 if 0)"
+        - "ts (Instant.now().getEpochSecond() — NO testing-mode override; tests use ${json-unit.any-number} placeholders)"
+        - "src (literal `pbserver`)"
+    helpers:
+      - name: makeBidRequest
+        signature: "private BidRequest makeBidRequest(BidRequest request)"
+      - name: unpackImpExt
+        signature: "private ExtImpEmxDigital unpackImpExt(Imp imp)"
+      - name: modifyImp
+        signature: "private Imp modifyImp(Imp imp, boolean isSecure, ExtImpEmxDigital extImpEmxDigital)"
+      - name: modifyImpVideo
+        signature: "private Video modifyImpVideo(Video video)"
+      - name: modifyImpBanner
+        signature: "private Banner modifyImpBanner(Banner banner)"
+      - name: cleanProtocol
+        signature: "private List<Integer> cleanProtocol(List<Integer> protocols)"
+      - name: makeHeaders
+        signature: "private MultiMap makeHeaders(BidRequest request)"
+      - name: makeUrl
+        signature: "private String makeUrl(Long tmax)"
+      - name: resolveUrl
+        signature: "private static String resolveUrl(BidRequest bidRequest)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidResponse bidResponse)"
+      - name: getBidType
+        signature: "private static BidType getBidType(String bidAdm)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: string-sniff-adm-substring  # `StringUtils.containsAny(bidAdm, "<?xml", "<vast")` — case-SENSITIVE substring match (Go side lowercases AdM first; Java does NOT — case-sensitivity divergence)
+          hardcoded_value: null
+          fallback_action: classify-as-banner
+      default_value: banner
+      multi_format_detection: none
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/emxdigital/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:                              # Audit C4 resolves under `src/test/resources/org/prebid/server/it/openrtb2/emxdigital/`. The 4 cadent-alias fixtures (test-auction-cadentaperturemx-{request,response}.json + test-cadentaperturemx-bid-{request,response}.json under openrtb2/cadentaperturemx/) are documented in quirks/lifecycle but NOT enumerated here — audit base dir is parent-only.
+      - filename: test-auction-emxdigital-request.json
+        bytes: 0
+        role: auction-request
+      - filename: test-auction-emxdigital-response.json
+        bytes: 0
+        role: auction-response
+      - filename: test-emxdigital-bid-request.json
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-emxdigital-bid-response.json
+        bytes: 0
+        role: bidder-bid-response
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+  fixture_handling: count-only
+  test_application_properties_entries_added: 3
+  integration_test_class: EmxdigitalTest      # Note title-case is `Emxdigital`, NOT `EmxDigitalTest` — divergence from class-name PascalCase
+  integration_test_pattern: 4-file-split
+
+aliases:
+  - name: cadent_aperture_mx
+    parent: emxdigital
+    config_form: tilde_inherit                # `aliases: { cadent_aperture_mx: { enabled: false, geoscope: [USA, CAN] } }` — minimal alias-back form. Inherits parent's endpoint, capabilities, etc.
+    relationship_flavor: registration-only    # NOT an empire alias; this is a parent-with-disabled-alias for the Cadent acquisition rename. Closest existing flavor.
+    test_assets:
+      it_class: CadentApertureMxTest          # NOTE: `Mx` not `MX` — diverges from Go's all-caps `BidderCadentApertureMX` constant
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/cadentaperturemx/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false                            # Default-disabled (Rule 45 instance — operators must opt in via `adapters.emxdigital.aliases.cadent_aperture_mx.enabled=true`)
+
+spring_config:
+  factory_class: EmxDigitalConfiguration
+  factory_method: emxdigitalBidderDeps
+  property_source_path: classpath:/bidder-config/emxdigital.yaml
+  bidder_creator_lambda: |
+    config -> new EmxDigitalBidder(config.getEndpoint(), mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: emxdigitalConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.emxdigital\")"
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+
+bidder_class:
+  name: EmxDigitalBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointUrl
+        type: String
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+    arity: 2                                  # 2-arity (no currency service injection — distinct from Vungle's 3-arity)
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: USD_CURRENCY
+      type: String
+      value: "USD"
+    - name: PROTOCOL_VAST_40
+      type: int                               # Literal `7` (Java numeric — Go uses typed `adcom1.CreativeVAST40` constant)
+      value: "7"
+    - name: EMXDIGITAL_EXT_TYPE_REFERENCE
+      type: TypeReference
+      value: "TypeReference<ExtPrebid<?, ExtImpEmxDigital>>"
+  helper_classes_co_located: []                # NO co-located helper classes — `EmxDigitalBidder.java` is the SOLE file in the package (Java edge case #19)
+  helper_classes_in_proto:
+    - ExtImpEmxDigital
+
+code_naming: null
+
+lifecycle:
+  rename:
+    old_name: emx_digital
+    new_name: cadent_aperture_mx
+    subtype: java-leads                       # ADR-006 sub-type. Java retains `emxdigital` (legacy EMX brand) as canonical parent with `cadent_aperture_mx` (new Cadent brand) as a disabled+geo-restricted alias under it. Defensible under the parent-canonical interpretation.
+    alias_back: true                          # Java DOES use a YAML alias-back: `aliases: { cadent_aperture_mx: { enabled: false, geoscope: [USA, CAN] } }`
+    alias_back_form: tilde_inherit_with_geoscope
+    package_moves: []
+    fixture_dir_moves: []
+    yaml_deletes: []
+    yaml_adds: []
+    merged_at: null
+    release: null
+    notes:
+      - "Cadent acquired EMX Digital; the SSP/exchange product was rebranded to 'Cadent Aperture MX'. Maintainer email is `contactaperturemx@cadent.tv` — same on both sides."
+      - "Java retains `emxdigital` as the canonical parent. The new Cadent brand `cadent_aperture_mx` lives ONLY as a disabled+geo-restricted alias under emxdigital.yaml — operators must explicitly enable via `adapters.emxdigital.aliases.cadent_aperture_mx.enabled=true`."
+      - "Comment in emxdigital.yaml at the alias block: `# CadentAperture only operates in North America` — explicitly explains the geo-restriction rationale."
+      - "Java has only ONE bidder code path (`EmxDigitalBidder`); the alias is purely YAML-declared. No `CadentApertureMxBidder.java`, no `CadentApertureMxConfiguration.java`, no `ExtImpCadentApertureMx.java` exist."
+      - "Two integration test classes for one bidder code path: `EmxdigitalTest` (parent regression) and `CadentApertureMxTest` (alias regression). Both hit the same wiremock endpoint `/emx_digital-exchange`."
+      - "Go side has dual-core-bidder-registration (BOTH cadent_aperture_mx + emx_digital as siblings sharing one Builder). Java side has parent-with-disabled-alias. Asymmetric topology — both retain both names but with different organizational primacy."
+      - "Per ADR-006 LIFECYCLE_PAIRS: ('cadent_aperture_mx', 'emxdigital', 'java-leads', 'Cadent acquired EMX'). The label is empirically defensible (Java has designated a canonical name; Go has not), though strictly the rename is partial on both sides."
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: java-edge-case-19-alternate-naming
+    file: src/main/java/org/prebid/server/bidder/emxdigital/
+    summary: "Bidder package contains ONLY `EmxDigitalBidder.java`. No `EmxDigitalUtil`, no separate request/response model classes. Java edge case #19 alternate naming form. Distinct from canonical Java bidders that ship Bidder + Util/Helper classes in the same package."
+    edge_case_taxon: yaml-field-name-typo
+  - id: tri-form-java-naming
+    file: src/main/java/org/prebid/server/spring/config/bidder/EmxDigitalConfiguration.java
+    line: 22
+    summary: "Three name forms within Java: `BIDDER_NAME = \"emx_digital\"` (underscored — Prebid routing identifier, used in BidderDepsAssembler.forBidder); `@ConfigurationProperties(\"adapters.emxdigital\")` (no underscore — Spring property key); `EmxDigitalBidder/Configuration/ExtImpEmxDigital` (PascalCase). Plus integration test class title-cases break further: `EmxdigitalTest` (not `EmxDigitalTest`) and `CadentApertureMxTest` (not `CadentApertureMXTest`). Rule 46 normalization happens INSIDE the Java side itself."
+    edge_case_taxon: yaml-field-name-typo
+  - id: bidder-name-vs-yaml-key-divergence
+    file: src/main/resources/bidder-config/emxdigital.yaml
+    line: 2
+    summary: "YAML structure root key is `adapters.emxdigital` (no underscore). Spring class uses `@ConfigurationProperties(\"adapters.emxdigital\")` matching. But the params filename is `emx_digital.json` (with underscore) and BIDDER_NAME constant is `emx_digital`. Cross-name layer asymmetry between Spring property naming and Prebid Core routing identifier."
+    edge_case_taxon: yaml-field-name-typo
+  - id: cadent-alias-with-geoscope-and-default-disabled
+    file: src/main/resources/bidder-config/emxdigital.yaml
+    line: 5
+    summary: "Alias `cadent_aperture_mx` has BOTH `enabled: false` (default-disabled, Rule 45 instance) AND `geoscope: [USA, CAN]` (alias-only field; geo-restriction). Comment: `# CadentAperture only operates in North America`. Operators must explicitly enable. Cross-language asymmetric — Go has NO yaml alias; both names are core sibling bidders."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: bid-type-string-sniff-case-sensitive
+    file: src/main/java/org/prebid/server/bidder/emxdigital/EmxDigitalBidder.java
+    summary: "`StringUtils.containsAny(bidAdm, \"<?xml\", \"<vast\")` is CASE-SENSITIVE. Go side lowercases AdM via `strings.ToLower(raw)` first; Java does NOT. Java would miss `<VAST>` uppercase variant. Real Cadent VAST responses likely use lowercase, so this is a latent fidelity gap rather than a current bug."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: currency-propagation-from-response
+    file: src/main/java/org/prebid/server/bidder/emxdigital/EmxDigitalBidder.java
+    summary: "`extractBids` sets `BidderBid.cur = bidResponse.getCur()` — Java propagates response currency to TypedBid. Go side does NOT propagate (Go's TypedBid has no currency field). Java-only currency propagation. Cross-language behavioral asymmetry."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: no-imp-id-clobber
+    file: src/main/java/org/prebid/server/bidder/emxdigital/EmxDigitalBidder.java
+    summary: "Java does NOT clobber `bid.impID` with `bid.id`. Go side does (`sb.Bid[i].ImpID = sb.Bid[i].ID`). Cross-language behavioral asymmetry — Java assumes the Cadent server emits Bid.ImpID correctly, while Go preempts."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: no-testing-mode-override
+    file: src/main/java/org/prebid/server/bidder/emxdigital/EmxDigitalBidder.java
+    summary: "Java's `makeUrl` always uses `Instant.now().getEpochSecond()` for the `ts` query parameter — no testing-mode override. IT tests rely on `${json-unit.any-number}` placeholders for timestamp variance. Go side has a `testing bool` flag pinning ts=2060541160 for golden test stability."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: vast40-protocol-filter-literal-7
+    file: src/main/java/org/prebid/server/bidder/emxdigital/EmxDigitalBidder.java
+    summary: "`PROTOCOL_VAST_40 = 7` literal int constant; cleanProtocol filters this. Go uses typed `adcom1.CreativeVAST40` constant. Same effect; type-system-divergence."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: bidfloor-parse-error-silent-skip
+    file: src/main/java/org/prebid/server/bidder/emxdigital/EmxDigitalBidder.java
+    summary: "If bidfloor extension parse to BigDecimal throws NumberFormatException, the imp is returned WITHOUT bidfloor set — the exception is silently swallowed (no error logged). Cross-language symmetric — Go also silently skips on parse failure (sets bidFloor=0 then skips since bidFloor>0 is false)."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: cookie-family-name-underscored
+    file: src/main/resources/bidder-config/emxdigital.yaml
+    line: 22
+    summary: "`cookie-family-name: emx_digital` uses underscored form (matches Go's `emx_digital` core bidder name) — distinct from the YAML key `emxdigital` used by Spring. Cookie family is the cross-language identity boundary."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/cadent_aperture_mx/
+    package_name: cadentaperturemx
+    bidder_constant: openrtb_ext.BidderCadentApertureMX
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/emxdigital/
+    bidder_class: EmxDigitalBidder
+    config_class: EmxDigitalConfiguration
+    yaml_path: src/main/resources/bidder-config/emxdigital.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/emxdigital/
+  port_concerns:
+    aliases_inverted: true                    # Java declares cadent_aperture_mx as disabled+geo-restricted alias under emxdigital. Go has NO YAML alias — co-registers both as core bidders with shared Builder. Cross-language asymmetry on the alias mechanism (Rule 33-adjacent).
+    yaml_unification: false                   # Java has ONE yaml file (emxdigital.yaml with alias block). Go has TWO yaml files (cadent_aperture_mx.yaml + emx_digital.yaml, byte-identical).
+    mutation_idiom_divergence: true           # Java uses Lombok toBuilder immutable rebuild; Go uses shallow-copy-then-mutate
+    package_directory_mismatch: false         # Java side: package emxdigital in dir emxdigital. Go side has the mismatch (package cadentaperturemx in dir cadent_aperture_mx).
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: null
+    destination_language: null
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - bidder-rename-cadent-acquired-emx
+      - dual-core-bidder-registration-go
+      - parent-with-disabled-alias-java
+      - bid-type-string-sniff-case-sensitivity
+      - imp-id-clobber-go-only
+      - currency-propagation-java-only
+      - tri-form-java-naming
+      - alias-with-geoscope-and-default-disabled
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "Java edge case #19 alternate naming: `EmxDigitalBidder.java` is the SOLE class in the package (no Util/Helper/Model classes). Distinct from canonical Java bidders that ship Bidder + helpers."
+    - "Tri-form Java naming: `BIDDER_NAME = \"emx_digital\"` (underscored — Prebid routing identifier and params filename); `@ConfigurationProperties(\"adapters.emxdigital\")` (no underscore — Spring property key); class names PascalCase `EmxDigitalBidder/Configuration/ExtImpEmxDigital`. Plus IT class title-cases diverge: `EmxdigitalTest` (not `EmxDigitalTest`) and `CadentApertureMxTest` (Mx not MX)."
+    - "Cadent alias is `enabled: false` + `geoscope: [USA, CAN]` (default-disabled with geo-restriction). Operators must explicitly enable via `adapters.emxdigital.aliases.cadent_aperture_mx.enabled=true`. The IT test-application.properties enables it for testing."
+    - "Currency: Java sets `BidderBid.cur = bidResponse.getCur()` — propagates response currency. Go does NOT propagate. Java-only currency propagation."
+    - "Bid-type AdM sniff: `StringUtils.containsAny(bidAdm, \"<?xml\", \"<vast\")` is CASE-SENSITIVE. Go lowercases AdM first. Latent cross-language divergence."
+    - "Constructor 2-arity (endpointUrl, mapper) — distinct from typical Java bidders with currency service injection."
+    - "ExtImpEmxDigital uses lowercase Java field names (`tagid`, `bidfloor`) matching JSON keys directly — no @JsonProperty annotations needed. Distinct from typical camelCase + @JsonProperty pattern."
+    - "Two integration test classes (EmxdigitalTest + CadentApertureMxTest) for ONE bidder code path. Both hit `/emx_digital-exchange` wiremock endpoint."
+    - "Cookie-family-name uses the underscored form `emx_digital` (matching Go's identifier). Cross-language identity boundary."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

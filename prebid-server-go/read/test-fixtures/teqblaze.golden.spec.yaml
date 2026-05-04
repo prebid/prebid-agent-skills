@@ -1,0 +1,325 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: go
+
+provenance:
+  source:
+    repo: prebid/prebid-server
+    ref:
+      branch: master
+    resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-info: 1.0.0
+      read-bidder-params: 1.0.0
+      read-adapter-code: 1.0.0
+    timestamp_utc: "2026-05-02T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: teqblaze
+  is_alias: false
+  alias_of: null
+  parent_aliases: []                          # Go-side: 10 aliases each ship as separate static/bidder-info/<name>.yaml with `aliasOf: teqblaze` (Rule 33).
+  whitelabel_only: true                       # Go YAML declares `whiteLabelOnly: true` and ships NO endpoint — parent is a registration anchor only; only aliases function.
+  disabled: false
+  module_path_major: v4
+  java_artifact_version: null
+  empire_canonical_master: false              # smarthub is the canonical white-label-saas master (ADR-003); teqblaze is the second-largest reference fixture for the flavor.
+  empire_parent_flavor: white-label-saas
+
+bidder_info:
+  endpoint: null                              # Parent has NO endpoint (whiteLabelOnly: true). Each alias supplies its own. Upstream YAML omits the field entirely (so golden uses null to match upstream-absent).
+  endpoint_construction:
+    kind: static                              # Aliases inherit the empty parent endpoint and override per-alias; parent itself is non-functional.
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "github@teqblaze.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}                               # Go YAML omits userSync entirely
+  yaml_extra_fields:
+    whiteLabelOnly: true                      # Go-only field — declares the parent as a registration anchor for alias-only operation
+  yaml_field_name_quirks: []
+
+bidder_params_json: |-
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "TeqBlaze Adapter Params",
+    "description": "A schema which validates params accepted by the TeqBlaze adapter",
+    "type": "object",
+    "properties": {
+      "placementId": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Placement ID"
+      },
+      "endpointId": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Endpoint ID"
+      }
+    },
+    "oneOf": [
+      { "required": ["placementId"] },
+      { "required": ["endpointId"] }
+    ]
+  }
+bidder_params_sha256: ef396f97c184f14224d0006d6277c6982e7afea42f650e43f31af2c79e8b53bb
+
+params:
+  schema_interpretation:
+    properties:
+      - name: placementId
+        type: string
+        minLength: 1
+        description: "Placement ID"
+      - name: endpointId
+        type: string
+        minLength: 1
+        description: "Endpoint ID"
+    required_fields: []                       # The `oneOf` combinator gates on placementId OR endpointId; neither is unconditionally required.
+    flexible_types: []
+    combinators_used:
+      - oneOf                                 # First corpus example of params `oneOf` combinator. Each branch is a `required: [...]` entry — the `oneOf-of-required` shape.
+  ext_struct:
+    package: openrtb_ext
+    file: openrtb_ext/imp_teqblaze.go
+    type_name: ImpExtTeqBlaze                 # Brand-acronym-preserving TitleCase: `TeqBlaze` (with capital B) in the type name despite YAML name `teqblaze`. Same pattern as smarthub's ExtSmartHub.
+    fields:
+      - name: PlacementID
+        json_tag: placementId
+        type_native: string
+        omitempty: false
+        notes: []
+      - name: EndpointID
+        json_tag: endpointId
+        type_native: string
+        omitempty: false
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: adapters/teqblaze/params_test.go
+    valid_cases_count: 4
+    invalid_cases_count: 5
+    bidder_constant_referenced: openrtb_ext.BidderTeqBlaze
+
+code:
+  package_or_class: teqblaze
+  directory_name: teqblaze
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: teqblaze.go
+        role: implementation
+        loc: 165
+  imports:
+    has_template_engine: false                # No text/template — adapter uses the raw config.Endpoint string verbatim
+    has_currency_helper: false
+    has_jsonutil: true                        # uses prebid-server/v4/util/jsonutil
+    third_party:
+      - github.com/prebid/openrtb/v20/openrtb2
+  adapter_struct:
+    type_name: adapter
+    type_visibility: unexported
+    fields:
+      - name: endpoint
+        type: string                           # NOT *template.Template — direct string
+  builder:
+    signature_canonical: true
+    extra_adapter_info_used: false
+    template_parsed_at_build: false
+    errors_returned: []
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: per-imp                       # Rule 10 — one HttpRequest per imp via reqCopy + reqCopy.Imp = []openrtb2.Imp{imp}
+    request_body:
+      kind: openrtb2-modified                 # imp.ext.bidder is REPACKED with new shape (see imp_ext_repack quirk)
+      custom_body_type: null
+    mutation:
+      mutates_request: true
+      entity_strategies:
+        Imp: copy-then-mutate                 # reqCopy := *request; reqCopy.Imp = []openrtb2.Imp{imp}; reqCopy.Imp[0].Ext = impExtJSON
+        Site: none
+        App: none
+      go_idiom: shallow-copy
+      java_idiom: null
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: jsonutil-two-phase
+      mechanism_java: null
+      target_type: openrtb_ext.ImpExtTeqBlaze
+      wrapper_type: null
+    endpoint_resolution:
+      kind: literal                           # Adapter uses raw config.Endpoint string. Aliases' YAML endpoint:s ARE the URLs; no template / no macro substitution.
+      mechanism_go: literal
+      mechanism_java: null
+      macros_used: []
+    helpers:
+      - name: makeRequest
+        signature: "func (a *adapter) makeRequest(request *openrtb2.BidRequest) (*adapters.RequestData, error)"
+      - name: getBidType
+        signature: "func getBidType(bid openrtb2.Bid) (openrtb_ext.BidType, error)"
+  make_bids:
+    response_type: openrtb2.BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: canonical-go-helpers              # adapters.IsResponseStatusCodeNoContent + adapters.CheckResponseStatusCodeForErrors
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-mtype                # Rule 23. Go-side: banner=1, video=2, native=3 (audio NOT supported on Go side; Java does support audio=3 + native=4)
+          field: bid.MType
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    bid_pointer_pattern: indexed-iteration    # `for i := range seatBid.Bid { bid := seatBid.Bid[i]; ... }` — index-based to avoid range-var aliasing
+    bid_pointer_go_sibling: range-index
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: teqblazetest
+  go_directory_naming: canonical
+  java_it_folder_naming: null
+  fixture_inventory:
+    exemplary: []                             # Inventoried by orchestrator on read
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration: []
+  uses_canonical_harness: true
+  unit_test_methods_count: null
+  unit_test_loc: null
+  hand_written_test_methods: []
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+
+aliases: []                                   # Go-side aliases (360playvid, pinkLion, rocketlab, appStockSSP, gravite, bidfuse, adsinteractive, progx, harion, mycodemedia) live as separate static/bidder-info/<name>.yaml files with `aliasOf: teqblaze`.
+
+spring_config: null
+
+bidder_class: null
+
+code_naming: null
+
+lifecycle: null
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: go-struct
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Content-Type
+      value: "application/json;charset=utf-8"
+    - name: Accept
+      value: "application/json"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: brand-acronym-titlecase-ext-type
+    file: openrtb_ext/imp_teqblaze.go
+    summary: "Type name `ImpExtTeqBlaze` preserves brand-acronym TitleCase (`TeqBlaze` with capital B) despite the YAML name being lowercase `teqblaze`. Same pattern as smarthub's ExtSmartHub. Adjacent to Java edge case #27 (acronym-case preservation) but on the Go side."
+    edge_case_taxon: acronym-case-preservation
+  - id: imp-ext-repack-with-type-tag
+    file: teqblaze.go
+    line: 60
+    summary: "MakeRequests REPACKS imp.ext.bidder with a new shape: `{type: publisher|network, placementId|endpointId: <value>}`. The `type` tag indicates which of the two mutually-exclusive params was supplied (placementId → publisher, endpointId → network). Output JSON shape differs from input — `params.ext_struct.fields[]` describes the input; the wire format ext is the repacked shape. Cross-language: Java side does the SAME repack via TeqblazeExtImp builder."
+    edge_case_taxon: imp-ext-strip-post-extraction
+  - id: white-label-only-parent
+    file: static/bidder-info/teqblaze.yaml
+    summary: "Parent declares `whiteLabelOnly: true` and supplies NO endpoint. Parent is non-functional; only the 10 aliases (each with own endpoint) function. Distinct from smarthub-style white-label-saas where the parent itself functions."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/teqblaze/
+    package_name: teqblaze
+    bidder_constant: openrtb_ext.BidderTeqBlaze
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/teqblaze/
+    bidder_class: TeqblazeBidder
+    config_class: TeqblazeConfiguration       # NOTE: lives in spring/config/bidder/util/ NOT spring/config/bidder/ (location anomaly — only Java config in util/ subpackage today)
+    yaml_path: src/main/resources/bidder-config/teqblaze.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/teqblaze/
+  port_concerns:
+    aliases_inverted: true                    # Java parent.aliases[10 entries] vs Go per-alias YAMLs — Rule 33
+    yaml_unification: false
+    mutation_idiom_divergence: true           # Java imp.toBuilder() vs Go shallow-copy + index-based ext replacement
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis
+    source_pr: prebid/prebid-server-java#4161
+    destination_language: null
+    destination_pr: prebid/prebid-server#4480
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-white-label-saas
+      - imp-ext-repack
+      - first-imp-extraction-anti-pattern
+  go_specific_concerns:
+    - "Adapter struct holds raw `endpoint string`, not `*template.Template`. Builder does NO template parsing — it stores config.Endpoint verbatim and returns. Aliases supply their own endpoints in static/bidder-info/<alias>.yaml; the parent endpoint is empty (whiteLabelOnly: true)."
+    - "MakeRequests REPACKS imp.ext.bidder per imp: input shape is `{placementId | endpointId}`; output (wire) shape is `{bidder: {type: publisher|network, placementId|endpointId: <value>}}`. The `type` field is a derived classification, not present on input. Repacked JSON is written into reqCopy.Imp[0].Ext (line 71)."
+    - "Per-imp split via `reqCopy := *request; reqCopy.Imp = []openrtb2.Imp{imp}` — shallow-copies the BidRequest struct, then assigns a fresh single-imp slice. Slice/pointer fields (Source, Site, App, Device, User) still alias the original framework's underlying memory until reassigned."
+    - "Bid type resolution supports banner=1, video=2, native=3 (Go's openrtb2.MarkupNative is constant 4 but adapter code uses the canonical enum constants). Adapter does NOT support audio (no MarkupAudio case)."
+    - "10 aliases declared via separate Go YAMLs (360playvid, pinkLion, rocketlab, appStockSSP, gravite, bidfuse, adsinteractive, progx, harion, mycodemedia). 360playvid is digit-leading — Java side has the same alias name, but Java's class-naming rules require `Threehundredsixtyplayvid`-style spellout for any class root (Rule 46 digit-leading-workaround case; appStockSSP also has Rule 15 deploy-time-token `#{REGION}#`)."
+  java_specific_concerns: []
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg

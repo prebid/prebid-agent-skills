@@ -1,0 +1,491 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+    fetch_method: github-raw
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: "2026-05-02T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: smarthub
+  is_alias: false
+  alias_of: null
+  parent_aliases:
+    - markapp
+    - jdpmedia
+    - tredio
+    - felixads
+    - jambojar
+    - adinify
+    - artechnology
+    - addigi
+    - radianfusion
+  whitelabel_only: true
+  disabled: false
+  module_path_major: null
+  java_artifact_version: "3.42.0"
+  empire_canonical_master: true               # ADR-003 Rule 44 — white-label-saas canonical (9 aliases; cleanest empire shape per ADR-003)
+  empire_parent_flavor: white-label-saas
+
+bidder_info:
+  endpoint: "https://prebid.attekmi.com/pbserver?partnerName={{Host}}&seat={{AccountID}}&token={{SourceId}}"
+  endpoint_construction:
+    kind: multi-token-substitution
+    macros_used:
+      - Host
+      - AccountID
+      - SourceId
+    macro_syntax: java-string-replace
+    placeholders_unresolved: []
+  endpoint_compression: null                  # Java YAML omits endpoint-compression entirely (upstream-absent → null golden)
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@attekmi.com"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 0
+  user_sync: {}                                # Java YAML omits usersync for parent (each alias declares its own — see aliases[])
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Attekmi (formerly SmartHub) Adapter Params",
+    "description": "A schema which validates params accepted by the Attekmi (formerly SmartHub) adapter",
+    "type": "object",
+    "properties": {
+      "partnerName": {
+        "type": "string",
+        "description": "Attekmi (formerly SmartHub) unique partner name"
+      },
+      "seat": {
+        "type": "string",
+        "description": "Seat",
+        "minLength": 1
+      },
+      "token": {
+        "type": "string",
+        "description": "Token",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "seat",
+      "token"
+    ]
+  }
+bidder_params_sha256: 92b2e3f638f6219083b14306cab72a3bee59f41c59e4961aa71accc152be0b65
+
+params:
+  schema_interpretation:
+    properties:
+      - name: partnerName
+        type: string
+        description: "Attekmi (formerly SmartHub) unique partner name"
+      - name: seat
+        type: string
+        minLength: 1
+        description: "Seat"
+      - name: token
+        type: string
+        minLength: 1
+        description: "Token"
+    required_fields:
+      - seat
+      - token
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.smarthub
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/smarthub/ExtImpSmarthub.java
+    type_name: ExtImpSmarthub                 # Java uses canonical ExtImp* form (vs Go's ExtSmartHub which preserves brand-acronym TitleCase)
+    fields:
+      - name: partnerName
+        json_tag: partnerName
+        type_native: String
+        omitempty: true
+        notes:
+          - "@JsonProperty(\"partnerName\") explicit"
+      - name: seat
+        json_tag: seat
+        type_native: String
+        omitempty: true
+        notes: []
+      - name: token
+        json_tag: token
+        type_native: String
+        omitempty: true
+        notes: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test: null
+
+code:
+  package_or_class: SmarthubBidder
+  directory_name: smarthub
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: SmarthubBidder.java
+        role: implementation
+        loc: 130
+  imports:
+    has_jsonutil: false
+    has_template_engine: false
+    has_currency_helper: false                # Smarthub does NOT use CurrencyConversionService
+  make_requests:
+    request_body:
+      kind: openrtb2-passthrough              # Body = mapper.encodeToBytes(request) directly; no imp mutation
+      custom_body_type: null
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched                # Single HTTP request returned with the entire BidRequest
+    mutation:
+      mutates_request: false
+      go_idiom: null
+      java_idiom: none
+      entity_strategies:
+        Imp: none
+        Site: none
+        App: none
+        Source: none
+        Banner: none
+        Device: none
+        User: none
+        Cur: none
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid       # TypeReference<ExtPrebid<?, ExtImpSmarthub>>
+      target_type: ExtImpSmarthub
+      wrapper_type: null
+    endpoint_resolution:
+      kind: multi-token-substitution
+      mechanism_go: null
+      mechanism_java: string-replace
+      macros_used:
+        - Host
+        - AccountID
+        - SourceId
+    helpers:
+      - name: resolveHeaders
+        signature: "private MultiMap resolveHeaders()"
+      - name: buildEndpointUrl
+        signature: "private String buildEndpointUrl(ExtImpSmarthub extImpSmarthub)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidResponse bidResponse)"
+      - name: makeBid
+        signature: "private static BidderBid makeBid(Bid bid, String currency)"
+      - name: getBidType
+        signature: "private static BidType getBidType(Bid bid)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field      # Rule 24 — bid.getExt().get("mediaType") parses to BidType
+          field: bid.ext.mediaType
+          fallback_action: throw
+      default_value: null
+      multi_format_detection: strict
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/smarthub/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-smarthub-bid-request.json
+        bytes: 0
+        role: bidder-bid-request
+      - filename: test-smarthub-bid-response.json
+        bytes: 0
+        role: bidder-bid-response
+      - filename: test-auction-smarthub-request.json
+        bytes: 0
+        role: auction-request
+      - filename: test-auction-smarthub-response.json
+        bytes: 0
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 10
+  unit_test_loc: 252
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+  fixture_handling: count-only
+  test_application_properties_entries_added: 0
+  integration_test_class: SmarthubTest
+  integration_test_pattern: 4-file-split
+
+aliases:
+  - name: markapp
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: MarkappTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/markapp/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: jdpmedia
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: null                          # ANOMALY: jdpmedia has fixture dir but NO IT class — incomplete-classification quirk emitted on this entry
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/jdpmedia/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: tredio
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: TredioTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/tredio/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: felixads
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: FelixadsTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/felixads/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: jambojar
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: JambojarTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/jambojar/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: adinify
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: AdinifyTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/adinify/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: artechnology
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: ArtechnologyTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/artechnology/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: addigi
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: AddigiTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/addigi/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false
+  - name: radianfusion
+    parent: smarthub
+    config_form: full_block
+    relationship_flavor: white-label-saas
+    test_assets:
+      it_class: RadianfusionTest
+      fixture_dir: src/test/resources/org/prebid/server/it/openrtb2/radianfusion/
+      fixture_file_count: 4
+    test_application_properties_entries: []
+    enabled: false                            # NOTE: alias name `radianfusion` (no T) but endpoint URL is `radiantfusion-prebid.attekmi.co` (typo `.co` not `.com`); upstream artifact
+
+spring_config:
+  factory_class: SmarthubConfiguration        # Canonical `<Name>Configuration` form
+  factory_method: smarthubBidderDeps
+  property_source_path: classpath:/bidder-config/smarthub.yaml
+  bidder_creator_lambda: |
+    config -> new SmarthubBidder(config.getEndpoint(), mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: smarthubConfigurationProperties
+      type: BidderConfigurationProperties
+      source: "@ConfigurationProperties(\"adapters.smarthub\")"
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(\"${external-url}\")"
+    - name: mapper
+      type: JacksonMapper
+      source: "@Autowired"
+
+bidder_class:
+  name: SmarthubBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  constructor:
+    parameters:
+      - name: endpointTemplate
+        type: String
+        annotations: []
+      - name: mapper
+        type: JacksonMapper
+        annotations: []
+    arity: 2
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  static_fields:
+    - name: SMARTHUB_EXT_TYPE_REFERENCE
+      type: "TypeReference<ExtPrebid<?, ExtImpSmarthub>>"
+  helper_classes_co_located: []
+  helper_classes_in_proto:
+    - ExtImpSmarthub
+
+code_naming: null
+
+lifecycle: null                               # SmartHub→Attekmi rebrand: see Java PR #3699 (referenced in ADR-003) AND `meta-info.maintainer-email = prebid@attekmi.com` AND endpoint host `prebid.attekmi.com`. The YAML name + class name remain `smarthub`/`Smarthub`. Not yet a Rule 43 lifecycle.rename event.
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-staticconstructor   # @Value(staticConstructor = "of")
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Prebid-Adapter-Ver
+      value: "1.0.0"
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: alias-it-class-missing-jdpmedia
+    file: src/main/resources/bidder-config/smarthub.yaml
+    summary: "Alias `jdpmedia` is declared in parent.aliases[] AND has its IT fixture dir at openrtb2/jdpmedia/ — but does NOT have a corresponding JdpmediaTest.java IT class. The 8 sibling aliases (markapp, tredio, felixads, jambojar, adinify, artechnology, addigi, radianfusion) all have IT classes. Reviewers may flag this as a gap."
+    edge_case_taxon: incomplete-classification
+  - id: rebrand-in-progress
+    file: src/main/resources/bidder-config/smarthub.yaml
+    summary: "Endpoint host (`prebid.attekmi.com`), maintainer email (`prebid@attekmi.com`), and JSON schema title (`Attekmi (formerly SmartHub) Adapter Params`) reference the Attekmi rebrand. The YAML name + class name remain `smarthub`/`Smarthub`. SmartHub→Attekmi rebrand is partial; ADR-003 expects this rebrand to land as a Rule 43 lifecycle.rename event in a future Java PR (referenced #3699)."
+    edge_case_taxon: bidder-rename-three-step
+  - id: alias-typo-radianfusion-vs-radiantfusion
+    file: src/main/resources/bidder-config/smarthub.yaml
+    summary: "Alias name in parent.aliases[] is `radianfusion` but the endpoint URL points at `radiantfusion-prebid.attekmi.co` (extra `t` AND `.co` not `.com`). Likely a typo at PR-time that landed without notice. Cross-language fidelity NOT broken (Go side mirrors with `radianfusion` YAML name)."
+    edge_case_taxon: yaml-field-name-typo
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/smarthub/
+    package_name: smarthub
+    bidder_constant: openrtb_ext.BidderSmartHub
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/smarthub/
+    bidder_class: SmarthubBidder
+    config_class: SmarthubConfiguration
+    yaml_path: src/main/resources/bidder-config/smarthub.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/smarthub/
+  port_concerns:
+    aliases_inverted: true                    # Java parent.aliases[markapp,jdpmedia,…] (all 9) vs Go per-alias YAMLs — Rule 33 + Rule 44
+    yaml_unification: true
+    mutation_idiom_divergence: false          # Both sides do passthrough (no entity mutation)
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: shared-genesis           # Both established pre-Phase-2 ports (Java #1442; Go #1932)
+    source_pr: prebid/prebid-server-java#1442
+    destination_language: null
+    destination_pr: prebid/prebid-server#1932
+    fidelity_review_themes:
+      - port-fidelity
+      - alias-empire-white-label-saas
+      - parent-rebrand-in-progress
+      - first-imp-extraction-anti-pattern
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "Bean-construction-time URL validation: SmarthubBidder constructor calls HttpUtil.validateUrl(endpointTemplate) at line 49. Throws IllegalArgumentException on invalid URL — caught at Spring startup."
+    - "Static TypeReference<ExtPrebid<?, ExtImpSmarthub>> at class init (line 38)."
+    - "Single-batched: makeHttpRequests reads imp.ext from the FIRST imp via `request.getImp().getFirst()` (line 57), then sends the entire BidRequest as one HttpRequest. Multi-imp callers' subsequent imps are passed through but not used for endpoint resolution — symmetric with Go-side first-imp-only-extraction quirk."
+    - "Empty-seatbid shortcircuit: extractBids returns Collections.emptyList() BEFORE iterating when getSeatbid() is null/empty. Distinct from Go's explicit error-on-empty-seatbid (which returns BadServerResponse instead)."
+    - "Custom HTTP header `Prebid-Adapter-Ver: 1.0.0` is hardcoded in resolveHeaders (line 76). Go side uses the same constant value but as a top-level package const (ADAPTER_VER) at line 21."
+    - "9 aliases declare full_block config_form (each ships its own endpoint URL; vs tilde_inherit which would inherit all parent fields). White-label-saas empire flavor canonical (ADR-003 Rule 44)."
+    - "Alias inconsistency: jdpmedia has fixture dir but NO IT class. radianfusion alias name spelled without the `t` but endpoint URL is `radiantfusion-prebid.attekmi.co`. Both upstream artifacts; not introduced by this read."
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
+
+registry: {}

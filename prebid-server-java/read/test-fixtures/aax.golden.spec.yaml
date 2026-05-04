@@ -1,0 +1,400 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: gh-cli
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+      read-bidder-class: 1.0.0
+      read-bidder-config: 1.0.0
+      read-bidder-params-java: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: aax
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://prebid.aaxads.com/rtb/pb/aax-prebid?src={{PREBID_SERVER_ENDPOINT}}"
+  endpoint_construction:
+    kind: single-token-substitution
+    macros_used:
+      - PREBID_SERVER_ENDPOINT
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: true
+  maintainer:
+    email: "product@aax.media"
+  capabilities:
+    site:
+      mediaTypes:
+        - banner
+        - video
+        - native
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 720
+  user_sync:
+    cookie-family-name: aax
+    redirect:
+      url: "https://c.aaxads.com/aacxc.php?fv=1&wbsh=psa&ryvlg=setstatuscode&redirect={{redirect_url}}"
+      support-cors: false
+      uid-macro: "<vsid>"
+  yaml_extra_fields: {}
+  yaml_field_name_quirks: []
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Aax Adapter Params",
+    "description": "A schema which validates params accepted by the Aax adapter",
+    "type": "object",
+    "properties": {
+      "cid": {
+        "type": "string",
+        "description": "The customer id provided by AAX."
+      },
+      "crid": {
+        "type": "string",
+        "description": "The placement id provided by AAX."
+      }
+    },
+    "required": [
+      "cid",
+      "crid"
+    ]
+  }
+bidder_params_sha256: c71febfe0778ea8b7e522fe04afa4bae0c76e6dbe3cc0e4c5ca2a07889004200
+
+params:
+  schema_interpretation:
+    properties:
+      - name: cid
+        type: string
+        description: "The customer id provided by AAX."
+      - name: crid
+        type: string
+        description: "The placement id provided by AAX."
+    required_fields:
+      - cid
+      - crid
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: null
+    file: null
+    type_name: null
+    fields: []
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/aax/AaxBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: AaxBidder
+  directory_name: aax
+  package_directory_mismatch: false
+  file_layout:
+    kind: single-file
+    files:
+      - name: AaxBidder.java
+        role: implementation
+        loc: 141
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: false
+    third_party:
+      - CollectionUtils
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+    request_body:
+      kind: openrtb2-passthrough
+      custom_body_type: null
+    mutation:
+      mutates_request: false
+      entity_strategies:
+        Site: none
+        App: none
+        Source: none
+        Imp: none
+        Banner: none
+        Device: none
+        User: none
+        Cur: none
+      go_idiom: null
+      java_idiom: none
+    imp_ext_unmarshal:
+      kind: none
+      mechanism_go: null
+      mechanism_java: null
+      target_type: null
+      wrapper_type: null
+    endpoint_resolution:
+      kind: single-token-substitution
+      mechanism_go: null
+      mechanism_java: string-replace
+      macro_field_set:
+        - PREBID_SERVER_ENDPOINT
+      template_params_struct_field_count: null
+    helpers:
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(BidRequest bidRequest, BidResponse bidResponse, List<BidderError> errorList)"
+      - name: bidsFromResponse
+        signature: "private List<BidderBid> bidsFromResponse(BidRequest bidRequest, BidResponse bidResponse, List<BidderError> errorList)"
+      - name: resolveBidderBid
+        signature: "private BidderBid resolveBidderBid(Bid bid, List<Imp> imps, List<BidderError> errors)"
+      - name: getBidType
+        signature: "private BidType getBidType(Bid bid, List<Imp> imps)"
+      - name: bidTypeFromExt
+        signature: "private static BidType bidTypeFromExt(ObjectNode bidExt)"
+      - name: bidTypeFromImp
+        signature: "private static BidType bidTypeFromImp(String impId, List<Imp> imps)"
+      - name: resolveEndpoint
+        signature: "private String resolveEndpoint(String configEndpoint, String externalUrl)"
+  make_bids:
+    response_type: BidResponse
+    custom_response_type: null
+    http_status_handling:
+      kind: framework-default-plus-empty-seatbid-shortcircuit
+    application_status_handling:
+      kind: none
+      field: null
+      success_codes: []
+      error_codes: []
+    bid_type_resolution:
+      method_chain:
+        - method: by-bid-ext-typed-field
+          field: bid.ext.adCodeType
+          fallback_action: next
+        - method: by-imp-mediatype
+          fallback_action: next
+        - method: throw
+      default_value: null
+      multi_format_detection: strict
+    bid_pointer_pattern: flatten-streams
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: unguarded-hardcoded
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/aax/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-aax-bid-request.json
+        sha256: dc5b4a453395a06d2571d3f31567098ac62983c7b22d0f6884484fade31e05a2
+        bytes: 948
+        role: bidder-bid-request
+      - filename: test-aax-bid-response.json
+        sha256: 090a95588f5de7319c8fa1e8aadbca75c159e852584961b272d490246854d6fa
+        bytes: 423
+        role: bidder-bid-response
+      - filename: test-auction-aax-request.json
+        sha256: f9c5fe818d979aadc13d312a6808e3eebfae76cfa653552f2f6c9fb45467145a
+        bytes: 321
+        role: auction-request
+      - filename: test-auction-aax-response.json
+        sha256: 0739f93adc9027551df45662b437f53e216e5129641b914a5adb2ef445ef1b48
+        bytes: 835
+        role: auction-response
+  uses_canonical_harness: true
+  unit_test_methods_count: 14
+  unit_test_loc: 289
+  hand_written_test_methods:
+    - creationShouldFailOnInvalidEndpointUrl
+    - makeHttpRequestsShouldCreateExpectedUrl
+    - makeBidsShouldReturnErrorIfResponseBodyCouldNotBeParsed
+    - makeBidsShouldReturnEmptyListIfBidResponseIsNull
+    - makeBidsShouldReturnEmptyListIfBidResponseSeatBidIsNull
+    - makeBidsShouldReturnBannerBidIfBannerIsPresentInAdCodeTypeBidExtRequestImp
+    - makeBidsShouldReturnNativeBidIfNativeIsPresentInAdCodeTypeBidExtRequestImp
+    - makeBidsShouldReturnVideoBidIfVideoIsPresentInAdCodeTypeBidExtRequestImp
+    - makeBidsShouldReturnBannerBidIfBannerIsPresentInRequestImp
+    - makeBidsShouldReturnVideoBidIfVideoIsPresentInRequestImp
+    - makeBidsShouldReturnNativeBidIfNativeIsPresentInRequestImp
+    - makeBidsShouldShouldGetMediaTypeFromImpIfBidExtCannotBeParsed
+    - makeBidsShouldReturnErrorIfBidExtContainUnsupportedMediaType
+    - makeBidsShouldReturnErrorIfRequestContainUnsupportedMediaType
+  fixture_handling: count-only
+  test_application_properties_entries_added: 2
+  integration_test_class: AaxTest
+  integration_test_pattern: 4-file-split
+
+spring_config:
+  factory_class: AaxConfiguration
+  factory_method: aaxBidderDeps
+  property_source_path: classpath:/bidder-config/aax.yaml
+  bidder_creator_lambda: |
+    config -> new AaxBidder(resolveEndpoint(config.getEndpoint(), externalUrl), mapper)
+  configuration_properties_class: null
+  bean_dependencies:
+    - name: aaxConfigurationProperties
+      type: BidderConfigurationProperties
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@Value(${external-url})"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+
+bidder_class:
+  name: AaxBidder
+  parameterized_request_type: BidRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 2
+    parameters:
+      - name: endpointUrl
+        type: String
+        source: config.endpoint
+        role: properties
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+  static_fields:
+    - name: USD_CURRENCY
+      type: String
+      value: "USD"
+  helper_classes_co_located: []
+  helper_classes_in_proto: []
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: null
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers: []
+  authentication_kind: none
+  authentication_input: []
+
+deploy_time_tokens: []
+
+quirks:
+  - id: three-step-bid-type-method-chain
+    file: src/main/java/org/prebid/server/bidder/aax/AaxBidder.java
+    summary: "getBidType (lines 94-98) uses ObjectUtil.firstNonNull over [bidTypeFromExt, bidTypeFromImp]; bidTypeFromExt (lines 100-113) reads bid.ext.adCodeType and returns null on missing/unsupported, bidTypeFromImp (lines 115-140) requires exactly one media type on the matched imp or throws PreBidException 'Unable to fetch mediaType in multi-format'. Encoded as 3-step method_chain[by-bid-ext-typed-field -> by-imp-mediatype -> throw] with strict multi_format_detection (canonical example for the rules-list refactor)."
+    edge_case_taxon: incomplete-classification
+  - id: forced-usd-currency
+    file: src/main/java/org/prebid/server/bidder/aax/AaxBidder.java
+    summary: "resolveBidderBid (line 91) calls BidderBid.of(bid, bidType, USD_CURRENCY) — currency is hardcoded to USD regardless of bidResponse.cur or upstream signal. Surfaces as currency_overwrite_safety: unguarded-hardcoded."
+    edge_case_taxon: unguarded-currency-overwrite
+  - id: ext-struct-absent-but-params-required
+    file: src/main/resources/static/bidder-params/aax.json
+    summary: "Bidder declares cid+crid as required string params but ships NO ExtImpAax POJO under proto/openrtb/ext/request/aax/. AaxBidder never unmarshals imp.ext (mutates_request: false, imp_ext_unmarshal.kind: none). The params are validated by JSON Schema only and the upstream bidder reads them from imp.ext.bidder.{cid,crid} verbatim."
+    edge_case_taxon: incomplete-classification
+  - id: bidder-params-sha-divergence-from-go
+    file: src/main/resources/static/bidder-params/aax.json
+    summary: "Java JSON schema lacks the minLength: 1 constraints that Go's static/bidder-params/aax.json applies to cid and crid. SHAs differ: Java=c71febfe..., Go=543bb3ef.... Cross-language R5 fidelity violation."
+    edge_case_taxon: port-fidelity-divergence
+  - id: passthrough-default-request
+    file: src/main/java/org/prebid/server/bidder/aax/AaxBidder.java
+    summary: "makeHttpRequests (lines 44-47) is a single-line BidderUtil.defaultRequest passthrough — no mutation, no batching, no per-imp split. The Java side mirrors Go's similarly minimal MakeRequests (which directly json.Marshal's the request)."
+    edge_case_taxon: incomplete-classification
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/aax/
+    package_name: aax
+    bidder_constant: openrtb_ext.BidderAax
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/aax/
+    bidder_class: AaxBidder
+    config_class: AaxConfiguration
+    yaml_path: src/main/resources/bidder-config/aax.yaml
+    proto_dir: null
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: false
+    custom_unmarshaljson_present: false
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes:
+      - bid-type-3-step-chain
+      - hardcoded-usd-currency
+      - bidder-params-schema-drift
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "AaxBidder constructor (line 39-42) calls HttpUtil.validateUrl(endpointUrl) — invalid endpoint URLs throw IllegalArgumentException at bean construction (covered by creationShouldFailOnInvalidEndpointUrl test)."
+    - "AaxConfiguration.resolveEndpoint (lines 44-46) substitutes {{PREBID_SERVER_ENDPOINT}} with HttpUtil.encodeUrl(externalUrl) at bean wiring time; the substitution happens once before the bidder is constructed, NOT per-request."
+    - "Java endpoint URL embeds the ?src= query parameter inline as part of {{PREBID_SERVER_ENDPOINT}} substitution; Go's aax.go builds the same query parameter at runtime via net/url Query/RawQuery in buildEndpoint (lines 136-149). Cross-language: same observable URL, different mechanism."
+    - "ObjectUtil.firstNonNull (org/prebid/server/util/ObjectUtil.java) walks Supplier<T>... until one returns non-null — drives the by-bid-ext-typed-field -> by-imp-mediatype chain order; the second supplier's PreBidException propagates as the terminal throw step rather than being caught inside firstNonNull."
+    - "bidTypeFromExt (lines 100-113) maps adCodeType strings 'banner'/'native'/'video' to BidType.banner/xNative/video respectively — note Java's BidType.xNative (the Java POJO renames native due to keyword collision)."
+    - "bidTypeFromImp (lines 115-140) accumulates a counter across banner/video/xNative non-null tests on each matching imp; counter != 1 throws regardless of whether counter==0 (no media types) or counter>=2 (multi-format) — both surfaced under the same 'Unable to fetch mediaType in multi-format' message."
+    - "AaxConfiguration declares no custom BidderConfigurationProperties subclass; the bidderCreator lambda receives the default BidderConfigurationProperties and only reads config.getEndpoint()."
+    - "bidsFromResponse (lines 68-81) uses defensive Stream pipeline with three Objects::nonNull filters across SeatBid, SeatBid.Bid, and Bid — flattens via Collection::stream + flatMap; bid_pointer_pattern: flatten-streams."
+    - "extractBids (lines 61-66) early-returns Collections.emptyList() when bidResponse is null OR seatbid is empty — pairs with framework-default HTTP status validation."
+    - "AaxBidderTest.makeBidsShouldReturnErrorIfBidExtContainUnsupportedMediaType (lines 224-239) covers the case where bid.ext.adCodeType='audio' (unsupported in switch -> null), causing the chain to fall through to bidTypeFromImp; the imp has no media type set, counter==0, throws — concrete witness for step 3 of the method_chain."
+  reviewer_cohort:
+    go: []
+    java:
+      - CTMBNara
+      - AntoxaAntoxic
+    cross_language_coordinator: bretg

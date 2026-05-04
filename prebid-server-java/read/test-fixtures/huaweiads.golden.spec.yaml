@@ -1,0 +1,955 @@
+adapter_spec_version: "1.0.0"
+taxonomy_version: "1.0.0"
+spec_kind: prebid-server-adapter
+source_language: java
+
+provenance:
+  source:
+    repo: prebid/prebid-server-java
+    ref:
+      branch: master
+    resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+    fetch_method: local-checkout
+  read:
+    skill_versions:
+      orchestrator: 1.0.0
+    timestamp_utc: "2026-04-27T00:00:00Z"
+    operator: claude-code/opus-4-7
+  warnings: []
+
+meta:
+  bidder_name: huaweiads
+  is_alias: false
+  alias_of: null
+  parent_aliases: []
+  whitelabel_only: false
+  disabled: false
+  module_path_major: null
+  java_artifact_version: null
+
+bidder_info:
+  endpoint: "https://acd.op.hicloud.com/ppsadx/getResult"
+  endpoint_construction:
+    kind: runtime-region-selection
+    macros_used: []
+    placeholders_unresolved: []
+  endpoint_compression: null
+  ortb_version: null
+  default_enabled: true
+  modifying_vast_xml_allowed: false
+  maintainer:
+    email: "prebid@huawei.com"
+  capabilities:
+    site:
+      mediaTypes: []
+    app:
+      mediaTypes:
+        - banner
+        - video
+        - native
+  geoscope: []
+  gvl_vendor_id: 856
+  user_sync: {}
+  yaml_extra_fields:
+    extra-info:
+      pkgNameConvert:
+        - convertedPkgName: com.example.pkgname1
+          unconvertedPkgNames: [com.example.p1, com.example.p2]
+          unconvertedPkgNameKeyWords: [p3, p4]
+          unconvertedPkgNamePrefixs: [com.example1, com.example2]
+          exceptionPkgNames: [com.example.p7, com.example.p8]
+        - convertedPkgName: com.example.pkgname2
+          unconvertedPkgNames: [com.example.p9, com.example.p10]
+          unconvertedPkgNameKeyWords: [p11, p12]
+          unconvertedPkgNamePrefixs: [com.example3, com.example4]
+          exceptionPkgNames: [com.example.p15, com.example3.unchanged]
+      closeSiteSelectionByCountry: null
+      chineseEndpoint: "https://acd.op.hicloud.com/ppsadx/getResult"
+      russianEndpoint: "https://adx-drru.op.hicloud.com/ppsadx/getResult"
+      europeanEndpoint: "https://adx-dre.op.hicloud.com/ppsadx/getResult"
+      asianEndpoint: "https://adx-dra.op.hicloud.com/ppsadx/getResult"
+  yaml_field_name_quirks:
+    - "extra-info.pkgNameConvert uses camelCase keys (convertedPkgName, unconvertedPkgNames, unconvertedPkgNameKeyWords, unconvertedPkgNamePrefixs, exceptionPkgNames) inside YAML, contrasting with kebab-case meta-info section."
+    - "site-media-types and supported-vendors are emitted as empty values (not empty list `[]`) in the YAML file — Jackson YAML parser treats these as null."
+
+bidder_params_json: |
+  {
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "HuaweiAds Adapter Params",
+    "description": "A schema which validates params accepted by the HuaweiAds adapter",
+    "type": "object",
+    "properties": {
+      "publisherid": {
+        "type": "string",
+        "description": "publisher id",
+        "minLength": 1
+      },
+      "signkey": {
+        "type": "string",
+        "description": "the sign key of publisher",
+        "minLength": 1
+      },
+      "keyid": {
+        "type": "string",
+        "description": "the key id of publisher",
+        "minLength": 1
+      },
+      "slotid": {
+        "type": "string",
+        "description": "ad slot id",
+        "minLength": 1
+      },
+      "adtype": {
+        "type": "string",
+        "description": "ad type",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "publisherid",
+      "signkey",
+      "keyid",
+      "slotid",
+      "adtype"
+    ]
+  }
+bidder_params_sha256: ce8ea45365697938314e3667010585ac119ce7902fe64ae00f580a70e2de945b
+
+params:
+  schema_interpretation:
+    properties:
+      - name: publisherid
+        type: string
+        description: "publisher id"
+        constraints: { minLength: 1 }
+      - name: signkey
+        type: string
+        description: "the sign key of publisher"
+        constraints: { minLength: 1 }
+      - name: keyid
+        type: string
+        description: "the key id of publisher"
+        constraints: { minLength: 1 }
+      - name: slotid
+        type: string
+        description: "ad slot id"
+        constraints: { minLength: 1 }
+      - name: adtype
+        type: string
+        description: "ad type"
+        constraints: { minLength: 1 }
+    required_fields:
+      - publisherid
+      - signkey
+      - keyid
+      - slotid
+      - adtype
+    flexible_types: []
+    combinators_used: []
+  ext_struct:
+    package: org.prebid.server.proto.openrtb.ext.request.huaweiads
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/huaweiads/ExtImpHuaweiAds.java
+    type_name: ExtImpHuaweiAds
+    fields:
+      - name: slotId
+        json_tag: slotid
+        type_native: String
+        omitempty: false
+        notes: ["@JsonProperty(\"slotid\")"]
+      - name: adType
+        json_tag: adtype
+        type_native: String
+        omitempty: false
+        notes: ["@JsonProperty(\"adtype\")"]
+      - name: publisherId
+        json_tag: publisherid
+        type_native: String
+        omitempty: false
+        notes: ["@JsonProperty(\"publisherid\")"]
+      - name: signKey
+        json_tag: signkey
+        type_native: String
+        omitempty: false
+        notes: ["@JsonProperty(\"signkey\")"]
+      - name: keyId
+        json_tag: keyid
+        type_native: String
+        omitempty: false
+        notes: ["@JsonProperty(\"keyid\")"]
+      - name: isTestAuthorization
+        json_tag: isTestAuthorization
+        type_native: String
+        omitempty: false
+        notes:
+          - "@JsonProperty(\"isTestAuthorization\")"
+          - "Not declared in bidder-params/huaweiads.json schema; runtime-only escape hatch read by HuaweiAdSlotBuilder.build (line 87) — string \"true\" enables AdSlot30.test=1."
+    custom_unmarshal: false
+    custom_unmarshal_accepts: []
+  params_test:
+    file: src/test/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidderTest.java
+    valid_cases_count: null
+    invalid_cases_count: null
+    bidder_constant_referenced: null
+
+code:
+  package_or_class: HuaweiAdsBidder
+  directory_name: huaweiads
+  package_directory_mismatch: false
+  file_layout:
+    kind: multi-file
+    files:
+      - name: HuaweiAdsBidder.java
+        role: implementation
+        loc: 355
+      - name: HuaweiAdmBuilder.java
+        role: parsers
+        loc: 522
+      - name: HuaweiAdSlotBuilder.java
+        role: parsers
+        loc: 231
+      - name: HuaweiAppBuilder.java
+        role: parsers
+        loc: 75
+      - name: HuaweiDeviceBuilder.java
+        role: parsers
+        loc: 110
+      - name: HuaweiNetworkBuilder.java
+        role: parsers
+        loc: 49
+      - name: HuaweiEndpointResolver.java
+        role: utils
+        loc: 56
+      - name: CountryCodeResolver.java
+        role: utils
+        loc: 54
+      - name: ClientTimeFormatter.java
+        role: utils
+        loc: 52
+      - name: HuaweiUtils.java
+        role: utils
+        loc: 20
+      - name: model/AdsType.java
+        role: models
+        loc: 40
+      - name: model/request/HuaweiAdsRequest.java
+        role: models
+        loc: 33
+      - name: model/request/AdSlot30.java
+        role: models
+        loc: 35
+      - name: model/request/App.java
+        role: models
+        loc: 22
+      - name: model/request/Device.java
+        role: models
+        loc: 64
+      - name: model/request/Network.java
+        role: models
+        loc: 19
+      - name: model/request/CellInfo.java
+        role: models
+        loc: 12
+      - name: model/request/Format.java
+        role: models
+        loc: 12
+      - name: model/request/Geo.java
+        role: models
+        loc: 15
+      - name: model/request/Regs.java
+        role: models
+        loc: 9
+      - name: model/request/PkgNameConvert.java
+        role: models
+        loc: 25
+      - name: model/response/HuaweiAdsResponse.java
+        role: models
+        loc: 17
+      - name: model/response/Ad30.java
+        role: models
+        loc: 24
+      - name: model/response/Content.java
+        role: models
+        loc: 32
+      - name: model/response/MetaData.java
+        role: models
+        loc: 41
+      - name: model/response/MediaFile.java
+        role: models
+        loc: 22
+      - name: model/response/VideoInfo.java
+        role: models
+        loc: 31
+      - name: model/response/ImageInfo.java
+        role: models
+        loc: 26
+      - name: model/response/Icon.java
+        role: models
+        loc: 26
+      - name: model/response/Monitor.java
+        role: models
+        loc: 16
+      - name: model/response/MonitorEventType.java
+        role: models
+        loc: 47
+      - name: model/response/CreativeType.java
+        role: models
+        loc: 34
+      - name: model/response/HuaweiAdm.java
+        role: models
+        loc: 14
+      - name: model/response/PictureAdm.java
+        role: models
+        loc: 52
+      - name: model/response/VideoAdm.java
+        role: models
+        loc: 67
+      - name: model/response/RewardedVideoPartAdm.java
+        role: models
+        loc: 35
+      - name: model/response/ApkInfo.java
+        role: models
+        loc: 34
+      - name: model/response/AdmUtils.java
+        role: utils
+        loc: 13
+    file_count_total: 38
+    notes:
+      - "After rubicon, this is one of the densest Java bidder layouts: 10 implementation/util/parser files at the top level + 28 model files in model/, model/request/, model/response/. Multiple sub-protos (HuaweiAdsRequest, HuaweiAdsResponse) plus 21 nested response/request DTOs."
+  imports:
+    has_template_engine: false
+    has_currency_helper: false
+    has_jsonutil: false
+    third_party:
+      - "org.apache.commons.codec.binary.Hex"
+      - "org.apache.commons.codec.digest.HmacAlgorithms"
+      - "org.apache.commons.codec.digest.HmacUtils"
+      - "org.apache.commons.collections4.CollectionUtils"
+      - "org.apache.commons.lang3.StringUtils"
+      - "javax.crypto.Mac"
+  adapter_struct: null
+  builder: null
+  make_requests:
+    batching:
+      applied_in_order: true
+      rules:
+        - kind: single-batched
+          notes: "All imps' AdSlot30 entries are aggregated into a single HuaweiAdsRequest.multislot list and sent as one HTTP POST."
+    request_body:
+      kind: custom
+      custom_body_type: HuaweiAdsRequest
+      notes:
+        - "Body type is HuaweiAdsRequest (not openrtb2.BidRequest) — bidder serializes a vendor-specific payload with fields {version, multislot, app, device, network, regs, geo, consent, clientAdRequestId}. The class is parameterized on Bidder<HuaweiAdsRequest>."
+    mutation:
+      mutates_request: false
+      entity_strategies:
+        Site: none
+        App: none
+        Source: none
+        Imp: none
+        Banner: none
+        Device: none
+        User: none
+        Cur: none
+        Geo: none
+      go_idiom: null
+      java_idiom: none
+      notes: "BidRequest is read-only; HuaweiAdsRequest is constructed fresh by helper builders (adSlotBuilder, appBuilder, deviceBuilder, networkBuilder). No toBuilder() chain on the inbound BidRequest itself."
+    imp_ext_unmarshal:
+      kind: standard-two-phase
+      mechanism_go: null
+      mechanism_java: typeref-extprebid
+      target_type: ExtImpHuaweiAds
+      wrapper_type: null
+      notes:
+        - "EXT_IMP_TYPE_REFERENCE: TypeReference<ExtPrebid<?, ExtImpHuaweiAds>> at HuaweiAdsBidder line 56."
+        - "parseImpExt called once per Imp inside makeHttpRequests (line 122) and again per Imp inside makeBids (line 265) to rebuild slotId→Imp map — duplicate work but no caching."
+    endpoint_resolution:
+      kind: runtime-region-selection
+      mechanism_go: null
+      mechanism_java: custom-resolver-class
+      macro_field_set: []
+      template_params_struct_field_count: null
+      notes:
+        - "HuaweiEndpointResolver.resolve(countryCode) chooses among five endpoints: chineseEndpoint, russianEndpoint, europeanEndpoint, asianEndpoint, or fallback endpointUrl."
+        - "closeSiteSelectionByCountry config flag (=\"1\") forces use of endpointUrl regardless of countryCode."
+        - "CHINESE: {CN}; RUSSIAN: {RU}; EUROPEAN: 57-country alpha-2 set including AX, AL, AD, AU, AT, BE, BA, BG, CA, HR, CY, CZ, DK, EE, FO, FI, FR, DE, GI, GR, GL, GG, VA, HU, IS, IE, IM, IL, IT, JE, YK, LV, LI, LT, LU, MT, MD, MC, ME, NL, AN, NZ, NO, PL, PT, RO, MF, VC, SM, RS, SX, SK, SI, ES, SE, CH, TR, UA, GB, US, MK, SJ, BQ, PM, CW; default ASIAN."
+        - "CountryCodeResolver pulls countryCode from device.geo.country, then user.geo.country, then device.mccmnc[0]→alpha2 fallback (defaults to ZA)."
+    helpers:
+      - name: parseImpExt
+        signature: "private ExtImpHuaweiAds parseImpExt(Imp imp)"
+      - name: validate
+        signature: "private void validate(ExtImpHuaweiAds impExt)"
+      - name: makeHuaweiAdsRequest
+        signature: "private HuaweiAdsRequest makeHuaweiAdsRequest(BidRequest bidRequest, List<AdSlot30> adSlots, String countryCode)"
+      - name: makeRegs
+        signature: "private Regs makeRegs(com.iab.openrtb.request.Regs regs)"
+      - name: makeGeo
+        signature: "private Geo makeGeo(Device device)"
+      - name: makeConsent
+        signature: "private String makeConsent(User user)"
+      - name: makeHeaders
+        signature: "private static MultiMap makeHeaders(BidRequest bidRequest, ExtImpHuaweiAds extImp)"
+      - name: makeAuthorization
+        signature: "private static String makeAuthorization(ExtImpHuaweiAds extImp)"
+      - name: encrypt
+        signature: "private static String encrypt(String message, String key)"
+      - name: validateRetcode
+        signature: "private static void validateRetcode(Integer retcode, String reason)"
+      - name: extractBids
+        signature: "private List<BidderBid> extractBids(HuaweiAdsResponse response, BidRequest bidRequest)"
+      - name: makeBidderBids
+        signature: "private List<BidderBid> makeBidderBids(HuaweiAdsResponse response, Map<String, Imp> slotIdToImpMap)"
+      - name: getMediaType
+        signature: "private static BidType getMediaType(Imp imp)"
+      - name: getCurrency
+        signature: "private static Optional<String> getCurrency(List<Content> contentList)"
+      - name: makeBid
+        signature: "private Bid makeBid(Ad30 ad, Imp imp, BidType mediaType, Content content)"
+      - name: getNurl
+        signature: "private String getNurl(List<Monitor> monitorList)"
+  make_bids:
+    response_type: custom
+    custom_response_type: HuaweiAdsResponse
+    http_status_handling:
+      kind: framework-default
+      notes: "No explicit HTTP status branching — relies on framework defaults; primary success/error gating is done via the application_status_handling retcode field below."
+    application_status_handling:
+      kind: retcode-field
+      field: retcode
+      success_codes: [200, 204, 206]
+      error_codes:
+        - "201..299 (exclusive of 200, 204, 206) — matches retcode > 200 && retcode < 300 && retcode != 204 && retcode != 206"
+        - "400..599 inclusive — matches retcode >= 400 && retcode < 600"
+      notes:
+        - "validateRetcode at HuaweiAdsBidder line 244-250: throws PreBidException(\"HuaweiAdsResponse retcode: \" + retcode + \" , reason: \" + reason) when (retcode > 200 && retcode < 300 && retcode != 204 && retcode != 206) OR (retcode >= 400 && retcode < 600)."
+        - "Retcodes <= 200 (i.e. 200 itself and any anomalous below-200 values) and 300..399 and >=600 fall through to extractBids without raising — the retcode==200 path proceeds to bid extraction; other unhandled ranges are silently treated as success."
+        - "Within multi-ad responses, each Ad30.retcode30 must equal 200 to be eligible (line 281: !Objects.equals(ad.getRetCode(), 200) → continue) — this is a SECOND retcode dimension at the per-ad level (Ad30.retcode30 with @JsonProperty(\"retcode30\"))."
+    bid_type_resolution:
+      method_chain:
+        - method: by-imp-mediatype
+          fallback_action: next
+          field: imp.video
+          notes: "if (imp.getVideo() != null) → BidType.video"
+        - method: by-imp-mediatype
+          fallback_action: next
+          field: imp.native
+          notes: "else if (imp.getXNative() != null) → BidType.xNative"
+        - method: by-imp-mediatype
+          fallback_action: next
+          field: imp.audio
+          notes: "else if (imp.getAudio() != null) → BidType.audio (then later thrown as 'no support bidtype: audio' in makeBid)"
+        - method: hardcoded
+          hardcoded_value: BidType.banner
+          fallback_action: return-default
+          notes: "default branch in getMediaType (line 308)"
+      default_value: banner
+      multi_format_detection: strict
+      notes:
+        - "getMediaType at HuaweiAdsBidder line 300-310 uses if/else-if chain over imp.getVideo, imp.getXNative, imp.getAudio, falling to banner. Then makeBid (line 321) uses switch over BidType to dispatch to admBuilder.buildBanner / buildVideo / buildNative; audio explicitly throws PreBidException(\"no support bidtype: audio\")."
+    bid_pointer_pattern: indexed-iteration
+    bid_pointer_go_sibling: null
+    currency_overwrite_safety: passthrough-from-response
+    notes_currency:
+      - "DEFAULT_BID_CURRENCY constant is CNY (line 61). getCurrency returns first non-blank Content.cur; if none found, defaults to CNY."
+      - "Bid.price set from Content.price directly (no currency conversion). Comment in code: 'The bidder has already helped us automatically convert the currency price, here only the CNY price is filled in'."
+
+tests:
+  test_root_directory: src/test/java/org/prebid/server/bidder/huaweiads/
+  go_directory_naming: null
+  java_it_folder_naming: canonical
+  fixture_inventory:
+    exemplary: []
+    supplemental: []
+    amp: []
+    video: []
+    videosupplemental: []
+    integration:
+      - filename: test-huaweiads-bid-request.json
+        sha256: 5a0f578649c142b278d0365588572f244fcd54777f89af6257081e2b1eaa2542
+        bytes: 1037
+        role: bidder-bid-request
+      - filename: test-huaweiads-bid-response.json
+        sha256: 30dd08382491a34f9518596c9921b9bfde54add27a065a5354d17788c64c5aae
+        bytes: 2073
+        role: bidder-bid-response
+      - filename: test-huaweiads-auction-request.json
+        sha256: f8e0ae5f1d28f09b57720295a8b79f17292ac028f6612630596929d4ce9a549d
+        bytes: 1356
+        role: auction-request
+      - filename: test-huaweiads-auction-response.json
+        sha256: 37cb4554ece8c518e322a486e47926d365e0f7aa2a04ac2b9e77fb8fad32c25f
+        bytes: 1980
+        role: auction-response
+    integration_subdirs_count: 23
+    integration_subdirs_total_files: 92
+    integration_subdirs:
+      - banner_app_promotion_type
+      - banner_ch_endpoint
+      - banner_eu_endpoint
+      - banner_imei
+      - banner_interstitial_type
+      - banner_mccmnc
+      - banner_non_integer_mccmnc
+      - banner_not_app_promotion_type
+      - banner_ru_endpoint
+      - banner_with_user_geo
+      - banner_without_device_geo
+      - banner_without_userext
+      - banner_wrong_mccmnc
+      - native_include_video
+      - native_single_image
+      - native_three_image
+      - native_three_image_include_icon
+      - simple_video
+      - video_interstitial_type
+      - video_rewarded_type_no_icons_no_images
+      - video_rewarded_type_with_icon
+      - video_rewarded_type_with_images
+      - video_roll_type
+  uses_canonical_harness: true
+  unit_test_methods_count: 198
+  unit_test_loc: 4880
+  unit_test_breakdown:
+    HuaweiAdsBidderTest: 38
+    HuaweiAdmBuilderTest: 64
+    HuaweiAdSlotBuilderTest: 41
+    HuaweiAppBuilderTest: 10
+    HuaweiDeviceBuilderTest: 8
+    HuaweiEndpointResolverTest: 10
+    HuaweiNetworkBuilderTest: 8
+    CountryCodeResolverTest: 9
+    ClientTimeFormatterTest: 5
+    AdsTypeTest: 3
+  hand_written_test_methods:
+    - makeHttpRequestsShouldReturnErrorWhenImpExtCannotBeParsed
+    - makeHttpRequestsShouldReturnErrorWhenImpExtHasNullBidder
+    - makeHttpRequestsShouldReturnErrorWhenImpressionDoesNotHaveSlotId
+    - makeHttpRequestsShouldReturnErrorWhenImpressionDoesNotHaveAdType
+    - makeHttpRequestsShouldReturnErrorWhenImpressionDoesNotHavePublisherId
+    - makeHttpRequestsShouldReturnErrorWhenImpressionDoesNotHaveSignKey
+    - makeHttpRequestsShouldReturnErrorWhenImpressionDoesNotHaveKeyId
+    - makeHttpRequestsShouldReturnRegsWhenCoppaIsPresent
+    - makeHttpRequestsShouldReturnRegsWhenCoppaIsAbsent
+    - makeHttpRequestsShouldReturnGeoWhenDeviceGeoIsPresent
+    - makeHttpRequestsShouldNotReturnGeoWhenDeviceGeoIsAbsent
+    - makeHttpRequestsShouldReturnConsentWhenUserExtConsentIsPresent
+    - makeHttpRequestsShouldNotReturnConsentWhenUserExtIsAbsent
+    - makeHttpRequestsShouldReturnAllImpIdsAndCorrespondingAdSlots
+    - makeHttpRequestsShouldReturnAppDeviceAndNetworkWhenAppDeviceAndUserArePresent
+    - makeHttpRequestsShouldReturnAllHeaders
+    - makeHttpRequestsShouldNotReturnUserAgentHeaderWhenDeviceIsAbsence
+    - makeBidsShouldReturnErrorWhenResponseCanNotBeParsed
+    - makeBidsShouldReturnErrorWhenResponseHas201Retcode
+    - makeBidsShouldReturnErrorWhenResponseHas299Retcode
+    - makeBidsShouldReturnErrorWhenResponseHas400Retcode
+    - makeBidsShouldReturnErrorWhenResponseHas599Retcode
+    - makeBidsShouldReturnErrorWhenResponseDoesNotHaveAds
+    - makeBidsShouldReturnErrorWhenBidRequestDoesNotHaveImpressions
+    - makeBidsShouldReturnErrorWhenImpExtCannotBeParsed
+    - makeBidsShouldReturnErrorWhenImpExtHasNullBidder
+    - makeBidsShouldReturnErrorWhenImpressionDoesNotHaveSlotId
+    - makeBidsShouldReturnErrorWhenImpressionDoesNotHaveAdType
+    - makeBidsShouldReturnErrorWhenImpressionDoesNotHavePublisherId
+    - makeBidsShouldReturnErrorWhenImpressionDoesNotHaveSignKey
+    - makeBidsShouldReturnErrorWhenImpressionDoesNotHaveKeyId
+    - makeBidsShouldReturnErrorWhenAdHasNullContent
+    - makeBidsShouldReturnErrorWhenMediaTypeIsAudio
+    - makeBidsShouldReturnBannerBidWithCurrencyWhenAdIsBanner
+    - makeBidsShouldReturnVideoBidWithDefaultCurrencyWhenAdIsVideoAndContentDoesNotHaveCurrency
+    - makeBidsShouldReturnNativeBidWhenAdIsNative
+    - makeBidsShouldReturnBidWithFirstNoticeUrlOfWinMonitor
+    - makeBidsShouldReturnBannerNativeAndVideoBids
+  fixture_handling: count-only
+  test_application_properties_entries_added: 6
+  test_application_properties_keys:
+    - "adapters.huaweiads.enabled"
+    - "adapters.huaweiads.endpoint"
+    - "adapters.huaweiads.extra-info.chineseEndpoint"
+    - "adapters.huaweiads.extra-info.russianEndpoint"
+    - "adapters.huaweiads.extra-info.europeanEndpoint"
+    - "adapters.huaweiads.extra-info.asianEndpoint"
+  integration_test_class: HuaweiAdsTest
+  integration_test_pattern: multi-folder
+
+spring_config:
+  factory_class: HuaweiAdsConfiguration
+  factory_method: huaweiAdsBidderDeps
+  property_source_path: classpath:/bidder-config/huaweiads.yaml
+  bidder_creator_lambda: |
+    config -> {
+        final ExtraInfo extraInfo = config.getExtraInfo();
+        return new HuaweiAdsBidder(
+                mapper,
+                new HuaweiAdSlotBuilder(mapper),
+                new HuaweiAppBuilder(extraInfo.getPkgNameConvert()),
+                new HuaweiDeviceBuilder(mapper, new ClientTimeFormatter(clock)),
+                new HuaweiNetworkBuilder(),
+                new HuaweiAdmBuilder(mapper),
+                new CountryCodeResolver(countryCodeMapper),
+                new HuaweiEndpointResolver(
+                        config.getEndpoint(),
+                        extraInfo.getChineseEndpoint(),
+                        extraInfo.getRussianEndpoint(),
+                        extraInfo.getEuropeanEndpoint(),
+                        extraInfo.getAsianEndpoint(),
+                        extraInfo.getCloseSiteSelectionByCountry()));
+    }
+  configuration_properties_class:
+    name: HuaweiAdsConfigurationProperties
+    extends: BidderConfigurationProperties
+    extra_fields:
+      - name: extraInfo
+        type: ExtraInfo
+        validations:
+          - "@Valid"
+          - "@NotNull"
+          - "default = new ExtraInfo()"
+    nested_classes:
+      - name: ExtraInfo
+        annotations: [Data, NoArgsConstructor]
+        access: "private static"
+        fields:
+          - { name: pkgNameConvert, type: "List<PkgNameConvert>" }
+          - { name: closeSiteSelectionByCountry, type: String }
+          - { name: chineseEndpoint, type: String }
+          - { name: russianEndpoint, type: String }
+          - { name: europeanEndpoint, type: String }
+          - { name: asianEndpoint, type: String }
+        notes:
+          - "Edge case: Java port stores 5 region-specific endpoints in a nested ExtraInfo class on top of the parent endpoint. Configured via YAML extra-info: section."
+          - "Reference list explicitly mentions huaweiads/nextmillennium as the two adapters with nested ExtraInfo class."
+    lombok_annotations: [Validated, Data, EqualsAndHashCode-callSuper-true, NoArgsConstructor]
+  bean_dependencies:
+    - name: countryCodeMapper
+      type: CountryCodeMapper
+      source: framework-injected
+    - name: clock
+      type: Clock
+      source: framework-injected
+    - name: externalUrl
+      type: String
+      source: "@NotBlank @Value(${external-url})"
+    - name: mapper
+      type: JacksonMapper
+      source: framework-injected
+  notes:
+    - "Configuration class file lives at HuaweiadsConfiguration.java BUT class name inside is HuaweiAdsConfiguration (TitleCase Ads acronym). This is a file/class naming asymmetry."
+    - "BIDDER_NAME constant value is the all-lowercase \"huaweiads\" (line 40)."
+
+bidder_class:
+  name: HuaweiAdsBidder
+  parameterized_request_type: HuaweiAdsRequest
+  parameterized_response_type: null
+  override_methods:
+    - makeHttpRequests
+    - makeBids
+  constructor:
+    arity: 8
+    parameters:
+      - name: mapper
+        type: JacksonMapper
+        source: framework-injected
+        role: helper-collaborator
+      - name: adSlotBuilder
+        type: HuaweiAdSlotBuilder
+        source: spring-constructed
+        role: helper-collaborator
+      - name: appBuilder
+        type: HuaweiAppBuilder
+        source: spring-constructed
+        role: helper-collaborator
+      - name: deviceBuilder
+        type: HuaweiDeviceBuilder
+        source: spring-constructed
+        role: helper-collaborator
+      - name: networkBuilder
+        type: HuaweiNetworkBuilder
+        source: spring-constructed
+        role: helper-collaborator
+      - name: admBuilder
+        type: HuaweiAdmBuilder
+        source: spring-constructed
+        role: helper-collaborator
+      - name: countryCodeResolver
+        type: CountryCodeResolver
+        source: spring-constructed
+        role: helper-collaborator
+      - name: endpointResolver
+        type: HuaweiEndpointResolver
+        source: spring-constructed
+        role: helper-collaborator
+  static_fields:
+    - name: EXT_IMP_TYPE_REFERENCE
+      type: TypeReference
+      value: "TypeReference<ExtPrebid<?, ExtImpHuaweiAds>>"
+    - name: HUAWEI_ADX_API_VERSION
+      type: String
+      value: "3.4"
+    - name: DEFAULT_COUNTRY_CODE
+      type: String
+      value: "ZA"
+    - name: DEFAULT_BID_CURRENCY
+      type: String
+      value: "CNY"
+    - name: HUAWEIADS_DOMAIN
+      type: "List<String>"
+      value: "List.of(\"huaweiads\")"
+  helper_classes_co_located:
+    - HuaweiAdSlotBuilder
+    - HuaweiAdmBuilder
+    - HuaweiAppBuilder
+    - HuaweiDeviceBuilder
+    - HuaweiNetworkBuilder
+    - HuaweiEndpointResolver
+    - CountryCodeResolver
+    - ClientTimeFormatter
+    - HuaweiUtils
+  helper_classes_in_proto:
+    - ExtImpHuaweiAds
+    - ExtUserDataDeviceIdHuaweiAds
+  helper_classes_in_model:
+    - "model/AdsType (enum)"
+    - "model/request/HuaweiAdsRequest"
+    - "model/request/AdSlot30"
+    - "model/request/App"
+    - "model/request/Device"
+    - "model/request/Network"
+    - "model/request/CellInfo"
+    - "model/request/Format"
+    - "model/request/Geo"
+    - "model/request/Regs"
+    - "model/request/PkgNameConvert"
+    - "model/response/HuaweiAdsResponse"
+    - "model/response/Ad30"
+    - "model/response/Content"
+    - "model/response/MetaData"
+    - "model/response/MediaFile"
+    - "model/response/VideoInfo"
+    - "model/response/ImageInfo"
+    - "model/response/Icon"
+    - "model/response/Monitor"
+    - "model/response/MonitorEventType (enum)"
+    - "model/response/CreativeType (enum)"
+    - "model/response/HuaweiAdm"
+    - "model/response/PictureAdm"
+    - "model/response/VideoAdm"
+    - "model/response/RewardedVideoPartAdm"
+    - "model/response/ApkInfo"
+    - "model/response/AdmUtils"
+  notes:
+    - "Edge case #28: Bidder<HuaweiAdsRequest> generic — class implements Bidder parameterized on HuaweiAdsRequest (vendor-specific request body), not the default BidRequest. Mediasquare is the only other adapter doing this."
+    - "8-arg constructor — among the highest-arity bidder constructors after rubicon (15+) and appnexus."
+
+code_naming:
+  yaml_name: huaweiads
+  class_name_root: HuaweiAds
+  preserves_acronym_case: true
+  notes:
+    - "Java class names mix TitleCase brand-acronym preservation: HuaweiAdsBidder, HuaweiAdsConfiguration, HuaweiAdsRequest, HuaweiAdsResponse, HuaweiAdSlotBuilder, HuaweiAdmBuilder, HuaweiAppBuilder, HuaweiDeviceBuilder, HuaweiNetworkBuilder, HuaweiEndpointResolver, HuaweiUtils. Integration test class is HuaweiAdsTest.java (not Huaweiads)."
+    - "Directory and YAML name remain all-lowercase huaweiads; bidder-name string constant in HuaweiAdsConfiguration.BIDDER_NAME is \"huaweiads\"."
+    - "Edge case #27: HuaweiAdsTest.java integration class preserves Ads acronym capitalization unlike the canonical {Bidder}Test pattern."
+
+iab_category_storage:
+  storage_kind: none
+  yaml_field: null
+  go_data_file: null
+  table_size: null
+  delivery_mechanism: null
+
+ext_pojo_construction:
+  framework_choice: lombok-value-builder
+  flexible_extension_used: false
+  custom_unmarshal:
+    kind: none
+    accepts_shapes: []
+    where_branched: null
+
+currency_conversion:
+  used: false
+  helper:
+    go_signature: null
+    java_signature: null
+  injection: null
+  bid_request_passed_for_context: false
+
+headers_constructed:
+  pre_built_in_constructor: false
+  per_request_dynamic: true
+  custom_headers:
+    - name: Authorization
+      value: "Digest username=<publisherId>,realm=ppsadx/getResult,nonce=<currentTimeMillis>,response=<HMAC-SHA256(nonce:POST:/ppsadx/getResult, publisherId:ppsadx/getResult:signKey)>,algorithm=HmacSHA256,usertype=1,keyid=<keyId>"
+    - name: User-Agent
+      value: "<bidRequest.device.ua> (set only when device.ua is non-blank)"
+  authentication_kind: hmac-digest
+  authentication_input:
+    - "ExtImpHuaweiAds.publisherId (used as Digest username AND as part of apiKey)"
+    - "ExtImpHuaweiAds.signKey (used as third segment of apiKey, the HMAC secret)"
+    - "ExtImpHuaweiAds.keyId (used as Digest keyid)"
+    - "System.currentTimeMillis() (nonce; per-request timestamp)"
+    - "Hardcoded \"POST:/ppsadx/getResult\" path string in signed payload"
+    - "Hardcoded \"ppsadx/getResult\" realm and apiKey-segment string"
+  authentication_algorithm: HMAC-SHA-256
+  authentication_output_encoding: hex (lowercase)
+  notes:
+    - "makeAuthorization at HuaweiAdsBidder line 201-215 and encrypt at line 217-227. Uses Apache commons-codec HmacUtils.getInitializedMac(HmacAlgorithms.HMAC_SHA_256, key.getBytes(UTF_8)) and Hex.encodeHexString."
+    - "Format string literal: \"Digest username=%s,realm=ppsadx/getResult,nonce=%s,response=%s,algorithm=%s,usertype=1,keyid=%s\""
+    - "apiKey is built as `publisherId.trim() + \":ppsadx/getResult:\" + signKey.trim()`; data is `nonce + \":POST:/ppsadx/getResult\"`."
+    - "Cross-language R5: SHA256 of the same (data, key) byte strings must match between Go and Java implementations — both use UTF-8 encoding and lowercase hex output."
+
+deploy_time_tokens: []
+
+quirks:
+  - id: hmac-sha256-authentication-per-request
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "Per-request HMAC-SHA-256 Digest Authorization header built in makeAuthorization (line 201-215) using publisherId+signKey+keyId from ExtImpHuaweiAds and System.currentTimeMillis() as nonce. Apache commons-codec Hex output is lowercase. Cross-language byte-equal contract with Go side."
+    edge_case_taxon: per-request-cryptographic-auth
+  - id: application-status-via-retcode-body-field
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "validateRetcode (line 244-250) reads retcode from response body (HuaweiAdsResponse.retcode) — error windows are (200,300) excl 204/206 and [400,600). HTTP status code is not consulted directly — application-level status pattern."
+    edge_case_taxon: application-status-code
+  - id: per-ad-retcode30-secondary-status
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "Secondary per-ad status: Ad30.retcode30 (@JsonProperty(\"retcode30\")) must equal 200 to be eligible (line 281). Each ad in multiad list has its own retcode separate from the top-level response retcode."
+    edge_case_taxon: application-status-code
+  - id: acronym-case-preservation-in-class-names
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "Edge case #27: Java class names preserve TitleCase Ads acronym (HuaweiAds, HuaweiAdsBidder, HuaweiAdSlotBuilder, HuaweiAdmBuilder, HuaweiAdsRequest, HuaweiAdsResponse, HuaweiAdsTest); directory/YAML name remains all-lowercase huaweiads. Configuration file is HuaweiadsConfiguration.java (lowercase 'a' in filename) but class inside is HuaweiAdsConfiguration."
+    edge_case_taxon: acronym-case-preservation
+  - id: parameterized-request-type-non-default
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "Edge case #28: implements Bidder<HuaweiAdsRequest>, sending a vendor-specific JSON payload (multislot/app/device/network/regs/geo/consent/clientAdRequestId) instead of openrtb2.BidRequest. Mediasquare is the only sibling doing this."
+    edge_case_taxon: parameterized-request-type
+  - id: nested-extrainfo-configuration-properties
+    file: src/main/java/org/prebid/server/spring/config/bidder/HuaweiadsConfiguration.java
+    summary: "HuaweiAdsConfigurationProperties extends BidderConfigurationProperties with @Valid @NotNull ExtraInfo extraInfo field (default new ExtraInfo()). Nested static class ExtraInfo holds 6 fields: pkgNameConvert + closeSiteSelectionByCountry + 4 region endpoints. Reference list mentions huaweiads/nextmillennium share this nested-ExtraInfo pattern."
+    edge_case_taxon: nested-configuration-properties
+  - id: configuration-class-name-vs-filename-asymmetry
+    file: src/main/java/org/prebid/server/spring/config/bidder/HuaweiadsConfiguration.java
+    summary: "Filename HuaweiadsConfiguration.java (lowercase 'ads') but class declaration is `public class HuaweiAdsConfiguration` (TitleCase 'Ads'). Java compiles fine because Spring scans by class annotation, but the file/class name mismatch is unusual; reference list flags this asymmetry."
+    edge_case_taxon: acronym-case-preservation
+  - id: runtime-region-selection-endpoint-fan-out
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiEndpointResolver.java
+    summary: "HuaweiEndpointResolver.resolve(countryCode) chooses among 5 endpoint URLs (chinese/russian/european/asian + fallback) based on resolved country code via 57-country EUROPEAN allowlist + CN + RU dispatch. closeSiteSelectionByCountry config flag (=\"1\") forces use of base endpoint."
+    edge_case_taxon: runtime-region-selection
+  - id: country-code-resolution-multi-source
+    file: src/main/java/org/prebid/server/bidder/huaweiads/CountryCodeResolver.java
+    summary: "Country code resolved by walking device.geo.country → user.geo.country → device.mccmnc[0] (mapped via CountryCodeMapper.mapMccToAlpha2). Defaults to ZA when none resolve. ALPHA2 normalization handles 1-char (skipped), 2-char (passed through), 3+ char (mapped to alpha2 via countryCodeMapper)."
+    edge_case_taxon: country-code-resolution-fallback-chain
+  - id: vendor-specific-request-body-shape
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "Body sent to Huawei is HuaweiAdsRequest (custom DTO), not openrtb2.BidRequest. Conversion done by helper builders (adSlotBuilder, appBuilder, deviceBuilder, networkBuilder). Response shape is also custom: HuaweiAdsResponse with multiad: List<Ad30>."
+    edge_case_taxon: custom-request-response-shape
+  - id: per-ad-creative-type-with-100-offset
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdmBuilder.java
+    summary: "buildBanner at line 74-76 reads Content.creativeType and applies `type > 100 ? type - 100 : type` before mapping via CreativeType.of(). Vendor-specific +100 offset for an alternate creative-type encoding."
+    edge_case_taxon: vendor-specific-protocol-quirk
+  - id: pkg-name-conversion-table-from-yaml
+    file: src/main/resources/bidder-config/huaweiads.yaml
+    summary: "extra-info.pkgNameConvert (List<PkgNameConvert>) holds rewriting rules for app bundle names with 4 input criteria (unconvertedPkgNames, unconvertedPkgNameKeyWords, unconvertedPkgNamePrefixs, exceptionPkgNames) → convertedPkgName. HuaweiAppBuilder consults this list to rewrite the outbound app.pkgName. YAML uses camelCase keys for PkgNameConvert fields contrasting with kebab-case meta-info."
+    edge_case_taxon: yaml-configuration-rewrite-table
+  - id: bidder-params-json-byte-divergence-go-vs-java
+    file: src/main/resources/static/bidder-params/huaweiads.json
+    summary: "Java JSON file uses LF line endings + trailing newline (sha256 ce8ea453...); Go file uses CRLF line endings + no trailing newline (sha256 c2d5585c...). Schema content is semantically identical. R5 cross-language SHA equality FAILS due to whitespace divergence. This is a Go-side anomaly (CRLF endings unusual for upstream JSON files) — port-fidelity violation surfaced as a port concern."
+    edge_case_taxon: cross-language-byte-divergence
+  - id: ext-imp-test-authorization-string-not-boolean
+    file: src/main/java/org/prebid/server/proto/openrtb/ext/request/huaweiads/ExtImpHuaweiAds.java
+    summary: "ExtImpHuaweiAds.isTestAuthorization is type String (not Boolean) and field is NOT in bidder-params/huaweiads.json schema. HuaweiAdSlotBuilder.build line 87 compares to literal string \"true\" to set test=1; any other value (including \"TRUE\" or null) yields test=0. Schema-undocumented runtime field is a tech-debt anti-pattern."
+    edge_case_taxon: schema-undocumented-runtime-field
+  - id: hardcoded-default-currency-cny
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "DEFAULT_BID_CURRENCY = \"CNY\" at line 61 — non-USD default reflects bidder's primary China-region market. getCurrency falls through to CNY when Content.cur is empty for all contents."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: hardcoded-default-country-za
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "DEFAULT_COUNTRY_CODE = \"ZA\" at line 60 — South Africa as catch-all fallback when CountryCodeResolver returns empty. Combined with HuaweiEndpointResolver, ZA falls to asianEndpoint (since not in CN/RU/EUROPEAN allowlist)."
+    edge_case_taxon: hardcoded-config-as-anti-pattern
+  - id: imp-ext-parsed-twice-per-request-cycle
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "parseImpExt is called once per Imp in makeHttpRequests (line 101) AND once again per Imp in makeBids (line 265) to rebuild slotId→Imp map. No caching — duplicate Jackson convertValue work on every bid round-trip."
+    edge_case_taxon: redundant-work
+  - id: empty-multiad-pre-bid-exception
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "extractBids (line 252-256) throws PreBidException(\"convert huaweiads response to bidder response failed: multiad length is 0, get no ads from huawei side.\") when response.multiad is empty/null — surfaces as BidderError.badServerResponse via the makeBids catch at line 240. Empty multiad is treated as protocol error, not no-bid."
+    edge_case_taxon: empty-response-as-error
+  - id: high-test-method-count
+    file: src/test/java/org/prebid/server/bidder/huaweiads/
+    summary: "198 @Test methods across 10 unit-test files (4880 total LOC). HuaweiAdmBuilderTest alone has 64 tests covering banner/video/native creative-type matrix. One of the most-tested adapters in the Java codebase."
+    edge_case_taxon: high-test-method-count
+  - id: integration-test-class-name-titlecase-preservation
+    file: src/test/java/org/prebid/server/it/HuaweiAdsTest.java
+    summary: "Integration test class is HuaweiAdsTest (TitleCase Ads) not HuaweiadsTest. Reference list explicitly catalogs this as Edge case #27 — class-name brand-acronym preservation in IT tests."
+    edge_case_taxon: acronym-case-preservation
+  - id: country-defaulting-after-resolution-failure
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java
+    summary: "makeHttpRequests line 95: countryCodeResolver.resolve(bidRequest).orElse(DEFAULT_COUNTRY_CODE) — wraps Optional empty case with ZA default. Edge case: resolved code is later USED for {App.country, Device.belongCountry, Device.localeCountry, HuaweiEndpointResolver.resolve} — single source of truth fans out to multiple downstream uses."
+    edge_case_taxon: shared-default-fan-out
+  - id: native-version-default-1-1
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdmBuilder.java
+    summary: "DEFAULT_NATIVE_VERSION = \"1.1\" at HuaweiAdmBuilder line 57; if native request payload doesn't carry ver, response uses 1.1 (not 1.2). Vendor-specific default."
+    edge_case_taxon: vendor-specific-protocol-quirk
+  - id: vast-3-tracker-event-mapping
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdmBuilder.java
+    summary: "MonitorEventType maps Huawei-side event strings (imp/click/vastError/userclose/playStart/playEnd/playResume/playPause/soundClickOff/soundClickOn/win) into VAST event element names (start/complete/resume/pause/mute/unmute) when emitting <Tracking event=\"...\">. USER_CLOSE expands to TWO Tracking elements (skip + closeLinear)."
+    edge_case_taxon: vendor-to-iab-mapping
+  - id: clienttime-iso-format-mutator
+    file: src/main/java/org/prebid/server/bidder/huaweiads/ClientTimeFormatter.java
+    summary: "ClientTimeFormatter normalizes user-supplied clientTime to format `yyyy-MM-dd HH:mm:ss.SSS+ZZZZ`. If input matches with-offset pattern → passthrough; if matches without-offset → reformat with system zone offset; else uses LocalDateTime.now(clock). Clock is injected (testable). Output anchored at OffsetDateTime in injected clock."
+    edge_case_taxon: time-formatting-quirk
+  - id: pkgname-conversion-key-length-checks
+    file: src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAppBuilder.java
+    summary: "getPackageName uses `bundleName.indexOf(keyword) > 0` (strict greater-than zero, not >=) — keyword at position 0 is not matched by indexOf check, only at position 1 onward. unconvertedPkgNames also accepts \"*\" wildcard meaning convert-all. Multi-table walk: exception → name → keyword → prefix in fixed order."
+    edge_case_taxon: vendor-specific-protocol-quirk
+
+cross_language:
+  go_artifacts:
+    bidder_dir: adapters/huaweiads/
+    package_name: huaweiads
+    bidder_constant: openrtb_ext.BidderHuaweiAds
+  java_artifacts:
+    bidder_dir: src/main/java/org/prebid/server/bidder/huaweiads/
+    bidder_class: HuaweiAdsBidder
+    config_class: HuaweiAdsConfiguration
+    yaml_path: src/main/resources/bidder-config/huaweiads.yaml
+    proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/huaweiads/
+  port_concerns:
+    aliases_inverted: false
+    yaml_unification: true
+    mutation_idiom_divergence: false
+    package_directory_mismatch: false
+    multi_file_layout: true
+    custom_unmarshaljson_present: false
+  go_specific_concerns: []
+  java_specific_concerns:
+    - "Bidder<HuaweiAdsRequest> generic — port to Java fan-out into model/request/HuaweiAdsRequest DTO + companion model/response/HuaweiAdsResponse. Go side likely uses a struct named openrtb_ext.HuaweiAdsRequest in same package as adapter."
+    - "TitleCase brand acronym preserved in 14+ class names (HuaweiAds*, HuaweiAdSlotBuilder, HuaweiAdmBuilder, HuaweiAdsTest); Go-side files use lowercase huaweiads_ prefix — round-trip port must apply Title-case rule on file/class boundary."
+    - "Nested ExtraInfo configuration class (huaweiads/nextmillennium pattern) — Go-side equivalent is likely a config flag struct passed to Builder via ExtraAdapterInfo string parsed at boot."
+    - "HMAC-SHA-256 implementation must use UTF-8 encoding and lowercase hex output to match Go side's crypto/hmac + encoding/hex.EncodeToString. Apache commons-codec Hex.encodeHexString outputs lowercase by default — confirmed byte-equal contract."
+    - "ClientTimeFormatter uses Java's DateTimeFormatter pattern `yyyy-MM-dd HH:mm:ss.SSSZ` matching Go's reference time `2006-01-02 15:04:05.000-0700`. Round-trip parser must accept BOTH variants (with-offset and without-offset)."
+    - "Auth header data input includes `nonce + \":POST:/ppsadx/getResult\"` — the path string is hardcoded; cross-language byte-equality of HMAC depends on bit-identical apiKey and message strings."
+    - "5 region endpoints (chinese, russian, european, asian + fallback) plus closeSiteSelectionByCountry kill-switch — Go side likely has equivalent ExtraInfo dispatch with same 57-country EUROPEAN allowlist."
+    - "Country code fallback chain: device.geo.country → user.geo.country → mccmnc[0]→alpha2 → ZA. Go side likely uses identical chain in CountryCodeMapper."
+    - "Application-status retcode windows: success [<=200, 204, 206, 300..399, >=600] — error windows (200,300) excl 204/206 and [400,600). Asymmetric: codes outside both windows fall through silently as success — Go side must mirror this bit-for-bit."
+    - "Per-ad retcode30 second dimension (Ad30.retcode30 must == 200) — orthogonal to top-level response retcode. Both must hold for an ad to be considered."
+    - "Two parseImpExt calls per cycle (makeHttpRequests + makeBids) — Go-side parity check: do they cache the parsed ExtImpHuaweiAds across the round-trip, or also re-parse?"
+    - "Bidder-params JSON SHA differs across languages: Go file has CRLF endings (sha256 c2d5585c27...); Java file has LF endings + trailing newline (sha256 ce8ea45365...). Content semantically identical. R5 cross-language assertion FAILS on whitespace bytes alone."
+    - "DEFAULT_BID_CURRENCY=CNY (not USD) — vendor-specific. Go side must hold same default."
+    - "Custom CreativeType offset of +100 in buildBanner (`type > 100 ? type - 100 : type`) — vendor-specific protocol quirk. Go side must have identical offset."
+    - "MonitorEventType.USER_CLOSE expands to TWO VAST Tracking elements (skip + closeLinear) — Go side must emit identical concatenation."
+    - "PkgNameConvert keyword check uses `> 0` not `>= 0` — bundle starting with the keyword is NOT matched (position 0 ignored). This is semantic: Go regex must mirror this off-by-one."
+    - "isTestAuthorization is typed String, not Boolean, and is NOT declared in bidder-params/huaweiads.json — runtime escape hatch. Go side may have same field type."
+  port_lineage:
+    source_language: go
+    source_pr: null
+    destination_language: java
+    destination_pr: null
+    fidelity_review_themes:
+      - port-fidelity
+      - hmac-cross-language-byte-equality
+      - retcode-application-status-handling
+      - region-endpoint-dispatch
+      - title-case-acronym-preservation
+      - nested-extrainfo-config
+  reviewer_cohort:
+    go: []
+    java: []
+    cross_language_coordinator: bretg
