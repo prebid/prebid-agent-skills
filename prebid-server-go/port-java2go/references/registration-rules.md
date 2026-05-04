@@ -65,9 +65,9 @@ Two regions the port skill edits:
 ```go
 import (
     ...
-    "github.com/prebid/prebid-server/v3/adapters/aax"
-    "github.com/prebid/prebid-server/v3/adapters/aceex"
-    "github.com/prebid/prebid-server/v3/adapters/acuityads"
+    "github.com/prebid/prebid-server/v4/adapters/aax"
+    "github.com/prebid/prebid-server/v4/adapters/aceex"
+    "github.com/prebid/prebid-server/v4/adapters/acuityads"
     ...
 )
 ```

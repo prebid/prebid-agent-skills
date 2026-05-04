@@ -1,6 +1,6 @@
-"""scripts/lib/port_engine.py — Phase D1.2 mechanical helpers for port skills.
+"""scripts/lib/port_engine.py — Phase D1.2 + D4.3 mechanical helpers for port skills.
 
-Nine helpers wrapping deterministic mechanical operations the
+Ten helpers wrapping deterministic mechanical operations the
 ``port-go2java`` / ``port-java2go`` SKILLs invoke. Prose-driven SKILL
 bodies walk the 46 port-translation rules; this engine provides the
 small bag of structurally-mechanical transformations that don't fit
@@ -8,7 +8,7 @@ cleanly into prose (byte-copy, name normalization, alias-graph
 inversion, IAB data-table translation, alphabetical insert into
 ``bidders.go`` / ``adapter_builders.go``, prefix-uniqueness pre-check,
 ``gofmt`` post-process, R5 at port time, schema-validated port-report
-emit).
+emit, and pre-submit checkstyle dry-run).
 
 Public API
 ----------
@@ -22,6 +22,7 @@ Public API
 - ``alphabetical_insert(file_path, marker_pattern, insert_line, *, language='go') -> None``
 - ``prefix_uniqueness_check(target_lang, bidder_name, *, existing_names=None) -> Tuple[bool, List[str]]``
 - ``gofmt_post_process(file_paths) -> Tuple[bool, str]``
+- ``mvn_checkstyle_dry_run(target_clone, *, pom_file='extra/pom.xml', runner=None) -> Tuple[bool, List[Dict]]``
 
 Each helper has a corresponding test class in
 ``scripts/tests/test_port_engine.py``. Helpers that consume external
@@ -778,12 +779,17 @@ def mvn_checkstyle_dry_run(
         rc, stdout, stderr = runner(argv, target)
     else:
         try:
+            # Phase D4.3 follow-up: bound subprocess to 5 minutes so a hung
+            # mvn (network stall pulling a checkstyle profile, deadlocked
+            # surefire fork, etc.) doesn't block indefinitely. Operator can
+            # rerun manually if the bidder genuinely needs > 300s.
             result = subprocess.run(
                 argv,
                 cwd=str(target),
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=300,
             )
         except FileNotFoundError:
             return False, [{
@@ -792,36 +798,75 @@ def mvn_checkstyle_dry_run(
                 "file": None,
                 "line": None,
             }]
+        except subprocess.TimeoutExpired:
+            return False, [{
+                "severity": "infrastructure",
+                "message": "mvn -B checkstyle:check exceeded 300s timeout",
+                "file": None,
+                "line": None,
+            }]
         rc, stdout, stderr = result.returncode, result.stdout, result.stderr
     violations = _parse_checkstyle_violations(stdout, stderr)
     return rc == 0, violations
 
 
-_CHECKSTYLE_LINE_RE = re.compile(
-    # Mvn -B checkstyle output format:
-    #   [ERROR] /path/to/File.java:LINE:COL: message [RuleName]
-    # or [WARN] equivalents. Severity comes from the bracketed prefix.
-    r"^\[(?P<sev>(?:ERROR|WARN(?:ING)?))\]\s+(?P<file>[^\s:]+):(?P<line>\d+)(?::(?P<col>\d+))?:\s+(?P<msg>.+?)(?:\s+\[(?P<rule>[^\]]+)\])?\s*$",
-    re.MULTILINE,
+# Two checkstyle output formats are emitted across maven-checkstyle-plugin
+# versions / configurations. The regex registry below handles both; the
+# parser tries each in turn.
+#
+# Format A (legacy / some 2.x configurations + verbose output):
+#   [ERROR] /path/to/File.java:42:5: Method length is 200 lines. [MethodLength]
+#
+# Format B (maven-checkstyle-plugin 3.x default):
+#   [ERROR] /path/to/File.java:[42,5] (sizes) MethodLength: Method length is 200 lines.
+#
+# Both forms include severity, file path, line, optional column, message,
+# and a rule name; field placement differs. The Phase D4.3 reviewer noted
+# that synthetic test inputs matched format A but real upstream
+# maven-checkstyle-plugin output is format B; without both regexes a
+# real-world run would parse zero violations.
+_CHECKSTYLE_LINE_RES = (
+    # Format A: file:line:col: message [Rule]
+    re.compile(
+        r"^\[(?P<sev>ERROR|WARN(?:ING)?)\]\s+(?P<file>[^\s:]+):(?P<line>\d+)(?::(?P<col>\d+))?:\s+(?P<msg>.+?)(?:\s+\[(?P<rule>[^\]]+)\])?\s*$",
+        re.MULTILINE,
+    ),
+    # Format B: file:[line,col] (group) Rule: message
+    re.compile(
+        r"^\[(?P<sev>ERROR|WARN(?:ING)?)\]\s+(?P<file>[^\s:]+):\[(?P<line>\d+)(?:,(?P<col>\d+))?\]\s+\((?P<group>[^)]+)\)\s+(?P<rule>\S+):\s+(?P<msg>.+?)\s*$",
+        re.MULTILINE,
+    ),
 )
 
 
 def _parse_checkstyle_violations(stdout: str, stderr: str) -> List[Dict[str, Any]]:
-    """Parse ``mvn -B checkstyle:check`` output into structured violations."""
+    """Parse ``mvn -B checkstyle:check`` output into structured violations.
+
+    Walks both regex formats in turn. A line that matches either format
+    is recorded once (the regex set is mutually exclusive on real
+    checkstyle output; defensive against double-counting if a future
+    plugin version emits both forms simultaneously).
+    """
     text = "\n".join(filter(None, (stdout, stderr)))
     out: List[Dict[str, Any]] = []
-    for m in _CHECKSTYLE_LINE_RE.finditer(text):
-        sev = m.group("sev").lower()
-        # Only file:line:col-shaped lines that mention a Java file are real
-        # checkstyle violations; skip the surrounding mvn build banner.
-        if not m.group("file").endswith(".java"):
-            continue
-        out.append({
-            "severity": sev,
-            "file": m.group("file"),
-            "line": int(m.group("line")),
-            "column": int(m.group("col")) if m.group("col") else None,
-            "message": m.group("msg").strip(),
-            "rule": m.group("rule"),
-        })
+    seen_at_offset: set[int] = set()
+    for regex in _CHECKSTYLE_LINE_RES:
+        for m in regex.finditer(text):
+            if m.start() in seen_at_offset:
+                continue
+            seen_at_offset.add(m.start())
+            sev = m.group("sev").lower()
+            file_path = m.group("file")
+            # Only file:line:col-shaped lines that mention a Java file are real
+            # checkstyle violations; skip the surrounding mvn build banner.
+            if not file_path.endswith(".java"):
+                continue
+            out.append({
+                "severity": sev,
+                "file": file_path,
+                "line": int(m.group("line")),
+                "column": int(m.group("col")) if m.group("col") else None,
+                "message": m.group("msg").strip(),
+                "rule": m.group("rule"),
+            })
     return out

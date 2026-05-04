@@ -891,6 +891,22 @@ def _round_trip_diff(
     """Walk original vs round-tripped spec; collect fields that diverge AND
     are NOT flagged as lossy in the relevant direction. Returns a list of
     {path, original, round_tripped} dicts for unexpected divergences.
+
+    keys_to_check is intentionally minimal — limited to the R5-strict
+    subset whose divergence is meaningful regardless of direction. The
+    Round-Trip Safety table at port-translation-rules.yaml lists many
+    paths flagged lossy that are NOT in this set (e.g., code.builder.*,
+    spring_config.*, tests.unit_test_methods_count); the lossy_paths
+    loader is forward-looking — a future expansion of keys_to_check
+    can add those without re-shaping the diff loop. Today, none of the
+    paths in keys_to_check appear in the Round-Trip Safety lossy list,
+    so the lossy_paths intersection is empty by design (the gate is in
+    place against future schema additions).
+
+    Per Phase D4.1 follow-up: bidder_info.endpoint compares via
+    normalize_endpoint_macros so macro-form equivalent endpoints
+    (Go {{.X}} vs Java ${X}) don't fire false WARNs — same canonical
+    form R5 uses for the form-divergent comparison.
     """
     out: List[Dict[str, Any]] = []
     keys_to_check = (
@@ -910,6 +926,11 @@ def _round_trip_diff(
             continue
         orig_val = _walk_dotted(original, path)
         rt_val = _walk_dotted(round_tripped, path)
+        # bidder_info.endpoint may use language-specific macro syntax;
+        # canonicalize before comparing so {{.Host}} ≡ ${host} ≡ {{Host}}.
+        if path == "bidder_info.endpoint":
+            orig_val = normalize_endpoint_macros(orig_val) if isinstance(orig_val, str) else orig_val
+            rt_val = normalize_endpoint_macros(rt_val) if isinstance(rt_val, str) else rt_val
         if not _values_equivalent(orig_val, rt_val):
             out.append({
                 "path": path,

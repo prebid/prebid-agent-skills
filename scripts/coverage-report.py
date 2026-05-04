@@ -60,6 +60,7 @@ PHASE_5_PAIRS = [
     ("adkernelAdn", "P3", "ADR-005 Rule 46 naming-normalization master (adkernelAdn → adkerneladn)"),
     ("freewheelssp", "Stretch", "ADR-007 F2 master (language-stamped-header-divergence — refined 2026-05-03 from multi-endpoint-by-mediatype label-collision)"),
     ("thetradedesk", "Stretch", "ADR-007 F4 master (bid-post-processing-macro)"),
+    ("beachfront", "Stretch", "ADR-007 F1 master (multi-endpoint-by-mediatype) + Rule 35 typed-config-subclass + Rule 9 parameterized-request-type — three patterns in one bidder"),
 ]
 
 # Rule 46 naming-convention pairs (ADR-005, 11 verified pairs — refined 2026-05-03

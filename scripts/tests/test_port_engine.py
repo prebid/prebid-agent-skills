@@ -706,6 +706,34 @@ class TestMvnCheckstyleDryRun(unittest.TestCase):
             self.assertEqual(violations[1]["line"], 88)
             self.assertEqual(violations[1]["rule"], "LineLength")
 
+    def test_violations_parsed_from_mvn_3x_default_format(self):
+        """Phase D4.3 follow-up: maven-checkstyle-plugin 3.x default format
+        is `[SEV] /path/Foo.java:[LINE,COL] (group) Rule: msg`. The earlier
+        format-A-only regex parsed zero violations against a real run."""
+        from scripts.lib.port_engine import mvn_checkstyle_dry_run
+        sample_stdout = (
+            "[INFO] Running checkstyle:check\n"
+            "[ERROR] /clone/src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java:[42,5] "
+            "(sizes) MethodLength: Method length is 200 lines (max allowed is 150).\n"
+            "[WARN] /clone/src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java:[88,1] "
+            "(sizes) LineLength: Line is 130 chars (max 120).\n"
+            "[INFO] BUILD FAILURE\n"
+        )
+        with TemporaryDirectory() as td:
+            ok, violations = mvn_checkstyle_dry_run(
+                td,
+                runner=lambda _argv, _cwd: (1, sample_stdout, ""),
+            )
+            self.assertFalse(ok)
+            self.assertEqual(len(violations), 2)
+            self.assertEqual(violations[0]["severity"], "error")
+            self.assertEqual(violations[0]["line"], 42)
+            self.assertEqual(violations[0]["column"], 5)
+            self.assertEqual(violations[0]["rule"], "MethodLength")
+            self.assertIn("Method length is 200 lines", violations[0]["message"])
+            self.assertEqual(violations[1]["severity"], "warn")
+            self.assertEqual(violations[1]["rule"], "LineLength")
+
     def test_non_java_file_lines_ignored(self):
         """Build banner lines like '[ERROR] /path/to/something:42:5: ...'
         that don't reference a .java file are NOT parsed as violations."""

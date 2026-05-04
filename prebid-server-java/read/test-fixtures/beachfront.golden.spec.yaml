@@ -169,10 +169,10 @@ code:
     files:
       - name: BeachfrontBidder.java
         role: implementation
-        loc: 716
+        loc: 575
       - name: BeachfrontFloorResolver.java
         role: helper
-        loc: 175
+        loc: 143
       - name: model/
         role: helper
         loc: 0

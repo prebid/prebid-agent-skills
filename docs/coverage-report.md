@@ -39,8 +39,9 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 | `adkernelAdn` | P3 | ✓ | ✓ | ✓ covered | ADR-005 Rule 46 naming-normalization master (adkernelAdn → adkerneladn) |
 | `freewheelssp` | Stretch | ✓ | ✓ | ✓ covered | ADR-007 F2 master (language-stamped-header-divergence — refined 2026-05-03 from multi-endpoint-by-mediatype label-collision) |
 | `thetradedesk` | Stretch | ✓ | ✓ | ✓ covered | ADR-007 F4 master (bid-post-processing-macro) |
+| `beachfront` | Stretch | ✓ | ✓ | ✓ covered | ADR-007 F1 master (multi-endpoint-by-mediatype) + Rule 35 typed-config-subclass + Rule 9 parameterized-request-type — three patterns in one bidder |
 
-**Phase 5 status**: 9 of 9 pairs covered. 0 remaining (matches ADR-008's 9-pair plan).
+**Phase 5 status**: 10 of 10 pairs covered. 0 remaining (matches ADR-008's 9-pair plan).
 
 ---
 

@@ -51,7 +51,11 @@ class TestCoverageComputations(unittest.TestCase):
 
     def test_phase_5_pairs_exist(self):
         readiness = cr.compute_phase_5_readiness(self.goldens)
-        self.assertEqual(9, len(readiness), "ADR-008 lists 9 Phase 5 pairs (3 P1 + 3 P2 + 1 P3 + 2 stretch)")
+        # ADR-008 listed 9 Phase 5 pairs (3 P1 + 3 P2 + 1 P3 + 2 stretch).
+        # Phase D4.4 added beachfront as a 3rd stretch (ADR-007 F1 master)
+        # so the count is now 10.
+        self.assertEqual(10, len(readiness),
+                         "ADR-008 + D4.4: 10 Phase 5 pairs (3 P1 + 3 P2 + 1 P3 + 3 stretch incl. beachfront)")
         # Coverage progresses as Phase 5 lands. Assert progress is monotonic
         # (never goes backwards) and adverxo (the first P1 fixture) is covered.
         covered = {p["bidder"] for p in readiness if p["covered"]}

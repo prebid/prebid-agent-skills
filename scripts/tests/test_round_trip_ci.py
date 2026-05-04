@@ -877,6 +877,82 @@ class TestR11PortRoundTrip(unittest.TestCase):
         diffs = rtci._round_trip_diff(original, round_tripped, {}, "go-to-java")
         self.assertEqual(diffs, [])
 
+    def test_round_trip_diff_normalizes_endpoint_macros(self):
+        """Phase D4.1 follow-up: bidder_info.endpoint with Go {{.Host}}
+        vs Java ${host} canonicalizes to {{Host}} on both sides; should
+        NOT register as a divergence (matches R5 form-divergent semantics)."""
+        original = {"bidder_info": {"endpoint": "https://x/{{.Host}}/bid"}}
+        round_tripped = {"bidder_info": {"endpoint": "https://x/${Host}/bid"}}
+        diffs = rtci._round_trip_diff(original, round_tripped, {}, "go-to-java")
+        self.assertEqual(diffs, [])
+
+    def test_round_trip_diff_endpoint_real_divergence_still_flags(self):
+        """When endpoints diverge BEYOND macro syntax (different host /
+        path), normalize_endpoint_macros doesn't paper it over — the
+        diff still fires."""
+        original = {"bidder_info": {"endpoint": "https://go.example/{{.Host}}/bid"}}
+        round_tripped = {"bidder_info": {"endpoint": "https://java.example/${Host}/bid"}}
+        diffs = rtci._round_trip_diff(original, round_tripped, {}, "go-to-java")
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0]["path"], "bidder_info.endpoint")
+
+    def test_r_port_round_trip_emits_pass_for_lossy_flagged_divergence(self):
+        """Phase D4.1 follow-up: when a synthetic round-trip artifact
+        has a divergent value on a path that the Round-Trip Safety table
+        flags as lossy in the relevant direction, the diff exempts that
+        field and r_port_round_trip emits PASS rather than WARN."""
+        import os
+        bidder = "synthetic_lossy_exemption_bidder_xyz"
+        original = {
+            "meta": {"bidder_name": bidder},
+            "bidder_info": {
+                "endpoint": "https://x",
+                "geoscope": ["NOR"],
+                "gvl_vendor_id": 0,
+            },
+            "bidder_params_sha256": "a" * 64,
+        }
+        # Round-tripped artifact has a different geoscope value — would
+        # normally be a divergence. We synthesize a lossy_paths entry
+        # flagging bidder_info.geoscope as lossy go-to-java to exercise
+        # the exemption.
+        round_tripped_artifact = dict(original)
+        round_tripped_artifact["bidder_info"] = dict(original["bidder_info"])
+        round_tripped_artifact["bidder_info"]["geoscope"] = ["NOR", "SWE", "DNK"]
+
+        rt_dir = os.path.join(rtci.REPO_ROOT, ".tmp", "full-loop",
+                              "test-r11-lossy-run", "round-trip", "go")
+        os.makedirs(rt_dir, exist_ok=True)
+        rt_path = os.path.join(rt_dir, f"{bidder}.yaml")
+        rt_dir_java = os.path.join(rtci.REPO_ROOT, ".tmp", "full-loop",
+                                   "test-r11-lossy-run", "round-trip", "java")
+        os.makedirs(rt_dir_java, exist_ok=True)
+        rt_path_java = os.path.join(rt_dir_java, f"{bidder}.yaml")
+        try:
+            import yaml as _yaml
+            with open(rt_path, "w") as fh:
+                _yaml.safe_dump(round_tripped_artifact, fh)
+            with open(rt_path_java, "w") as fh:
+                _yaml.safe_dump(round_tripped_artifact, fh)
+
+            go_spec = make_spec(bidder=bidder, language="go", raw=original)
+            java_spec = make_spec(bidder=bidder, language="java", raw=original)
+            # Synthetic lossy_paths flagging geoscope as lossy in BOTH
+            # directions — proves the diff loop honors the exemption.
+            lossy = {
+                "bidder_info.geoscope": {"go-to-java": True, "java-to-go": True},
+            }
+            findings = rtci.r_port_round_trip(go_spec, java_spec, lossy)
+            severities = [f.severity for f in findings]
+            # Both directions should emit PASS (geoscope divergence
+            # exempted by lossy_paths) — no WARN.
+            self.assertIn(rtci.SEV_PASS, severities)
+            self.assertNotIn(rtci.SEV_WARN, severities)
+        finally:
+            import shutil
+            shutil.rmtree(os.path.join(rtci.REPO_ROOT, ".tmp", "full-loop", "test-r11-lossy-run"),
+                          ignore_errors=True)
+
     def test_pass_finding_when_artifact_present_and_matches(self):
         """When a synthetic round-trip artifact exists at the canonical
         path AND matches the original on the checked fields, emit PASS."""
