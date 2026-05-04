@@ -1,0 +1,33 @@
+version: 2
+
+# Wave 11b post-review hardening: keep CI deps current automatically so
+# pinned exact versions (requirements.txt) and SHA-pinned actions
+# (.github/workflows/*.yml) don't fall behind security patches.
+#
+# Pulls open weekly. Reviewers approve like any PR before merge.
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Group all action bumps into a single weekly PR to reduce noise.
+    groups:
+      gh-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
