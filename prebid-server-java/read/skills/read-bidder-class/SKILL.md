@@ -93,20 +93,16 @@ From the file with role=`implementation` (the `{Xyz}Bidder.java` file declaring 
 
 ### Step 3 — Extract `spring_config.*`
 
-From `src/main/java/org/prebid/server/spring/config/bidder/{Xyz}Configuration.java` (the Spring factory class — lives OUTSIDE the bidder package and is therefore NOT recorded in `code.file_layout.files[]`; locate it by canonical path):
+From `src/main/java/org/prebid/server/spring/config/bidder/{Xyz}Configuration.java` (the Spring factory class — lives OUTSIDE the bidder package and is therefore NOT recorded in `code.file_layout.files[]`; locate it by canonical path). Apply the extraction rules at [references/spring-config-patterns.md](references/spring-config-patterns.md) (the canonical home — factory class shape, `BidderConfigurationProperties` subclass detection per edge case #20, bean dependencies + standard collaborator catalog, Lombok annotation recognition, plus worked examples).
 
-1. `factory_class` — the class identifier (e.g., `KoblerConfiguration`). Naming variance: `<Name>Configuration` (Kobler, Optidigital) vs `<Name>BidderConfiguration` (Adverxo). Edge case #19; record either name verbatim.
-2. `factory_method` — the `@Bean` method returning `BidderDeps`. Naming: `<name>BidderDeps` (e.g., `koblerBidderDeps`).
-3. `property_source_path` — the value of `@PropertySource` on the class. Canonical: `classpath:/bidder-config/{xyz}.yaml`.
-4. `bidder_creator_lambda` — the verbatim lambda body inside `BidderDepsAssembler.bidderCreator(cfg -> new XyzBidder(...))`. Preserve indentation, line breaks, and constructor argument order — round-trip fidelity is load-bearing for porters.
-5. `configuration_properties_class.*` — populated when the adapter declares a subclass of `BidderConfigurationProperties` (typically as an inner static class on the factory class):
-   - `name` — the subclass identifier (e.g., `KoblerConfigurationProperties`).
-   - `extends` — typically `BidderConfigurationProperties`.
-   - `extra_fields[]` — each declared field with `{ name, type, validations[] }`. `validations[]` is a list of strings carrying the verbatim Bean Validation annotation including the leading `@`: `["@NotBlank"]`, `["@NotNull"]`, `["@Valid", "@NotNull"]`, `["@Size(min=1, max=10)"]`. Empty list permitted. Edge case #20 examples: Kobler's `@NotBlank private String devEndpoint`; Appnexus's `platformId` + `iabCategories` (Map<String, Long>).
-   - `nested_classes[]` — additional inner static classes (e.g., Huaweiads/NextMillennium `ExtraInfo`).
-   - `lombok_annotations[]` — class-level Lombok annotations: `[Data, EqualsAndHashCode, NoArgsConstructor]` for the canonical case; record verbatim.
-   - When the factory class declares NO subclass (default `BidderConfigurationProperties` is enough), set `configuration_properties_class: null`.
-6. `bean_dependencies[]` — every `@Autowired` constructor parameter or `@Value(${...})` injection on the factory method. Record `{ name, type, source }`. The standard collaborators list (`CurrencyConversionService`, `JacksonMapper`, `@Value(${external-url})`) lives in [references/spring-config-patterns.md](references/spring-config-patterns.md#bean-dependencies-extraction).
+Per-step output fields:
+
+1. `factory_class` — naming variance per edge case #19 (`<Name>Configuration` vs `<Name>BidderConfiguration`). Record verbatim.
+2. `factory_method` — `@Bean` method returning `BidderDeps` (e.g., `koblerBidderDeps`).
+3. `property_source_path` — `@PropertySource` value (canonical: `classpath:/bidder-config/{xyz}.yaml`).
+4. `bidder_creator_lambda` — verbatim lambda body from `BidderDepsAssembler.bidderCreator(...)`. Round-trip fidelity load-bearing for porters; preserve indentation, line breaks, and constructor argument order.
+5. `configuration_properties_class.*` — populated when the factory declares a `BidderConfigurationProperties` subclass; `null` otherwise. See references doc for the full sub-field shape (name, extends, extra_fields[] with verbatim `@Validation` annotations, nested_classes[], lombok_annotations[]).
+6. `bean_dependencies[]` — every `@Autowired` constructor parameter or `@Value(${...})` injection on the factory method. Record `{ name, type, source }` per the [Bean dependencies extraction](references/spring-config-patterns.md#bean-dependencies-extraction) section.
 
 ### Step 4 — Classify `code.make_requests.*`
 

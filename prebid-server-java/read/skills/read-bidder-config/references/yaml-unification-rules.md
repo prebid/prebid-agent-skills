@@ -57,6 +57,10 @@ Maps each Java unified key to the corresponding canonical Adapter Specification 
 
 **`ortb-version` quoting** (Java edge case #29): The Java YAML declares `ortb-version: "2.6"` with explicit quotes to preserve string type (without quotes, YAML parses `2.6` as a float). The skill MUST detect from raw text whether the value was quoted. Emit as a string (`"2.6"`) regardless. Go YAMLs typically nest under `openrtb: { version: 2.6 }` and round-trip through `yaml_extra_fields` rather than top-level `ortb_version` — the inverse asymmetry.
 
+**`enabled: false` opt-in pattern** (Java edge case #30): Default for `bidder_info.default_enabled` is `true` when the key is absent. When YAML declares `enabled: false`, the bidder ships disabled and must be opt-in by the operator. Canonical opt-in pattern: Optidigital, Adverxo aliases.
+
+**`modifying-vast-xml-allowed`** (Java edge case #31): kebab-case Boolean. Default `false` when absent. Maps to `bidder_info.modifying_vast_xml_allowed`. Canonical: FeedAd PR #3869, Mediasquare PR #4031.
+
 ---
 
 ## Tilde-syntax detection (`aliases[].config_form`)

@@ -63,22 +63,12 @@ The wrapper key MUST equal the bidder filename (e.g., `kobler.yaml` -> `adapters
 
 ### Step 3: Extract canonical `bidder_info:` fields
 
-Walk the inner adapter map and map each known key to the spec field per the unification rules at [references/yaml-unification-rules.md](references/yaml-unification-rules.md). Summary mapping:
+Walk the inner adapter map and apply the unified→canonical field mapping per the table at [references/yaml-unification-rules.md](references/yaml-unification-rules.md) (the canonical home — Java keys, target spec fields, Go-side equivalents, plus the kebab-case-vs-camelCase / structural-flattening / quoting divergences). Per-step reminders for this skill's workflow:
 
-- `endpoint` -> `bidder_info.endpoint` (string).
-- `endpoint-compression` -> `bidder_info.endpoint_compression` (string, e.g., `gzip`). The canonical Java key is **kebab-case** `endpoint-compression`. Step 7 detects the camelCase typo.
-- `meta-info.vendor-id` -> `bidder_info.gvl_vendor_id` (uint16; emit `0` as `0`, not `null`).
-- `meta-info.maintainer-email` -> `bidder_info.maintainer.email` (string).
-- `meta-info.site-media-types` -> `bidder_info.capabilities.site.mediaTypes` (list).
-- `meta-info.app-media-types` -> `bidder_info.capabilities.app.mediaTypes` (list).
-- `meta-info.dooh-media-types` -> `bidder_info.capabilities.dooh.mediaTypes` (list). Omit any sub-block whose corresponding YAML list is absent — do NOT synthesize empty platforms.
-- `geoscope` -> `bidder_info.geoscope` (list of 3-letter ISO 3166-1 alpha-3 codes / `GLOBAL` / `EEA` / `!`-prefixed negations).
-- `usersync` -> `bidder_info.user_sync` (verbatim subtree, preserving key order).
-- `enabled` (bool) -> `bidder_info.default_enabled`. Java edge case #30: when YAML has `enabled: false` it flips the default. Default `true` if absent. Canonical opt-in pattern: Optidigital, Adverxo aliases.
-- `modifying-vast-xml-allowed` (bool) -> `bidder_info.modifying_vast_xml_allowed`. Java edge case #31. Default `false`. Canonical: FeedAd PR #3869, Mediasquare PR #4031.
-- `ortb-version` -> `bidder_info.ortb_version`. Java edge case #29: YAML declares as quoted string (`"2.6"`). The skill emits the raw string; YAML parsers that strip quotes lose the type signal — the skill MUST detect from raw text whether the value was quoted (preserve `"2.6"` as string, not `2.6` as float). Canonical: Optidigital PR #4054.
-- `aliases` -> Step 5 (not a `bidder_info` field; emitted as a SIBLING `aliases[]` block).
-- All other keys -> Step 8 (`yaml_extra_fields`).
+- `aliases:` is NOT a `bidder_info` field — it routes to Step 5 (sibling `aliases[]` block).
+- Keys absent from the canonical table flow through Step 8 (`yaml_extra_fields`).
+- Edge-case callouts the references doc covers: #29 (`ortb-version` quoting), #30 (`enabled: false` opt-in default-flip), #31 (`modifying-vast-xml-allowed` kebab-case Boolean).
+- The kebab-case typo for `endpoint-compression` is detected by Step 7.
 
 Endpoint construction (`bidder_info.endpoint_construction.{kind, macros_used, placeholders_unresolved}`) is classified using the same enum and decision tree as the Go side. The decision tree's structural inputs are language-neutral (literal endpoint string + presence of `{{.X}}` template syntax + presence of `?...` query + presence of `#{X}#` non-Go-template tokens + presence of paired `dev-endpoint:`); the Go reader's [endpoint-classification.md](../../../../prebid-server-go/read/skills/read-bidder-info/references/endpoint-classification.md) enumerates the rules. Apply the same enum here. Java-specific note: when `dev-endpoint:` is present alongside `endpoint:` (canonical: Kobler), classify as `dev-prod-toggle` directly from the YAML — Java promotes the dev URL to YAML config (Kobler PR #3684, Port Translation Rule 13 + Rule 35), unlike Go where the dev URL is typically a hardcoded constant in adapter Go-code.
 
