@@ -1174,68 +1174,48 @@ def r7_check(spec: Spec) -> List[Finding]:
 # ---------------------------------------------------------------------------
 
 
-# Macros known to the prebid-server-go macros.EndpointTemplateParams (subset; canonical).
-GO_TEMPLATE_MACROS = {
-    "AccountID",
-    "AdUnit",
-    "BidderCode",
-    "GvlID",
-    "Host",
-    "MediaType",
-    "PageID",
-    "PartnerID",
-    "PlacementID",
-    "PublisherID",
-    "RegionID",
-    "SiteID",
-    "SourceID",
-    "TagID",
-    "Username",
-    "ZoneID",
-}
-# Java template macros (used in URL replacement). These are not Go-template-formatted.
-JAVA_TEMPLATE_MACROS = {
-    "PREBID_SERVER_ENDPOINT",
-    "AdUnit",
-    "Host",
-    "PartnerId",
-    "PageID",
-    "PartnerCode",
-    "PublisherId",
-    "RegionId",
-    "ZoneId",
-    "AccountId",
-    "Source",
-    "GvlId",
-}
-# Wave 11b B5 #7: user-sync URL macros. These appear in
-# bidder_info.user_sync.{iframe,redirect}.url string values and are NOT
-# in GO_TEMPLATE_MACROS (which is endpoint-context only). Walking user-
-# sync paths without this registry would emit warns on every well-known
-# user-sync macro — pure noise.
-#
-# The Go and Java prebid-servers use different naming conventions for the
-# same conceptual macros: Go uses PascalCase ({{.GDPR}}) per its template
-# package, Java uses snake_case ({{gdpr}}) per its String.replace flow.
-# Both spellings are admitted; the language signal is in the path
-# (bidder_info.user_sync.* on Go vs Java spec) but the macro NAMES are
-# the same canonical set under different casings.
-USER_SYNC_MACROS = {
-    # Go casings (PascalCase)
-    "GDPR", "GDPRConsent", "USPrivacy", "GPP", "GPPSID", "RedirectURL",
-    "BidderName", "UID",
-    # Java casings (snake_case)
-    "gdpr", "gdpr_consent", "us_privacy", "gpp", "gpp_sid", "redirect_url",
-    "bidder", "uid",
-}
+# Wave 11b post-review (3d): macro registries lifted from inline Python
+# literals to data at `prebid-server-go/read/skills/shared/endpoint-macros.yaml`.
+# Adding a new macro is now a YAML edit, not a code change.
+ENDPOINT_MACROS_PATH = os.path.join(
+    REPO_ROOT, "prebid-server-go", "read", "skills", "shared", "endpoint-macros.yaml"
+)
 
-# Wave 11b B5 #7: OpenRTB-standard macros that may appear in any
-# endpoint-bearing string (notably nurl/burl billing macros). These are
-# spec-defined per OpenRTB 2.5 §4.1 and aren't bidder-specific.
-OPENRTB_MACROS = {
-    "AUCTION_PRICE", "AUCTION_BID_ID", "AUCTION_IMP_ID", "AUCTION_AD_ID",
-    "AUCTION_LOSS", "AUCTION_MIN_TO_WIN", "AUCTION_SEAT_ID", "AUCTION_CURRENCY",
-}
+
+def _load_endpoint_macros() -> Dict[str, frozenset]:
+    """Load the four R8 macro registries from endpoint-macros.yaml.
+
+    Returns a dict with keys go_template_macros, java_template_macros,
+    user_sync_macros, openrtb_macros — each mapped to a frozenset of
+    macro names. Raises FileNotFoundError if the YAML is missing (a
+    deeply-broken state; the script can't run R8 without the registry).
+    """
+    if not os.path.isfile(ENDPOINT_MACROS_PATH):
+        raise FileNotFoundError(
+            f"endpoint-macros.yaml not found at {ENDPOINT_MACROS_PATH}; "
+            f"R8 cannot recognize macros without it"
+        )
+    with open(ENDPOINT_MACROS_PATH, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    out: Dict[str, frozenset] = {}
+    for key in ("go_template_macros", "java_template_macros",
+                "user_sync_macros", "openrtb_macros"):
+        values = data.get(key) or []
+        if not isinstance(values, list):
+            raise ValueError(
+                f"endpoint-macros.yaml: expected `{key}` to be a list, "
+                f"got {type(values).__name__}"
+            )
+        out[key] = frozenset(values)
+    return out
+
+
+_MACRO_REGISTRIES = _load_endpoint_macros()
+GO_TEMPLATE_MACROS = _MACRO_REGISTRIES["go_template_macros"]
+JAVA_TEMPLATE_MACROS = _MACRO_REGISTRIES["java_template_macros"]
+USER_SYNC_MACROS = _MACRO_REGISTRIES["user_sync_macros"]
+OPENRTB_MACROS = _MACRO_REGISTRIES["openrtb_macros"]
+del _MACRO_REGISTRIES
 PLACEHOLDER_RE = re.compile(r"\{\{\.?([A-Za-z_][A-Za-z0-9_]*)\}\}|#\{([A-Za-z_][A-Za-z0-9_]*)\}#|\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 

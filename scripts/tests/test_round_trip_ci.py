@@ -772,5 +772,45 @@ class TestR3bRegistryHardening(unittest.TestCase):
                            f"Expected ≥30 registered taxa; got {len(taxa)}")
 
 
+# ---------------------------------------------------------------------------
+# Wave 11b post-review (3d): R8 macro registries lifted from Python literals
+# to YAML data. Verify the loader + the four expected sets.
+# ---------------------------------------------------------------------------
+
+class TestEndpointMacrosRegistry(unittest.TestCase):
+    """Wave 11b post-review (3d): the four R8 macro registries are now
+    loaded from `prebid-server-go/read/skills/shared/endpoint-macros.yaml`
+    at module-import time. Verify the loader works + each frozenset
+    contains the canonical core entries (regression gate against
+    accidental YAML edits that would silently drop macros)."""
+
+    def test_endpoint_macros_yaml_loads(self):
+        """The YAML loader returns the four expected keys."""
+        registries = rtci._load_endpoint_macros()
+        self.assertEqual(set(registries.keys()),
+                         {"go_template_macros", "java_template_macros",
+                          "user_sync_macros", "openrtb_macros"})
+        for key, values in registries.items():
+            self.assertIsInstance(values, frozenset, key)
+            self.assertGreater(len(values), 0, f"{key} must be non-empty")
+
+    def test_go_template_macros_contains_canonical_set(self):
+        """Spot-check: the canonical Go endpoint macros are still listed."""
+        for required in ("AccountID", "AdUnit", "PublisherID", "PlacementID"):
+            self.assertIn(required, rtci.GO_TEMPLATE_MACROS,
+                          f"GO_TEMPLATE_MACROS missing canonical {required!r}")
+
+    def test_user_sync_macros_admits_both_casings(self):
+        """The set must include both Go PascalCase + Java snake_case forms."""
+        self.assertIn("GDPR", rtci.USER_SYNC_MACROS)
+        self.assertIn("gdpr", rtci.USER_SYNC_MACROS)
+        self.assertIn("GDPRConsent", rtci.USER_SYNC_MACROS)
+        self.assertIn("gdpr_consent", rtci.USER_SYNC_MACROS)
+
+    def test_openrtb_macros_includes_auction_price(self):
+        """OpenRTB 2.5 §4.1 AUCTION_PRICE is the most common burl/nurl macro."""
+        self.assertIn("AUCTION_PRICE", rtci.OPENRTB_MACROS)
+
+
 if __name__ == "__main__":
     unittest.main()
