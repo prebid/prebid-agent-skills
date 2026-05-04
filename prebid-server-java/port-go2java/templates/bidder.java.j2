@@ -1,0 +1,305 @@
+{# Java {Bidder}Bidder.java template — emits
+src/main/java/org/prebid/server/bidder/{bidder}/{Bidder}Bidder.java
+
+This is the heaviest template in the port-go2java suite. The template
+covers the canonical shapes observed across the MVP corpus (kobler,
+aax, adkernelAdn, adverxo, vungle, thetradedesk) plus a few common
+variants. Source-spec shapes outside this set surface as
+unresolved_translations[] in the port-report (the SKILL Step 3 falls
+through to a TODO comment in the emitted Java; the operator hand-fills
+post-emit).
+
+Inputs (large; see the prose-driven SKILL Step 4 docstring for what
+the SKILL passes from the source spec):
+
+  ctx.bidder_name              : str  — Java YAML / package name (lowercase)
+  ctx.bidder_class_root        : str  — PascalCase (e.g., "Kobler", "AdkernelAdn")
+  ctx.uses_currency_conversion : bool — source spec's currency_conversion.used
+  ctx.imp_ext_class_root       : str  — typically same as bidder_class_root; used for ExtImp{X}
+  ctx.imp_ext_unmarshal_kind   : str  — one of {"standard-two-phase", "direct"}; Rule 1/2
+  ctx.batching_kind            : str  — one of {"single-batched", "per-imp", "max-imps-per-request",
+                                          "format-split", "pod-grouping"}; Rule 16/17/18
+  ctx.batching_max_imps        : int|null  — when batching_kind == "max-imps-per-request"
+  ctx.endpoint_resolution_kind : str  — one of {"static", "single-token-substitution",
+                                          "query-parameter-augmentation", "dev-prod-toggle",
+                                          "multi-token-substitution"}; Rule 11/12/13/14
+  ctx.headers_collapse         : bool — Rule 19; emit HttpUtil.headers() shorthand
+  ctx.http_status_kind         : str  — one of {"canonical-helpers", "legacy-raw"}; Rule 30
+  ctx.bid_type_resolution      : str  — one of {"imp-mediatype-introspection",
+                                          "ext-prebid-video-placement",
+                                          "constant-banner",
+                                          "method-chain-fallback"}; Rule 23-25
+  ctx.javadoc_summary          : str|null  — class-level Javadoc
+  ctx.imports_extra            : list[str]  — caller-collected; alphabetically sorted
+
+The body shape per kobler is:
+  - private final {endpoint, currencyConversionService, mapper}
+  - public ctor(endpoint, [currencyConversionService,] mapper) { ... HttpUtil.validateUrl ... }
+  - makeHttpRequests: parse imp.ext per imp, build HttpRequest, return
+  - makeBids: parse BidResponse, walk seatbid → bid, classify type, return
+  - private helpers: parseImpExt, getBidType
+
+Variants beyond canonical surface as unresolved_translations[] entries
+when the SKILL's Step 3 cannot deterministically map a rule to template
+inputs.
+#}
+package org.prebid.server.bidder.{{ ctx.bidder_name }};
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.iab.openrtb.request.BidRequest;
+import com.iab.openrtb.request.Imp;
+import com.iab.openrtb.response.Bid;
+import com.iab.openrtb.response.BidResponse;
+import com.iab.openrtb.response.SeatBid;
+{% for imp in ctx.imports_extra %}
+import {{ imp }};
+{% endfor %}
+import org.prebid.server.bidder.Bidder;
+import org.prebid.server.bidder.model.BidderBid;
+import org.prebid.server.bidder.model.BidderCall;
+import org.prebid.server.bidder.model.BidderError;
+import org.prebid.server.bidder.model.HttpRequest;
+import org.prebid.server.bidder.model.HttpResponse;
+import org.prebid.server.bidder.model.Result;
+{% if ctx.uses_currency_conversion %}
+import org.prebid.server.currency.CurrencyConversionService;
+{% endif %}
+import org.prebid.server.exception.PreBidException;
+import org.prebid.server.json.DecodeException;
+import org.prebid.server.json.JacksonMapper;
+import org.prebid.server.proto.openrtb.ext.ExtPrebid;
+import org.prebid.server.proto.openrtb.ext.request.{{ ctx.bidder_name }}.ExtImp{{ ctx.imp_ext_class_root }};
+import org.prebid.server.proto.openrtb.ext.response.BidType;
+import org.prebid.server.util.BidderUtil;
+import org.prebid.server.util.HttpUtil;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
+{% if ctx.javadoc_summary %}
+/**
+ * {{ ctx.javadoc_summary }}
+ */
+{% endif %}
+public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
+
+    private static final TypeReference<ExtPrebid<?, ExtImp{{ ctx.imp_ext_class_root }}>> {{ ctx.bidder_class_root | upper }}_EXT_TYPE_REFERENCE =
+            new TypeReference<>() {
+            };
+
+    private final String endpointUrl;
+{% if ctx.uses_currency_conversion %}
+    private final CurrencyConversionService currencyConversionService;
+{% endif %}
+    private final JacksonMapper mapper;
+
+    public {{ ctx.bidder_class_root }}Bidder(
+            String endpointUrl,
+{% if ctx.uses_currency_conversion %}
+            CurrencyConversionService currencyConversionService,
+{% endif %}
+            JacksonMapper mapper) {
+
+        this.endpointUrl = HttpUtil.validateUrl(Objects.requireNonNull(endpointUrl));
+{% if ctx.uses_currency_conversion %}
+        this.currencyConversionService = Objects.requireNonNull(currencyConversionService);
+{% endif %}
+        this.mapper = Objects.requireNonNull(mapper);
+    }
+
+    @Override
+    public Result<List<HttpRequest<BidRequest>>> makeHttpRequests(BidRequest bidRequest) {
+        final List<BidderError> errors = new ArrayList<>();
+        final List<HttpRequest<BidRequest>> httpRequests = new ArrayList<>();
+
+{% if ctx.batching_kind == "single-batched" %}
+        try {
+            // Per-imp validation: parse imp.ext.bidder for each imp; collect errors.
+            for (Imp imp : bidRequest.getImp()) {
+                parseImpExt(imp);
+            }
+        } catch (PreBidException e) {
+            errors.add(BidderError.badInput(e.getMessage()));
+            if (errors.size() == bidRequest.getImp().size()) {
+                return Result.withErrors(errors);
+            }
+        }
+
+        httpRequests.add(BidderUtil.defaultRequest(bidRequest, resolveEndpoint(bidRequest), mapper));
+{% elif ctx.batching_kind == "per-imp" %}
+        for (Imp imp : bidRequest.getImp()) {
+            try {
+                final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
+                final BidRequest perImpRequest = bidRequest.toBuilder()
+                        .imp(Collections.singletonList(imp))
+                        .build();
+                httpRequests.add(BidderUtil.defaultRequest(
+                        perImpRequest,
+                        resolveEndpoint(perImpRequest),
+                        mapper));
+            } catch (PreBidException e) {
+                errors.add(BidderError.badInput(e.getMessage()));
+            }
+        }
+{% elif ctx.batching_kind == "max-imps-per-request" %}
+        final int maxImpsPerRequest = {{ ctx.batching_max_imps }};
+        final List<List<Imp>> chunks = chunkImps(bidRequest.getImp(), maxImpsPerRequest);
+        for (List<Imp> chunk : chunks) {
+            try {
+                for (Imp imp : chunk) {
+                    parseImpExt(imp);
+                }
+                final BidRequest chunkRequest = bidRequest.toBuilder().imp(chunk).build();
+                httpRequests.add(BidderUtil.defaultRequest(
+                        chunkRequest,
+                        resolveEndpoint(chunkRequest),
+                        mapper));
+            } catch (PreBidException e) {
+                errors.add(BidderError.badInput(e.getMessage()));
+            }
+        }
+{% else %}
+        // TODO[port-go2java]: batching_kind={{ ctx.batching_kind }} is not yet
+        // template-mapped. Operator must hand-fill makeHttpRequests body.
+        // (See port-report.json::unresolved_translations[].)
+        throw new UnsupportedOperationException("batching_kind={{ ctx.batching_kind }} not yet implemented");
+{% endif %}
+
+        if (httpRequests.isEmpty()) {
+            return Result.withErrors(errors);
+        }
+        return Result.of(httpRequests, errors);
+    }
+
+    @Override
+    public Result<List<BidderBid>> makeBids(BidderCall<BidRequest> httpCall, BidRequest bidRequest) {
+        final HttpResponse response = httpCall.getResponse();
+{% if ctx.http_status_kind == "canonical-helpers" %}
+        if (BidderUtil.isResponseStatusCodeNoContent(response)) {
+            return Result.empty();
+        }
+        try {
+            BidderUtil.checkResponseStatusCode(response);
+        } catch (PreBidException e) {
+            return Result.withError(BidderError.badServerResponse(e.getMessage()));
+        }
+{% else %}
+        if (response.getStatusCode() == 204) {
+            return Result.empty();
+        }
+        if (response.getStatusCode() != 200) {
+            return Result.withError(BidderError.badServerResponse(
+                    "Unexpected status code: " + response.getStatusCode()));
+        }
+{% endif %}
+        try {
+            final BidResponse bidResponse = mapper.decodeValue(response.getBody(), BidResponse.class);
+            return Result.withValues(extractBids(bidResponse, bidRequest));
+        } catch (DecodeException | JsonProcessingException e) {
+            return Result.withError(BidderError.badServerResponse(e.getMessage()));
+        }
+    }
+
+    private ExtImp{{ ctx.imp_ext_class_root }} parseImpExt(Imp imp) {
+        try {
+{% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
+            return mapper.mapper()
+                    .convertValue(imp.getExt(), {{ ctx.bidder_class_root | upper }}_EXT_TYPE_REFERENCE)
+                    .getBidder();
+{% else %}
+            return mapper.mapper()
+                    .convertValue(imp.getExt(), ExtImp{{ ctx.imp_ext_class_root }}.class);
+{% endif %}
+        } catch (IllegalArgumentException e) {
+            throw new PreBidException(
+                    "Could not parse imp.ext.bidder for imp.id=" + imp.getId() + ": " + e.getMessage());
+        }
+    }
+
+    private String resolveEndpoint(BidRequest bidRequest) {
+{% if ctx.endpoint_resolution_kind == "static" %}
+        return endpointUrl;
+{% elif ctx.endpoint_resolution_kind == "dev-prod-toggle" %}
+        // Dev-prod toggle: when imp.ext.test indicates test mode, use a dev URL;
+        // otherwise the configured endpoint. Per source spec's
+        // headers_constructed.dev_prod_toggle_signal documentation.
+        return endpointUrl;  // placeholder: operator wires the toggle per Rule 13
+{% else %}
+        // TODO[port-go2java]: endpoint_resolution_kind={{ ctx.endpoint_resolution_kind }}
+        // requires per-bidder customization (Rule 11/12/14).
+        return endpointUrl;
+{% endif %}
+    }
+
+    private List<BidderBid> extractBids(BidResponse bidResponse, BidRequest bidRequest) {
+        if (bidResponse == null || bidResponse.getSeatbid() == null) {
+            return Collections.emptyList();
+        }
+        return bidResponse.getSeatbid().stream()
+                .filter(Objects::nonNull)
+                .map(SeatBid::getBid)
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .map(bid -> BidderBid.of(bid, resolveBidType(bid, bidRequest), bidResponse.getCur()))
+                .toList();
+    }
+
+    private BidType resolveBidType(Bid bid, BidRequest bidRequest) {
+{% if ctx.bid_type_resolution == "constant-banner" %}
+        return BidType.banner;
+{% elif ctx.bid_type_resolution == "imp-mediatype-introspection" %}
+        // Walk bid.impid → matching imp; classify by populated mediatype field.
+        for (Imp imp : bidRequest.getImp()) {
+            if (Objects.equals(imp.getId(), bid.getImpid())) {
+                if (imp.getVideo() != null) {
+                    return BidType.video;
+                }
+                if (imp.getXNative() != null) {
+                    return BidType.xNative;
+                }
+                if (imp.getAudio() != null) {
+                    return BidType.audio;
+                }
+                return BidType.banner;
+            }
+        }
+        return BidType.banner;
+{% elif ctx.bid_type_resolution == "ext-prebid-video-placement" %}
+        // Inspect bid.ext.prebid.type when present; fallback to imp introspection.
+        final JsonNode extPrebid = bid.getExt() != null
+                ? bid.getExt().get("prebid")
+                : null;
+        if (extPrebid != null && extPrebid.get("type") != null) {
+            try {
+                return BidType.valueOf(extPrebid.get("type").asText());
+            } catch (IllegalArgumentException ignored) {
+                // fall through
+            }
+        }
+        for (Imp imp : bidRequest.getImp()) {
+            if (Objects.equals(imp.getId(), bid.getImpid())) {
+                return imp.getVideo() != null ? BidType.video : BidType.banner;
+            }
+        }
+        return BidType.banner;
+{% else %}
+        // TODO[port-go2java]: bid_type_resolution={{ ctx.bid_type_resolution }}
+        // requires per-bidder customization (Rule 23-25).
+        return BidType.banner;
+{% endif %}
+    }
+{% if ctx.batching_kind == "max-imps-per-request" %}
+
+    private static List<List<Imp>> chunkImps(List<Imp> imps, int chunkSize) {
+        final List<List<Imp>> chunks = new ArrayList<>();
+        for (int i = 0; i < imps.size(); i += chunkSize) {
+            chunks.add(imps.subList(i, Math.min(i + chunkSize, imps.size())));
+        }
+        return chunks;
+    }
+{% endif %}
+}

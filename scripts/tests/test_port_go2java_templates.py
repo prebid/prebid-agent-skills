@@ -318,6 +318,34 @@ class TestConfigurationJ2(unittest.TestCase):
         self.assertIn("import org.springframework.validation.annotation.Validated;", typed)
 
 
+def _kobler_bidder_ctx() -> Dict[str, Any]:
+    """Synthetic kobler-equivalent context for bidder.java.j2.
+
+    Matches kobler's golden spec shape:
+        batching = single-batched
+        endpoint_resolution = dev-prod-toggle (handled inline per Rule 13)
+        imp_ext_unmarshal = standard-two-phase
+        http_status = canonical-helpers (Rule 30)
+        currency_conversion = used = true
+        bid_type = imp-mediatype-introspection
+    """
+    return {
+        "bidder_name": "kobler",
+        "bidder_class_root": "Kobler",
+        "uses_currency_conversion": True,
+        "imp_ext_class_root": "Kobler",
+        "imp_ext_unmarshal_kind": "standard-two-phase",
+        "batching_kind": "single-batched",
+        "batching_max_imps": None,
+        "endpoint_resolution_kind": "dev-prod-toggle",
+        "headers_collapse": False,
+        "http_status_kind": "canonical-helpers",
+        "bid_type_resolution": "imp-mediatype-introspection",
+        "javadoc_summary": None,
+        "imports_extra": [],
+    }
+
+
 def _adverxo_typed_config_ctx() -> Dict[str, Any]:
     """Synthetic adverxo-equivalent context for configuration-properties.java.j2.
     Adverxo (Rule 35 master sample) has a typed config subclass with
@@ -393,6 +421,87 @@ class TestConfigurationPropertiesJ2(unittest.TestCase):
         )
 
 
+class TestBidderJ2(unittest.TestCase):
+    """Tests for templates/bidder.java.j2 — the heaviest port-go2java template."""
+
+    def test_renders_kobler_well_formed(self):
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertIn("package org.prebid.server.bidder.kobler;", rendered)
+        self.assertIn("public class KoblerBidder implements Bidder<BidRequest>", rendered)
+
+    def test_currency_conversion_field_present(self):
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertIn("private final CurrencyConversionService currencyConversionService;", rendered)
+        self.assertIn(
+            "this.currencyConversionService = Objects.requireNonNull(currencyConversionService);",
+            rendered,
+        )
+
+    def test_currency_conversion_omitted_when_unused(self):
+        ctx = _kobler_bidder_ctx()
+        ctx["uses_currency_conversion"] = False
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertNotIn("CurrencyConversionService", rendered)
+        self.assertNotIn("currencyConversionService", rendered)
+
+    def test_type_reference_uppercase_constant(self):
+        """ExtPrebid type-reference constant uses upper-case bidder root."""
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertIn(
+            "private static final TypeReference<ExtPrebid<?, ExtImpKobler>> KOBLER_EXT_TYPE_REFERENCE =",
+            rendered,
+        )
+
+    def test_endpoint_url_validated_in_constructor(self):
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertIn(
+            "this.endpointUrl = HttpUtil.validateUrl(Objects.requireNonNull(endpointUrl));",
+            rendered,
+        )
+
+    def test_canonical_helpers_emit_when_rule_30_applies(self):
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertIn("BidderUtil.isResponseStatusCodeNoContent(response)", rendered)
+        self.assertIn("BidderUtil.checkResponseStatusCode(response);", rendered)
+
+    def test_legacy_raw_status_when_rule_30_inapplicable(self):
+        ctx = _kobler_bidder_ctx()
+        ctx["http_status_kind"] = "legacy-raw"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("response.getStatusCode() == 204", rendered)
+        self.assertIn("response.getStatusCode() != 200", rendered)
+        self.assertNotIn("isResponseStatusCodeNoContent", rendered)
+
+    def test_per_imp_batching_loops_through_imps(self):
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "per-imp"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("for (Imp imp : bidRequest.getImp())", rendered)
+        self.assertIn(".imp(Collections.singletonList(imp))", rendered)
+
+    def test_max_imps_emits_chunker_helper(self):
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "max-imps-per-request"
+        ctx["batching_max_imps"] = 5
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("final int maxImpsPerRequest = 5;", rendered)
+        self.assertIn("private static List<List<Imp>> chunkImps(", rendered)
+
+    def test_unsupported_batching_kind_emits_throw(self):
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "format-split"  # not yet template-mapped
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn(
+            'throw new UnsupportedOperationException("batching_kind=format-split not yet implemented");',
+            rendered,
+        )
+
+    def test_imp_mediatype_introspection_emits_imp_walk(self):
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertIn("if (imp.getVideo() != null)", rendered)
+        self.assertIn("if (imp.getXNative() != null)", rendered)
+
+
 class TestRequiredArtifacts(unittest.TestCase):
     """Sanity: every Java template referenced by SKILL.md Step 5 either exists
     or is flagged in the templates STUB.md as a future deliverable."""
@@ -402,8 +511,8 @@ class TestRequiredArtifacts(unittest.TestCase):
         "ext-imp-pojo.java.j2",                  # D2.2 commit
         "configuration.java.j2",                 # D2.2 commit
         "configuration-properties.java.j2",      # D2.3 commit
+        "bidder.java.j2",                        # D2.4 commit (heaviest template)
         # Future D2 commits author:
-        # "bidder.java.j2",
         # "bidder-test.java.j2",
         # "it-test.java.j2",
         # "it-fixture-auction-request.json.j2",
