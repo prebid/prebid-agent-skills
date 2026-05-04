@@ -92,7 +92,7 @@
 
     "r5_check": {
       "type": "object",
-      "description": "Result of R5-strict cross-language equivalence check at port time. The destination spec is loaded as if it were a fresh read of the ported code; compared field-by-field against the source spec. The check uses the same R5_STRICT_KEYS / R5_DIVERGENT_KEYS partitioning as scripts/round-trip-ci.py.",
+      "description": "Result of R5-strict cross-language equivalence check at port time. The destination spec is loaded as if it were a fresh read of the ported code; compared field-by-field against the source spec. The check uses the same R5_STRICT_KEYS / R5_FORM_DIVERGENT_KEYS / R5_ADVISORY_DIVERGENT_KEYS partitioning as scripts/lib/r5_check.py (also re-exported by scripts/round-trip-ci.py).",
       "required": ["state"],
       "additionalProperties": false,
       "properties": {

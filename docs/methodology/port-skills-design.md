@@ -158,13 +158,13 @@ The reflection loop in Phase F triages these `unresolved_translations` entries �
 
 ## 7. R5-strict check at port time
 
-The R5-strict check at port time uses the same logic as `scripts/round-trip-ci.py r5_check`, but invoked on the source ↔ destination pair instead of two existing fixtures. Three differences:
+The R5-strict check at port time calls `scripts/lib/r5_check.compare_pair`, the same comparator the harness uses, but invoked on the source ↔ destination pair instead of two existing fixtures. Three differences:
 
 1. **Source/destination pairing**: source = the input spec; destination = the freshly-emitted one. No `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` is consulted (the pair file may not exist for new bidders being ported).
 2. **Strict-keys decomposition**: applies the Wave 1 R5 fix — `params.schema_interpretation.{required_fields, combinators_used, flexible_types}` are the strict subfields; the prose-bearing description/notes are NOT compared.
 3. **Severity remap**: a port-time R5 fail is a `human_todos` entry, not a CI failure. The port still ships; humans decide.
 
-Phase D will share the R5-check implementation between `round-trip-ci.py` and the port skills (refactor extracts the comparison logic to `scripts/lib/r5_check.py`).
+The R5 comparator was lifted to `scripts/lib/r5_check.py` in Phase D0.1 (the harness re-exports the public surface for backward compatibility). Port skills consume `compare_pair(go_spec, java_spec, *, assertions=None, overall=None) -> R5Result`; the harness wraps `R5Diagnostic` items into its own `Finding` dataclass.
 
 ---
 

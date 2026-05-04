@@ -30,7 +30,7 @@
     rule_45_match: go-enabled-java-disabled     # NEW field on dual-spec block.
   ```
 
-**R5 dual-spec handling**: `default_enabled` is already in `R5_DIVERGENT_KEYS` (`round-trip-ci.py:678+`). Rule 45 documents WHY this is divergent (it's expected, not a bug). The new `rule_45_match` value on the dual-spec block carries the canonical direction; R5 emits `WARN` only if the assertion declares `severity: pass` while runtime values disagree about direction (e.g., assertion claims go-enabled-java-disabled but runtime shows the inverse — stale-assertion).
+**R5 dual-spec handling**: `default_enabled` is already in `R5_ADVISORY_DIVERGENT_KEYS` (`scripts/lib/r5_check.py`). Rule 45 documents WHY this is divergent (it's expected, not a bug). The new `rule_45_match` value on the dual-spec block carries the canonical direction; R5 emits `WARN` only if the assertion declares `severity: pass` while runtime values disagree about direction (e.g., assertion claims go-enabled-java-disabled but runtime shows the inverse — stale-assertion).
 
 **Rationale for moving to dual-spec**: A Go-only or Java-only orchestrator can't populate cross-language assertions; the dual-spec file is the natural cross-language joiner. ADR-005 makes the same architectural move for Rule 46.
 
