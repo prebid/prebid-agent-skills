@@ -144,6 +144,10 @@ def canonical_java_empire_parents_count() -> int:
 DISCOVERY_REGEX = re.compile(
     r"\b(\d+)\s+("
     r"(?:cross-language\s+)?port-translation\s+rules"
+    # Wave 11b post-review (3c): port-translation-rules.yaml intro uses
+    # the phrasing "explicit translation rules" (no "port-" prefix).
+    # Without this alternation, the YAML intro count drifts undetected.
+    r"|explicit\s+translation\s+rules"
     r"|enumerated\s+behavioral\s+fields"
     r"|registered\s+taxa"
     r"|dual-spec\s+(?:assertion\s+)?(?:files|pairs)"
@@ -163,7 +167,8 @@ DISCOVERY_REGEX = re.compile(
 def _normalize_phrase(s: str) -> str:
     """Collapse whitespace and lowercase; strip optional prefixes that don't
     affect the canonical lookup ('cross-language' on rules, 'java' / 'alias-'
-    on empire parents)."""
+    on empire parents). Map "explicit translation rules" to the canonical
+    "port-translation rules" key (Wave 11b post-review 3c)."""
     out = " ".join(s.lower().split())
     if out.startswith("cross-language "):
         out = out[len("cross-language "):]
@@ -171,6 +176,8 @@ def _normalize_phrase(s: str) -> str:
         out = "dual-spec " + out[len("dual-spec assertion "):]
     if out.startswith("java "):
         out = out[len("java "):]
+    if out == "explicit translation rules":
+        out = "port-translation rules"
     if out.startswith("alias-"):
         out = out[len("alias-"):]
     return out
@@ -274,6 +281,7 @@ class TestDocCountClaims(unittest.TestCase):
         sample = (
             "1 port-translation rules. "
             "1 cross-language port-translation rules. "
+            "1 explicit translation rules. "  # Wave 11b post-review 3c
             "1 enumerated behavioral fields. "
             "1 registered taxa. "
             "1 dual-spec files. "

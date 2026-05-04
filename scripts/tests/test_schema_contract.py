@@ -375,7 +375,21 @@ DOTTED_PATH_RE = re.compile(r"`([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+(?:\[\])*
 
 
 def extract_paths_from_skill(md_text: str) -> Iterable[Tuple[str, int]]:
-    """Yield (dotted_path, line_number) for every plausible schema path."""
+    """Yield (dotted_path, line_number) for every plausible schema path
+    found in INLINE PROSE — i.e., backticked dotted paths embedded in
+    paragraphs, headers, table cells, and bullet lists.
+
+    Wave 11b post-review (3a) scope clarification: this function does NOT
+    descend into ```yaml ... ``` code blocks. Phantom paths added inside
+    YAML examples in any of the 6 SKILL.md files that use them currently
+    pass silently. The schema-validator test (test_schema_jsonschema.py's
+    test_no_truly_invented_keys_outside_open_maps) catches phantom keys
+    in actual goldens; YAML examples in SKILLs are documentation, not
+    authoritative claims, and are out of scope for this gate. If a future
+    reviewer wants tighter coverage, extend this function to also yield
+    paths from `parse_yaml_paths_from_codeblocks(md_text)` (a helper that
+    already exists for parsing the taxonomy registry — its application to
+    SKILL example blocks would be the natural extension)."""
     for i, line in enumerate(md_text.splitlines(), start=1):
         for m in DOTTED_PATH_RE.finditer(line):
             yield m.group(1), i
