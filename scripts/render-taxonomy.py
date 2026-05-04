@@ -78,7 +78,30 @@ def render_enumeration(enum: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+# Wave 11b B4 C4: keys consumed by render(). Adding a new YAML key WITHOUT
+# wiring it into render() causes the assertion below to fail loudly so the
+# renderer's --check mode catches the silent drop. KNOWN_UNCONSUMED_KEYS
+# captures keys intentionally NOT rendered (version metadata that lives in
+# the YAML for tooling but doesn't appear in the rendered Markdown).
+_TAXONOMY_CONSUMED_KEYS = frozenset({
+    "intro", "how_to_read", "enumerations", "quirks_taxa", "post_taxa_note",
+    "sources",
+})
+_TAXONOMY_KNOWN_UNCONSUMED_KEYS = frozenset({
+    "adapter_spec_version_min",  # used by tooling, not rendered
+    "taxonomy_version",          # used by tooling, not rendered
+})
+
+
 def render(taxonomy: dict) -> str:
+    unrecognized = set(taxonomy.keys()) - _TAXONOMY_CONSUMED_KEYS - _TAXONOMY_KNOWN_UNCONSUMED_KEYS
+    if unrecognized:
+        raise ValueError(
+            f"render-taxonomy doesn't emit YAML keys {sorted(unrecognized)} "
+            "from behavior-taxonomy.yaml. Either wire them into render() or "
+            "add to _TAXONOMY_KNOWN_UNCONSUMED_KEYS if intentionally unrendered."
+        )
+
     out = []
     out.append("# Behavior Taxonomy (canonical enumerations)")
     out.append("")

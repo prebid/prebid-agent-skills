@@ -73,6 +73,18 @@ class TestTaxonomyRenderDrift(unittest.TestCase):
             seen.add(tid)
         self.assertEqual(dupes, set(), f"duplicate taxon ids: {sorted(dupes)}")
 
+    def test_render_rejects_unknown_yaml_keys(self):
+        """Wave 11b B4 C4: render() must raise ValueError when the YAML grows
+        a new top-level key the renderer doesn't consume. Catches the silent-
+        drop class of bug where someone adds YAML data and forgets to wire it
+        through render().
+        """
+        taxonomy = render_taxonomy.load_yaml()
+        taxonomy_with_phantom = {**taxonomy, "phantom_section_added_by_test": "bogus"}
+        with self.assertRaises(ValueError) as cm:
+            render_taxonomy.render(taxonomy_with_phantom)
+        self.assertIn("phantom_section_added_by_test", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

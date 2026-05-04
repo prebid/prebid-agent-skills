@@ -132,6 +132,18 @@ class TestPortRulesRenderDrift(unittest.TestCase):
         self.assertEqual(data["rules_version"], "0.2.0",
                          f"Expected rules_version 0.2.0 (Phase 2.5), got {data['rules_version']!r}")
 
+    def test_render_rejects_unknown_yaml_keys(self):
+        """Wave 11b B4 C4: render() must raise ValueError when the YAML grows
+        a new top-level key the renderer doesn't consume. Catches the silent-
+        drop class of bug where someone adds YAML data and forgets to wire it
+        through render().
+        """
+        data = render_port_rules.load_yaml()
+        data_with_phantom = {**data, "phantom_section_added_by_test": "bogus"}
+        with self.assertRaises(ValueError) as cm:
+            render_port_rules.render(data_with_phantom)
+        self.assertIn("phantom_section_added_by_test", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

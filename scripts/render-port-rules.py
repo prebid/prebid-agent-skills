@@ -105,7 +105,27 @@ def render_section(sec: dict) -> str:
     raise ValueError(f"Unknown section kind: {kind!r}")
 
 
+# Wave 11b B4 C4: keys consumed by render(). Adding a new YAML key WITHOUT
+# wiring it into render() causes the assertion below to fail loudly so the
+# renderer's --check mode catches the silent drop. KNOWN_UNCONSUMED_KEYS
+# captures keys intentionally NOT rendered (version metadata for tooling).
+_RULES_CONSUMED_KEYS = frozenset({
+    "intro", "toc", "how_to_use", "sections", "summary", "sources",
+})
+_RULES_KNOWN_UNCONSUMED_KEYS = frozenset({
+    "rules_version",  # used by tooling, not rendered
+})
+
+
 def render(data: dict) -> str:
+    unrecognized = set(data.keys()) - _RULES_CONSUMED_KEYS - _RULES_KNOWN_UNCONSUMED_KEYS
+    if unrecognized:
+        raise ValueError(
+            f"render-port-rules doesn't emit YAML keys {sorted(unrecognized)} "
+            "from port-translation-rules.yaml. Either wire them into render() "
+            "or add to _RULES_KNOWN_UNCONSUMED_KEYS if intentionally unrendered."
+        )
+
     out = []
     out.append("# Port Translation Rules (Go ↔ Java)")
     out.append("")
