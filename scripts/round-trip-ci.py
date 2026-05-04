@@ -140,17 +140,46 @@ def discover_specs() -> List[Spec]:
 # ---------------------------------------------------------------------------
 
 
+class TaxaRegistryUnreachable(Exception):
+    """Raised by `parse_taxa_registry` when the behavior-taxonomy.md file
+    is missing, unreadable, or contains no parseable taxa registry. R3b
+    cannot enforce the closed registry without it; main() catches at
+    startup and exits 3 (mirrors the GhApiUnreachable Wave 10 recipe).
+
+    Wave 11b post-review fix (2b): the prior behavior was to return an
+    empty list and emit per-spec SEV_WARN "could not load taxa registry
+    — skipped" on every golden, producing CI runs that exited 2 with
+    "0 failures" while R3b was silently disabled. Reviewers reading
+    those runs trusted the gate was holding when it wasn't. Fail-loud
+    abort prevents that trust gap.
+    """
+
+
 def parse_taxa_registry(taxonomy_md_path: str) -> List[str]:
-    """Extract the list of allowed `edge_case_taxon` values from the markdown."""
+    """Extract the list of allowed `edge_case_taxon` values from the markdown.
+
+    Raises TaxaRegistryUnreachable on any condition that would have
+    silently degraded R3b in the prior implementation: missing file,
+    no registry section, empty registry. Caller MUST catch (in main())
+    at startup so the workflow aborts with a clear diagnostic instead
+    of running per-spec checks against an empty allowlist."""
     if not os.path.isfile(taxonomy_md_path):
-        return []
+        raise TaxaRegistryUnreachable(
+            f"taxa registry not found at {taxonomy_md_path}; "
+            f"behavior-taxonomy.md was renamed/moved/deleted, or the "
+            f"YAML→MD render is stale (run scripts/render-taxonomy.py)"
+        )
     with open(taxonomy_md_path, "r", encoding="utf-8") as fh:
         text = fh.read()
     # Find the registry section (case- and back-tick-tolerant).
     pattern = re.compile(r"^##\s+quirks\s+`?edge_case_taxon`?[^\n]*$", re.MULTILINE | re.IGNORECASE)
     m = pattern.search(text)
     if not m:
-        return []
+        raise TaxaRegistryUnreachable(
+            f"taxa registry section (## quirks edge_case_taxon) not found in "
+            f"{taxonomy_md_path}; the markdown structure was edited or the "
+            f"render is broken — run scripts/render-taxonomy.py"
+        )
     section = text[m.end():]
     # Stop at the next H2.
     next_h2 = re.search(r"^##\s", section, re.MULTILINE)
@@ -175,7 +204,14 @@ def parse_taxa_registry(taxonomy_md_path: str) -> List[str]:
     seen: Dict[str, None] = OrderedDict()
     for t in taxa:
         seen.setdefault(t, None)
-    return list(seen.keys())
+    result = list(seen.keys())
+    if not result:
+        raise TaxaRegistryUnreachable(
+            f"taxa registry at {taxonomy_md_path} parsed to an empty list; "
+            f"the table structure may have changed (column order, table "
+            f"format) — re-render via scripts/render-taxonomy.py and verify"
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1346,8 +1382,15 @@ def r_taxa_check(spec: Spec, registered: List[str], lenient: bool = False) -> Li
     if not quirks:
         return [Finding("R3b", spec.label, SEV_PASS, "no quirks")]
     if not registered:
-        return [Finding("R3b", spec.label, SEV_WARN,
-            "could not load taxa registry from behavior-taxonomy.md — skipped")]
+        # Wave 11b post-review fix (2b): this branch is now defensive only —
+        # parse_taxa_registry raises TaxaRegistryUnreachable on missing/empty
+        # registry, which main() catches at startup with exit 3. If we somehow
+        # reach this with an empty list, the upstream guard failed and we
+        # should fail loudly per spec rather than silently SEV_WARN.
+        return [Finding("R3b", spec.label, SEV_FAIL,
+            "internal: r_taxa_check called with empty registered list "
+            "(should have been caught by main()'s TaxaRegistryUnreachable "
+            "abort; this Finding indicates a control-flow regression)")]
     findings: List[Finding] = []
     bad_severity = SEV_WARN if lenient else SEV_FAIL
     for i, q in enumerate(quirks):
@@ -1655,9 +1698,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="(Wave 11b opt-out) Disable strict R3 keyword-pairing; falls back to advisory mode (any non-empty quirks list satisfies). Use only when quirks are deliberately under-documented.",
     )
     parser.add_argument(
+        "--lenient-r3b",
+        action="store_true",
+        dest="lenient_r3b",
+        help="Downgrade unregistered taxa from FAIL to WARN (use while taxonomy lags goldens). R3b is the quirks-taxa-registry rule.",
+    )
+    # Wave 11b post-review fix (2a): --lenient-r9 was a misnamed alias —
+    # the flag controls R3b (taxa registry), but R9 is "legacy encoding/json
+    # direct usage" with no lenient mode. Anyone reading --help and passing
+    # --lenient-r9 hoping to relax R9 silently relaxed R3b instead. Renamed
+    # to --lenient-r3b; --lenient-r9 kept as a deprecated alias that emits
+    # a stderr warning, with intent to remove in a future wave.
+    parser.add_argument(
         "--lenient-r9",
         action="store_true",
-        help="Downgrade unregistered taxa from FAIL to WARN (use while taxonomy lags goldens)",
+        dest="lenient_r3b",
+        help=argparse.SUPPRESS,  # hide deprecated alias from --help
     )
     parser.add_argument(
         "--verbose",
@@ -1695,7 +1751,26 @@ def main(argv: Optional[List[str]] = None) -> int:
     java_bidders = {s.bidder for s in specs if s.language == "java"}
     pair_bidders = sorted(go_bidders & java_bidders)
 
-    registered_taxa = parse_taxa_registry(TAXONOMY_PATH)
+    # Wave 11b post-review fix (2b): fail loudly when the taxa registry can't
+    # load. Mirrors the GhApiUnreachable Wave 10 recipe. Prior behavior was
+    # to return [] and let r_taxa_check emit SEV_WARN per-spec ("skipped"),
+    # producing CI runs with "0 failures" while R3b was silently disabled.
+    try:
+        registered_taxa = parse_taxa_registry(TAXONOMY_PATH)
+    except TaxaRegistryUnreachable as exc:
+        print(f"ERROR: R3b taxa registry unreachable: {exc}", file=sys.stderr)
+        print("R3b cannot enforce the closed taxa registry without it.",
+              file=sys.stderr)
+        print("Aborting to prevent silent gate degradation.", file=sys.stderr)
+        return 3
+
+    # Wave 11b post-review fix (2a): emit deprecation warning when the old
+    # --lenient-r9 flag was passed (still wired via dest=lenient_r3b).
+    if "--lenient-r9" in sys.argv:
+        print("DEPRECATED: --lenient-r9 is renamed to --lenient-r3b; "
+              "the old name will be removed in a future wave",
+              file=sys.stderr)
+
     dual_specs = load_dual_specs()
 
     findings: List[Finding] = []
@@ -1707,7 +1782,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         ("R1",  lambda s: r1_check(s, args.check_network, gh_cache)),
         ("R2",  r2_check),
         ("R3",  lambda s: r3_check(s, strict=args.strict_r3)),
-        ("R3b", lambda s: r_taxa_check(s, registered_taxa, lenient=args.lenient_r9)),
+        ("R3b", lambda s: r_taxa_check(s, registered_taxa, lenient=args.lenient_r3b)),
         ("R4",  r4_check),
         ("R6",  r6_check),
         ("R7",  r7_check),

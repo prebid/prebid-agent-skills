@@ -717,5 +717,60 @@ class TestRuleIsolation(unittest.TestCase):
         self.assertIn("crash", f.detail.lower())
 
 
+# ---------------------------------------------------------------------------
+# Wave 11b post-review: R3b registry-missing fail-loud + lenient-r9 → r3b rename
+# ---------------------------------------------------------------------------
+
+class TestR3bRegistryHardening(unittest.TestCase):
+    """Wave 11b post-review (item 2b): R3b must fail loudly when the taxa
+    registry is missing instead of silently warn-and-continue. Mirrors the
+    GhApiUnreachable Wave 10 recipe."""
+
+    def test_parse_taxa_registry_raises_on_missing_file(self):
+        with self.assertRaises(rtci.TaxaRegistryUnreachable) as cm:
+            rtci.parse_taxa_registry("/nonexistent/path/behavior-taxonomy.md")
+        self.assertIn("not found", str(cm.exception).lower())
+
+    def test_parse_taxa_registry_raises_on_empty_section(self):
+        """If the markdown exists but has no parseable taxa table, raise."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            # No `## quirks edge_case_taxon` header.
+            f.write("# Behavior taxonomy\n\nNo registry here.\n")
+            path = f.name
+        try:
+            with self.assertRaises(rtci.TaxaRegistryUnreachable):
+                rtci.parse_taxa_registry(path)
+        finally:
+            os.unlink(path)
+
+    def test_parse_taxa_registry_raises_on_empty_table(self):
+        """If the registry header exists but the table parses to an empty list, raise."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("# Behavior taxonomy\n\n## quirks `edge_case_taxon`\n\nNo table.\n")
+            path = f.name
+        try:
+            with self.assertRaises(rtci.TaxaRegistryUnreachable):
+                rtci.parse_taxa_registry(path)
+        finally:
+            os.unlink(path)
+
+    def test_parse_taxa_registry_succeeds_on_real_file(self):
+        """Sanity: the actual repo's behavior-taxonomy.md parses to a
+        non-empty list (regression gate for the section-detection regex)."""
+        import os
+        repo_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..")
+        )
+        taxonomy_path = os.path.join(
+            repo_root, "prebid-server-go", "read", "skills", "shared",
+            "behavior-taxonomy.md",
+        )
+        taxa = rtci.parse_taxa_registry(taxonomy_path)
+        self.assertGreater(len(taxa), 30,
+                           f"Expected ≥30 registered taxa; got {len(taxa)}")
+
+
 if __name__ == "__main__":
     unittest.main()
