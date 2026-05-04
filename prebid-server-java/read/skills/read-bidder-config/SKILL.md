@@ -1,6 +1,6 @@
 ---
 name: read-bidder-config
-description: Parses Java prebid-server-java's UNIFIED `src/main/resources/bidder-config/{xyz}.yaml` and splits it into the canonical Adapter Specification's separated `bidder_info:` block + endpoint config + `aliases[]` array. USE WHEN the Java orchestrator (read-bidder-orchestrator) dispatches the bidder-config domain for a Java adapter, OR when a user wants to extract YAML metadata + alias map + custom config fields from a single Java unified config file at a resolved commit. Do NOT use for `static/bidder-params/*.json` (read-bidder-params-java owns that), `bidder/{xyz}/*.java` (read-bidder-class), or Go's split `static/bidder-info/{xyz}.yaml` (the Go sibling skill `read-bidder-info` owns that — and produces an inverse spec round-trip pair).
+description: Parse prebid-server-java's unified `src/main/resources/bidder-config/{xyz}.yaml` into the Adapter Specification's separated bidder_info block + endpoint config + aliases array. USE WHEN read-bidder-orchestrator dispatches the bidder-config domain, OR when a user wants YAML metadata + alias map + custom fields from one Java unified config file at a resolved commit. Do NOT use for `static/bidder-params/*.json` (read-bidder-params-java), `bidder/*.java` (read-bidder-class), or Go's split `static/bidder-info/*.yaml` (Go-side read-bidder-info — inverse round-trip pair).
 version: 1.0.0
 ---
 

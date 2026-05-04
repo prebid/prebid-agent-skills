@@ -1,6 +1,6 @@
 ---
 name: read-bidder-class
-description: Extracts the `code:`, `bidder_class:`, `spring_config:`, `iab_category_storage:`, `ext_pojo_construction:`, `currency_conversion:`, `headers_constructed:`, and `tests:` fragments of an Adapter Specification from prebid-server-java adapter source. USE WHEN the orchestrator dispatches read-time analysis for `src/main/java/org/prebid/server/bidder/{xyz}/*.java`, `src/main/java/org/prebid/server/spring/config/bidder/{Xyz}Configuration.java`, `src/main/java/org/prebid/server/proto/openrtb/ext/request/{xyz}/*.java`, plus the unit-test class, integration-test class(es), 4-file Wiremock fixtures, and the `test-application.properties` registry append. Owns Java file inventory, class-hierarchy extraction, Spring DI extraction, behavioral classification (same taxonomy as Go), JUnit method counting, IT fixture inventory, and `quirks[]` emission.
+description: Extract code, bidder_class, spring_config, iab_category_storage, ext_pojo_construction, currency_conversion, headers_constructed, and tests fragments of an Adapter Specification from prebid-server-java sources. USE WHEN the orchestrator dispatches read-time analysis for the bidder package, its Configuration.java factory, ext-request POJOs, unit and 4-file Wiremock IT tests, and the test-application.properties registry. Owns Java file inventory, class hierarchy, Spring DI, behavioral classification (same taxonomy as Go), JUnit method counting, IT fixture inventory, and quirks emission.
 version: 1.0.0
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: read-adapter-orchestrator
-description: Extracts a structured Adapter Specification from any prebid/prebid-server (Go) bid adapter. USE WHEN a user asks to "read", "spec out", "extract", "snapshot", "summarize", or "describe" a Go bid adapter, alias, or its YAML/params/code by name, branch, PR, tag, or commit; or to produce the input artifact for the future write/port-go2java skills. The skill resolves a ref to a commit, discovers files, dispatches to per-domain readers, assembles the canonical YAML spec, and emits YAML+Markdown. For aliases (meta.is_alias: true), code/tests/file_layout are inherited from the parent and emitted as null/empty placeholders on the alias spec itself. Do NOT use for prebid-server-java (use read-bidder-orchestrator instead), prebid-js, PR review (use review/ skills), or generating a new adapter from a spec (future write/ skill).
+description: Extract a structured Adapter Specification (YAML+Markdown) from any prebid/prebid-server (Go) bid adapter or alias. USE WHEN a user asks to "read", "spec out", "extract", "snapshot", or "describe" a Go adapter by name, branch, PR, tag, or commit; or to produce the input artifact for future write/port-go2java skills. Alias bidders inherit code/tests/file_layout from parent and emit them as nulls. Do NOT use for prebid-server-java (use read-bidder-orchestrator), prebid-js, PR review (review/ skills), or generating new adapters from a spec (future write/).
 version: 1.0.0
 ---
 

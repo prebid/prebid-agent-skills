@@ -1,6 +1,6 @@
 ---
 name: read-bidder-orchestrator
-description: USE WHEN extracting an Adapter Specification from a Java bidder in prebid-server-java (or its fork) — discovers the adapter's files at a specific commit, dispatches per-domain readers (read-bidder-class, read-bidder-config, read-bidder-params-java), assembles their output into the canonical language-neutral spec (source_language=java), and emits YAML + Markdown. Round-trip-deterministic, byte-comparable to Go-side spec on cross-language fields. Mirrors prebid-server-go/read-adapter-orchestrator step-for-step but with Java specifics (Spring DI, unified bidder-config YAML, inverted aliases, multi-file fixture split, per-alias IT classes).
+description: USE WHEN extracting an Adapter Specification from a Java bidder in prebid-server-java (or fork) — discovers files at a commit, dispatches per-domain readers (read-bidder-class, read-bidder-config, read-bidder-params-java), assembles output into the language-neutral spec (source_language=java), and emits YAML+Markdown. Idempotent under round-trip; byte-comparable to Go-side spec on cross-language fields. Mirrors read-adapter-orchestrator with Java specifics (Spring DI, unified bidder-config YAML, inverted aliases, multi-file fixtures, per-alias IT classes).
 version: 1.0.0
 ---
 
