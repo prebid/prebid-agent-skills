@@ -1106,10 +1106,14 @@
     "JavaArtifacts": {
       "type": ["object", "null"],
       "additionalProperties": false,
-      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep.",
+      "description": "Closed in Phase 2.8 / Wave 11b round-2 sweep. Phase D0.2 added optional `bidder_params_path` for the rare Java bidders whose upstream filename diverges from the lowercase bidder name (adkerneladn → adkernelAdn.json camelCase; emxdigital → emx_digital.json snake_case).",
       "properties": {
         "bidder_class": { "type": ["string", "null"] },
         "bidder_dir": { "type": ["string", "null"] },
+        "bidder_params_path": {
+          "type": ["string", "null"],
+          "description": "Optional override for the upstream bidder-params JSON path when the filename diverges from `src/main/resources/static/bidder-params/{bidder}.json`. When null/absent, sync-from-upstream.py constructs the path from the lowercase bidder name."
+        },
         "config_class": { "type": ["string", "null"] },
         "proto_dir": { "type": ["string", "null"] },
         "yaml_path": { "type": ["string", "null"] },
