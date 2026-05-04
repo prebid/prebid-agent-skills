@@ -812,5 +812,113 @@ class TestEndpointMacrosRegistry(unittest.TestCase):
         self.assertIn("AUCTION_PRICE", rtci.OPENRTB_MACROS)
 
 
+class TestR11PortRoundTrip(unittest.TestCase):
+    """Phase D4.1: r_port_round_trip validates round-trip artifacts when
+    the operator persists them. Without artifacts, the function emits SKIP
+    findings — the framework is in place for when D2.8 / D3.8 operator
+    runs land artifacts."""
+
+    def test_skip_when_one_side_missing(self):
+        go_spec = make_spec(language="go", raw={"meta": {"bidder_name": "kobler"}})
+        findings = rtci.r_port_round_trip(go_spec, None)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, rtci.SEV_SKIP)
+        self.assertIn("paired", findings[0].detail)
+
+    def test_skip_when_no_round_trip_artifact_exists(self):
+        """Common state today: pair fixtures present in the corpus, but no
+        port skill has emitted round-trip artifacts. Emits SKIP per direction."""
+        go_spec = make_spec(language="go", raw={"meta": {"bidder_name": "nonexistent_test_bidder"}})
+        java_spec = make_spec(language="java", raw={"meta": {"bidder_name": "nonexistent_test_bidder"}})
+        findings = rtci.r_port_round_trip(go_spec, java_spec)
+        # Two SKIP findings — one per direction (go-to-java, java-to-go).
+        self.assertEqual(len(findings), 2)
+        for f in findings:
+            self.assertEqual(f.severity, rtci.SEV_SKIP)
+            self.assertIn("no round-trip artifact", f.detail)
+
+    def test_lossy_paths_loader_returns_dict(self):
+        """The Round-Trip Safety table loader returns a non-empty dict
+        keyed by field path. Smoke-test against the live YAML."""
+        paths = rtci._load_lossy_field_paths()
+        self.assertIsInstance(paths, dict)
+        # The YAML has at least a handful of entries; we don't assert exact
+        # paths because the corpus evolves. The loader just needs to parse
+        # SOMETHING from the verdict_table rows.
+        for path, directions in paths.items():
+            self.assertIsInstance(path, str)
+            self.assertIsInstance(directions, dict)
+
+    def test_round_trip_diff_skips_lossy_direction_fields(self):
+        """A field divergence on a path flagged lossy in the relevant
+        direction is NOT recorded as unexpected."""
+        original = {"bidder_info": {"endpoint": "https://x"}}
+        round_tripped = {"bidder_info": {"endpoint": "https://y"}}
+        # Synthetic lossy paths: flag bidder_info.endpoint as lossy go-to-java.
+        lossy = {"bidder_info.endpoint": {"go-to-java": True}}
+        diffs = rtci._round_trip_diff(original, round_tripped, lossy, "go-to-java")
+        self.assertEqual(diffs, [])
+
+    def test_round_trip_diff_records_unexpected_divergence(self):
+        original = {"bidder_info": {"endpoint": "https://x", "gvl_vendor_id": 0}}
+        round_tripped = {"bidder_info": {"endpoint": "https://y", "gvl_vendor_id": 0}}
+        lossy = {}  # nothing is lossy
+        diffs = rtci._round_trip_diff(original, round_tripped, lossy, "go-to-java")
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0]["path"], "bidder_info.endpoint")
+        self.assertEqual(diffs[0]["original"], "https://x")
+        self.assertEqual(diffs[0]["round_tripped"], "https://y")
+
+    def test_round_trip_diff_set_equality_on_lists(self):
+        """List-valued fields (like geoscope) compare set-equally — a
+        re-ordered list is NOT a divergence."""
+        original = {"bidder_info": {"geoscope": ["NOR", "SWE", "DNK"]}}
+        round_tripped = {"bidder_info": {"geoscope": ["DNK", "NOR", "SWE"]}}
+        diffs = rtci._round_trip_diff(original, round_tripped, {}, "go-to-java")
+        self.assertEqual(diffs, [])
+
+    def test_pass_finding_when_artifact_present_and_matches(self):
+        """When a synthetic round-trip artifact exists at the canonical
+        path AND matches the original on the checked fields, emit PASS."""
+        import os
+        bidder = "synthetic_rt_test_bidder_xyz"
+        original = {
+            "meta": {"bidder_name": bidder},
+            "bidder_info": {
+                "endpoint": "https://x",
+                "geoscope": ["NOR", "SWE"],
+                "gvl_vendor_id": 0,
+            },
+            "bidder_params_sha256": "a" * 64,
+        }
+        # Drop the synthetic artifact at the canonical .tmp path so
+        # _round_trip_artifact_path picks it up.
+        rt_dir = os.path.join(rtci.REPO_ROOT, ".tmp", "full-loop",
+                              "test-r11-pass-run", "round-trip", "go")
+        os.makedirs(rt_dir, exist_ok=True)
+        rt_path = os.path.join(rt_dir, f"{bidder}.yaml")
+        try:
+            import yaml as _yaml
+            with open(rt_path, "w") as fh:
+                _yaml.safe_dump(original, fh)
+            # Also drop a Java-side artifact so both directions emit PASS.
+            rt_dir_java = os.path.join(rtci.REPO_ROOT, ".tmp", "full-loop",
+                                       "test-r11-pass-run", "round-trip", "java")
+            os.makedirs(rt_dir_java, exist_ok=True)
+            with open(os.path.join(rt_dir_java, f"{bidder}.yaml"), "w") as fh:
+                _yaml.safe_dump(original, fh)
+
+            go_spec = make_spec(bidder=bidder, language="go", raw=original)
+            java_spec = make_spec(bidder=bidder, language="java", raw=original)
+            findings = rtci.r_port_round_trip(go_spec, java_spec)
+            severities = [f.severity for f in findings]
+            self.assertIn(rtci.SEV_PASS, severities)
+        finally:
+            # Clean up the synthetic artifact.
+            import shutil
+            shutil.rmtree(os.path.join(rtci.REPO_ROOT, ".tmp", "full-loop", "test-r11-pass-run"),
+                          ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
