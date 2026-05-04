@@ -13,7 +13,7 @@ provenance:
   read:
     skill_versions:
       orchestrator: 1.0.0
-    timestamp_utc: 2026-04-28T14:17:50Z
+    timestamp_utc: "2026-04-28T14:17:50Z"
     operator: claude-code/opus-4-7
   warnings:
     - type: cross-language-byte-divergence
@@ -314,7 +314,7 @@ lifecycle:
     subtype: bilateral
     pr: prebid/prebid-server#4639
     release: null                                   # Go-side ElementalTv rename merged via PR #4639 on 2026-03-04 by pavel-ptashyts; Go does not tag release versions per-bidder the way Java does (java_artifact_version: 3.38.0 is tied to Java's release-versioning model — there is no equivalent on Go module v4).
-    merged_at: 2026-03-04
+    merged_at: "2026-03-04"
     yaml_deletes:
       - adapters/adoppler/adoppler.go               # Renamed via git rename to adapters/elementaltv/elementaltv.go (R087 similarity).
       - adapters/adoppler/adoppler_test.go          # Deleted outright; replaced with new elementaltv_test.go.

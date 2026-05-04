@@ -13,7 +13,7 @@ provenance:
   read:
     skill_versions:
       orchestrator: 1.0.0
-    timestamp_utc: 2026-04-27T14:58:02Z
+    timestamp_utc: "2026-04-27T14:58:02Z"
     operator: claude-code/opus-4-7
   warnings: []
 

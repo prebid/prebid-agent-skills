@@ -13,7 +13,7 @@ provenance:
   read:
     skill_versions:
       orchestrator: 1.0.0
-    timestamp_utc: 2026-04-27T00:00:00Z
+    timestamp_utc: "2026-04-27T00:00:00Z"
     operator: claude-code/opus-4-7
   warnings:
     - type: package-directory-mismatch
@@ -363,7 +363,7 @@ lifecycle:
     subtype: bilateral
     pr: prebid/prebid-server-java#4326
     release: v3.38.0
-    merged_at: 2026-01-12
+    merged_at: "2026-01-12"
     yaml_deletes:
       - src/main/resources/bidder-config/adoppler.yaml
       - src/main/resources/static/bidder-params/adoppler.json

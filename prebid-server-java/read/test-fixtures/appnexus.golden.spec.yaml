@@ -16,7 +16,7 @@ provenance:
       read-bidder-class: 1.0.0
       read-bidder-config: 1.0.0
       read-bidder-params-java: 1.0.0
-    timestamp_utc: 2026-04-27T00:00:00Z
+    timestamp_utc: "2026-04-27T00:00:00Z"
     operator: claude-code/opus-4-7
   warnings:
     - type: cross-language-byte-divergence

@@ -16,7 +16,7 @@ provenance:
       read-bidder-info: 1.0.0
       read-bidder-params: 1.0.0
       read-adapter-code: 1.0.0
-    timestamp_utc: 2026-05-02T00:00:00Z
+    timestamp_utc: "2026-05-02T00:00:00Z"
     operator: claude-code/opus-4-7
   warnings: []
 

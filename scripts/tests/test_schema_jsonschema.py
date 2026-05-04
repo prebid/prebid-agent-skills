@@ -24,7 +24,6 @@ YAML data. They check different invariants and run independently.
 
 from __future__ import annotations
 
-import datetime
 import json
 import unittest
 from pathlib import Path
@@ -38,16 +37,18 @@ except ImportError as exc:
     raise unittest.SkipTest(f"jsonschema unavailable: {exc}")
 
 
-# YAML auto-parses ISO 8601 timestamps to datetime. The schema declares
-# timestamp_utc and similar as `string`, so normalize before validation.
-def _normalize(node: Any) -> Any:
-    if isinstance(node, dict):
-        return {k: _normalize(v) for k, v in node.items()}
-    if isinstance(node, list):
-        return [_normalize(v) for v in node]
-    if isinstance(node, (datetime.datetime, datetime.date)):
-        return node.isoformat()
-    return node
+# Wave 11b post-review fix: dates and datetimes in goldens MUST be quoted
+# in the YAML source so that `yaml.safe_load` returns them as strings
+# (matching the schema's `"type": "string"` declaration). Prior to this
+# fix, the test ran a `_normalize()` step that converted Python datetime/
+# date objects to ISO strings before validation — papering over a real
+# issue: external consumers using stock JSON Schema validators would see
+# 40/40 goldens fail validation. The corpus is now stock-validator clean
+# (provenance.read.timestamp_utc and lifecycle.rename.merged_at are
+# quoted in every golden); _normalize() is removed to harden this
+# invariant — adding an unquoted date in a future fixture will now
+# surface as a schema validation failure instead of being silently
+# rewritten by the test.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHARED_DIR = REPO_ROOT / "prebid-server-go" / "read" / "skills" / "shared"
@@ -69,7 +70,7 @@ def _load_schema(path: Path = SCHEMA_PATH) -> dict:
 
 def _load_golden(rel_path: str) -> Any:
     with open(REPO_ROOT / rel_path) as fp:
-        return _normalize(yaml.safe_load(fp))
+        return yaml.safe_load(fp)
 
 
 def _build_declared_at(schema: dict) -> tuple[dict[str, set[str]], set[str]]:
@@ -207,9 +208,13 @@ def _discover_goldens():
 
 
 class TestAllGoldensAgainstSchema(unittest.TestCase):
-    """Phase 2.1 milestone: every golden validates against the schema.
+    """Every golden in the 40-spec corpus validates against the schema
+    using a stock yaml.safe_load → jsonschema pipeline (no normalization
+    layer). Wave 11b post-review fix: dates/datetimes are now quoted in
+    the goldens so external consumers see the same byte-stable strings
+    the schema declares.
 
-    Implemented as a single test that aggregates results across all 22
+    Implemented as a single test that aggregates results across all 40
     goldens. On failure, the message lists every failing golden + first
     error per golden for fast triage.
     """
@@ -218,6 +223,41 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
     def setUpClass(cls):
         cls.schema = _load_schema()
         cls.validator = Draft202012Validator(cls.schema)
+
+    def test_stock_yaml_load_emits_strings_for_date_fields(self):
+        """Wave 11b post-review regression gate: dates and datetimes in
+        the goldens MUST parse as strings via stock `yaml.safe_load` (no
+        normalization needed). External consumers using a stock JSON
+        Schema validator depend on this.
+
+        Asserts that `provenance.read.timestamp_utc` and
+        `lifecycle.rename.merged_at` (when non-null) are str-typed for
+        every golden. If any future fixture leaves a date unquoted, this
+        test surfaces the regression before a downstream consumer hits
+        it.
+        """
+        violations = []
+        for p in _discover_goldens():
+            with open(p) as fp:
+                raw = yaml.safe_load(fp)  # stock loader, no normalize
+            if not isinstance(raw, dict):
+                continue
+            ts = (raw.get("provenance") or {}).get("read") or {}
+            ts_val = ts.get("timestamp_utc")
+            if ts_val is not None and not isinstance(ts_val, str):
+                violations.append(
+                    f"{p.name}: provenance.read.timestamp_utc is {type(ts_val).__name__} "
+                    f"(value={ts_val!r}); MUST be quoted in YAML to parse as str"
+                )
+            rename = (raw.get("lifecycle") or {}).get("rename") or {}
+            ma_val = rename.get("merged_at")
+            if ma_val is not None and not isinstance(ma_val, str):
+                violations.append(
+                    f"{p.name}: lifecycle.rename.merged_at is {type(ma_val).__name__} "
+                    f"(value={ma_val!r}); MUST be quoted in YAML"
+                )
+        self.assertEqual(violations, [],
+                         "Unquoted date/datetime fields detected:\n" + "\n".join(violations))
 
     def test_all_22_goldens_validate(self):
         paths = _discover_goldens()

@@ -209,6 +209,28 @@ deferred — corpus uses each ambiguously.
 validate against the 1.2.0-tightened schema. Future fixtures using the
 post-closure structure should declare `adapter_spec_version: "1.2.0"`.
 
+### Goldens stock-validator compatibility (post-review fix)
+
+Reviewer feedback flagged that direct JSON Schema validation of the
+goldens with a stock validator failed 40/40: `provenance.read.timestamp_utc`
+in every golden was an unquoted ISO datetime (YAML auto-parses to a
+Python datetime), and the schema declares it as `"type": "string"`.
+The CI's prior `_normalize()` step rewrote datetimes to ISO strings
+before validation — papering over a real interoperability issue.
+
+Fix: 42 surgical edits across the 40-golden corpus quote the affected
+date/datetime values (`provenance.read.timestamp_utc` × 40 +
+`lifecycle.rename.merged_at` × 2 elementaltv occurrences). The
+`_normalize()` test crutch is removed, hardening the test against
+future unquoted-date regressions. New regression test
+`test_stock_yaml_load_emits_strings_for_date_fields` asserts every
+golden's date fields parse as strings via stock `yaml.safe_load` —
+catching the regression before any downstream consumer sees it.
+
+External consumers can now use any stock JSON Schema 2020-12 validator
+(jsonschema, ajv, etc.) directly against the goldens without a
+preprocessing step.
+
 ### Unchanged
 
 `taxonomy_version` stays at `1.0.0` (no behavior-taxonomy changes);
