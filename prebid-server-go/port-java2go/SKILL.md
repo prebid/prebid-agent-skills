@@ -1,12 +1,12 @@
 ---
 name: port-java2go
-description: Translates a Java-source Adapter Spec (prebid-server-java/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/java/{bidder}.yaml) into Go artifacts under prebid-server-go/adapters/{bidder}/ plus paired YAML, bidder-params, exemplary fixtures, and registry entries. USE WHEN porting a new (or existing) Java bid adapter to the Go codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json. SKELETON — Phase D3 fills the body; not yet operational.
-version: 0.1.0
+description: Translates a Java-source Adapter Spec (prebid-server-java/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/java/{bidder}.yaml) into Go artifacts under prebid-server-go/adapters/{bidder}/ plus paired YAML, bidder-params, exemplary fixtures, and registry entries. USE WHEN porting a new (or existing) Java bid adapter to the Go codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
+version: 0.2.0
 ---
 
 # port-java2go (Java → Go)
 
-> **Status: SKELETON.** Phase D1.1 scaffold. Phase D3 (per `docs/execution-plan-phase-d.md`) will populate the pipeline body, ship the auto-PR shape automation, and validate the skill against the same 6 MVP pairs as D2 reversed (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`). Until D3 lands, invoking this skill returns a "not implemented" notice; the design contract below is what D3 implements.
+> **Status: D3.1 in progress.** Pipeline prose authored (this commit, mirror of port-go2java D2.1). Remaining D3 work: author `templates/*.j2` (8 Go-side templates: `bidder.go.j2`, `bidder-test.go.j2`, `params-test.go.j2`, `imp-ext-pojo.go.j2`, `bidder-info.yaml.j2`, `exemplary-fixture.json.j2`, plus 2 minor scaffolds), validate end-to-end against the same 6 MVP pairs as D2 reversed (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) with operator-side `gofmt -s -l` + `go vet` + `go test` + `./scripts/check_coverage.sh ≥ 80%`, and bump frontmatter to 1.0.0 once each MVP pair clears all 8 acceptance gates per `docs/execution-plan-phase-d.md` §D3.3.
 >
 > **D3 ships production-grade**, not exploratory. The empirical Go→Java dominance in merged PRs (12+ vs 0 in 18 months) reflects current tooling limits, not user need or maintainer disinterest. Phase D removes that asymmetry as a first-class deliverable.
 
@@ -54,19 +54,51 @@ Pre- and post-conditions per `../../docs/methodology/port-skills-design.md` §2.
 
 ## Pipeline (7 steps)
 
-Per design doc `../../docs/methodology/port-skills-design.md` §3. Phase D3 fills each step's body; the skeleton below names the contract.
+Per design doc `../../docs/methodology/port-skills-design.md` §3. Phase D3 (this commit) fills each step's body. The SKILL is a prose-driven document the LLM follows in order; mechanical helpers from `scripts/lib/port_engine.py` are invoked via `Bash` tool calls; templates at `templates/*.j2` are rendered via Python's Jinja2 (operator may use `python3 -c 'import jinja2; ...'` from a Bash tool call, or the SKILL invokes a thin renderer script).
 
 ### Step 1 — Load + validate source spec
 
-**TODO (D3)**: Load the Java-source spec YAML. Validate against `../read/skills/shared/adapter-spec.schema.json`. Confirm `source_language: java`. Reject (exit 1) if malformed or directionally wrong.
+**Inputs.** Source spec YAML, located by precedence:
+
+1. `--source-spec=<path>` flag (operator override).
+2. `${FULL_LOOP_RUN_ID}` env var set OR `--run-id=<id>` flag → load `.tmp/full-loop/{run-id}/java/{bidder}.yaml`.
+3. `--bidder=<name>` flag (no run-id) → load `prebid-server-java/read/specs/{bidder}/latest.yaml` (the persisted golden).
+
+If multiple sources are present and they disagree, abort with `ERROR: source spec resolution conflict — use exactly one of --source-spec, --run-id, or --bidder`.
+
+**Validation.** Load the YAML via `yaml.safe_load`. Validate against `../read/skills/shared/adapter-spec.schema.json` using the `jsonschema` library. On a validation error, abort with the violation path + JSON-Path expression.
+
+**Direction gate.** Confirm `source_language == "java"`. If `source_language == "go"`, abort with `ERROR: this skill ports Java → Go; for Go → Java use port-go2java (lives at prebid-server-java/port-go2java/)`.
+
+**Loaded state.** After Step 1, the SKILL holds:
+
+- `source_spec: dict` — the parsed Java-source spec, schema-valid.
+- `bidder_name_java: str` — `source_spec.meta.bidder_name`, the Java YAML name (lowercase + drop non-`[a-z0-9]`).
+- `run_id: str` — explicit `--run-id` value OR `${FULL_LOOP_RUN_ID}` OR a freshly-generated ISO-like timestamp.
+- `output_root: Path` — `.tmp/full-loop/{run-id}/go/` (transient) OR `prebid-server-go/port-java2go/output/{bidder}/` (persisted via `--persist`).
+- `bidder_constant_lookup: dict[str,str]` — loaded from `../read/skills/shared/bidder-constant-table.yaml`; used in Step 4 to resolve the Go-side `Bidder{X}` constant name (the Rule 46 inverse is not fully mechanical — Java lowercase `adkerneladn` could map to Go `adkernel`, `adkernelAdn`, or other camelCase forms; the lookup table is the source of truth).
 
 ### Step 2 — Discover the bidder family
 
-**TODO (D3)**: Read `meta.is_alias`, `meta.parent_aliases`, `aliases[]`, `meta.empire_parent_flavor`. Determine whether the bidder is primary, alias child, alias-empire parent (Java declares the empire on the parent's YAML), or alias-empire child. Family shape drives Rule 33 inverse (Java parent → Go child YAMLs decomposition) and Rule 44 inverse (alias-empire flavor coherence).
+**Family classification.** Read `source_spec.meta.is_alias`, `source_spec.meta.parent_aliases`, `source_spec.aliases`, `source_spec.meta.empire_parent_flavor`. Java consolidates aliases on the parent's bidder-config YAML (the inverse of Go's per-child YAML model). Classify into one of four shapes:
+
+| Shape | Condition | Examples |
+|---|---|---|
+| `primary` | `meta.is_alias == false` AND `aliases:` block empty | kobler, vungle, thetradedesk |
+| `alias-child` | `meta.is_alias == true` AND `meta.parent_aliases[0]` populated | rare on Java side; usually accessed via parent's `aliases:` block |
+| `empire-parent` | `meta.is_alias == false` AND `aliases:` block has N entries | adverxo (3 children), smarthub (10) |
+| `empire-child` | implicit child entry in another bidder's `aliases:` block | accessed by walking the parent's spec |
+
+**Aliases-block decomposition.** For empire-parent specs, the Java parent's `aliases: { child_a: {overrides}, child_b: ~ }` block must be SPLIT into N separate Go child YAMLs at `static/bidder-info/{child}.yaml` each declaring `aliasOf: parent` (Rule 33 inverse). Step 5 emits these per-alias YAMLs; Step 2 just records the children list on the working state.
+
+**Loaded state addition.** After Step 2, the SKILL holds:
+
+- `family_shape: str` — one of `primary | alias-child | empire-parent | empire-child`.
+- `aux_alias_overrides: dict[str, dict]` — for empire-parent: per-child override dicts from the parent's aliases block.
 
 ### Step 3 — Apply rules (Java → Go inverse direction)
 
-**TODO (D3)**: Walk `../read/skills/shared/port-translation-rules.yaml` rule-by-rule in inverse direction. For each rule, check `spec_field_driver` against the source spec; emit `verdict: applied | skipped-not-applicable | skipped-source-side-only | applied-with-warning`.
+**Rule walk algorithm.** Iterate `../read/skills/shared/port-translation-rules.yaml::rules[]` in declared order. For each rule, check `rule.spec_field_driver` against `source_spec`; emit `verdict: applied | skipped-not-applicable | skipped-source-side-only | applied-with-warning`. Walk-loop logic mirrors D2 §Step 3 — the difference is direction-specific application (lossy-direction quirks emitted; Go-target idiom translation rather than Java-target).
 
 D3's mechanical-ready rules (priority order; same 10 as D2 in inverse direction):
 
@@ -83,15 +115,86 @@ D3's mechanical-ready rules (priority order; same 10 as D2 in inverse direction)
 
 The remaining 36 rules are handled prose-driven (the SKILL walks the rule's prose body and applies the inverse translation in-line). Conflict resolution per design doc §5: lower-id rule wins on artifact placement; record `unresolved_translations[]` with reason `conflicting-rules` for the reflection loop.
 
-**Lossy-direction safety**: Rule 35 inverse, Rule 19 inverse, Rule 30 inverse, Rule 8 (Java helper collapses → Go explicit expansions) are pre-declared lossy in `port-translation-rules.yaml` Round-Trip Safety section. The SKILL preserves source-side semantic information by emitting explicit `quirks[]` entries on the Go destination spec capturing what was lossy, so a future Go→Java re-port retains traceability.
+**Lossy-direction safety**: Rule 35 inverse, Rule 19 inverse, Rule 30 inverse, Rule 8 (Java helper collapses → Go explicit expansions) are pre-declared lossy in `port-translation-rules.yaml` Round-Trip Safety section. The SKILL preserves source-side semantic information by emitting explicit `quirks[]` entries on the Go destination spec capturing what was lossy, so a future Go→Java re-port retains traceability. Each lossy emission MUST add a `human_todos[]` entry with category `byte-divergence-warning` so the operator confirms the lossiness is acceptable for the target.
+
+**Loaded state addition.** After Step 3, the SKILL holds: `rules_consumed: list[dict]`, `dest_spec_partial: dict`, `quirks_emitted: list[dict]`, `unresolved_translations: list[dict]` — same shape as D2.
 
 ### Step 4 — Author the destination spec
 
-**TODO (D3)**: Construct the Go-side destination spec. Carry over R5-strict-shared fields verbatim. Apply Go-specific transformations on `code.adapter_struct`, `code.builder`, `code.make_requests`, `code.make_bids`. Re-compute `bidder_params_sha256` (matches source per Rule 38). Set `provenance.source.resolved_commit` to the same commit as the source spec.
+**R5-strict-shared field carry-over.** Same nine fields as D2 §Step 4 carry verbatim from `source_spec` to `dest_spec` (the cross-language R5-strict invariant is symmetric).
+
+**Go-specific construction.** Build the Go-only spec blocks:
+
+- `code.package_or_class`: typically `bidder_name_java` (lowercase). Exceptions: when the bidder-constant-table indicates a non-mechanical mapping, use the Go-side package name from there.
+- `code.directory_name`: same as `package_or_class` in 99% of cases. Mismatch is rare (cadent_aperture_mx Go side has package `cadentaperturemx` in dir `cadent_aperture_mx`); handled by Rule 7.
+- `code.adapter_struct.type_name`: `"adapter"` (canonical Go convention).
+- `code.adapter_struct.fields`: at minimum `{name: endpoint, type: string}`. When source's typed config has extra fields, demote to `{name: extraInfo, type: extraInfo}` per Rule 35 inverse + emit `quirks[]: hardcoded-config-as-anti-pattern`.
+- `code.builder.signature_canonical: true` (always for ports — the Builder signature follows the canonical 3-arg form).
+- `code.imports.has_currency_helper: bool` — set from `source_spec.currency_conversion.used`.
+- `code.imports.has_jsonutil`: true (every adapter parses `imp.ext`).
+- `cross_language.go_artifacts.{bidder_dir, package_name, bidder_constant}`: from `bidder_constant_lookup`.
+- `cross_language.go_artifacts.alias_yaml_path`: when family_shape ∈ `{empire-child, alias-child}`, set to `static/bidder-info/{alias_name}.yaml`.
+
+**Headers / status / unmarshal demotion.** The Java framework provides several behaviors implicitly that Go requires explicit code for. Per Rule 19/30/8 inverse:
+
+- Java `BidderUtil.defaultRequest` → Go explicit `headers := http.Header{}; headers.Add("Content-Type", "application/json;charset=utf-8"); headers.Add("Accept", "application/json"); return &adapters.RequestData{Method: "POST", Uri: ..., Body: bodyBytes, Headers: headers}`.
+- Java framework-default 204/4xx handling → Go explicit `adapters.IsResponseStatusCodeNoContent(responseData)` + `adapters.CheckResponseStatusCodeForErrors(responseData)`.
+- Java `ImpUtil.parseImpExt(imp, mapper, ExtImpFoo.class)` → Go explicit `var bidderExt openrtb_ext.ExtBidder; if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil { ... }; var fooExt openrtb_ext.ExtImpFoo; if err := jsonutil.Unmarshal(bidderExt.Bidder, &fooExt); err != nil { ... }`.
+
+These expansions are documented in `references/porting-guide.md` (the inverse porting guide) and emitted in the Go-side templates.
+
+**Cross-language metadata.** Same as D2 §Step 4 with directions reversed:
+
+```yaml
+port_lineage:
+  source_language: java
+  source_pr: <source_spec.provenance.source.pr_url or null>
+  destination_language: go
+  destination_pr: null
+  port_translation_rules_version: <from rules YAML>
+  port_skill_version: <this SKILL.md frontmatter>
+  fidelity_review_themes:
+    - port-fidelity
+    - <one entry per applied prose-driven rule>
+```
+
+**bidder_params_sha256 invariant.** SHA-256 of `dest_spec.bidder_params_json`; MUST equal `source_spec.bidder_params_sha256` (Rule 38 byte-copy guarantees this). Mismatch aborts the SKILL.
+
+**Provenance pinning.** `dest_spec.provenance.source.resolved_commit = source_spec.provenance.source.resolved_commit`.
 
 ### Step 5 — Emit Go artifacts
 
-**TODO (D3)**: Walk the destination spec; emit files at the canonical paths listed under "Target" above. Use Jinja templates from `templates/` (D3 fills): `bidder.go.j2`, `bidder-test.go.j2`, `imp-ext-pojo.go.j2`, `bidder-info.yaml.j2`, etc.
+**Output directory.** Same conventions as D2 §Step 5 (`output_root` per Step 1).
+
+**Per-file template invocation.**
+
+| File | Template | Notes |
+|---|---|---|
+| `static/bidder-info/{bidder}.yaml` | `bidder-info.yaml.j2` | camelCase keys per `references/go-artifact-shapes.md` §9. |
+| `static/bidder-params/{bidder}.json` | `byte_copy` (no template) | Byte-identical to Java's per Rule 38; SHA-256 verified. |
+| `openrtb_ext/imp_{bidder}.go` | `imp-ext-pojo.go.j2` | Cross-package struct; PascalCase fields with `json:"X"` tags. |
+| `adapters/{bidder}/{bidder}.go` | `bidder.go.j2` | Builder + MakeRequests + MakeBids per Go canonical pattern. |
+| `adapters/{bidder}/{bidder}_test.go` | `bidder-test.go.j2` | Thin `adapters.RunJSONBidderTest` wrapper. |
+| `adapters/{bidder}/{bidder}test/exemplary/*.json` | `exemplary-fixture.json.j2` | One file per Java IT scenario, re-authored to Go's flat shape (Rule 36 inverse). |
+| `adapters/{bidder}/{bidder}test/supplemental/*.json` | `exemplary-fixture.json.j2` | Same template, error-path scenarios. |
+| `adapters/{bidder}/params_test.go` | `params-test.go.j2` | Validates `static/bidder-params/{bidder}.json` against schema. |
+
+**Registry inserts (mechanical via port_engine):**
+
+- `openrtb_ext/bidders.go`: `port_engine.alphabetical_insert` for the const + slice entry. Marker: `r'Bidder\w+\s+BidderName\s*='`. Pre-emit: `port_engine.prefix_uniqueness_check(target_lang='go', bidder_name=bidder_name_java)` MUST return `(True, [])`. Abort with operator notification on collision — `TestBidderUniquenessGatekeeping` would fail otherwise.
+- `exchange/adapter_builders.go`: two `alphabetical_insert` calls — one for the import block, one for the dispatch-map entry. Markers per `references/registration-rules.md`.
+
+**Post-emit:**
+
+- `port_engine.gofmt_post_process(file_paths)` — runs `gofmt -s -w` over every emitted `.go` file. On non-zero exit, abort and surface the gofmt diff to the operator.
+- (Optional) `go vet ./adapters/{bidder}/...` — when `--target-clone=<path>` is provided. Violations surface as `human_todos[]` with category `style-violation`.
+
+**PR-shape automation outputs.** Per `references/pr-shape.md`:
+
+- `recommended_pr_title`: `"New Adapter: {Bidder}"` (capital A; observed 100% of merged PRs). For alias ports: `"New Alias: {AliasName} (parent: {ParentName})"`.
+- `target_pr_label_recommendations`: `[]` (Go has no upstream PR template; no mandatory labels).
+- `companion_docs_pr_draft`: same shape as D2 (target_repo prebid/prebid.github.io; less mandatory than Java side but expected for parity).
+- `pre_submit_rebase`: rebase target branch onto upstream `prebid/prebid-server` master HEAD; capture outcome.
 
 Emission rules:
 
@@ -105,11 +208,24 @@ Emission rules:
 
 ### Step 6 — R5-strict check at port time
 
-**TODO (D3)**: Re-read the destination spec via `prebid-server-go/read/skills/read-adapter-orchestrator`. Call `scripts/lib/r5_check.compare_pair(go_spec, java_spec)` (no dual-spec assertions for new ports). Map the four-state harness output plus port-time direction-aware analysis to one of the six `r5_check.state` enum values; populate `byte_equal_fields[]`, `warn_fields[]`, `fail_fields[]`, `summary`.
+**Re-read.** Same in-memory comparator approach as D2 §Step 6: `port_engine.r5_check_at_port_time(source_spec=source_spec, dest_spec=dest_spec)` routes through `r5_check.compare_pair`. The helper's first arg is the Go view; for Java→Go porting, `dest_spec` (the Go-target) is passed as the first arg per the helper's internal language-routing.
+
+**Direction-aware extension (Java→Go specifics).** The four harness states extend to six schema states by inspecting Go-target vs Java-source asymmetries:
+
+- `fail-source-omits-target-constraint`: Java source lacks a constraint Go enforces (aax-style — Java omits `minLength:1` that Go enforces on `cid`/`crid`). Port emits Go bidder-params with the Go-correct constraint AND surfaces a `human_todos[]: upstream-confirmation` entry advising the operator to file a port-fidelity bug against `prebid/prebid-server-java` to add the missing constraint upstream.
+- `warn-target-strengthens-source`: Go target carries a constraint absent in Java source (Connatix-style — Go has `minimum:0`/`maximum:1` that Java lacks). The port preserves the Go-side constraint; surfaces a `human_todos[]: byte-divergence-warning` for human review.
+
+These two states are direction-specific — a `fail-source-omits` in one direction is conceptually a `warn-target-strengthens` in the inverse direction (Java→Go aax shows the former; Go→Java shows the latter on the same pair).
+
+**Port-time R5 fail is NOT a CI failure.** Same as D2: human_todos[] populates; the port still ships its artifacts; merge decision is human review.
 
 ### Step 7 — Emit port-report.json
 
-**TODO (D3)**: Build the port-report dict per `../read/skills/shared/port-report.schema.json` (v0.2.0); write to `.tmp/full-loop/{run-id}/port-report.json`. Schema-validate before writing (use `scripts/lib/port_engine.port_report_emit`).
+**Assemble + write.** Same algorithm as D2 §Step 7. Build the dict per `../read/skills/shared/port-report.schema.json` v0.2.0; flip `port_run.{source_lang: "java", target_lang: "go"}`. Call `port_engine.port_report_emit(report, path=output_root / "port-report.json")` for schema-validated write.
+
+**Operator handoff.** Final message summarizes: emitted files at `output_root` (count + tree), `r5_check.state`, human_todos count + brief list, unresolved_translations count + brief list, next operator steps (review emission, run `gofmt -s -l + go vet + go test ./adapters/{bidder}/...` locally if not done, run `./scripts/check_coverage.sh`, open PR with `recommended_pr_title`, submit companion docs PR).
+
+The SKILL exits 0 on success regardless of `r5_check.state` — fail states are surfaced to the operator. Exit non-zero only on hard failures (Step 1 schema violation, Step 4 SHA mismatch, Step 5 prefix uniqueness collision, Step 7 schema violation).
 
 ## Rule application order
 
