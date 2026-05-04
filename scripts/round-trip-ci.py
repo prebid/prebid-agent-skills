@@ -1501,7 +1501,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--strict-r3",
         action="store_true",
-        help="Require quirk id/summary keyword pairing for every `custom` enum value",
+        default=True,
+        help="(Wave 11b default-on) Require quirk id/summary keyword pairing for every `custom` enum value. Round-2 audit confirmed 40 pass / 0 fail across corpus; safe to default-on.",
+    )
+    parser.add_argument(
+        "--lenient-r3",
+        action="store_false",
+        dest="strict_r3",
+        help="(Wave 11b opt-out) Disable strict R3 keyword-pairing; falls back to advisory mode (any non-empty quirks list satisfies). Use only when quirks are deliberately under-documented.",
     )
     parser.add_argument(
         "--lenient-r9",

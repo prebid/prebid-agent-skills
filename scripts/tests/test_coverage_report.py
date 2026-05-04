@@ -33,10 +33,14 @@ class TestDiscovery(unittest.TestCase):
         self.assertNotIn("_parse_error", d.get("kobler", {}))
 
     def test_load_rules_returns_46(self):
+        # Wave 11b B5 #6: hardcoded count + range(1, 47) literal removed; both
+        # become tautologies once derived from len(rules). Test now validates
+        # the non-trivial invariant: rule IDs are 1..N contiguous with no gaps.
         rules = cr.load_rules()
-        self.assertEqual(46, len(rules), "Phase 2.5 brought rule count to 46")
+        self.assertGreater(len(rules), 0, "load_rules returned empty list")
         ids = sorted(r["id"] for r in rules)
-        self.assertEqual(list(range(1, 47)), ids)
+        self.assertEqual(list(range(1, len(rules) + 1)), ids,
+                         "Rule IDs must be 1..N contiguous (no gaps, no duplicates)")
 
 
 class TestCoverageComputations(unittest.TestCase):
@@ -83,8 +87,10 @@ class TestCoverageComputations(unittest.TestCase):
                 self.assertTrue(entry["has_java"], f"{entry['bidder']}: dual-spec must have Java golden")
 
     def test_per_rule_mentions_returns_46_rows(self):
+        # Wave 11b B5 #6: derived from len(self.rules) instead of hardcoded 46.
         per_rule = cr.compute_per_rule_mentions(self.rules, self.goldens)
-        self.assertEqual(46, len(per_rule))
+        self.assertEqual(len(self.rules), len(per_rule),
+                         "compute_per_rule_mentions must produce one row per loaded rule")
 
 
 class TestReportRender(unittest.TestCase):

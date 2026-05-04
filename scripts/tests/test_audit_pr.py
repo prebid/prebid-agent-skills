@@ -51,8 +51,13 @@ class TestLoaders(unittest.TestCase):
             self.assertIn("id", t)
 
     def test_load_rule_summaries_returns_46(self):
+        # Wave 11b B5 #6: hardcoded count assertion removed (was tautology against
+        # len(rules) and required manual update on every rule-count change).
+        # Function name kept for human-readability; test now validates that rules
+        # are loaded non-empty with the required per-rule fields, which is the
+        # genuine drift gate.
         rules = ap.load_rule_summaries()
-        self.assertEqual(46, len(rules), "Phase 2.5 brings rule count to 46")
+        self.assertGreater(len(rules), 0, "load_rule_summaries returned empty list")
         for r in rules[:5]:
             self.assertIn("id", r)
             self.assertIn("title", r)

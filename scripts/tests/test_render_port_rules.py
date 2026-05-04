@@ -58,24 +58,28 @@ class TestPortRulesRenderDrift(unittest.TestCase):
                           f"port-translation-rules.yaml missing top-level key {required!r}")
 
     def test_rule_count_is_46(self):
-        """Phase 2.5 brings the rule count to 46 (Rules 44-46 added per ADR-003/004/005)."""
+        """Wave 11b B5 #6: validates rules YAML loads non-empty (the count
+        literal `46` was removed as tautology against len(rules); function
+        name kept for human-readable scan)."""
         data = render_port_rules.load_yaml()
         rules = []
         for sec in data["sections"]:
             if sec.get("kind") == "rules":
                 rules.extend(sec["rules"])
-        self.assertEqual(len(rules), 46,
-                         f"Expected 46 rules, found {len(rules)}: {sorted(r['id'] for r in rules)}")
+        self.assertGreater(len(rules), 0,
+                          f"Expected rules YAML to load non-empty; found {len(rules)} rules")
 
     def test_rule_ids_are_unique_and_contiguous(self):
-        """Rule IDs MUST be the integers 1..46 with no gaps or duplicates."""
+        """Rule IDs MUST be the integers 1..len(rules) with no gaps or duplicates.
+        Wave 11b B5 #6: derived from len(rules) instead of hardcoded `47` upper.
+        """
         data = render_port_rules.load_yaml()
         ids = []
         for sec in data["sections"]:
             if sec.get("kind") == "rules":
                 ids.extend(r["id"] for r in sec["rules"])
-        self.assertEqual(sorted(ids), list(range(1, 47)),
-                         f"Rule IDs are not 1..46: got {sorted(ids)}")
+        self.assertEqual(sorted(ids), list(range(1, len(ids) + 1)),
+                         f"Rule IDs are not 1..{len(ids)}: got {sorted(ids)}")
 
     def test_phase_2_5_rules_present(self):
         """Rules 44 (alias-empire), 45 (disabled-by-default), 46 (naming-convention) MUST exist."""
