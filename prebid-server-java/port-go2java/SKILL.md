@@ -1,12 +1,12 @@
 ---
 name: port-go2java
 description: Translates a Go-source Adapter Spec (prebid-server-go/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/go/{bidder}.yaml) into Java artifacts under prebid-server-java/src/main/java/org/prebid/server/bidder/{bidder}/ plus paired YAML, bidder-params, IT fixtures, and Spring config. USE WHEN porting a new (or existing) Go bid adapter to the Java codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
-version: 0.2.0
+version: 0.3.0
 ---
 
 # port-go2java (Go → Java)
 
-> **Status: D2.1 in progress.** Pipeline prose authored; the simplest template (`bidder-config.yaml.j2`) shipped. Remaining D2 work: author the rest of `templates/*.j2` (10 templates total), validate end-to-end against the 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) with operator-side mvn + checkstyle + Jacoco, and bump frontmatter to 1.0.0 once each MVP pair clears all 7 acceptance gates per `docs/execution-plan-phase-d.md` §D2.3.
+> **Status: D2 templates complete.** Pipeline prose authored (D2.1); all 11 Jinja templates shipped (D2.1-D2.7): `bidder-config.yaml.j2`, `ext-imp-pojo.java.j2`, `configuration.java.j2`, `configuration-properties.java.j2`, `bidder.java.j2`, `bidder-test.java.j2`, `it-test.java.j2`, plus 4 IT fixture JSONs. Remaining D2 work: end-to-end operator validation against the 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) using a local `prebid-server-java` clone — `mvn -B compile`, `mvn -B checkstyle:check`, Jacoco line-coverage ≥ 90% per `docs/execution-plan-phase-d.md` §D2.3 acceptance gates. Frontmatter bumps to 1.0.0 once each MVP pair clears all 7 gates.
 
 ## What this skill does
 

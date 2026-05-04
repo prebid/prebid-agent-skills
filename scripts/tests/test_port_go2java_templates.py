@@ -12,6 +12,7 @@ Run from repo root:
 
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 from typing import Any, Dict
@@ -389,6 +390,72 @@ def _kobler_it_test_ctx() -> Dict[str, Any]:
     }
 
 
+def _kobler_auction_request_ctx() -> Dict[str, Any]:
+    return {
+        "request_id": "kobler-banner-1",
+        "imps": [
+            {
+                "id": "imp-1",
+                "mediatype": "banner",
+                "mediatype_props": {"format": [{"w": 300, "h": 250}]},
+                "ext_bidder": {"test": True},
+            },
+        ],
+        "bidder_name": "kobler",
+        "tmax": 5000,
+        "cur": ["USD"],
+        "site_page": "https://example.com/page",
+        "app_bundle": None,
+        "publisher_id": "pub-1",
+    }
+
+
+def _kobler_bid_response_ctx() -> Dict[str, Any]:
+    return {
+        "response_id": "kobler-resp-1",
+        "cur": "USD",
+        "bidder_name": "kobler",
+        "bids": [
+            {
+                "id": "bid-1",
+                "impid": "imp-1",
+                "price": "1.50",
+                "adm": "<creative/>",
+                "crid": "creative-1",
+                "adomain": ["advertiser.example.com"],
+                "cat": None,
+                "w": 300,
+                "h": 250,
+                "ext": None,
+            },
+        ],
+    }
+
+
+def _kobler_auction_response_ctx() -> Dict[str, Any]:
+    return {
+        "response_id": "kobler-resp-1",
+        "cur": "USD",
+        "bidder_name": "kobler",
+        "bids": [
+            {
+                "id": "bid-1",
+                "impid": "imp-1",
+                "price": "1.50",
+                "adm": "<creative/>",
+                "crid": "creative-1",
+                "adomain": ["advertiser.example.com"],
+                "cat": None,
+                "w": 300,
+                "h": 250,
+                "ext_prebid_type": "banner",
+                "ext_origbidcpm": "1.50",
+                "ext_origbidcur": "USD",
+            },
+        ],
+    }
+
+
 def _adverxo_typed_config_ctx() -> Dict[str, Any]:
     """Synthetic adverxo-equivalent context for configuration-properties.java.j2.
     Adverxo (Rule 35 master sample) has a typed config subclass with
@@ -655,6 +722,73 @@ class TestItTestJ2(unittest.TestCase):
         self.assertIn("openrtb2AuctionShouldHandleNoBidGracefully", rendered)
 
 
+class TestItFixturesJ2(unittest.TestCase):
+    """Tests for the four IT-fixture JSON templates."""
+
+    def test_auction_request_renders_well_formed_json(self):
+        rendered = _render("it-fixture-auction-request.json.j2", _kobler_auction_request_ctx())
+        parsed = json.loads(rendered)
+        self.assertEqual(parsed["id"], "kobler-banner-1")
+        self.assertEqual(parsed["tmax"], 5000)
+        self.assertEqual(parsed["cur"], ["USD"])
+        self.assertEqual(len(parsed["imp"]), 1)
+        imp = parsed["imp"][0]
+        self.assertEqual(imp["id"], "imp-1")
+        self.assertEqual(imp["banner"]["format"], [{"w": 300, "h": 250}])
+        self.assertEqual(imp["ext"]["prebid"]["bidder"]["kobler"]["test"], True)
+        self.assertIn("site", parsed)
+        self.assertNotIn("app", parsed)
+
+    def test_auction_request_app_branch(self):
+        ctx = _kobler_auction_request_ctx()
+        ctx["site_page"] = None
+        ctx["app_bundle"] = "com.example.app"
+        rendered = _render("it-fixture-auction-request.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertNotIn("site", parsed)
+        self.assertEqual(parsed["app"]["bundle"], "com.example.app")
+
+    def test_bid_request_flatten_imp_ext(self):
+        ctx = _kobler_auction_request_ctx()
+        ctx["flatten_imp_ext"] = True
+        rendered = _render("it-fixture-bid-request.json.j2", ctx)
+        parsed = json.loads(rendered)
+        # Adapter typically flattens imp.ext.prebid.bidder.{bidder} → imp.ext.bidder.
+        self.assertIn("bidder", parsed["imp"][0]["ext"])
+        self.assertNotIn("prebid", parsed["imp"][0]["ext"])
+        self.assertEqual(parsed["imp"][0]["ext"]["bidder"]["test"], True)
+
+    def test_bid_response_renders_well_formed_json(self):
+        rendered = _render("it-fixture-bid-response.json.j2", _kobler_bid_response_ctx())
+        parsed = json.loads(rendered)
+        self.assertEqual(parsed["id"], "kobler-resp-1")
+        self.assertEqual(parsed["cur"], "USD")
+        self.assertEqual(len(parsed["seatbid"]), 1)
+        seat = parsed["seatbid"][0]
+        self.assertEqual(seat["seat"], "kobler")
+        self.assertEqual(len(seat["bid"]), 1)
+        bid = seat["bid"][0]
+        self.assertEqual(bid["price"], 1.5)
+        self.assertEqual(bid["adomain"], ["advertiser.example.com"])
+        self.assertNotIn("cat", bid)  # null in ctx → omitted
+
+    def test_auction_response_includes_ext_prebid(self):
+        rendered = _render("it-fixture-auction-response.json.j2", _kobler_auction_response_ctx())
+        parsed = json.loads(rendered)
+        bid = parsed["seatbid"][0]["bid"][0]
+        self.assertEqual(bid["ext"]["prebid"]["type"], "banner")
+        self.assertEqual(bid["ext"]["prebid"]["meta"]["origbidcpm"], 1.5)
+
+    def test_auction_response_omits_meta_when_no_currency_conversion(self):
+        ctx = _kobler_auction_response_ctx()
+        ctx["bids"][0]["ext_origbidcpm"] = None
+        ctx["bids"][0]["ext_origbidcur"] = None
+        rendered = _render("it-fixture-auction-response.json.j2", ctx)
+        parsed = json.loads(rendered)
+        bid = parsed["seatbid"][0]["bid"][0]
+        self.assertNotIn("meta", bid["ext"]["prebid"])
+
+
 class TestRequiredArtifacts(unittest.TestCase):
     """Sanity: every Java template referenced by SKILL.md Step 5 either exists
     or is flagged in the templates STUB.md as a future deliverable."""
@@ -667,7 +801,11 @@ class TestRequiredArtifacts(unittest.TestCase):
         "bidder.java.j2",                        # D2.4 commit (heaviest template)
         "bidder-test.java.j2",                   # D2.5 commit
         "it-test.java.j2",                       # D2.6 commit
-        # Future D2 commits author:
+        "it-fixture-auction-request.json.j2",    # D2.7 commit
+        "it-fixture-auction-response.json.j2",   # D2.7 commit
+        "it-fixture-bid-request.json.j2",        # D2.7 commit
+        "it-fixture-bid-response.json.j2",       # D2.7 commit
+        # All 11 templates shipped after D2.7.
         # "it-fixture-auction-request.json.j2",
         # "it-fixture-auction-response.json.j2",
         # "it-fixture-bid-request.json.j2",

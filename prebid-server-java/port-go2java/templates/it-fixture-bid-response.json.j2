@@ -1,0 +1,48 @@
+{# IT fixture: BidResponse the bidder returns to prebid-server.
+Lives at src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-{bidder}-bid-response.json
+
+Inputs:
+  ctx.response_id       : str  — top-level BidResponse.id (descriptive)
+  ctx.cur               : str  — bidder-returned currency (typically "USD")
+  ctx.bidder_name       : str  — used as the "seat" in seatbid; typically lowercase Java YAML name
+  ctx.bids              : list[dict]  — per bid; each:
+      id          : str
+      impid       : str  — must match a corresponding imp.id from the bid-request fixture
+      price       : str  — JSON-numeric literal (e.g., "1.50") to preserve precision
+      adm         : str  — creative markup (HTML / VAST / native JSON-string)
+      crid        : str  — creative id
+      adomain     : list[str]|null  — advertiser domains
+      cat         : list[str]|null  — IAB category codes
+      w           : int|null  — banner width (for placement-introspection bidders)
+      h           : int|null  — banner height
+      ext         : dict|null  — bid.ext (typically null for bidder-emitted; prebid-server adds ext.prebid post-hoc)
+
+Most adapters return seatbid[0].seat == bidder_name. Multi-seat bidders
+(rare) emit multiple SeatBid blocks; not handled in this template.
+#}
+{
+  "id": {{ ctx.response_id | tojson }},
+  "cur": {{ ctx.cur | tojson }},
+  "seatbid": [
+    {
+      "seat": {{ ctx.bidder_name | tojson }},
+      "bid": [
+{% for bid in ctx.bids %}
+        {
+          "id": {{ bid.id | tojson }},
+          "impid": {{ bid.impid | tojson }},
+          "price": {{ bid.price }},
+          "adm": {{ bid.adm | tojson }},
+          "crid": {{ bid.crid | tojson }}{% if bid.adomain %},
+          "adomain": {{ bid.adomain | tojson }}{% endif %}{% if bid.cat %},
+          "cat": {{ bid.cat | tojson }}{% endif %}{% if bid.w is not none %},
+          "w": {{ bid.w }}{% endif %}{% if bid.h is not none %},
+          "h": {{ bid.h }}{% endif %}{% if bid.ext %},
+          "ext": {{ bid.ext | tojson }}{% endif %}
+
+        }{% if not loop.last %},{% endif %}
+{% endfor %}
+      ]
+    }
+  ]
+}

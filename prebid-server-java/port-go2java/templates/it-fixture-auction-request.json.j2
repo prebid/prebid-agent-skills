@@ -1,0 +1,54 @@
+{# IT fixture: auction request the publisher sends to prebid-server.
+Lives at src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-auction-{bidder}-request.json
+
+Inputs:
+  ctx.request_id        : str  — top-level BidRequest.id (descriptive, e.g., "{bidder}-banner-1")
+  ctx.imps              : list[dict]  — per imp; each:
+      id          : str
+      mediatype   : str  ("banner" | "video" | "audio" | "native")
+      mediatype_props : dict  — Banner.format/size, Video.mimes, etc.
+      ext_bidder  : dict  — imp.ext.prebid.bidder.{bidder} payload
+  ctx.bidder_name       : str
+  ctx.tmax              : int  — default 5000
+  ctx.cur               : list[str]  — default ["USD"]
+  ctx.site_page         : str|null  — for site requests; null = app
+  ctx.app_bundle        : str|null  — for app requests
+  ctx.publisher_id      : str  — default "pub-id-1"
+
+This template emits a structurally-valid JSON BidRequest. The SKILL
+populates ctx from the source spec's tests.fixture_inventory.exemplary[]
+entries; specifically it maps Go test fixtures to this Java IT shape per
+Rule 36 (semantic-coverage parity, not byte-translation).
+#}
+{
+  "id": {{ ctx.request_id | tojson }},
+  "tmax": {{ ctx.tmax }},
+  "cur": {{ ctx.cur | tojson }},
+{% if ctx.site_page %}
+  "site": {
+    "page": {{ ctx.site_page | tojson }},
+    "publisher": { "id": {{ ctx.publisher_id | tojson }} }
+  },
+{% elif ctx.app_bundle %}
+  "app": {
+    "bundle": {{ ctx.app_bundle | tojson }},
+    "publisher": { "id": {{ ctx.publisher_id | tojson }} }
+  },
+{% endif %}
+  "imp": [
+{% for imp in ctx.imps %}
+    {
+      "id": {{ imp.id | tojson }},
+      "{{ imp.mediatype }}": {{ imp.mediatype_props | tojson }},
+      "ext": {
+        "prebid": {
+          "bidder": {
+            "{{ ctx.bidder_name }}": {{ imp.ext_bidder | tojson }}
+          }
+        }
+      }
+    }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ]
+}
