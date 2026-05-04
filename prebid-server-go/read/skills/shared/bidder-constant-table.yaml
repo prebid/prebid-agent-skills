@@ -1,0 +1,311 @@
+# Bidder constant lookup table — Phase D1.3 deliverable.
+#
+# Maps each upstream Go bidder yaml_name to its `BidderName` constant root
+# (the suffix of `Bidder{X}` declared in `openrtb_ext/bidders.go`). Sourced
+# from upstream prebid/prebid-server master at the resolved_commit below.
+#
+# Used by:
+# - port-go2java SKILL: when generating cross-language artifacts that
+#   reference the Go-side constant (e.g., reviewer-comment anchors).
+# - port-java2go SKILL: when emitting an entry into
+#   openrtb_ext/bidders.go and exchange/adapter_builders.go (via
+#   scripts/lib/port_engine.alphabetical_insert).
+# - scripts/lib/port_engine.prefix_uniqueness_check: when
+#   existing_names is not provided, the helper loads this table to run
+#   the TestBidderUniquenessGatekeeping pre-check (first-6-letter prefix).
+#
+# Of the 271 entries, 84 are non-mechanical — the Go constant deviates
+# from a naive title-case of the yaml_name. Examples: brand-acronym
+# preservation (BidderAJA for `aja`; BidderMX for `mx`); reserved
+# extension namespaces (Reserved* prefix); rebrands (BidderEmxDigital
+# for `emx_digital`). The naive formula is
+# `Bidder` + yaml_name[0].upper() + yaml_name[1:]; consult this table
+# instead of recomputing.
+#
+# Refresh cadence: regenerate when scripts/sync-from-upstream.py reports
+# a new bidder upstream OR when the master HEAD on bidders.go advances
+# more than one minor release (per docs/methodology/repo-rules.md).
+
+schema_version: "1.0.0"
+
+upstream_source:
+  repo: prebid/prebid-server
+  path: openrtb_ext/bidders.go
+  resolved_commit: f601e3f3db83b21f6bab6abb4ca5d4197a65013e
+  fetched_at: 2026-05-04
+
+# Map keyed by the lowercase yaml_name; value is the Go constant suffix
+# (so the full constant is `openrtb_ext.Bidder{value}`). Entries sorted
+# alphabetically by yaml_name. Total entries: 271.
+bidders:
+  "33across": 33Across
+  aax: Aax
+  aceex: Aceex
+  acuityads: AcuityAds
+  adagio: Adagio
+  adelement: Adelement
+  adf: Adf
+  adgeneration: Adgeneration
+  adhese: Adhese
+  adkernel: Adkernel
+  adkernelAdn: AdkernelAdn
+  adman: Adman
+  admatic: Admatic
+  admixer: Admixer
+  adnuntius: Adnuntius
+  adot: Adot
+  adpone: Adpone
+  adprime: Adprime
+  adquery: Adquery
+  adrino: Adrino
+  adtarget: Adtarget
+  adtelligent: Adtelligent
+  adtonos: AdTonos
+  adtrgtme: Adtrgtme
+  aduptech: AdUpTech
+  advangelists: Advangelists
+  adverxo: Adverxo
+  adview: AdView
+  adxcg: Adxcg
+  adyoulike: Adyoulike
+  ae: ReservedAE
+  afront: Afront
+  aidem: Aidem
+  aja: AJA
+  akcelo: Akcelo
+  algorix: Algorix
+  alkimi: Alkimi
+  all: ReservedAll
+  alliance_gravity: AllianceGravity
+  amx: AMX
+  apacdex: Apacdex
+  appnexus: Appnexus
+  appush: Appush
+  aso: Aso
+  audienceNetwork: AudienceNetwork
+  automatad: Automatad
+  avocet: Avocet
+  axis: Axis
+  axonix: Axonix
+  beachfront: Beachfront
+  beintoo: Beintoo
+  bematterfull: Bematterfull
+  beop: Beop
+  between: Between
+  beyondmedia: BeyondMedia
+  bidmachine: Bidmachine
+  bidmatic: Bidmatic
+  bidmyadz: Bidmyadz
+  bidscube: BidsCube
+  bidstack: Bidstack
+  bidtheatre: Bidtheatre
+  bigoad: BigoAd
+  blasto: Blasto
+  bliink: Bliink
+  blis: Blis
+  blue: Blue
+  bluesea: Bluesea
+  bmtm: Bmtm
+  boldwin: Boldwin
+  boldwin_rapid: BoldwinRapid
+  brave: Brave
+  bwx: BWX
+  cadent_aperture_mx: CadentApertureMX
+  ccx: Ccx
+  clydo: Clydo
+  cointraffic: Cointraffic
+  coinzilla: Coinzilla
+  colossus: Colossus
+  compass: Compass
+  concert: Concert
+  connatix: Connatix
+  connectad: ConnectAd
+  consumable: Consumable
+  context: ReservedContext
+  contxtful: Contxtful
+  conversant: Conversant
+  copper6ssp: Copper6ssp
+  cpmstar: Cpmstar
+  criteo: Criteo
+  cwire: CWire
+  data: ReservedData
+  datablocks: Datablocks
+  decenterads: DecenterAds
+  deepintent: Deepintent
+  definemedia: Definemedia
+  dianomi: Dianomi
+  displayio: Displayio
+  dmx: Dmx
+  driftpixel: DriftPixel
+  e_volution: EVolution
+  edge226: Edge226
+  elementaltv: ElementalTV
+  emtv: Emtv
+  emx_digital: EmxDigital
+  eplanning: EPlanning
+  epom: Epom
+  escalax: Escalax
+  exco: Exco
+  feedad: FeedAd
+  flatads: Flatads
+  flipp: Flipp
+  freewheelssp: FreewheelSSP
+  frvradn: FRVRAdNetwork
+  fwssp: FWSSP
+  gamma: Gamma
+  gamoshi: Gamoshi
+  general: ReservedGeneral
+  globalsun: Globalsun
+  goldbach: Goldbach
+  gpid: ReservedGPID
+  grid: Grid
+  gumgum: GumGum
+  huaweiads: HuaweiAds
+  igs: ReservedIGS
+  imds: Imds
+  impactify: Impactify
+  improvedigital: Improvedigital
+  infytv: InfyTV
+  inmobi: InMobi
+  insticator: Insticator
+  intenze: Intenze
+  interactiveoffers: Interactiveoffers
+  invibes: Invibes
+  iqx: IQX
+  iqzone: IQZone
+  ix: Ix
+  jixie: Jixie
+  kargo: Kargo
+  kayzen: Kayzen
+  kidoz: Kidoz
+  kiviads: Kiviads
+  kobler: Kobler
+  krushmedia: Krushmedia
+  kueezrtb: KueezRTB
+  lemmadigital: Lemmadigital
+  limelightDigital: LimelightDigital
+  lm_kiviads: LmKiviads
+  lockerdome: LockerDome
+  logan: Logan
+  logicad: Logicad
+  loopme: Loopme
+  loyal: Loyal
+  lunamedia: LunaMedia
+  mabidder: Mabidder
+  madsense: MadSense
+  madvertise: Madvertise
+  marsmedia: Marsmedia
+  mediafuse: Mediafuse
+  mediago: MediaGo
+  medianet: Medianet
+  mediasquare: Mediasquare
+  melozen: MeloZen
+  metax: MetaX
+  mgid: Mgid
+  mgidX: MgidX
+  minutemedia: MinuteMedia
+  missena: Missena
+  mobfoxpb: Mobfoxpb
+  mobilefuse: MobileFuse
+  mobkoi: Mobkoi
+  motorik: Motorik
+  msft: Microsoft
+  nativery: Nativery
+  nativo: Nativo
+  nextmillennium: NextMillennium
+  nexx360: Nexx360
+  nobid: NoBid
+  ogury: Ogury
+  oms: Oms
+  onetag: OneTag
+  openweb: OpenWeb
+  openx: Openx
+  operaads: Operaads
+  optidigital: Optidigital
+  oraki: Oraki
+  orbidder: Orbidder
+  outbrain: Outbrain
+  ownadx: OwnAdx
+  pangle: Pangle
+  pgamssp: PGAMSsp
+  playdigo: Playdigo
+  prebid: ReservedPrebid
+  pubmatic: Pubmatic
+  pubnative: Pubnative
+  pubrise: Pubrise
+  pulsepoint: Pulsepoint
+  pwbid: PWBid
+  qt: QT
+  readpeak: Readpeak
+  rediads: Rediads
+  relevantdigital: RelevantDigital
+  resetdigital: ResetDigital
+  revcontent: Revcontent
+  richaudience: Richaudience
+  rise: Rise
+  roulax: Roulax
+  rtbhouse: RTBHouse
+  rubicon: Rubicon
+  sa_lunamedia: SaLunaMedia
+  seedingAlliance: SeedingAlliance
+  seedtag: Seedtag
+  sharethrough: Sharethrough
+  showheroes: Showheroes
+  silvermob: SilverMob
+  silverpush: SilverPush
+  skadn: ReservedSKAdN
+  smaato: Smaato
+  smartadserver: SmartAdserver
+  smarthub: SmartHub
+  smartrtb: SmartRTB
+  smartx: Smartx
+  smartyads: SmartyAds
+  smilewanted: SmileWanted
+  smoot: Smoot
+  smrtconnect: Smrtconnect
+  sonobi: Sonobi
+  sovrn: Sovrn
+  sovrnXsp: SovrnXsp
+  sparteo: Sparteo
+  sspBC: SspBC
+  startio: StartIO
+  stroeerCore: StroeerCore
+  taboola: Taboola
+  tappx: Tappx
+  teads: Teads
+  telaria: Telaria
+  teqblaze: TeqBlaze
+  theadx: Theadx
+  thetradedesk: TheTradeDesk
+  tid: ReservedTID
+  tpmn: Tpmn
+  tradplus: TradPlus
+  trafficgate: TrafficGate
+  triplelift: Triplelift
+  triplelift_native: TripleliftNative
+  trustedstack: Trustedstack
+  trustx: TrustX
+  ucfunnel: Ucfunnel
+  undertone: Undertone
+  unicorn: Unicorn
+  unruly: Unruly
+  vidazoo: Vidazoo
+  videobyte: VideoByte
+  videoheroes: VideoHeroes
+  vidoomy: Vidoomy
+  visiblemeasures: VisibleMeasures
+  visx: Visx
+  vox: Vox
+  vrtcal: Vrtcal
+  vungle: Vungle
+  xeworks: Xeworks
+  yahooAds: YahooAds
+  yandex: Yandex
+  yeahmobi: Yeahmobi
+  yieldlab: Yieldlab
+  yieldmo: Yieldmo
+  yieldone: Yieldone
+  zentotem: Zentotem
+  zeroclickfraud: ZeroClickFraud
+  zeta_global_ssp: ZetaGlobalSsp
+  zmaticoo: Zmaticoo
