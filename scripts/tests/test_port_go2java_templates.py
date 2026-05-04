@@ -368,6 +368,27 @@ def _kobler_bidder_test_ctx() -> Dict[str, Any]:
     }
 
 
+def _kobler_it_test_ctx() -> Dict[str, Any]:
+    """Synthetic kobler-equivalent context for it-test.java.j2."""
+    return {
+        "bidder_name": "kobler",
+        "bidder_class_root": "Kobler",
+        "endpoint_path": "/kobler-exchange",
+        "scenarios": [
+            {
+                "method_name": "openrtb2AuctionShouldRespondWithBidsFromKoblerBidder",
+                "summary": "Happy path: kobler returns a single banner bid for one imp.",
+                "bid_request_path": "openrtb2/kobler/test-kobler-bid-request.json",
+                "bid_response_path": "openrtb2/kobler/test-kobler-bid-response.json",
+                "auction_request_path": "openrtb2/kobler/test-auction-kobler-request.json",
+                "auction_response_path": "openrtb2/kobler/test-auction-kobler-response.json",
+                "expected_seats": ["kobler"],
+            },
+        ],
+        "javadoc_summary": None,
+    }
+
+
 def _adverxo_typed_config_ctx() -> Dict[str, Any]:
     """Synthetic adverxo-equivalent context for configuration-properties.java.j2.
     Adverxo (Rule 35 master sample) has a typed config subclass with
@@ -577,6 +598,63 @@ class TestBidderTestJ2(unittest.TestCase):
         self.assertIn("ExtImpKobler.of(true)", rendered)
 
 
+class TestItTestJ2(unittest.TestCase):
+    """Tests for templates/it-test.java.j2."""
+
+    def test_renders_kobler_it_class(self):
+        rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
+        self.assertIn("package org.prebid.server.it;", rendered)
+        self.assertIn("public class KoblerTest extends IntegrationTest", rendered)
+
+    def test_test_property_source_uses_localhost(self):
+        rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
+        self.assertIn(
+            'adapters.kobler.endpoint=http://localhost:8090/kobler-exchange',
+            rendered,
+        )
+
+    def test_scenario_method_emits_with_wiremock_stub(self):
+        rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
+        self.assertIn("public void openrtb2AuctionShouldRespondWithBidsFromKoblerBidder()", rendered)
+        self.assertIn('post(urlPathEqualTo("/kobler-exchange"))', rendered)
+        self.assertIn(
+            'jsonFrom("openrtb2/kobler/test-kobler-bid-request.json")',
+            rendered,
+        )
+
+    def test_single_seat_uses_singletonlist(self):
+        rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
+        self.assertIn("import static java.util.Collections.singletonList;", rendered)
+        self.assertIn('singletonList("kobler")', rendered)
+        self.assertNotIn("import static java.util.Arrays.asList;", rendered)
+
+    def test_multi_seat_uses_aslist(self):
+        ctx = _kobler_it_test_ctx()
+        ctx["scenarios"][0]["expected_seats"] = ["kobler", "kobler_alt"]
+        rendered = _render("it-test.java.j2", ctx)
+        self.assertIn("import static java.util.Arrays.asList;", rendered)
+        self.assertIn('asList("kobler", "kobler_alt")', rendered)
+
+    def test_multiple_scenarios_emit(self):
+        ctx = _kobler_it_test_ctx()
+        ctx["scenarios"].append({
+            "method_name": "openrtb2AuctionShouldHandleNoBidGracefully",
+            "summary": "no-bid scenario",
+            "bid_request_path": "openrtb2/kobler/test-kobler-nobid-request.json",
+            "bid_response_path": "openrtb2/kobler/test-kobler-nobid-response.json",
+            "auction_request_path": "openrtb2/kobler/test-auction-kobler-nobid-request.json",
+            "auction_response_path": "openrtb2/kobler/test-auction-kobler-nobid-response.json",
+            "expected_seats": ["kobler"],
+        })
+        rendered = _render("it-test.java.j2", ctx)
+        # Count method-level @Test annotations only (not @TestPropertySource).
+        method_test_count = sum(
+            1 for ln in rendered.splitlines() if ln.strip() == "@Test"
+        )
+        self.assertEqual(method_test_count, 2)
+        self.assertIn("openrtb2AuctionShouldHandleNoBidGracefully", rendered)
+
+
 class TestRequiredArtifacts(unittest.TestCase):
     """Sanity: every Java template referenced by SKILL.md Step 5 either exists
     or is flagged in the templates STUB.md as a future deliverable."""
@@ -588,8 +666,8 @@ class TestRequiredArtifacts(unittest.TestCase):
         "configuration-properties.java.j2",      # D2.3 commit
         "bidder.java.j2",                        # D2.4 commit (heaviest template)
         "bidder-test.java.j2",                   # D2.5 commit
+        "it-test.java.j2",                       # D2.6 commit
         # Future D2 commits author:
-        # "it-test.java.j2",
         # "it-fixture-auction-request.json.j2",
         # "it-fixture-auction-response.json.j2",
         # "it-fixture-bid-request.json.j2",
