@@ -1172,16 +1172,104 @@ JAVA_TEMPLATE_MACROS = {
     "Source",
     "GvlId",
 }
+# Wave 11b B5 #7: user-sync URL macros. These appear in
+# bidder_info.user_sync.{iframe,redirect}.url string values and are NOT
+# in GO_TEMPLATE_MACROS (which is endpoint-context only). Walking user-
+# sync paths without this registry would emit warns on every well-known
+# user-sync macro — pure noise.
+#
+# The Go and Java prebid-servers use different naming conventions for the
+# same conceptual macros: Go uses PascalCase ({{.GDPR}}) per its template
+# package, Java uses snake_case ({{gdpr}}) per its String.replace flow.
+# Both spellings are admitted; the language signal is in the path
+# (bidder_info.user_sync.* on Go vs Java spec) but the macro NAMES are
+# the same canonical set under different casings.
+USER_SYNC_MACROS = {
+    # Go casings (PascalCase)
+    "GDPR", "GDPRConsent", "USPrivacy", "GPP", "GPPSID", "RedirectURL",
+    "BidderName", "UID",
+    # Java casings (snake_case)
+    "gdpr", "gdpr_consent", "us_privacy", "gpp", "gpp_sid", "redirect_url",
+    "bidder", "uid",
+}
+
+# Wave 11b B5 #7: OpenRTB-standard macros that may appear in any
+# endpoint-bearing string (notably nurl/burl billing macros). These are
+# spec-defined per OpenRTB 2.5 §4.1 and aren't bidder-specific.
+OPENRTB_MACROS = {
+    "AUCTION_PRICE", "AUCTION_BID_ID", "AUCTION_IMP_ID", "AUCTION_AD_ID",
+    "AUCTION_LOSS", "AUCTION_MIN_TO_WIN", "AUCTION_SEAT_ID", "AUCTION_CURRENCY",
+}
 PLACEHOLDER_RE = re.compile(r"\{\{\.?([A-Za-z_][A-Za-z0-9_]*)\}\}|#\{([A-Za-z_][A-Za-z0-9_]*)\}#|\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
+def _collect_endpoint_strings(spec: Spec) -> List[Tuple[str, str]]:
+    """Return (path, value) tuples for every endpoint-bearing string in the
+    spec that should be walked for placeholder recognition.
+
+    Wave 11b B5 #7 expansion: prior r8_check walked ONLY bidder_info.endpoint,
+    missing user-sync URLs, hardcoded Java static-field macros, and
+    deploy-time-token strings. Now covers:
+
+    - bidder_info.endpoint
+    - bidder_info.user_sync.{iframe,redirect}.url
+    - bidder_info.user_sync.{iframe,redirect}.uid_macro (redirect.* only)
+    - bidder_info.user_sync.{iframe_url,redirect_url}  (legacy flat form)
+    - bidder_class.static_fields[*].value (Java hardcoded macro literals)
+
+    SKIPS prose paths where placeholder-shaped strings are quotes of code,
+    not real macros: cross_language.{go,java}_specific_concerns[],
+    quirks[].summary, provenance.warnings[].summary.
+
+    deploy_time_tokens[*].token strings ARE the placeholders being
+    substituted; not walked here (they're treated as authoritative
+    deploy-time tokens by the placeholder-recognition pass)."""
+    out: List[Tuple[str, str]] = []
+    raw = spec.raw
+
+    bi = raw.get("bidder_info") or {}
+    if isinstance(bi, dict):
+        ep = bi.get("endpoint")
+        if isinstance(ep, str) and ep:
+            out.append(("bidder_info.endpoint", ep))
+
+        us = bi.get("user_sync") or {}
+        if isinstance(us, dict):
+            for sub in ("iframe", "redirect"):
+                v = us.get(sub) or {}
+                if isinstance(v, dict):
+                    s_url = v.get("url")
+                    if isinstance(s_url, str) and s_url:
+                        out.append((f"bidder_info.user_sync.{sub}.url", s_url))
+                    if sub == "redirect":
+                        um = v.get("uid_macro")
+                        if isinstance(um, str) and um:
+                            out.append(("bidder_info.user_sync.redirect.uid_macro", um))
+            for fld in ("iframe_url", "redirect_url"):
+                s = us.get(fld)
+                if isinstance(s, str) and s:
+                    out.append((f"bidder_info.user_sync.{fld}", s))
+
+    bc = raw.get("bidder_class") or {}
+    if isinstance(bc, dict):
+        for sf in (bc.get("static_fields") or []):
+            if isinstance(sf, dict):
+                v = sf.get("value")
+                if isinstance(v, str) and v:
+                    name = sf.get("name") or "?"
+                    out.append((f"bidder_class.static_fields[{name}].value", v))
+
+    return out
+
+
 def r8_check(spec: Spec) -> List[Finding]:
-    endpoint = spec.get("bidder_info.endpoint") or ""
-    if not isinstance(endpoint, str) or not endpoint:
-        return [Finding("R8", spec.label, SEV_PASS, "no endpoint")]
-    matches = list(PLACEHOLDER_RE.finditer(endpoint))
-    if not matches:
-        return [Finding("R8", spec.label, SEV_PASS, "no placeholder")]
+    """Wave 11b B5 #7: expanded from single-field walk (bidder_info.endpoint)
+    to recursive collection across user-sync URLs, hardcoded static-field
+    macros, and the original endpoint. Each placeholder is recognized
+    against per-language macro registries plus deploy-time-token names."""
+    leaves = _collect_endpoint_strings(spec)
+    if not leaves:
+        return [Finding("R8", spec.label, SEV_PASS, "no endpoint-bearing strings to check")]
     macros = GO_TEMPLATE_MACROS if spec.language == "go" else JAVA_TEMPLATE_MACROS
     warnings = spec.get("provenance.warnings") or []
     has_warning = any(
@@ -1189,38 +1277,54 @@ def r8_check(spec: Spec) -> List[Finding]:
         for w in warnings
         if isinstance(w, dict)
     )
-    deploy_tokens = {
-        (t.get("token") or "")
-        for t in (spec.get("deploy_time_tokens") or [])
-        if isinstance(t, dict)
-    }
+    # Build the deploy-time-token NAME set (extract name from token strings
+    # like `#{REGION}#`, not the full token string). Pre-Wave-11b code had
+    # a latent bug here: it stored the full token string then compared
+    # against extracted placeholder names — never matched. B5 #7 fixes
+    # this incidentally by extracting names from the token strings.
+    deploy_token_names: set = set()
+    for t in (spec.get("deploy_time_tokens") or []):
+        if isinstance(t, dict):
+            tok = t.get("token")
+            if isinstance(tok, str):
+                for m in PLACEHOLDER_RE.finditer(tok):
+                    n = m.group(1) or m.group(2) or m.group(3)
+                    if n:
+                        deploy_token_names.add(n)
+
     findings: List[Finding] = []
-    for m in matches:
-        name = m.group(1) or m.group(2) or m.group(3)
-        if not name:
-            continue
-        if name in macros or name in deploy_tokens:
-            continue
-        if has_warning:
-            findings.append(
-                Finding(
-                    "R8",
-                    spec.label,
-                    SEV_PASS,
-                    f"placeholder {{{{.{name}}}}} unrecognised but warning emitted",
-                )
-            )
-        else:
-            findings.append(
-                Finding(
-                    "R8",
-                    spec.label,
-                    SEV_WARN,
-                    f"placeholder {{{{.{name}}}}} not in macro registry and no provenance warning",
-                )
-            )
+    seen_unrecognised = 0
+    for path, value in leaves:
+        # User-sync URL macros are recognized in addition to the per-language
+        # endpoint macro set. Wave 11b B5 #7 introduces USER_SYNC_MACROS to
+        # admit GDPR/GDPRConsent/USPrivacy/GPP/etc. when walking user-sync
+        # path leaves. OPENRTB_MACROS apply everywhere (AUCTION_PRICE etc.
+        # may appear in any endpoint-bearing string per OpenRTB 2.5 §4.1).
+        path_macros = macros | OPENRTB_MACROS
+        if "user_sync" in path:
+            path_macros |= USER_SYNC_MACROS
+        for m in PLACEHOLDER_RE.finditer(value):
+            name = m.group(1) or m.group(2) or m.group(3)
+            if not name:
+                continue
+            if name in path_macros or name in deploy_token_names:
+                continue
+            seen_unrecognised += 1
+            if has_warning:
+                findings.append(Finding(
+                    "R8", spec.label, SEV_PASS,
+                    f"placeholder {{{{.{name}}}}} at {path} unrecognised but warning emitted",
+                ))
+            else:
+                findings.append(Finding(
+                    "R8", spec.label, SEV_WARN,
+                    f"placeholder {{{{.{name}}}}} at {path} not in macro registry and no provenance warning",
+                ))
     if not findings:
-        findings.append(Finding("R8", spec.label, SEV_PASS, "all placeholders recognised"))
+        findings.append(Finding(
+            "R8", spec.label, SEV_PASS,
+            f"{len(leaves)} endpoint-bearing string(s) checked; all placeholders recognised",
+        ))
     return findings
 
 

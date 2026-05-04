@@ -296,6 +296,54 @@ class TestR5(unittest.TestCase):
             f"got: {findings}",
         )
 
+    def test_r8_walks_user_sync_and_static_field_paths(self):
+        """Wave 11b B5 #7: r8_check now walks user-sync URLs and Java
+        static-field values, not just bidder_info.endpoint. Each macro is
+        recognized against per-language endpoint macros, USER_SYNC_MACROS
+        (when path contains 'user_sync'), and OPENRTB_MACROS (universal)."""
+        spec = make_spec("foo", "go", {
+            "meta": {"bidder_name": "foo"},
+            "bidder_info": {
+                "endpoint": "https://x/{{.PublisherID}}",  # in GO_TEMPLATE_MACROS
+                "user_sync": {
+                    "iframe": {"url": "https://x/sync?gdpr={{.GDPR}}&consent={{.GDPRConsent}}"},
+                    "redirect": {"url": "https://x/r?u={{.RedirectURL}}", "uid_macro": "${UID}"},
+                },
+            },
+            "bidder_class": {
+                "static_fields": [
+                    {"name": "FOO_MACRO", "type": "String", "value": "{{.PublisherID}}"},
+                    {"name": "PRICE_MACRO", "type": "String", "value": "${AUCTION_PRICE}"},
+                ],
+            },
+        })
+        findings = rtci.r8_check(spec)
+        warns = [f for f in findings if f.severity == rtci.SEV_WARN]
+        # All placeholders should be recognized: PublisherID (endpoint macro),
+        # GDPR/GDPRConsent/RedirectURL (user-sync macros), UID (also user-sync),
+        # AUCTION_PRICE (OpenRTB macro).
+        self.assertEqual(
+            warns, [],
+            f"Expected zero R8 warns when all placeholders are in known registries; "
+            f"got: {[f.detail for f in warns]}",
+        )
+
+    def test_r8_warns_on_unrecognized_bidder_specific_macro(self):
+        """Wave 11b B5 #7: when a placeholder name isn't in any registry,
+        R8 must WARN (or PASS if a provenance.warnings entry documents it)."""
+        spec = make_spec("foo", "go", {
+            "meta": {"bidder_name": "foo"},
+            "bidder_info": {
+                "endpoint": "https://x/{{.BogusUnknownMacro}}",
+            },
+        })
+        findings = rtci.r8_check(spec)
+        warns = [f for f in findings if f.severity == rtci.SEV_WARN]
+        self.assertTrue(
+            any("BogusUnknownMacro" in f.detail for f in warns),
+            f"Expected WARN on unrecognized macro; got: {[f.detail for f in findings]}",
+        )
+
     def test_list_set_eq_treats_lists_as_sets(self):
         """Wave 11b B5 #2: _list_set_eq must return True for lists with the
         same members in different orders (capabilities/geoscope/schema_*
