@@ -346,6 +346,28 @@ def _kobler_bidder_ctx() -> Dict[str, Any]:
     }
 
 
+def _kobler_bidder_test_ctx() -> Dict[str, Any]:
+    """Synthetic kobler-equivalent context for bidder-test.java.j2."""
+    return {
+        "bidder_name": "kobler",
+        "bidder_class_root": "Kobler",
+        "imp_ext_class_root": "Kobler",
+        "uses_currency_conversion": True,
+        "has_typed_config_props": False,
+        "endpoint_url_for_test": "https://test.endpoint.com/",
+        "imp_ext_field_pairs": [
+            {"java_name": "test", "default_value": "true"},
+        ],
+        "scenario_methods": [
+            {
+                "method_name": "makeHttpRequestsShouldUseDevEndpointWhenTestFlagIsSet",
+                "summary": "kobler dev-prod-toggle test scenario",
+            },
+        ],
+        "javadoc_summary": None,
+    }
+
+
 def _adverxo_typed_config_ctx() -> Dict[str, Any]:
     """Synthetic adverxo-equivalent context for configuration-properties.java.j2.
     Adverxo (Rule 35 master sample) has a typed config subclass with
@@ -502,6 +524,59 @@ class TestBidderJ2(unittest.TestCase):
         self.assertIn("if (imp.getXNative() != null)", rendered)
 
 
+class TestBidderTestJ2(unittest.TestCase):
+    """Tests for templates/bidder-test.java.j2."""
+
+    def test_renders_kobler_bidder_test_class(self):
+        rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
+        self.assertIn("package org.prebid.server.bidder.kobler;", rendered)
+        self.assertIn("public class KoblerBidderTest extends VertxTest", rendered)
+        self.assertIn('private static final String ENDPOINT_URL = "https://test.endpoint.com/";', rendered)
+
+    def test_setup_uses_currency_when_present(self):
+        rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
+        self.assertIn("mock(CurrencyConversionService.class)", rendered)
+        self.assertIn(
+            "new KoblerBidder(ENDPOINT_URL, currencyConversionService, jacksonMapper)",
+            rendered,
+        )
+
+    def test_setup_omits_currency_when_unused(self):
+        ctx = _kobler_bidder_test_ctx()
+        ctx["uses_currency_conversion"] = False
+        rendered = _render("bidder-test.java.j2", ctx)
+        self.assertNotIn("CurrencyConversionService", rendered)
+        self.assertNotIn("mock(", rendered)
+        self.assertIn(
+            "new KoblerBidder(ENDPOINT_URL, jacksonMapper);",
+            rendered,
+        )
+
+    def test_baseline_test_methods_present(self):
+        """The four canonical baseline @Test methods (constructor invariants,
+        204 no-content, malformed-response error, valid single-bid) all emit."""
+        rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
+        self.assertIn("public void creationShouldFailOnInvalidEndpointUrl()", rendered)
+        self.assertIn("public void makeBidsShouldReturnEmptyResultOn204NoContent()", rendered)
+        self.assertIn("public void makeBidsShouldReturnErrorOnMalformedResponse()", rendered)
+        self.assertIn("public void makeBidsShouldReturnSingleBannerBidForCanonicalResponse()", rendered)
+
+    def test_scenario_methods_emit_with_todo_body(self):
+        rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
+        self.assertIn(
+            "public void makeHttpRequestsShouldUseDevEndpointWhenTestFlagIsSet()",
+            rendered,
+        )
+        self.assertIn("// kobler dev-prod-toggle test scenario", rendered)
+        self.assertIn("// TODO[port-go2java]: operator fills body", rendered)
+
+    def test_givenbidrequest_helper_emits_imp_ext_fields(self):
+        rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
+        # The single field "test" with default value "true" should appear
+        # in ExtImpKobler.of(true).
+        self.assertIn("ExtImpKobler.of(true)", rendered)
+
+
 class TestRequiredArtifacts(unittest.TestCase):
     """Sanity: every Java template referenced by SKILL.md Step 5 either exists
     or is flagged in the templates STUB.md as a future deliverable."""
@@ -512,8 +587,8 @@ class TestRequiredArtifacts(unittest.TestCase):
         "configuration.java.j2",                 # D2.2 commit
         "configuration-properties.java.j2",      # D2.3 commit
         "bidder.java.j2",                        # D2.4 commit (heaviest template)
+        "bidder-test.java.j2",                   # D2.5 commit
         # Future D2 commits author:
-        # "bidder-test.java.j2",
         # "it-test.java.j2",
         # "it-fixture-auction-request.json.j2",
         # "it-fixture-auction-response.json.j2",

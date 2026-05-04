@@ -1,0 +1,167 @@
+{# Java {Bidder}BidderTest.java template — emits
+src/test/java/org/prebid/server/bidder/{bidder}/{Bidder}BidderTest.java
+
+JUnit 5 (jupiter) test class extending VertxTest. The template emits
+boilerplate setUp + a baseline of canonical @Test methods that every
+adapter test class needs (constructor invariants, no-content response,
+malformed-response error, valid-response single-bid). Per-scenario tests
+beyond the baseline are populated by the SKILL Step 5 (one @Test per
+source spec's tests.fixture_inventory.exemplary[] entry; method body is
+a TODO comment the operator fills using the corresponding fixture).
+
+Inputs:
+  ctx.bidder_name              : str  — Java YAML / package name (lowercase)
+  ctx.bidder_class_root        : str  — PascalCase
+  ctx.imp_ext_class_root       : str  — typically same as bidder_class_root
+  ctx.uses_currency_conversion : bool — drives constructor signature in setUp
+  ctx.has_typed_config_props   : bool — true → setUp uses the typed subclass
+  ctx.endpoint_url_for_test    : str  — canonical test URL ("https://test.endpoint.com/")
+  ctx.imp_ext_field_pairs      : list[dict]  — for the tiny `givenImpExt` helper;
+      each {java_name: str, default_value: str (Java literal)}
+  ctx.scenario_methods         : list[dict]  — per-scenario test stubs;
+      each {method_name: str, summary: str (one-line // comment in body)}
+  ctx.javadoc_summary          : str|null
+
+Coverage target: ≥ 90% line-coverage on the corresponding {Bidder}Bidder.java
+(per upstream Quality check checkbox). The template's baseline @Test set is
+sized for the canonical bidder shape; bidders with extra logic (Rule 35
+typed-config branches, custom URL resolution) need additional scenario
+methods to reach 90%.
+#}
+package org.prebid.server.bidder.{{ ctx.bidder_name }};
+
+import com.iab.openrtb.request.BidRequest;
+import com.iab.openrtb.request.Imp;
+import com.iab.openrtb.response.Bid;
+import com.iab.openrtb.response.BidResponse;
+import com.iab.openrtb.response.SeatBid;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.prebid.server.VertxTest;
+import org.prebid.server.bidder.model.BidderBid;
+import org.prebid.server.bidder.model.BidderCall;
+import org.prebid.server.bidder.model.BidderError;
+import org.prebid.server.bidder.model.HttpRequest;
+import org.prebid.server.bidder.model.HttpResponse;
+import org.prebid.server.bidder.model.Result;
+{% if ctx.uses_currency_conversion %}
+import org.prebid.server.currency.CurrencyConversionService;
+{% endif %}
+import org.prebid.server.proto.openrtb.ext.ExtPrebid;
+import org.prebid.server.proto.openrtb.ext.request.{{ ctx.bidder_name }}.ExtImp{{ ctx.imp_ext_class_root }};
+import org.prebid.server.proto.openrtb.ext.response.BidType;
+
+import java.util.List;
+import java.util.function.UnaryOperator;
+
+import static java.util.function.UnaryOperator.identity;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
+{% if ctx.uses_currency_conversion %}
+import static org.mockito.Mockito.mock;
+{% endif %}
+
+{% if ctx.javadoc_summary %}
+/**
+ * {{ ctx.javadoc_summary }}
+ */
+{% endif %}
+public class {{ ctx.bidder_class_root }}BidderTest extends VertxTest {
+
+    private static final String ENDPOINT_URL = "{{ ctx.endpoint_url_for_test }}";
+
+    private {{ ctx.bidder_class_root }}Bidder bidder;
+
+    @BeforeEach
+    public void setUp() {
+{% if ctx.uses_currency_conversion %}
+        final CurrencyConversionService currencyConversionService = mock(CurrencyConversionService.class);
+        bidder = new {{ ctx.bidder_class_root }}Bidder(ENDPOINT_URL, currencyConversionService, jacksonMapper);
+{% else %}
+        bidder = new {{ ctx.bidder_class_root }}Bidder(ENDPOINT_URL, jacksonMapper);
+{% endif %}
+    }
+
+    @Test
+    public void creationShouldFailOnInvalidEndpointUrl() {
+        // Constructor's HttpUtil.validateUrl rejects non-URL strings; the
+        // failure surfaces as IllegalArgumentException at bean-startup.
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+{% if ctx.uses_currency_conversion %}
+                () -> new {{ ctx.bidder_class_root }}Bidder("invalid-url", mock(CurrencyConversionService.class), jacksonMapper));
+{% else %}
+                () -> new {{ ctx.bidder_class_root }}Bidder("invalid-url", jacksonMapper));
+{% endif %}
+    }
+
+    @Test
+    public void makeBidsShouldReturnEmptyResultOn204NoContent() {
+        final BidRequest bidRequest = givenBidRequest(identity());
+        final BidderCall<BidRequest> httpCall = givenHttpCall(204, "");
+
+        final Result<List<BidderBid>> result = bidder.makeBids(httpCall, bidRequest);
+
+        assertThat(result.getValue()).isEmpty();
+        assertThat(result.getErrors()).isEmpty();
+    }
+
+    @Test
+    public void makeBidsShouldReturnErrorOnMalformedResponse() {
+        final BidRequest bidRequest = givenBidRequest(identity());
+        final BidderCall<BidRequest> httpCall = givenHttpCall(200, "this is not JSON");
+
+        final Result<List<BidderBid>> result = bidder.makeBids(httpCall, bidRequest);
+
+        assertThat(result.getValue()).isEmpty();
+        assertThat(result.getErrors()).hasSize(1);
+        assertThat(result.getErrors().get(0).getType()).isEqualTo(BidderError.Type.bad_server_response);
+    }
+
+    @Test
+    public void makeBidsShouldReturnSingleBannerBidForCanonicalResponse() throws Exception {
+        final BidRequest bidRequest = givenBidRequest(impBuilder ->
+                impBuilder.id("imp-1").banner(com.iab.openrtb.request.Banner.builder().build()));
+        final BidResponse bidResponse = BidResponse.builder()
+                .seatbid(List.of(SeatBid.builder()
+                        .bid(List.of(Bid.builder().id("bid-1").impid("imp-1").price(java.math.BigDecimal.ONE).build()))
+                        .build()))
+                .cur("USD")
+                .build();
+        final BidderCall<BidRequest> httpCall = givenHttpCall(200, mapper.writeValueAsString(bidResponse));
+
+        final Result<List<BidderBid>> result = bidder.makeBids(httpCall, bidRequest);
+
+        assertThat(result.getErrors()).isEmpty();
+        assertThat(result.getValue())
+                .hasSize(1)
+                .extracting(BidderBid::getType, BidderBid::getBidCurrency)
+                .containsExactly(tuple(BidType.banner, "USD"));
+    }
+
+{% for scenario in ctx.scenario_methods %}
+    @Test
+    public void {{ scenario.method_name }}() {
+        // {{ scenario.summary }}
+        // TODO[port-go2java]: operator fills body from source spec's
+        // tests.fixture_inventory.exemplary[] entry. The fixture has the
+        // expected request shape, mock response, and expected bid output.
+        org.junit.jupiter.api.Assertions.fail("scenario {{ scenario.method_name }} not yet implemented");
+    }
+
+{% endfor %}
+    private static BidRequest givenBidRequest(UnaryOperator<Imp.ImpBuilder> impCustomizer) {
+        return BidRequest.builder()
+                .imp(List.of(impCustomizer.apply(Imp.builder().id("imp-1").ext(jacksonMapper.mapper().valueToTree(
+                        ExtPrebid.of(null, ExtImp{{ ctx.imp_ext_class_root }}.of({{ ctx.imp_ext_field_pairs | map(attribute='default_value') | join(', ') }}))))).build()))
+                .build();
+    }
+
+    private static BidderCall<BidRequest> givenHttpCall(int statusCode, String body) {
+        final HttpRequest<BidRequest> request = HttpRequest.<BidRequest>builder()
+                .uri(ENDPOINT_URL)
+                .body(new byte[0])
+                .build();
+        final HttpResponse response = HttpResponse.of(statusCode, null, body);
+        return BidderCall.succeededHttp(request, response, null);
+    }
+}
