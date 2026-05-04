@@ -1,7 +1,7 @@
 ---
 name: read-adapter-orchestrator
-description: Extract a structured Adapter Specification (YAML+Markdown) from any prebid/prebid-server (Go) bid adapter or alias. USE WHEN a user asks to "read", "spec out", "extract", "snapshot", or "describe" a Go adapter by name, branch, PR, tag, or commit; or to produce the input artifact for future write/port-go2java skills. Alias bidders inherit code/tests/file_layout from parent and emit them as nulls. Do NOT use for prebid-server-java (use read-bidder-orchestrator), prebid-js, PR review (review/ skills), or generating new adapters from a spec (future write/).
-version: 1.0.0
+description: Extract a structured Adapter Specification (YAML+Markdown) from any prebid/prebid-server (Go) bid adapter or alias. USE WHEN a user asks to "read", "spec out", "extract", "snapshot", or "describe" a Go adapter by name, branch, PR, tag, or commit; or to produce the input artifact for the port-go2java / write skills. Alias bidders inherit code/tests/file_layout from parent and emit them as nulls. Do NOT use for prebid-server-java (use read-bidder-orchestrator), prebid-js, PR review (review/ skills), or generating new adapters from a spec (future write/).
+version: 1.1.0
 ---
 
 # read-adapter-orchestrator
@@ -28,8 +28,9 @@ The skill accepts one bidder per invocation. Flags:
 | `--bidder=<name>` | yes | — | Lowercase or snake_case bidder identifier (e.g., `kobler`, `33across`, `optidigital`). Must match the directory name under `adapters/`. |
 | `--ref=<spec>` | no | `branch=master` | One of `branch=<name>`, `commit=<sha>`, `pr=<N>`, `tag=<vX.Y.Z>`. PR refs resolve to `head.sha`. |
 | `--source-mode=<mode>` | no | auto | `local`, `github-raw`, `gh-cli`, or `auto`. See [`references/source-modes.md`](references/source-modes.md). |
-| `--out=<path>` | no | stdout | Write to PATH instead of stdout. With `--persist`, this is ignored. |
+| `--out=<path>` (synonym `--output=<path>`) | no | stdout | Write to PATH instead of stdout. With `--persist`, this is ignored. The `--output` synonym matches the spelling used in [`../../../../docs/methodology/end-to-end-flow.md`](../../../../docs/methodology/end-to-end-flow.md); both names resolve to the same flag. |
 | `--persist` | no | off | Write to `prebid-server-go/read/specs/{bidder}/{shortsha}.{yaml,md}` and refresh `latest.yaml` symlink. The `read/specs/` directory is gitignored by default. |
+| `--run-id=<id>` | no | `${FULL_LOOP_RUN_ID}` env var if set | Teal-flow convention (Phase D1.5). When set (and neither `--persist` nor `--out` is given), output path defaults to `.tmp/full-loop/{run-id}/go/{bidder}.yaml` — the canonical handoff location the upcoming `port-go2java` / `port-java2go` skills look for the source spec. Format: ISO-like timestamp + short hash, e.g., `2026-05-04T1430Z-a3f9`. The `.tmp/` directory is `.gitignore`d (Wave 5). |
 | `--format=<fmt>` | no | `yaml,md` | `yaml`, `md`, or `yaml,md`. |
 | `--fixture-mode=<mode>` | no | `count` | `count` (filename + sha + bytes), `summary` (adds extracted media types per fixture), or `verbatim` (full JSON inlined). |
 
@@ -122,8 +123,9 @@ Emit per the [Output](#output) contract below.
 Destination precedence (one per invocation):
 
 1. `--persist` set → `prebid-server-go/read/specs/{bidder}/{shortsha}.{yaml,md}` plus a relative `latest.yaml` symlink. The `read/specs/` directory is `.gitignore`d by default; users opt into committing specs.
-2. `--out=<path>` set (and `--persist` not) → write to PATH. If PATH is a directory, write `{bidder}-{shortsha}.spec.{yaml,md}` inside; if PATH has a `.yaml` or `.md` extension, write to that exact file; otherwise treat as a directory and create it.
-3. (default) → stdout, with literal delimiters `--- yaml ---` and `--- markdown ---` separating the two halves.
+2. `--out=<path>` (synonym `--output=<path>`) set (and `--persist` not) → write to PATH. If PATH is a directory, write `{bidder}-{shortsha}.spec.{yaml,md}` inside; if PATH has a `.yaml` or `.md` extension, write to that exact file; otherwise treat as a directory and create it.
+3. `--run-id=<id>` set (or `${FULL_LOOP_RUN_ID}` env var set, with neither `--persist` nor `--out` given) → write to `.tmp/full-loop/{run-id}/go/{bidder}.yaml` (and the matching `.spec.md` when `--format` includes `md`). The `.tmp/full-loop/` directory is `.gitignore`d. This is the **Teal-flow convention** — see [`../../../../docs/methodology/end-to-end-flow.md`](../../../../docs/methodology/end-to-end-flow.md) §1.2 for the read → port → review handoff. The `port-go2java` / `port-java2go` skills look for the source spec at this canonical path.
+4. (default) → stdout, with literal delimiters `--- yaml ---` and `--- markdown ---` separating the two halves.
 
 `--format=yaml` suppresses the Markdown half; `--format=md` suppresses the YAML half; `--format=yaml,md` (default) emits both. `--fixture-mode={count,summary,verbatim}` controls per-fixture payload in `tests.fixture_inventory.*`: `count` (filename + sha + bytes), `summary` (adds extracted media types), `verbatim` (inlines the JSON; 10–100× larger).
 
