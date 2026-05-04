@@ -1,0 +1,79 @@
+{# Go bidder-info YAML template — emits static/bidder-info/{bidder}.yaml.
+
+Inputs:
+  ctx.endpoint               : str  — bidder_info.endpoint URL (Go template syntax; macros normalized per Rule 11)
+  ctx.maintainer_email       : str
+  ctx.gvl_vendor_id          : int|null
+  ctx.endpoint_compression   : str|null
+  ctx.modifying_vast_xml     : bool
+  ctx.geoscope               : list[str]
+  ctx.site_media_types       : list[str]|null
+  ctx.app_media_types        : list[str]|null
+  ctx.dooh_media_types       : list[str]|null
+  ctx.alias_of               : str|null  — when present, this is an alias child YAML
+                                            (only the diverging fields populate;
+                                             parent's bidder-info covers the rest)
+  ctx.user_sync              : dict|null
+
+Field-name convention: camelCase (NOT kebab-case). Java side uses kebab-case;
+Go uses camelCase per upstream prebid-server convention. The template emits
+camelCase regardless of source spec's bidder_info.yaml_field_name_quirks[].
+
+For alias children (alias_of != null), only the diverging fields populate.
+The parent's static/bidder-info/{parent}.yaml carries the inherited values.
+#}
+{% if ctx.alias_of %}
+aliasOf: {{ ctx.alias_of }}
+{% endif %}
+{% if ctx.endpoint %}
+endpoint: {{ ctx.endpoint | tojson }}
+{% endif %}
+{% if ctx.endpoint_compression %}
+endpointCompression: {{ ctx.endpoint_compression }}
+{% endif %}
+{% if ctx.maintainer_email %}
+maintainer:
+  email: {{ ctx.maintainer_email }}
+{% endif %}
+{% if ctx.gvl_vendor_id is not none %}
+gvlVendorID: {{ ctx.gvl_vendor_id }}
+{% endif %}
+{% if ctx.modifying_vast_xml %}
+modifyingVastXmlAllowed: true
+{% endif %}
+{% if ctx.geoscope %}
+geoscope:
+{% for region in ctx.geoscope %}
+  - {{ region }}
+{% endfor %}
+{% endif %}
+{% if ctx.site_media_types or ctx.app_media_types or ctx.dooh_media_types %}
+capabilities:
+{% if ctx.site_media_types %}
+  site:
+    mediaTypes:
+{% for mt in ctx.site_media_types %}
+      - {{ mt }}
+{% endfor %}
+{% endif %}
+{% if ctx.app_media_types %}
+  app:
+    mediaTypes:
+{% for mt in ctx.app_media_types %}
+      - {{ mt }}
+{% endfor %}
+{% endif %}
+{% if ctx.dooh_media_types %}
+  dooh:
+    mediaTypes:
+{% for mt in ctx.dooh_media_types %}
+      - {{ mt }}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% if ctx.user_sync %}
+userSync:
+{% for k, v in ctx.user_sync | dictsort %}
+  {{ k }}: {{ v | tojson }}
+{% endfor %}
+{% endif %}

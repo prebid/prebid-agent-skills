@@ -1,0 +1,73 @@
+{# Go exemplary fixture template — emits one
+adapters/{bidder}/{bidder}test/exemplary/{descriptive-name}.json file
+per source-side scenario.
+
+Go's flat fixture shape collapses Java's IT 4-file split (auction-
+request, auction-response, bid-request, bid-response) into a single
+JSON file with `httpCalls[]` and `expectedBidResponses[]` arrays.
+
+The Go fixture format is:
+
+  {
+    "expectedRequest": <publisher-side BidRequest BidRequest>,
+    "httpCalls": [
+      {
+        "expectedRequest": { uri, body },
+        "mockResponse": { status, body }
+      }
+    ],
+    "expectedBidResponses": [{ currency, bids: [{ bid, type }] }]
+  }
+
+Inputs:
+  ctx.expected_request   : dict  — the BidRequest the harness feeds to MakeRequests
+  ctx.http_calls         : list[dict]  — per outgoing HTTP call; each:
+      uri      : str  — the bidder endpoint URL the adapter resolved
+      body     : dict  — the JSON body the adapter sent (typically a BidRequest)
+      status   : int  — mock response status (200, 204, 400, ...)
+      response : dict|null  — mock response body (BidResponse or null for 204)
+  ctx.expected_bids      : list[dict]  — per BidderBid result; each:
+      bid      : dict  — the openrtb response.Bid
+      type     : str   — "banner" | "video" | "audio" | "native"
+  ctx.expected_currency  : str  — typically "USD"
+
+For supplemental (error-path) fixtures, the same template applies but
+expected_bids is typically empty and httpCalls returns a non-200 status
+or malformed body. The SKILL Step 5 emits those into
+adapters/{bidder}/{bidder}test/supplemental/.
+#}
+{
+  "expectedRequest": {{ ctx.expected_request | tojson }},
+  "httpCalls": [
+{% for call in ctx.http_calls %}
+    {
+      "expectedRequest": {
+        "uri": {{ call.uri | tojson }},
+        "body": {{ call.body | tojson }}
+      },
+      "mockResponse": {
+        "status": {{ call.status }}{% if call.response %},
+        "body": {{ call.response | tojson }}{% endif %}
+
+      }
+    }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ],
+  "expectedBidResponses": [
+{% if ctx.expected_bids %}
+    {
+      "currency": {{ ctx.expected_currency | tojson }},
+      "bids": [
+{% for eb in ctx.expected_bids %}
+        {
+          "bid": {{ eb.bid | tojson }},
+          "type": {{ eb.type | tojson }}
+        }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+      ]
+    }
+{% endif %}
+  ]
+}

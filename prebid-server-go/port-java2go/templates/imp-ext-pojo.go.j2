@@ -1,0 +1,53 @@
+{# Go cross-package POJO struct template — emits openrtb_ext/imp_{bidder}.go
+
+The struct lives in the shared `openrtb_ext` package (NOT under
+`adapters/{bidder}/`), per upstream convention. Every adapter that
+parses imp.ext.bidder.{bidder} fields needs a corresponding ExtImp{X}
+struct here.
+
+Inputs:
+  ctx.bidder_class_root  : str  — PascalCase struct root (e.g., "Kobler", "AdkernelAdn")
+  ctx.fields             : list[dict]  — per-field; each:
+      go_name        : str  — Go field name (PascalCase, exported)
+      json_tag       : str  — JSON wire-format property name
+      go_type        : str  — Go type ("string", "int", "*int", "bool", "[]string", "json.RawMessage", etc.)
+      omitempty      : bool — emit `,omitempty` in the json tag
+      notes          : str|null — single-line // comment above the field
+  ctx.javadoc_summary    : str|null — class-level Go doc comment (// summary above struct)
+
+Type translation hints (Java → Go):
+- Java String → Go string
+- Java Boolean → Go bool (rarely *bool when nullable)
+- Java Integer → Go int (or *int for nullable)
+- Java Long → Go int64
+- Java Double / BigDecimal → Go float64
+- Java List<String> → Go []string
+- Java Map<String, X> → Go map[string]X
+- Java JsonNode → Go json.RawMessage
+- Java nested class → Go nested struct (separate file recommended)
+
+Caller is responsible for resolving Java types to Go types per the
+inverse porting guide. The template just emits the resulting Go struct.
+
+ImportOrder is gofmt-enforced — the post-emit `gofmt -s -w` step
+canonicalizes whatever this template emits.
+#}
+package openrtb_ext
+
+{% if ctx.fields | selectattr('go_type', 'equalto', 'json.RawMessage') | list %}
+import (
+	"encoding/json"
+)
+
+{% endif %}
+{% if ctx.javadoc_summary %}
+// {{ ctx.javadoc_summary }}
+{% endif %}
+type ExtImp{{ ctx.bidder_class_root }} struct {
+{% for field in ctx.fields %}
+{% if field.notes %}
+	// {{ field.notes }}
+{% endif %}
+	{{ field.go_name }} {{ field.go_type }} `json:"{{ field.json_tag }}{% if field.omitempty %},omitempty{% endif %}"`
+{% endfor %}
+}

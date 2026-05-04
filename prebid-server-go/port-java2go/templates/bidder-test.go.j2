@@ -1,0 +1,40 @@
+{# Go bidder test wrapper — emits adapters/{bidder}/{bidder}_test.go
+
+Upstream Go convention: per-bidder unit tests are JSON-fixture-driven
+via `adapters.RunJSONBidderTest("{bidder}test/exemplary")`. The test
+function loads every fixture in the directory; each fixture encodes
+the expected request sequence + mock responses + expected bid result.
+
+This is far simpler than Java's per-method @Test class — the actual
+test scenarios live in the JSON fixtures (rendered separately by
+exemplary-fixture.json.j2 and supplemental fixtures).
+
+Inputs:
+  ctx.package_name       : str  — Go package name (matches the bidder dir)
+  ctx.bidder_constant    : str  — full constant ref (e.g., "openrtb_ext.BidderKobler")
+  ctx.bidder_class_root  : str  — PascalCase root (used in test function names)
+
+The Builder signature is canonical (3-arg: name, config, server). Test
+just exercises Builder + the fixture-driven RunJSONBidderTest loop.
+#}
+package {{ ctx.package_name }}
+
+import (
+	"testing"
+
+	"github.com/prebid/prebid-server/v3/adapters/adapterstest"
+	"github.com/prebid/prebid-server/v3/config"
+	"github.com/prebid/prebid-server/v3/openrtb_ext"
+)
+
+func Test{{ ctx.bidder_class_root }}(t *testing.T) {
+	bidder, buildErr := Builder({{ ctx.bidder_constant }}, config.Adapter{
+		Endpoint: "https://test.example.com/bid",
+	}, config.Server{ExternalUrl: "http://hosturl.com", GvlID: 1, DataCenter: "2"})
+
+	if buildErr != nil {
+		t.Fatalf("Builder returned unexpected error %v", buildErr)
+	}
+
+	adapterstest.RunJSONBidderTest(t, "{{ ctx.package_name }}test", bidder)
+}

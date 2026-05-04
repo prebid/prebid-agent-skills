@@ -1,12 +1,12 @@
 ---
 name: port-java2go
 description: Translates a Java-source Adapter Spec (prebid-server-java/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/java/{bidder}.yaml) into Go artifacts under prebid-server-go/adapters/{bidder}/ plus paired YAML, bidder-params, exemplary fixtures, and registry entries. USE WHEN porting a new (or existing) Java bid adapter to the Go codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
-version: 0.2.0
+version: 0.3.0
 ---
 
 # port-java2go (Java → Go)
 
-> **Status: D3.1 in progress.** Pipeline prose authored (this commit, mirror of port-go2java D2.1). Remaining D3 work: author `templates/*.j2` (8 Go-side templates: `bidder.go.j2`, `bidder-test.go.j2`, `params-test.go.j2`, `imp-ext-pojo.go.j2`, `bidder-info.yaml.j2`, `exemplary-fixture.json.j2`, plus 2 minor scaffolds), validate end-to-end against the same 6 MVP pairs as D2 reversed (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) with operator-side `gofmt -s -l` + `go vet` + `go test` + `./scripts/check_coverage.sh ≥ 80%`, and bump frontmatter to 1.0.0 once each MVP pair clears all 8 acceptance gates per `docs/execution-plan-phase-d.md` §D3.3.
+> **Status: D3 templates complete.** Pipeline prose authored (D3.1); all 6 Go-side templates shipped (D3.2): `bidder-info.yaml.j2`, `imp-ext-pojo.go.j2`, `bidder-test.go.j2`, `params-test.go.j2`, `exemplary-fixture.json.j2`, `bidder.go.j2`. Remaining D3 work: end-to-end operator validation against the 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) using a local `prebid-server` clone — `go build ./adapters/{bidder}/...`, `gofmt -s -l`, `go vet`, `go test`, `./scripts/check_coverage.sh ≥ 80%`, `TestBidderUniquenessGatekeeping`. Frontmatter bumps to 1.0.0 once each MVP pair clears all 8 gates per `docs/execution-plan-phase-d.md` §D3.3.
 >
 > **D3 ships production-grade**, not exploratory. The empirical Go→Java dominance in merged PRs (12+ vs 0 in 18 months) reflects current tooling limits, not user need or maintainer disinterest. Phase D removes that asymmetry as a first-class deliverable.
 

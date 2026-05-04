@@ -1,0 +1,63 @@
+{# Go bidder-params schema validation tests — emits adapters/{bidder}/params_test.go
+
+Validates static/bidder-params/{bidder}.json against the openrtb_ext
+schema validator. Tests both valid + invalid inputs to ensure the
+JSON Schema correctly accepts/rejects expected shapes.
+
+Inputs:
+  ctx.package_name       : str  — Go package name
+  ctx.bidder_constant    : str  — full constant ref (e.g., "openrtb_ext.BidderKobler")
+  ctx.valid_cases        : list[str]  — JSON-string ext.bidder values that MUST validate
+  ctx.invalid_cases      : list[str]  — JSON-string ext.bidder values that MUST be rejected
+
+The valid/invalid case lists are populated by the SKILL Step 3 from
+the source spec's params.params_test.{valid_cases_count, invalid_cases_count}
+plus per-field constraints. For specs that don't enumerate test cases,
+the operator hand-fills.
+#}
+package {{ ctx.package_name }}
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/prebid/prebid-server/v3/openrtb_ext"
+)
+
+func TestValidParams(t *testing.T) {
+	validator, err := openrtb_ext.NewBidderParamsValidator("../../static/bidder-params")
+	if err != nil {
+		t.Fatalf("Failed to fetch the json-schemas. %v", err)
+	}
+
+	for _, validParam := range validParams {
+		if err := validator.Validate({{ ctx.bidder_constant }}, json.RawMessage(validParam)); err != nil {
+			t.Errorf("Schema rejected valid params: %s", validParam)
+		}
+	}
+}
+
+func TestInvalidParams(t *testing.T) {
+	validator, err := openrtb_ext.NewBidderParamsValidator("../../static/bidder-params")
+	if err != nil {
+		t.Fatalf("Failed to fetch the json-schemas. %v", err)
+	}
+
+	for _, invalidParam := range invalidParams {
+		if err := validator.Validate({{ ctx.bidder_constant }}, json.RawMessage(invalidParam)); err == nil {
+			t.Errorf("Schema allowed invalid params: %s", invalidParam)
+		}
+	}
+}
+
+var validParams = []string{
+{% for case in ctx.valid_cases %}
+	`{{ case }}`,
+{% endfor %}
+}
+
+var invalidParams = []string{
+{% for case in ctx.invalid_cases %}
+	`{{ case }}`,
+{% endfor %}
+}
