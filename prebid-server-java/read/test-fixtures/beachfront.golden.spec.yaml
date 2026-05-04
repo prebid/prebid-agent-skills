@@ -171,10 +171,10 @@ code:
         role: implementation
         loc: 575
       - name: BeachfrontFloorResolver.java
-        role: helper
+        role: utils
         loc: 143
       - name: model/
-        role: helper
+        role: models
         loc: 0
   imports:
     has_template_engine: false
