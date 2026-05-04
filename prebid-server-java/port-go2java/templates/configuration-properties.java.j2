@@ -1,0 +1,72 @@
+{# Java typed-config subclass template — emits
+src/main/java/org/prebid/server/spring/config/bidder/{Bidder}BidderConfigurationProperties.java
+
+Only emitted when Rule 35 (config-properties subclass scaffolding) fired —
+i.e., the source spec carries cross_language.go_specific_concerns[]:
+hardcoded-config-as-anti-pattern, OR the source's adapter struct has fields
+beyond `endpoint` (Kobler's `devEndpoint` is the canonical example).
+
+Inputs:
+  ctx.bidder_class_root  : str  — PascalCase (e.g., "Adverxo", "Kobler")
+  ctx.typed_fields       : list[dict]  — per-field; each:
+      java_name      : str  — Java field name (camelCase)
+      java_type      : str  — fully-resolved Java type (String, Integer, List<String>, etc.)
+      validation_annotations : list[str]|null  — e.g., ["@NotBlank", "@Min(0)"]
+      notes          : str|null  — single-line // comment above the field
+      default_value  : str|null  — RHS expression for the field initializer; null → no init
+  ctx.javadoc_summary    : str|null  — class-level Javadoc summary
+
+Lombok set: @Data + @NoArgsConstructor + @EqualsAndHashCode(callSuper = true).
+@EqualsAndHashCode is mandatory because this class extends
+BidderConfigurationProperties (which has its own equals/hashCode); without
+callSuper=true Lombok emits a checkstyle warning and Jacoco branch-coverage
+deficit.
+
+Imports:
+- jakarta.validation.constraints.* (only what's referenced via validation_annotations)
+- lombok.{Data, EqualsAndHashCode, NoArgsConstructor}
+- org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties (the parent)
+
+Caller is responsible for collecting the union of validation-annotation
+imports across all typed_fields; this template assumes ctx.imports_extra
+is the alphabetically-sorted list to emit.
+#}
+package org.prebid.server.spring.config.bidder;
+
+{% for imp in ctx.imports_extra %}
+import {{ imp }};
+{% endfor %}
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;
+
+{% if ctx.javadoc_summary %}
+/**
+ * {{ ctx.javadoc_summary }}
+ */
+{% endif %}
+@Data
+@NoArgsConstructor
+@EqualsAndHashCode(callSuper = true)
+public class {{ ctx.bidder_class_root }}BidderConfigurationProperties extends BidderConfigurationProperties {
+
+{% for field in ctx.typed_fields %}
+{% if field.notes %}
+    // {{ field.notes }}
+{% endif %}
+{% if field.validation_annotations %}
+{% for ann in field.validation_annotations %}
+    {{ ann }}
+{% endfor %}
+{% endif %}
+{% if field.default_value %}
+    private {{ field.java_type }} {{ field.java_name }} = {{ field.default_value }};
+{% else %}
+    private {{ field.java_type }} {{ field.java_name }};
+{% endif %}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+}

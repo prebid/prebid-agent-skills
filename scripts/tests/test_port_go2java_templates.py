@@ -318,17 +318,92 @@ class TestConfigurationJ2(unittest.TestCase):
         self.assertIn("import org.springframework.validation.annotation.Validated;", typed)
 
 
+def _adverxo_typed_config_ctx() -> Dict[str, Any]:
+    """Synthetic adverxo-equivalent context for configuration-properties.java.j2.
+    Adverxo (Rule 35 master sample) has a typed config subclass with
+    bidder-specific fields beyond the standard endpoint/enabled/usersync set.
+    """
+    return {
+        "bidder_class_root": "Adverxo",
+        "typed_fields": [
+            {
+                "java_name": "auctionEndpoint",
+                "java_type": "String",
+                "validation_annotations": ["@NotBlank"],
+                "notes": "Endpoint for the auction call; differs from the registration endpoint.",
+                "default_value": None,
+            },
+            {
+                "java_name": "registrationEndpoint",
+                "java_type": "String",
+                "validation_annotations": ["@NotBlank"],
+                "notes": None,
+                "default_value": None,
+            },
+        ],
+        "imports_extra": ["jakarta.validation.constraints.NotBlank"],
+        "javadoc_summary": "Typed configuration properties for the Adverxo bidder.",
+    }
+
+
+class TestConfigurationPropertiesJ2(unittest.TestCase):
+    """Tests for templates/configuration-properties.java.j2."""
+
+    def test_renders_adverxo_typed_subclass(self):
+        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
+        self.assertIn("public class AdverxoBidderConfigurationProperties extends BidderConfigurationProperties", rendered)
+        self.assertIn("@Data", rendered)
+        self.assertIn("@NoArgsConstructor", rendered)
+        self.assertIn("@EqualsAndHashCode(callSuper = true)", rendered)
+
+    def test_validation_annotations_emitted(self):
+        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
+        # Both fields carry @NotBlank.
+        self.assertEqual(rendered.count("@NotBlank"), 2)
+        self.assertIn("private String auctionEndpoint;", rendered)
+        self.assertIn("private String registrationEndpoint;", rendered)
+
+    def test_field_notes_emit_as_comment(self):
+        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
+        self.assertIn("// Endpoint for the auction call", rendered)
+
+    def test_default_value_emits_initializer(self):
+        ctx = _adverxo_typed_config_ctx()
+        ctx["typed_fields"][0]["default_value"] = '"https://default.example.com/auction"'
+        rendered = _render("configuration-properties.java.j2", ctx)
+        self.assertIn(
+            'private String auctionEndpoint = "https://default.example.com/auction";',
+            rendered,
+        )
+
+    def test_no_validation_annotations_when_absent(self):
+        ctx = _adverxo_typed_config_ctx()
+        ctx["typed_fields"][0]["validation_annotations"] = None
+        ctx["typed_fields"][1]["validation_annotations"] = None
+        ctx["imports_extra"] = []
+        rendered = _render("configuration-properties.java.j2", ctx)
+        self.assertNotIn("@NotBlank", rendered)
+        self.assertNotIn("import jakarta.validation.constraints.NotBlank;", rendered)
+
+    def test_extends_bidderconfigurationproperties_imported(self):
+        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
+        self.assertIn(
+            "import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;",
+            rendered,
+        )
+
+
 class TestRequiredArtifacts(unittest.TestCase):
     """Sanity: every Java template referenced by SKILL.md Step 5 either exists
     or is flagged in the templates STUB.md as a future deliverable."""
 
     EXPECTED_TEMPLATES = (
-        "bidder-config.yaml.j2",            # D2.1 commit
-        "ext-imp-pojo.java.j2",             # D2.2 commit
-        "configuration.java.j2",            # D2.2 commit
+        "bidder-config.yaml.j2",                 # D2.1 commit
+        "ext-imp-pojo.java.j2",                  # D2.2 commit
+        "configuration.java.j2",                 # D2.2 commit
+        "configuration-properties.java.j2",      # D2.3 commit
         # Future D2 commits author:
         # "bidder.java.j2",
-        # "configuration-properties.java.j2",
         # "bidder-test.java.j2",
         # "it-test.java.j2",
         # "it-fixture-auction-request.json.j2",
