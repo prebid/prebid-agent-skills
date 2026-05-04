@@ -1,16 +1,18 @@
-"""Wave 6 + Wave 9b CI gate: doc-level count claims must match canonical sources.
+"""Wave 6 + Wave 9b + Wave 11b CI gate: doc-level count claims must match
+canonical sources.
 
 The gate catches stale numeric claims like "12 enumerated behavioral fields"
 (canonical was 15; surfaced in Wave 2 of the PR #1 hardening pass) BEFORE
 they reach main.
 
 Wave 9b generalized the gate from a 5-entry hardcoded `CLAIMS` tuple to a
-discovery-based design over the 4 currently-tracked claim phrases:
+discovery-based design. Wave 11b B5 #5 adds Java empire parents to the
+tracked phrase set:
 
-1. `CANONICAL_SOURCES` maps the 4 tracked phrases (port-translation rules,
-   enumerated behavioral fields, registered taxa, dual-spec files/pairs) to
-   source-of-truth functions.
-2. `DISCOVERY_REGEX` is a multi-alternation pattern matching those 4 phrases.
+1. `CANONICAL_SOURCES` maps tracked phrases (port-translation rules,
+   enumerated behavioral fields, registered taxa, dual-spec files/pairs,
+   Java empire parents) to source-of-truth functions.
+2. `DISCOVERY_REGEX` is a multi-alternation pattern matching those phrases.
 3. The gate walks every `*.md` under `INCLUDED_DIRS` (excluding
    `EXCLUDED_PATHS`), runs the regex, and asserts each numeric capture
    matches the canonical source for that phrase.
@@ -19,21 +21,24 @@ To add a new tracked claim phrase: add it to `DISCOVERY_REGEX` AND
 `CANONICAL_SOURCES` (with a backing counter function). New claim SITES are
 auto-discovered — no manifest update needed.
 
-## Known untracked phrases (Wave 11b plan B5 finding-5 will add)
+## Phrases NOT tracked (Wave 11b deliberately deferred)
 
-The discovery regex does NOT track:
-- "N goldens" (canonical: `canonical_goldens_count` — already exists in
-  this file but not wired to the regex)
-- "N reference PRs" (canonical: count from
-  `prebid-server-{go,java}/references/new-bid-adapter-prs.md`; the Java
-  reference doesn't separately track tagged-vs-total — needs disambiguation)
-- "N empire parents" (canonical: `INVENTORY_TOTALS["java_empire_parents"]`
-  in `coverage-report.py`, currently a hardcoded 32)
-- "N fixtures" (canonical: `canonical_goldens_count`, equivalent)
-
-Wave 11b will extend the regex with these alternations and wire each to a
-canonical-source function. Until then, drift on these phrases (e.g., README
-saying "20 reference PRs" when canonical is 92) ships silently.
+- "N reference PRs" — the corpus uses this phrase ambiguously: "92 reference
+  PRs" means Go-side totals; "49 reference PRs" means Java-side totals; "44
+  currently tagged" / "39 currently tagged" are subset-only counts on each
+  side. Tracking via single canonical needs disambiguation (Go vs Java vs
+  total vs tagged-subset). Deferred to a future wave that picks a
+  disambiguation policy.
+- "N fixtures" — the test-fixtures/README cites phase-specific fixture
+  counts ("21 fixtures" for Phase A, "12 fixtures" for Phase 5 batch 1, "9
+  fixtures" for batch 2). These are HISTORICAL state counts that do not
+  match any single canonical. Adding "N fixtures" generically would force
+  test-fixtures/README to either be excluded or rewritten. Deferred.
+- "N goldens" — used as both "10 goldens" (per-language subset count in
+  per-language READMEs) and "40 goldens" (cross-language total). Plus
+  SemVer strings ("1.0.0 goldens") create false positives. Tracking
+  would require unambiguous phrasing in the corpus or a more elaborate
+  regex with negative lookbehind for SemVer fragments. Deferred.
 
 Files NOT gated (intentional):
 - `CHANGELOG.md` — version-history snapshots; counts there are frozen.
@@ -110,6 +115,21 @@ def canonical_quirk_taxa_count() -> int:
     return len(data.get("quirks_taxa") or [])
 
 
+def canonical_java_empire_parents_count() -> int:
+    """Wave 11b B5 #5: Java alias-empire parent count from coverage-report.py's
+    INVENTORY_TOTALS dict. The canonical 32 is a Round-3 reconnaissance
+    snapshot per ADR-003; this function reads coverage-report.py's
+    constant so any future re-count cascades to all docs that cite it."""
+    import importlib.util
+    cr_path = REPO_ROOT / "scripts" / "coverage-report.py"
+    spec = importlib.util.spec_from_file_location("_cr_for_count", cr_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load {cr_path}")
+    cr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cr)
+    return int(cr.INVENTORY_TOTALS["java_empire_parents"])
+
+
 # === Discovery regex + canonical-source mapping ===
 
 # A single multi-alternation regex catching every tracked claim phrase.
@@ -127,18 +147,32 @@ DISCOVERY_REGEX = re.compile(
     r"|enumerated\s+behavioral\s+fields"
     r"|registered\s+taxa"
     r"|dual-spec\s+(?:assertion\s+)?(?:files|pairs)"
+    # Wave 11b B5 #5: Java empire parents (alias-empire reconnaissance).
+    r"|(?:java\s+)?(?:alias-)?empire\s+parents"
     r")\b",
     re.IGNORECASE,
 )
+# "N goldens" was considered but excluded — the corpus uses the phrase
+# ambiguously: "10 goldens" appears in per-language READMEs as a subset
+# count (Go-side or Java-side only), not the 40-spec total. Plus SemVer
+# strings ("1.0.0 goldens") create false positives. Tracking would need
+# either a corpus rewrite to unambiguous phrasing or a more elaborate
+# regex with negative lookbehind. Deferred.
 
 
 def _normalize_phrase(s: str) -> str:
-    """Collapse whitespace and lowercase, plus strip the optional 'cross-language' prefix."""
+    """Collapse whitespace and lowercase; strip optional prefixes that don't
+    affect the canonical lookup ('cross-language' on rules, 'java' / 'alias-'
+    on empire parents)."""
     out = " ".join(s.lower().split())
     if out.startswith("cross-language "):
         out = out[len("cross-language "):]
     if out.startswith("dual-spec assertion "):
         out = "dual-spec " + out[len("dual-spec assertion "):]
+    if out.startswith("java "):
+        out = out[len("java "):]
+    if out.startswith("alias-"):
+        out = out[len("alias-"):]
     return out
 
 
@@ -148,6 +182,8 @@ CANONICAL_SOURCES: dict[str, Callable[[], int]] = {
     "registered taxa": canonical_quirk_taxa_count,
     "dual-spec files": canonical_dual_specs_count,
     "dual-spec pairs": canonical_dual_specs_count,
+    # Wave 11b B5 #5 addition
+    "empire parents": canonical_java_empire_parents_count,
 }
 
 
@@ -243,7 +279,11 @@ class TestDocCountClaims(unittest.TestCase):
             "1 dual-spec files. "
             "1 dual-spec pairs. "
             "1 dual-spec assertion files. "
-            "1 dual-spec assertion pairs."
+            "1 dual-spec assertion pairs. "
+            "1 empire parents. "
+            "1 Java empire parents. "
+            "1 alias-empire parents. "
+            "1 Java alias-empire parents."
         )
         for m in DISCOVERY_REGEX.finditer(sample):
             phrase = _normalize_phrase(m.group(2))
