@@ -724,3 +724,104 @@ def gofmt_post_process(
     except FileNotFoundError:
         return False, "gofmt not found on PATH"
     return result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Helper 10 — mvn_checkstyle_dry_run (Phase D4.3)
+# ---------------------------------------------------------------------------
+
+
+def mvn_checkstyle_dry_run(
+    target_clone: Union[str, Path],
+    *,
+    pom_file: str = "extra/pom.xml",
+    runner: Optional[Callable[[List[str], Path], Tuple[int, str, str]]] = None,
+) -> Tuple[bool, List[Dict[str, Any]]]:
+    """Phase D4.3: invoke ``mvn -B checkstyle:check`` against the emitted Java
+    tree to surface style violations BEFORE the operator opens the PR.
+
+    The Java port-go2java SKILL Step 5 calls this helper when
+    ``--target-clone=<path>`` is provided AND ``mvn`` is on PATH. Violations
+    surface as ``human_todos[]`` entries with category ``style-violation``
+    in the port-report (per port-report.schema.json::human_todos.category
+    enum admitted in v0.2.0).
+
+    Parameters:
+      - ``target_clone``: path to the local prebid-server-java clone.
+      - ``pom_file``: relative path to the pom file from the clone root.
+        Defaults to ``extra/pom.xml`` per upstream's checkstyle profile.
+      - ``runner``: dependency-injection hook that receives ``(argv, cwd)``
+        and returns ``(returncode, stdout, stderr)``. When omitted, the
+        helper invokes ``subprocess.run`` with ``cwd=target_clone``.
+
+    Returns ``(ok, violations)`` where ``ok`` is ``True`` iff ``mvn``
+    exited 0 (no checkstyle violations); ``violations`` is a list of
+    ``{file, line, severity, message}`` dicts parsed from ``mvn`` stdout.
+    On runtime failure (mvn missing, target_clone path absent), returns
+    ``(False, [{"severity": "infrastructure", "message": ...}])``.
+
+    Skip semantics: when the SKILL invokes this with no target_clone,
+    the SKILL emits ``human_todos[]: { category: style-violation,
+    summary: "checkstyle dry-run skipped — no --target-clone provided" }``
+    and proceeds.
+    """
+    target = Path(target_clone)
+    if not target.is_dir():
+        return False, [{
+            "severity": "infrastructure",
+            "message": f"target_clone path is not a directory: {target}",
+            "file": None,
+            "line": None,
+        }]
+    argv = ["mvn", "-B", "checkstyle:check", "--file", pom_file]
+    if runner is not None:
+        rc, stdout, stderr = runner(argv, target)
+    else:
+        try:
+            result = subprocess.run(
+                argv,
+                cwd=str(target),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return False, [{
+                "severity": "infrastructure",
+                "message": "mvn not found on PATH",
+                "file": None,
+                "line": None,
+            }]
+        rc, stdout, stderr = result.returncode, result.stdout, result.stderr
+    violations = _parse_checkstyle_violations(stdout, stderr)
+    return rc == 0, violations
+
+
+_CHECKSTYLE_LINE_RE = re.compile(
+    # Mvn -B checkstyle output format:
+    #   [ERROR] /path/to/File.java:LINE:COL: message [RuleName]
+    # or [WARN] equivalents. Severity comes from the bracketed prefix.
+    r"^\[(?P<sev>(?:ERROR|WARN(?:ING)?))\]\s+(?P<file>[^\s:]+):(?P<line>\d+)(?::(?P<col>\d+))?:\s+(?P<msg>.+?)(?:\s+\[(?P<rule>[^\]]+)\])?\s*$",
+    re.MULTILINE,
+)
+
+
+def _parse_checkstyle_violations(stdout: str, stderr: str) -> List[Dict[str, Any]]:
+    """Parse ``mvn -B checkstyle:check`` output into structured violations."""
+    text = "\n".join(filter(None, (stdout, stderr)))
+    out: List[Dict[str, Any]] = []
+    for m in _CHECKSTYLE_LINE_RE.finditer(text):
+        sev = m.group("sev").lower()
+        # Only file:line:col-shaped lines that mention a Java file are real
+        # checkstyle violations; skip the surrounding mvn build banner.
+        if not m.group("file").endswith(".java"):
+            continue
+        out.append({
+            "severity": sev,
+            "file": m.group("file"),
+            "line": int(m.group("line")),
+            "column": int(m.group("col")) if m.group("col") else None,
+            "message": m.group("msg").strip(),
+            "rule": m.group("rule"),
+        })
+    return out

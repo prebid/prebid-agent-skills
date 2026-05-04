@@ -222,7 +222,7 @@ Templates emit checkstyle-compliant code by construction (ImportOrder strict 3-g
 
 If `--target-clone` is not provided, the SKILL skips the rebase step and emits `pre_submit_rebase: null` in the port-report. The operator MUST run the rebase manually before submitting.
 
-**Optional pre-submit checkstyle dry-run (D4.3 deliverable; placeholder here).** When `mvn` is on PATH and `--target-clone` is provided, the SKILL invokes `mvn -B checkstyle:check --file extra/pom.xml` against the emitted tree. Violations surface as `human_todos[]` with `category: style-violation`. When `mvn` is unavailable, the SKILL emits a single `human_todos[]: { category: style-violation, summary: "checkstyle dry-run skipped — mvn not on PATH" }`.
+**Pre-submit checkstyle dry-run (D4.3).** When `--target-clone=<path>` is provided AND `mvn` is on PATH, the SKILL invokes `port_engine.mvn_checkstyle_dry_run(target_clone)` (which shells out to `mvn -B checkstyle:check --file extra/pom.xml` from the clone directory). Each parsed violation surfaces as a `human_todos[]` entry with `category: style-violation`, populated `evidence_path: {file}:{line}`, and `summary: {message} [{rule}]`. When `mvn` is unavailable OR `--target-clone` is omitted, the SKILL emits one `human_todos[]: { category: style-violation, summary: "checkstyle dry-run skipped — {reason}" }` and proceeds. The helper is hermetic (dependency-injected runner for tests); see `scripts/tests/test_port_engine.py::TestMvnCheckstyleDryRun` for exercised cases.
 
 ### Step 6 — R5-strict check at port time
 

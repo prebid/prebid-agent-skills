@@ -651,6 +651,92 @@ class TestGofmtPostProcess(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class TestMvnCheckstyleDryRun(unittest.TestCase):
+    """Phase D4.3: mvn_checkstyle_dry_run helper exercises checkstyle:check
+    against the operator's local prebid-server-java clone before the port PR
+    is submitted. Tests use the runner DI hook so they're hermetic."""
+
+    def test_target_clone_missing_returns_infrastructure_error(self):
+        from scripts.lib.port_engine import mvn_checkstyle_dry_run
+        ok, violations = mvn_checkstyle_dry_run("/nonexistent/path/here")
+        self.assertFalse(ok)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0]["severity"], "infrastructure")
+        self.assertIn("not a directory", violations[0]["message"])
+
+    def test_clean_run_returns_ok_no_violations(self):
+        from scripts.lib.port_engine import mvn_checkstyle_dry_run
+        with TemporaryDirectory() as td:
+            captured = []
+
+            def fake_runner(argv, cwd):
+                captured.append((argv, str(cwd)))
+                return 0, "[INFO] BUILD SUCCESS\n", ""
+
+            ok, violations = mvn_checkstyle_dry_run(td, runner=fake_runner)
+            self.assertTrue(ok)
+            self.assertEqual(violations, [])
+            argv, cwd = captured[0]
+            self.assertEqual(argv[:3], ["mvn", "-B", "checkstyle:check"])
+            self.assertEqual(cwd, td)
+
+    def test_violations_parsed_from_stdout(self):
+        from scripts.lib.port_engine import mvn_checkstyle_dry_run
+        sample_stdout = (
+            "[INFO] Some banner line\n"
+            "[ERROR] /clone/src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java:42:5: "
+            "Method length is 200 lines (max allowed is 150). [MethodLength]\n"
+            "[WARN] /clone/src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java:88:1: "
+            "Line is 130 chars (max 120). [LineLength]\n"
+            "[INFO] BUILD FAILURE\n"
+        )
+        with TemporaryDirectory() as td:
+            ok, violations = mvn_checkstyle_dry_run(
+                td,
+                runner=lambda _argv, _cwd: (1, sample_stdout, ""),
+            )
+            self.assertFalse(ok)
+            self.assertEqual(len(violations), 2)
+            self.assertEqual(violations[0]["severity"], "error")
+            self.assertEqual(violations[0]["line"], 42)
+            self.assertEqual(violations[0]["column"], 5)
+            self.assertEqual(violations[0]["rule"], "MethodLength")
+            self.assertIn("KoblerBidder.java", violations[0]["file"])
+            self.assertEqual(violations[1]["severity"], "warn")
+            self.assertEqual(violations[1]["line"], 88)
+            self.assertEqual(violations[1]["rule"], "LineLength")
+
+    def test_non_java_file_lines_ignored(self):
+        """Build banner lines like '[ERROR] /path/to/something:42:5: ...'
+        that don't reference a .java file are NOT parsed as violations."""
+        from scripts.lib.port_engine import mvn_checkstyle_dry_run
+        sample_stdout = (
+            "[ERROR] /clone/extra/pom.xml:1:1: Some build error\n"
+            "[ERROR] /clone/Foo.java:10:1: Real violation [SomeRule]\n"
+        )
+        with TemporaryDirectory() as td:
+            ok, violations = mvn_checkstyle_dry_run(
+                td,
+                runner=lambda _argv, _cwd: (1, sample_stdout, ""),
+            )
+            self.assertFalse(ok)
+            self.assertEqual(len(violations), 1)
+            self.assertIn("Foo.java", violations[0]["file"])
+
+    def test_pom_file_argument_passed_to_mvn(self):
+        from scripts.lib.port_engine import mvn_checkstyle_dry_run
+        with TemporaryDirectory() as td:
+            captured: List[List[str]] = []
+            mvn_checkstyle_dry_run(
+                td,
+                pom_file="custom/pom.xml",
+                runner=lambda argv, _cwd: (captured.append(argv), (0, "", ""))[1],
+            )
+            self.assertIn("--file", captured[0])
+            idx = captured[0].index("--file")
+            self.assertEqual(captured[0][idx + 1], "custom/pom.xml")
+
+
 class TestDefaultAllowList(unittest.TestCase):
     def test_known_rebrand_present(self):
         self.assertEqual(DEFAULT_NAME_ALLOW_LIST.get("cadent_aperture_mx"), "emxdigital")
