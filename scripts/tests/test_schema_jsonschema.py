@@ -65,6 +65,76 @@ def _load_golden(rel_path: str) -> Any:
         return _normalize(yaml.safe_load(fp))
 
 
+def _build_declared_at(schema: dict) -> tuple[dict[str, set[str]], set[str]]:
+    """Wave 11b B5 #1: Path-aware schema vocabulary builder.
+
+    Walks the schema and returns:
+
+    - `declared_at[prefix]` = set of property names declared at that exact
+      JSONPath prefix. UNION across $ref expansion (cycle-guarded), and
+      across composition keywords (oneOf/anyOf/allOf/if/then/else branches
+      contribute at the SAME prefix).
+
+    - `open_map_prefixes` = paths whose `additionalProperties` is `true`
+      (or omitted per Draft 2020-12 default) on a `type: object` node.
+      patternProperties also marks the prefix as open (any key admitted
+      via the regex constraint).
+
+    Array indices are NOT part of dotted paths — items at `prefix.field[]`
+    contribute their property names to `declared_at[prefix.field]`.
+
+    Used by test_no_truly_invented_keys_outside_open_maps to do path-aware
+    phantom-key detection (replacing the prior global leaf-key escape
+    that admitted property names regardless of path).
+    """
+    declared_at: dict[str, set[str]] = {}
+    open_maps: set[str] = set()
+
+    def walk(node, prefix: str, visiting: frozenset):
+        if isinstance(node, dict) and "$ref" in node:
+            ref = node["$ref"]
+            if ref.startswith("#/$defs/"):
+                ref_name = ref[len("#/$defs/"):]
+                if ref_name in visiting:
+                    return  # cycle guard for recursive $defs
+                resolved = schema.get("$defs", {}).get(ref_name, {})
+                walk(resolved, prefix, visiting | {ref_name})
+            return
+        if not isinstance(node, dict):
+            return
+        types = node.get("type")
+        if isinstance(types, str):
+            types = [types]
+        is_object = isinstance(types, list) and "object" in types
+        # Draft 2020-12: omitted additionalProperties defaults to True.
+        addl = node.get("additionalProperties", True)
+        is_open = addl is True or (isinstance(addl, dict) and addl)
+        if (is_open or "patternProperties" in node) and is_object and prefix:
+            open_maps.add(prefix)
+        props = node.get("properties")
+        if isinstance(props, dict):
+            slot = declared_at.setdefault(prefix, set())
+            for k, v in props.items():
+                slot.add(k)
+                child = f"{prefix}.{k}" if prefix else k
+                walk(v, child, visiting)
+        items = node.get("items")
+        if isinstance(items, dict):
+            walk(items, prefix, visiting)  # array items inherit parent prefix
+        elif isinstance(items, list):
+            for it in items:
+                walk(it, prefix, visiting)
+        for kw in ("oneOf", "anyOf", "allOf"):
+            for branch in node.get(kw, []) or []:
+                walk(branch, prefix, visiting)
+        for kw in ("if", "then", "else"):
+            if kw in node:
+                walk(node[kw], prefix, visiting)
+
+    walk(schema, "", frozenset())
+    return declared_at, open_maps
+
+
 class TestSchemaSelfValidity(unittest.TestCase):
     """Every shared JSON Schema must be a well-formed Draft 2020-12 document."""
 
@@ -241,105 +311,62 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
             )
 
     def test_no_truly_invented_keys_outside_open_maps(self):
-        """Phase 2.3 phantom-path detector for goldens — DOCUMENTED GAPS.
+        """Phase 2.3 phantom-path detector for goldens (Wave 11b B5 #1: PATH-AWARE).
 
         jsonschema's `iter_errors` accepts any key under blocks declared as
         `additionalProperties: true` (open maps), so a typo'd field there
-        wouldn't fail validation. This test attempts to catch that case by
-        cross-referencing every dotted path in every golden against the
-        schema's vocabulary — but it has TWO load-bearing gaps that future
-        Wave 11b work will close.
+        wouldn't fail validation. This test catches that case by cross-
+        referencing every dotted path in every golden against the schema's
+        path-aware vocabulary.
 
-        ## Detection logic
+        ## Wave 11b B5 #1 architectural change
 
-        A path is INVENTED when ALL of:
-        - It's not declared anywhere in the schema's $defs
-        - AND it's not under an open-map prefix (additionalProperties:true)
-        - AND its leaf key is not a property name mentioned anywhere in the
-          schema's $defs.*.properties
+        Pre-Wave-11b detection had TWO load-bearing gaps:
 
-        ## Gap #1 — open-map prefix bypass (28 prefixes)
+        - GAP #1 (open-map prefix bypass): paths under any of the 28 open-
+          map prefixes were silently admitted. CLOSED by Wave 11b B1/B2/B3/B3+
+          (17 accidentally-open sites flipped to additionalProperties: false;
+          11 prefixes remain — 4 EXTENSION-SLOTS + 7 LEGITIMATELY-OPEN).
 
-        Same gap as `test_schema_contract.py`'s phantom-path detector:
-        anything under one of the 28 open-map prefixes
-        (`code.*, tests.*, quirks.*, aliases.*, cross_language.*, lifecycle.*,
-        spring_config.*, code_naming.*, iab_category_storage.*,
-        headers_constructed.*, deploy_time_tokens.*, bidder_class.*, registry.*`,
-        plus 15 nested ones) is silently allowed. Wave 11b / Phase 2.8 closes
-        17 of these accidentally-open sites; 4 are extension-slots; 7 are
-        legitimately keyed-by-arbitrary-name. See the test_schema_contract.py
-        module docstring for the full list and closure tiers.
+        - GAP #2 (leaf-key permissive escape): `if k in known_keys` admitted
+          ANY key whose name happened to appear anywhere in any
+          $defs.*.properties block. So `code.builder = "request_body"` (a
+          real property name from a totally unrelated $def) was accepted.
+          REPLACED by path-aware vocabulary lookup (this commit, B5 #1).
 
-        ## Gap #2 — leaf-key permissive escape (this test only)
+        ## Path-aware detection
 
-        The `if k in known_keys` branch at lines 271-273 below admits ANY
-        key whose name happens to appear anywhere in any $def.*.properties
-        block. So `code.builder = "request_body"` (a real property name from
-        a totally unrelated $def) is accepted unconditionally — `request_body`
-        IS a known key (under `$defs/Code.make_requests`), so it slips
-        through even at a wildly wrong path. Wave 11b will delete this
-        branch.
+        `_build_declared_at(schema)` returns:
 
-        Phase 2.4 was supposed to tighten by adding $defs for BidderClass /
-        SpringConfig / Lifecycle / CodeNaming; that promise carries forward
-        as Tier C in Wave 11b's plan.
+        - `declared_at: dict[prefix → set[property_names]]` — for every
+          JSONPath prefix in the schema, the set of property names declared
+          at that exact prefix. Walks $ref, oneOf/anyOf/allOf/if/then/else
+          branches as union, with cycle guard for recursive $defs.
+
+        - `open_maps: set[prefix]` — paths whose `additionalProperties` is
+          `true` (or omitted per Draft 2020-12 default) on a `type: object`
+          node. Includes patternProperties prefixes.
+
+        For each leaf key at path `<prefix>.<k>`:
+
+        - If under an open-map prefix → admit (permissive recursion)
+        - Else if `k in declared_at.get(prefix, set())` → admit
+        - Else → flag as phantom
+
+        This closes Gap #2 entirely: keys are validated AT their path, not
+        as a global vocabulary set. A spec with `code.builder = "request_body"`
+        would now flag (request_body is declared under
+        `$defs/MakeRequests` at prefix `code.make_requests`, NOT at
+        prefix `code.builder` directly).
         """
-        # Collect every property name mentioned anywhere in the schema
         schema = _load_schema()
-        known_keys: set = set()
-        def collect_names(node):
-            if isinstance(node, dict):
-                if isinstance(node.get("properties"), dict):
-                    known_keys.update(node["properties"].keys())
-                for v in node.values():
-                    collect_names(v)
-            elif isinstance(node, list):
-                for item in node:
-                    collect_names(item)
-        collect_names(schema)
-
-        # Open-map paths derived from schema (additionalProperties: true on object)
-        open_map_paths: set = set()
-        def find_open_maps(node, prefix=""):
-            node_resolved = node
-            if isinstance(node, dict) and "$ref" in node:
-                ref = node["$ref"]
-                if ref.startswith("#/$defs/"):
-                    name = ref[len("#/$defs/"):]
-                    node_resolved = schema.get("$defs", {}).get(name, {})
-            if not isinstance(node_resolved, dict):
-                return
-            t = node_resolved.get("type")
-            if isinstance(t, str): t = [t]
-            # Three open-map flavors (Draft 2020-12: omitted additionalProperties
-            # defaults to true, so absence is equivalent to explicit true):
-            # 1. additionalProperties: true (any key, any value)
-            # 2. additionalProperties omitted (any key, any value — spec default)
-            # 3. additionalProperties: <subschema> (any key, value matches schema)
-            addl = node_resolved.get("additionalProperties", True)
-            is_open_map = (
-                addl is True
-                or (isinstance(addl, dict) and addl)  # non-empty schema
-            )
-            if is_open_map and isinstance(t, list) and "object" in t and prefix:
-                open_map_paths.add(prefix)
-            if isinstance(node_resolved.get("properties"), dict):
-                for k, v in node_resolved["properties"].items():
-                    p = f"{prefix}.{k}" if prefix else k
-                    find_open_maps(v, p)
-            if isinstance(node_resolved.get("items"), dict):
-                find_open_maps(node_resolved["items"], prefix)
-            for kw in ("oneOf", "anyOf", "allOf"):
-                if kw in node_resolved:
-                    for branch in node_resolved[kw]:
-                        find_open_maps(branch, prefix)
-        find_open_maps(schema)
+        declared_at, open_maps = _build_declared_at(schema)
 
         def under_open_map(path: str) -> bool:
             parts = path.split(".")
             for i in range(len(parts), 0, -1):
                 prefix = ".".join(parts[:i])
-                if prefix in open_map_paths:
+                if prefix in open_maps:
                     return True
             return False
 
@@ -351,24 +378,17 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
                 if isinstance(node, dict):
                     for k, v in node.items():
                         path = f"{prefix}.{k}" if prefix else k
-                        # Skip keys that are well-known property names.
-                        # GAP #2 (Wave 11b will delete this branch): admits
-                        # ANY key whose name appears in any $defs.*.properties
-                        # block, even at totally wrong paths. E.g.,
-                        # `code.builder = "request_body"` slips through
-                        # because `request_body` is a known property name on
-                        # a different $def.
-                        if k in known_keys:
+                        # Permissive recursion under any open-map ancestor.
+                        if prefix and under_open_map(prefix):
                             yield from walk(v, path)
                             continue
-                        # Skip keys under an open-map prefix
-                        if under_open_map(path):
+                        # Path-aware vocabulary lookup (closes Gap #2).
+                        if k in declared_at.get(prefix, set()):
                             yield from walk(v, path)
                             continue
-                        # This key is truly invented
+                        # Truly invented at this path.
                         yield (str(p.relative_to(REPO_ROOT)), path, k)
-                        # Don't recurse — once an invented key is hit, deeper
-                        # mentions are downstream effects of the invention
+                        # Don't recurse — deeper mentions are downstream.
                 elif isinstance(node, list):
                     for item in node:
                         yield from walk(item, prefix)
@@ -380,6 +400,52 @@ class TestAllGoldensAgainstSchema(unittest.TestCase):
             for golden, path, key in invented[:30]:
                 lines.append(f"  {golden}: '{key}' at path {path}")
             self.fail("\n".join(lines))
+
+    def test_path_aware_vocab_catches_gap2_cases(self):
+        """Wave 11b B5 #1 regression gate: the path-aware vocabulary must
+        catch the Gap #2 cases (key name appears under a different $def's
+        prefix) that the prior leaf-key escape silently admitted.
+
+        Synthesizes minimal `declared_at`/`open_maps` setups to exercise:
+
+        - Path-aware acceptance: known property at the correct prefix.
+        - Path-aware rejection: same key NAME under a wrong prefix where
+          it isn't declared.
+        - Open-map admission: any key under an open-map prefix.
+        - Cycle guard: recursive $defs don't blow the stack.
+        """
+        schema = _load_schema()
+        declared_at, open_maps = _build_declared_at(schema)
+
+        # 1. `request_body` is declared under `code.make_requests`, not at
+        #    `code.builder` (the Gap #2 example from the prior docstring).
+        self.assertIn("request_body", declared_at.get("code.make_requests", set()),
+                      "request_body must be declared at code.make_requests prefix")
+        self.assertNotIn("request_body", declared_at.get("code.builder", set()),
+                         "request_body must NOT be declared at code.builder "
+                         "(Gap #2 case — the prior leaf-key escape admitted it)")
+
+        # 2. Top-level fields contribute to declared_at[''].
+        for top in ("meta", "bidder_info", "params", "code"):
+            self.assertIn(top, declared_at.get("", set()),
+                          f"top-level '{top}' missing from declared_at['']")
+
+        # 3. Open-map prefixes still recognized (extension-slot example).
+        # `provenance.read.skill_versions` is keyed by skill name with
+        # patternProperties — should be in open_maps.
+        # (One of the 11 remaining open-map prefixes post-Wave-11b.)
+        self.assertTrue(
+            any("skill_versions" in p for p in open_maps),
+            "provenance.read.skill_versions should be open_map post-Wave-11b",
+        )
+
+        # 4. Closed schema blocks should NOT be in open_maps. Code was
+        # closed in Wave 11b B1; it must have declared_at entries but NOT
+        # appear in open_maps.
+        self.assertNotIn("code", open_maps,
+                         "code should NOT be open_map after Wave 11b B1 closure")
+        self.assertIn("code", declared_at.get("", set()),
+                      "code should be declared at top-level prefix")
 
 
 if __name__ == "__main__":
