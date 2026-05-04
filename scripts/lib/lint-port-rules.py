@@ -10,28 +10,30 @@ Rules covered:
             (`copy-then-mutate`/`in-place` Go ↔ `immutable-rebuild` Java)
   Rule 9  — Custom-typed request body coherence
             (Go `request_body.kind=custom` ↔ Java `parameterized_request_type` ≠ BidRequest)
-  Rule 33 — Aliases inversion
+  Rule 33 — Aliases inversion (FAIL-severity post-Wave-11b)
             (Go child's `aliasOf:` ↔ Java parent's `aliases[]` block)
   Rule 36 — Test fixture inventory parity
             (both languages have non-empty fixture inventories)
-  Rule 38 — bidder_params_sha256 byte-equality
-            (re-reports R2/R5 with explicit Rule 38 framing)
   Rule 44 — Java alias-empire parent-flavor coherence
             (alias's `meta.empire_parent_flavor` matches parent's `aliases[].relationship_flavor`)
   Rule 46 — Naming-convention normalization
             (`go_name.lower().replace('_','').replace('-','') == java_name`,
             with digit-leading-workaround / brand-acronym-preservation allow-listed)
 
+Wave 11b B5 #8 deleted Rule 38 (bidder_params_sha256 byte-equality) from
+this lint check — it was redundant with R5's dual-spec-aware byte-
+divergence reporting in round-trip-ci.py. The Rule 38 PRINCIPLE remains
+documented in port-translation-rules.md:45-77 ("Java MUST copy Go's
+bidder_params bytes verbatim") as a load-bearing port-translation rule;
+just no separate lint emission. R5 is the sole runtime gate.
+
 Each finding is a tuple of (rule_id, severity, bidder, message).
 Severities: `pass` | `warn` | `fail`.
 
-NOTE on severity (Wave 11b will tighten): no rule currently emits the
-`fail` severity in default mode — every violation is a `warn`. The exit-1
-"always blocking" branch below activates only when `--strict` is passed
-or if a future rule is promoted to fail-severity. CI does NOT pass
-`--strict` by default. Wave 11b plan B5 finding-8 promotes Rule 38
-(sha-equality, contractual) and Rule 33 (alias inversion structural
-correctness) to fail-severity.
+Wave 11b B5 #8 promoted Rule 33 (alias inversion structural correctness)
+from `warn` to `fail` severity. Round-2 audit confirmed 0 active Rule 33
+warns across the 14-pair corpus; promotion is safe and turns alias-graph
+inversions into hard CI gates instead of advisory noise.
 
 Usage:
     python3 scripts/lib/lint-port-rules.py
@@ -65,7 +67,9 @@ RULE_TITLES = {
     9: "Custom-typed request body coherence",
     33: "Aliases inversion (Go child ↔ Java parent.aliases[])",
     36: "Test fixture inventory parity",
-    38: "bidder_params_sha256 byte-equality",
+    # Rule 38 (bidder_params_sha256 byte-equality) deleted in Wave 11b B5 #8;
+    # principle preserved in port-translation-rules.md:45-77, runtime gate
+    # in round-trip-ci.py R5 (dual-spec-aware byte-divergence reporting).
     44: "Java alias-empire parent-flavor coherence",
     46: "Naming-convention normalization",
 }
@@ -161,7 +165,8 @@ def rule_33_alias_inversion(go: dict, java: dict, java_parent_specs: dict) -> li
 
     parent_name = _path(go, "meta", "alias_of") or _path(java, "meta", "alias_of")
     if not parent_name:
-        return [Finding(33, "warn", bidder, "is_alias=true but meta.alias_of is null/missing")]
+        # Wave 11b B5 #8: Rule 33 promoted warn → fail (alias-graph integrity).
+        return [Finding(33, "fail", bidder, "is_alias=true but meta.alias_of is null/missing")]
 
     parent_spec = java_parent_specs.get(parent_name)
     if parent_spec is None:
@@ -181,7 +186,8 @@ def rule_33_alias_inversion(go: dict, java: dict, java_parent_specs: dict) -> li
     if bidder in parent_alias_names:
         return [Finding(33, "pass", bidder,
                         f"alias graph coherent: {bidder!r} listed under Java parent {parent_name!r}.aliases[]")]
-    return [Finding(33, "warn", bidder,
+    # Wave 11b B5 #8: Rule 33 promoted warn → fail (alias-graph integrity).
+    return [Finding(33, "fail", bidder,
                     f"Java parent {parent_name!r}.aliases[] does not list {bidder!r}; "
                     f"Go declares aliasOf={parent_name} but Java parent's aliases block omits this child "
                     f"(possible Rule 33 inversion divergence)")]
@@ -208,25 +214,15 @@ def rule_36_test_fixture_parity(go: dict, java: dict) -> list[Finding]:
                     f"{side_lacks} has 0; per Rule 36 expect parallel coverage")]
 
 
-def rule_38_bidder_params_byte_fidelity(go: dict, java: dict) -> list[Finding]:
-    """Verify bidder_params_sha256 matches across languages."""
-    bidder = _path(go, "meta", "bidder_name") or _path(java, "meta", "bidder_name") or "unknown"
-    go_sha = go.get("bidder_params_sha256")
-    java_sha = java.get("bidder_params_sha256")
-
-    if not go_sha and not java_sha:
-        return []  # both absent — no bidder params on either side
-    if go_sha and java_sha:
-        if go_sha == java_sha:
-            return [Finding(38, "pass", bidder, f"bidder_params_sha256 byte-equal: {go_sha[:16]}…")]
-        return [Finding(38, "warn", bidder,
-                        f"bidder_params_sha256 byte divergence: go={go_sha[:16]}… java={java_sha[:16]}…; "
-                        f"per Rule 38 the bytes MUST match (R2/R5 also enforce this)")]
-    side_has = "go" if go_sha else "java"
-    side_lacks = "java" if go_sha else "go"
-    return [Finding(38, "warn", bidder,
-                    f"one-sided bidder_params_sha256: {side_has} has it, {side_lacks} does not; "
-                    f"per Rule 38 both sides must declare and bytes must match")]
+# Wave 11b B5 #8: rule_38_bidder_params_byte_fidelity DELETED.
+# Rule 38 the principle (Java MUST copy Go's bidder_params bytes verbatim)
+# remains documented in port-translation-rules.md:45-77 as a load-bearing
+# port-translation rule. The runtime gate is in round-trip-ci.py's R5
+# bidder_params_sha256 check (dual-spec-aware byte-divergence reporting).
+# This lint's prior implementation was redundant with R5 and noisy (13/14
+# pairs warned with no actionable distinction between declared-divergence
+# and undeclared-divergence). Cleanly removed; Rule 38 entry left out of
+# RULE_TITLES so summary printout omits it without crashing.
 
 
 def rule_44_alias_empire(go: dict, java: dict, java_parent_specs: dict) -> list[Finding]:
@@ -318,7 +314,7 @@ def lint_pair(go_spec: dict, java_spec: dict, dual_spec: Optional[dict] = None,
     findings.extend(rule_9_custom_request_body(go_spec, java_spec))
     findings.extend(rule_33_alias_inversion(go_spec, java_spec, java_parent_specs))
     findings.extend(rule_36_test_fixture_parity(go_spec, java_spec))
-    findings.extend(rule_38_bidder_params_byte_fidelity(go_spec, java_spec))
+    # Rule 38 deleted in Wave 11b B5 #8; runtime gate is round-trip-ci.py R5.
     findings.extend(rule_44_alias_empire(go_spec, java_spec, java_parent_specs))
     findings.extend(rule_46_naming_normalization(go_spec, java_spec, dual_spec))
     return findings

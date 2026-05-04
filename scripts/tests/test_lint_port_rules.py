@@ -133,12 +133,13 @@ class TestRule33AliasInversion(unittest.TestCase):
         findings = lpr.rule_33_alias_inversion(go, java, {"parent": parent_spec})
         self.assertEqual("pass", findings[0].severity)
 
-    def test_alias_missing_from_parent_warns(self):
+    def test_alias_missing_from_parent_fails(self):
+        # Wave 11b B5 #8: Rule 33 promoted warn → fail (alias-graph integrity).
         go = _spec(meta={"bidder_name": "child", "is_alias": True, "alias_of": "parent"})
         java = _spec(meta={"bidder_name": "child", "is_alias": True, "alias_of": "parent"})
         parent_spec = _spec(meta={"bidder_name": "parent"}, aliases=[{"name": "other"}])
         findings = lpr.rule_33_alias_inversion(go, java, {"parent": parent_spec})
-        self.assertEqual("warn", findings[0].severity)
+        self.assertEqual("fail", findings[0].severity)
 
     def test_no_parent_in_scope_passes_best_effort(self):
         go = _spec(meta={"bidder_name": "152media", "is_alias": True, "alias_of": "adkernel"})
@@ -154,11 +155,12 @@ class TestRule33AliasInversion(unittest.TestCase):
         findings = lpr.rule_33_alias_inversion(go, java, {})
         self.assertEqual(0, len(findings))
 
-    def test_alias_without_parent_name_warns(self):
+    def test_alias_without_parent_name_fails(self):
+        # Wave 11b B5 #8: Rule 33 promoted warn → fail (alias-graph integrity).
         go = _spec(meta={"bidder_name": "child", "is_alias": True, "alias_of": None})
         java = _spec(meta={"bidder_name": "child", "is_alias": True, "alias_of": None})
         findings = lpr.rule_33_alias_inversion(go, java, {})
-        self.assertEqual("warn", findings[0].severity)
+        self.assertEqual("fail", findings[0].severity)
 
 
 class TestRule36FixtureParity(unittest.TestCase):
@@ -191,32 +193,11 @@ class TestRule36FixtureParity(unittest.TestCase):
         self.assertEqual("pass", findings[0].severity)
 
 
-class TestRule38ByteFidelity(unittest.TestCase):
-    """Rule 38: bidder_params_sha256 byte-equality."""
-
-    def test_matching_sha_passes(self):
-        sha = "a" * 64
-        go = _spec(bidder_params_sha256=sha)
-        java = _spec(bidder_params_sha256=sha)
-        findings = lpr.rule_38_bidder_params_byte_fidelity(go, java)
-        self.assertEqual("pass", findings[0].severity)
-
-    def test_diverging_sha_warns(self):
-        go = _spec(bidder_params_sha256="a" * 64)
-        java = _spec(bidder_params_sha256="b" * 64)
-        findings = lpr.rule_38_bidder_params_byte_fidelity(go, java)
-        self.assertEqual("warn", findings[0].severity)
-
-    def test_one_sided_sha_warns(self):
-        go = _spec(bidder_params_sha256="a" * 64)
-        java = _spec(bidder_params_sha256=None)
-        findings = lpr.rule_38_bidder_params_byte_fidelity(go, java)
-        self.assertEqual("warn", findings[0].severity)
-        self.assertIn("one-sided", findings[0].message)
-
-    def test_both_absent_silent(self):
-        findings = lpr.rule_38_bidder_params_byte_fidelity(_spec(), _spec())
-        self.assertEqual(0, len(findings))
+# TestRule38ByteFidelity deleted in Wave 11b B5 #8 alongside the
+# rule_38_bidder_params_byte_fidelity function. The Rule 38 PRINCIPLE
+# (bidder_params byte fidelity) remains documented in port-translation-
+# rules.md and enforced by round-trip-ci.py's R5; no separate lint test
+# needed here.
 
 
 class TestRule44AliasEmpire(unittest.TestCase):
@@ -327,14 +308,19 @@ class TestLintPairOnRealGoldens(unittest.TestCase):
         self.pairs, _errors = lpr.discover_pairs()
         self.pairs_by_bidder = {p[0]: p for p in self.pairs}
 
-    def test_kobler_pair_clean_except_rule_38_passes(self):
-        """kobler is the only golden with matching shas — Rule 38 should pass."""
+    def test_kobler_pair_clean_no_failures(self):
+        """Wave 11b B5 #8: Rule 38 deleted from this lint; verify kobler
+        pair lints cleanly (no failures) under the post-deletion ruleset.
+        Rule 38 byte-equality enforcement now lives in round-trip-ci.py R5."""
         self.assertIn("kobler", self.pairs_by_bidder)
         bidder, go, java, dual = self.pairs_by_bidder["kobler"]
         findings = lpr.lint_pair(go, java, dual, {})
         rule_38 = [f for f in findings if f.rule_id == 38]
-        self.assertEqual(1, len(rule_38))
-        self.assertEqual("pass", rule_38[0].severity)
+        self.assertEqual(0, len(rule_38),
+                         "Rule 38 was deleted in Wave 11b B5 #8; lint must not emit any rule_id=38")
+        fails = [f for f in findings if f.severity == "fail"]
+        self.assertEqual(0, len(fails),
+                         f"kobler pair must produce no failures; got: {[f.message for f in fails]}")
 
     def test_mediasquare_rule_9_custom_passes(self):
         """mediasquare is the canonical Rule 9 custom-body case."""
