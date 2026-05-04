@@ -101,7 +101,7 @@ After file gathering, the orchestrator runs these checks (Step 6 R-rules cite th
 
 ## Sources
 
-- Master plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` (Edge cases #18–#34, Discovery rules narrative).
+- Master plan: (Claude Code planning artifact) (Edge cases #18–#34, Discovery rules narrative).
 - Canonical schema: `../../../../../prebid-server-go/read/skills/shared/adapter-spec.md` (Per-section field reference: `code_naming.*`, top-level).
 - Behavior taxonomy: `../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md` (`identifier-rule-workaround`, `acronym-case-preservation`, `bidder-rename-three-step` taxa).
 - Java reference list: `../../../references/new-bid-adapter-prs.md` (49 PRs with `Patterns Demonstrated` tags — source for the TitleCase + identifier-workaround allow-lists).

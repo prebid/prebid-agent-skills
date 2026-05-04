@@ -189,7 +189,7 @@ The `port-go2java/` skill consumes the Go spec's `yaml_unification: false` and m
 
 ## Edge case mapping
 
-The full Java edge-case catalog is in `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md`. This skill covers Java-specific cases #29-#34:
+The full Java edge-case catalog is in (Claude Code planning artifact). This skill covers Java-specific cases #29-#34:
 
 | Edge case | Plan ref | Captured by |
 |---|---|---|

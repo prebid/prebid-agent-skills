@@ -275,7 +275,7 @@ A mismatch surfaces as a `port_concerns` warning + dual-spec-assertion FAIL. The
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` (Phase C — read-bidder-config; Java edge cases #29-#34).
+- Plan: (Claude Code planning artifact) (Phase C — read-bidder-config; Java edge cases #29-#34).
 - Schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md) — `bidder_info:` section, `aliases[].config_form`, `lifecycle.rename`, `bidder_info.yaml_field_name_quirks[]`, `bidder_info.default_enabled`, `bidder_info.modifying_vast_xml_allowed`, `bidder_info.ortb_version`, `cross_language.port_concerns.yaml_unification`.
 - Taxonomy: [../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md](../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md) — `quirks edge_case_taxon` registry: `tilde-alias-syntax`, `bidder-rename-three-step`, `endpoint-compression-typo`, `yaml-field-name-typo`, `dev-endpoint-config-promotion`, `acronym-case-preservation`.
 - Port translation rules: [../../../../../prebid-server-go/read/skills/shared/port-translation-rules.md](../../../../../prebid-server-go/read/skills/shared/port-translation-rules.md) — Rule 34 (yaml_unification, including kebab vs camel + meta-info wrapper + capabilities flatten), Rule 33 (alias inversion), Rule 35 (dev-endpoint config promotion), Rule 13 (dev-prod toggle), Rule 11–15 (endpoint resolution).

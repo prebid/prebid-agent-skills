@@ -55,7 +55,7 @@ A `write/` skill MUST emit these files byte-identical to the spec's verbatim cop
 | `bidder_params_json` (verbatim string) | `static/bidder-params/{xyz}.json` | `src/main/resources/static/bidder-params/{xyz}.json` | The cross-language contract — same bytes on both sides. R2 hard-error if the SHA mismatches the verbatim. |
 | `bidder_info.*` (entire subtree) | `static/bidder-info/{xyz}.yaml` | (folded into the unified `bidder-config/{xyz}.yaml` — see §2.3) | Endpoint, capabilities, geoscope, gvl_vendor_id, user_sync, yaml_extra_fields. |
 
-Worked example — Optidigital. The spec at [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml) line 68 carries the JSON Schema as a YAML double-quoted scalar (preserving the trailing `}` with no terminal newline). A `write/` skill must reconstruct those exact bytes — `bidder_params_sha256` is `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31`, and a single-byte deviation breaks R2.
+Worked example — Optidigital. The spec at [`prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml) line 68 carries the JSON Schema as a YAML double-quoted scalar (preserving the trailing `}` with no terminal newline). A `write/` skill must reconstruct those exact bytes — `bidder_params_sha256` is `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31`, and a single-byte deviation breaks R2.
 
 ### 2.2 Behavioral fields drive code generation
 
@@ -99,7 +99,7 @@ Field-name conventions also differ — Go uses camelCase (`endpointCompression`)
 const devBidderEndpoint = "..."
 ```
 
-Worked example — Kobler. The spec at [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml) carries two quirks (`hardcoded-dev-endpoint` and `dev-prod-toggle-via-imp-ext-test-flag`). Both must round-trip into TODO comments — `write/` cannot infer whether the user wants to keep the anti-pattern or fix it.
+Worked example — Kobler. The spec at [`prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml) carries two quirks (`hardcoded-dev-endpoint` and `dev-prod-toggle-via-imp-ext-test-flag`). Both must round-trip into TODO comments — `write/` cannot infer whether the user wants to keep the anti-pattern or fix it.
 
 ### 2.5 Tests
 
@@ -134,7 +134,7 @@ Translate a Go-source spec into Java adapter artifacts. The skill consumes the s
 | `code.make_requests.imp_ext_unmarshal.kind: standard-two-phase` + `mechanism_go: jsonutil-two-phase` | Java emits a `static final TypeReference<ExtPrebid<?, ExtImpXyz>> XYZ_EXT_TYPE_REFERENCE` + `mapper.mapper().convertValue(imp.getExt(), XYZ_EXT_TYPE_REFERENCE).getBidder()` per Rule 1. |
 | `code.make_requests.imp_ext_unmarshal.kind: direct` + `wrapper_type: <X>` | Java emits a `TypeReference<X>` directly; no `getBidder()` call (Appnexus-style). Rule 2. |
 | `code.make_requests.endpoint_resolution.kind: dev-prod-toggle` + Go uses hardcoded `const devBidderEndpoint` | Java port SHOULD promote to YAML `dev-endpoint:` field + `BidderConfigurationProperties` subclass with `@NotBlank private String devEndpoint`. Apply Rule 35 (cross-language win — fixes the Go-side anti-pattern). |
-| `iab_category_storage.storage_kind: go-data-table` + `go_data_file: adapters/{xyz}/iab_categories.go` + `table_size: N` | Java port SHOULD inline the table as a YAML `iab-categories:` block under `adapters.{xyz}.iab-categories` and inject via constructor-arg. (Appnexus did this in Java with 95 entries — see [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml) line 70 + 812.) Apply Rule 42 (IAB-categories storage cross-language translation) in `port-translation-rules.md`. |
+| `iab_category_storage.storage_kind: go-data-table` + `go_data_file: adapters/{xyz}/iab_categories.go` + `table_size: N` | Java port SHOULD inline the table as a YAML `iab-categories:` block under `adapters.{xyz}.iab-categories` and inject via constructor-arg. (Appnexus did this in Java with 95 entries — see [`prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml) line 70 + 812.) Apply Rule 42 (IAB-categories storage cross-language translation) in `port-translation-rules.md`. |
 | `tests.fixture_inventory.exemplary[]` (Go single-file) | Java port emits 4 separate files per case: `test-{xyz}-bid-request.json`, `test-{xyz}-bid-response.json`, `test-auction-{xyz}-request.json`, `test-auction-{xyz}-response.json`. Apply Rule 36. |
 | `tests.go_directory_naming: legacy-test` (msft) | Java target uses canonical layout regardless — `src/test/resources/org/prebid/server/it/openrtb2/{xyz}/`. The legacy Go pattern is Go-only. |
 
@@ -302,7 +302,7 @@ The `bidder_params_sha256` cross-language equality (R5) is the ideal — same JS
 - Go writes 4-space indent with stray blank lines and no trailing newline (Optidigital, msft).
 - Java writes 2-space indent with trailing newlines (most adapters).
 
-Worked example — Optidigital. The Java spec at [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml) line 22 carries a `cross-language-byte-divergence` warning: Go SHA `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31` ≠ Java SHA `93bad2a9790ba8dd6e38d2c88206910e10a9c682af7be2b726b5d64318bc6832`. Files are SEMANTICALLY identical (same properties, types, descriptions, required) but byte-divergent. R5 cross-language parity FAILS — port-fidelity violation that should be reconciled by reformatting one side to match the other.
+Worked example — Optidigital. The Java spec at [`prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml) line 22 carries a `cross-language-byte-divergence` warning: Go SHA `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31` ≠ Java SHA `93bad2a9790ba8dd6e38d2c88206910e10a9c682af7be2b726b5d64318bc6832`. Files are SEMANTICALLY identical (same properties, types, descriptions, required) but byte-divergent. R5 cross-language parity FAILS — port-fidelity violation that should be reconciled by reformatting one side to match the other.
 
 The Appnexus pair has the same divergence (Java spec line 21–24): Java raw SHA `5946ec7d034be6f6f4033913751d074ffe75dacd9df542b30e1a44f41333ee12` ≠ Go SHA `20a3f193c62b1b3d6d2a0daf5dfaa3935a045c52b83af236693ebe9c3459106d`. Reviewer should regenerate the Java JSON from the Go canonical form to restore byte parity.
 
@@ -389,7 +389,7 @@ Don't translate the R-rules into per-skill `script_eval` entries. The result wou
 
 ## Sources
 
-- Master plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` — Phase E section "Cross-skill integration + handoff" + the spec format definition.
+- Master plan: (Claude Code planning artifact) — Phase E section "Cross-skill integration + handoff" + the spec format definition.
 - Canonical schema: [`adapter-spec.md`](adapter-spec.md) — full Adapter Specification format with worked Kobler dual-spec example.
 - Port translation rules: [`port-translation-rules.md`](port-translation-rules.md) — 46 explicit Go ↔ Java rules indexed by spec field driver.
 - Behavior taxonomy: [`behavior-taxonomy.md`](behavior-taxonomy.md) — enumerated values for behavioral fields and the `quirks[].edge_case_taxon` registry.

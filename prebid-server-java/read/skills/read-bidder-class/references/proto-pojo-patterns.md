@@ -362,7 +362,7 @@ The `notes: ["@Value(staticConstructor=of)"]` entry on the field is informationa
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md`.
+- Plan: (Claude Code planning artifact).
 - Schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md).
 - Taxonomy: [../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md](../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md) — `ext_pojo_construction.framework_choice` and `custom_unmarshal.kind` enumerations.
 - Java reference PR list: [../../../../references/new-bid-adapter-prs.md](../../../../references/new-bid-adapter-prs.md) — see Pattern Index tags `custom-typed-payload-Bidder-T`, `multi-class-proto-request-response-split`, `free-form-imp-ext-no-proto`, `multi-file-go-preserved`.

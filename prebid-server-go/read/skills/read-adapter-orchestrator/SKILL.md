@@ -213,7 +213,7 @@ R5 cross-language structural parity: for any bidder also in `prebid-server-java`
 
 ## Sources
 
-- The plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` — Phase B Go orchestrator section, "Per-skill workflows" outline, edge-case catalog (17 Go cases captured by `code.*`/`bidder_info.*`/`tests.*` fields), validation rules R1–R10.
+- The plan: (Claude Code planning artifact) — Phase B Go orchestrator section, "Per-skill workflows" outline, edge-case catalog (17 Go cases captured by `code.*`/`bidder_info.*`/`tests.*` fields), validation rules R1–R10.
 - Spec schema: [`../shared/adapter-spec.md`](../shared/adapter-spec.md) — canonical Adapter Specification format, validation rules, worked Kobler example.
 - Behavior taxonomy: [`../shared/behavior-taxonomy.md`](../shared/behavior-taxonomy.md) — enumerated values for all behavioral fields plus the closed `quirks[].edge_case_taxon` registry.
 - Port translation rules: [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md) — 46 cross-language Go↔Java translation rules consumed by the future port-go2java skill.

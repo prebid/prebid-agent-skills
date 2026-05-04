@@ -72,7 +72,7 @@ Implication for cross-language port PRs:
 
 > When a Go adapter is being ported to Java (or vice versa), the spec's `cross_language.port_lineage.{source_pr, destination_pr}` populates, and the destination PR's author SHOULD explicitly cc `@bretg`. The `cross_language.reviewer_cohort.cross_language_coordinator: bretg` field captures this assignment.
 
-Worked example — Kobler (Go #3904 → Java #3684). Both PRs carry @bretg's review. The Go side approved with `bsardo` and `SyntaxNode`; the Java side approved with `CTMBNara`, `AntoxaAntoxic`, AND `bretg` for cross-language coordination. The spec at [`/Users/quantum/Documents/GitHub/prebid-agent-skills/prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml) records this in `cross_language.reviewer_cohort` and `cross_language.port_lineage`.
+Worked example — Kobler (Go #3904 → Java #3684). Both PRs carry @bretg's review. The Go side approved with `bsardo` and `SyntaxNode`; the Java side approved with `CTMBNara`, `AntoxaAntoxic`, AND `bretg` for cross-language coordination. The spec at [`prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml) records this in `cross_language.reviewer_cohort` and `cross_language.port_lineage`.
 
 @bretg's pattern fingerprints differ between repos. On Go PRs he focuses on adoption-readiness (will this adapter be ported to Java soon?). On Java PRs he focuses on port-fidelity vs. legitimate divergence. Encoding his fingerprint requires per-repo handling — even @bretg's review patterns do NOT transfer cleanly between languages, despite his being the same human.
 
@@ -181,7 +181,7 @@ The Adapter Specification format itself, the 46 port-translation rules, and the 
 
 ## Sources
 
-- Master plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` — Phase 2 reconnaissance findings (cross-language reviewer cohort disjointness; port-fidelity as #1 Java review theme), Phase E section "Document the review-pattern transfer ban".
+- Master plan: (Claude Code planning artifact) — Phase 2 reconnaissance findings (cross-language reviewer cohort disjointness; port-fidelity as #1 Java review theme), Phase E section "Document the review-pattern transfer ban".
 - Go reference list: [`../../../references/new-bid-adapter-prs.md`](../../../references/new-bid-adapter-prs.md) — 89 PRs with reviewer attribution; canonical Go cohort corpus.
 - Java reference list: [`../../../../prebid-server-java/references/new-bid-adapter-prs.md`](../../../../prebid-server-java/references/new-bid-adapter-prs.md) — 49 PRs with `Patterns Demonstrated` tags; `port-from-go` tag identifies port pairs.
 - Spec schema: [`adapter-spec.md`](adapter-spec.md) — `cross_language.reviewer_cohort.{go, java, cross_language_coordinator}` field definitions; `port_lineage.fidelity_review_themes[]`.

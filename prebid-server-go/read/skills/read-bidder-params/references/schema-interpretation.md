@@ -453,7 +453,7 @@ Cases NOT covered by this skill (delegated to other readers):
 
 ## Sources
 
-- Plan: `~/.claude/plans/you-are-right-lets-mighty-wombat.md` (Phase B Go suite, `read-bidder-params` skill scope).
+- Plan: (Claude Code planning artifact) (Phase B Go suite, `read-bidder-params` skill scope).
 - Canonical schema: `prebid-server-go/read/skills/shared/adapter-spec.md` (`params.schema_interpretation`, `params.ext_struct`, `params.params_test`, `ext_pojo_construction`; validation rules R1-R10).
 - Behavior taxonomy: `prebid-server-go/read/skills/shared/behavior-taxonomy.md` (`combinators_used[]` enum, `framework_choice`, `custom_unmarshal.kind`, `quirks edge_case_taxon` registry).
 - Port translation rules: `prebid-server-go/read/skills/shared/port-translation-rules.md` (Rule 1 standard ExtPrebid two-phase, Rule 9 flexible-type Go ↔ Java mapping note).

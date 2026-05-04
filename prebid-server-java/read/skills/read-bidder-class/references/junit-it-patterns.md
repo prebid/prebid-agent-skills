@@ -437,7 +437,7 @@ The Pattern Index tag is `bidder-rename-major-version` + `alias-back-via-tilde` 
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md`.
+- Plan: (Claude Code planning artifact).
 - Schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md) — `tests:` block (lines covering `unit_test_methods_count`, `integration_test_pattern`, `aliases[].test_assets`, etc.).
 - Java reference PR list: [../../../../references/new-bid-adapter-prs.md](../../../../references/new-bid-adapter-prs.md) — see Pattern Index tags `alias-coverage-it-classes` (#3705 Adverxo), `digit-leading-bidder-class-workaround-OneFiveTwoMedia` (#3829 152 Media), `bidder-rename-major-version` + `package-rename-fixture-dir-rename` + `acronym-case-preservation` (#4326 ElementalTV).
 - Golden spec: [../../../test-fixtures/kobler.golden.spec.yaml](../../../test-fixtures/kobler.golden.spec.yaml) — `tests:` block (lines 195–243), particularly `unit_test_methods_count: 14`, `unit_test_loc: 320`, `hand_written_test_methods` (lines 226–240), `integration_test_class: KoblerTest`, `integration_test_pattern: 4-file-split`, the four `fixture_inventory.integration[]` entries.

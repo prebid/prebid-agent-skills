@@ -227,7 +227,7 @@ This skill links to the existing review/ master-truth references rather than re-
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md`.
+- Plan: (Claude Code planning artifact).
 - Schema: [../shared/adapter-spec.md](../shared/adapter-spec.md).
 - Taxonomy: [../shared/behavior-taxonomy.md](../shared/behavior-taxonomy.md).
 - Port-translation rules: [../shared/port-translation-rules.md](../shared/port-translation-rules.md).

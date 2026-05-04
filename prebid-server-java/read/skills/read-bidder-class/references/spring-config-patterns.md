@@ -380,7 +380,7 @@ Edge case #19 covers the two known patterns. Anything else (e.g., `KoblerConfig`
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md`.
+- Plan: (Claude Code planning artifact).
 - Schema: [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md).
 - Java reference PR list: [../../../../references/new-bid-adapter-prs.md](../../../../references/new-bid-adapter-prs.md) — see Pattern Index tags `configuration-properties-subclass`, `dev-prod-endpoint-toggle`.
 - Golden spec: [../../../test-fixtures/kobler.golden.spec.yaml](../../../test-fixtures/kobler.golden.spec.yaml) — `spring_config:` block (lines 245–277), `bidder_class.constructor` (lines 286–304).

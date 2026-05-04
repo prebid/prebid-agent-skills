@@ -165,7 +165,7 @@ The Optidigital golden's `yaml_extra_fields: { openrtb: { version: 2.6 } }` is t
 
 ## Edge case mapping
 
-The full Go edge-case catalog is in `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md`. This skill covers:
+The full Go edge-case catalog is in (Claude Code planning artifact). This skill covers:
 
 | Edge case | Plan ref | Captured by |
 |---|---|---|
@@ -227,7 +227,7 @@ read-adapter-orchestrator --bidder=ogury-typo-test --source-mode=local --format=
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` (Phase B — read-bidder-info).
+- Plan: (Claude Code planning artifact) (Phase B — read-bidder-info).
 - Schema: [../shared/adapter-spec.md](../shared/adapter-spec.md) (`bidder_info:` section, including `endpoint_construction`, `capabilities`, `geoscope`, `gvl_vendor_id`, `user_sync`, `yaml_extra_fields`, `default_enabled`, `modifying_vast_xml_allowed`, `ortb_version`, `yaml_field_name_quirks[]`).
 - Taxonomy: [../shared/behavior-taxonomy.md](../shared/behavior-taxonomy.md) (the `quirks edge_case_taxon` registry — `yaml-field-name-typo`, `endpoint-compression-typo`).
 - Port translation rules: [../shared/port-translation-rules.md](../shared/port-translation-rules.md) (Rule 34 — YAML unification asymmetry; Rule 14 / Rule 11–15 — endpoint resolution; Rule 33 — aliases inversion).

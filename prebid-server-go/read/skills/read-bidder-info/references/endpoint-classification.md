@@ -319,7 +319,7 @@ Typo pass-through: the FOUND key (verbatim, with its typo'd casing) is preserved
 
 ## Sources
 
-- Plan: `/Users/quantum/.claude/plans/you-are-right-lets-mighty-wombat.md` (edge case Go #10, Go #16, Java #34).
+- Plan: (Claude Code planning artifact) (edge case Go #10, Go #16, Java #34).
 - Schema: [../../shared/adapter-spec.md](../../shared/adapter-spec.md) (`bidder_info.endpoint_construction`, `deploy_time_tokens[]`, `yaml_field_name_quirks[]`).
 - Taxonomy: [../../shared/behavior-taxonomy.md](../../shared/behavior-taxonomy.md) (the kind enum; the `quirks edge_case_taxon` registry).
 - Port translation rules: [../../shared/port-translation-rules.md](../../shared/port-translation-rules.md) (Rules 11–15 for endpoint resolution; Rule 33 for aliases inversion; Rule 34 for YAML unification).
