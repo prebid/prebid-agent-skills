@@ -17,7 +17,7 @@ For a single bidder pinned to a single commit, the skill produces:
 
 The YAML is the contract; the Markdown is the dashboard. Both are emitted at the same `provenance.source.resolved_commit`. Re-running the skill on the same commit produces a YAML spec idempotent under round-trip (R4: `yaml.safe_load → safe_dump` on the emitted spec is byte-stable, dump2 == dump3). The orchestrator's encoding contract targets byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator`; R4 enforces idempotency, not raw-byte equality against a previously-stored golden.
 
-The output is the input contract for the future `write/` skill (regenerate adapter from spec) and the future `port-go2java/` skill (translate Go-source spec into Java artifacts; will consume [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md)). Both are Phase D/E milestones — see [`../../../ROADMAP.md`](../../../ROADMAP.md).
+The output is the input contract for the future `write/` skill (regenerate adapter from spec) and the future `port-go2java/` skill (translate Go-source spec into Java artifacts; will consume [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md)). Both are Phase D/E milestones — see [`../../../../ROADMAP.md`](../../../../ROADMAP.md).
 
 ## Inputs
 

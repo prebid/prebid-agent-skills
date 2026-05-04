@@ -2,11 +2,11 @@
 
 Rules and procedures for interpreting `static/bidder-params/{xyz}.json` into the Adapter Specification's `params.schema_interpretation` block, and for classifying the corresponding Go ext struct in `params.ext_struct`. Consumed by the `read-bidder-params` SKILL.md.
 
-The master JSON Schema → Go type mapping table is canonical at [`../../../review/skills/bidder-params-pr-review/references/params-type-index.md`](../../../review/skills/bidder-params-pr-review/references/params-type-index.md). This file references that table — do NOT duplicate the table here.
+The master JSON Schema → Go type mapping table is canonical at [`../../../../review/skills/bidder-params-pr-review/references/params-type-index.md`](../../../../review/skills/bidder-params-pr-review/references/params-type-index.md). This file references that table — do NOT duplicate the table here.
 
 The `combinators_used[]` enum is canonical at [`../../shared/behavior-taxonomy.md`](../../shared/behavior-taxonomy.md) under `params.schema_interpretation.combinators_used[]`.
 
-Framework helper signatures (`jsonutil.StringInt`, `IntString`, etc.) are canonical at [`../../../review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md) under "util/jsonutil extras beyond Marshal/Unmarshal". This file references that file — do NOT duplicate.
+Framework helper signatures (`jsonutil.StringInt`, `IntString`, etc.) are canonical at [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) under "util/jsonutil extras beyond Marshal/Unmarshal". This file references that file — do NOT duplicate.
 
 ---
 

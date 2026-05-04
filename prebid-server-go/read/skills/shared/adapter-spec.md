@@ -127,7 +127,7 @@ When adding or changing a field:
 
 Phase 2.0 milestone fixture. The full Go and Java specs live in the goldens directory:
 
-- Go-source spec: [`prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../../test-fixtures/kobler.golden.spec.yaml)
+- Go-source spec: [`prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml)
 - Java-source spec: [`prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml)
 - Cross-language assertions: [`cross-language-pairs/kobler.dual-spec-assertions.yaml`](../../../../cross-language-pairs/kobler.dual-spec-assertions.yaml)
 

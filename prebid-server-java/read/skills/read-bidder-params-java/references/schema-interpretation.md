@@ -283,6 +283,6 @@ Note: The Java kobler golden currently emits `valid_cases_count: null` and `inva
 - Port translation rules: [`../../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`](../../../../../prebid-server-go/read/skills/shared/port-translation-rules.md) (R5 — bidder_params_json byte-identical contract; R9 — flexible-type idiom mismatch Go `jsonutil.StringInt` ↔ Java `Long` + `@JsonAlias`)
 - Java kobler golden: [`../../../test-fixtures/kobler.golden.spec.yaml`](../../../test-fixtures/kobler.golden.spec.yaml)
 - Go counterpart kobler golden: [`../../../../../prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../../../../prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml)
-- Java reference list (Lombok and Jackson patterns under "Code & Adapter Patterns (Java-specific)"): [`../../../../prebid-server-java/references/new-bid-adapter-prs.md`](../../../../prebid-server-java/references/new-bid-adapter-prs.md)
+- Java reference list (Lombok and Jackson patterns under "Code & Adapter Patterns (Java-specific)"): [`../../../../references/new-bid-adapter-prs.md`](../../../../references/new-bid-adapter-prs.md)
 - Sister Go skill (structural template, written in parallel): `prebid-server-go/read/skills/read-bidder-params/`
 - Skill body: [`../SKILL.md`](../SKILL.md)

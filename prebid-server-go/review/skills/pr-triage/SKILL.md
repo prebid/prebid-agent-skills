@@ -647,7 +647,7 @@ See [routing-rules.md](references/routing-rules.md) for:
 
 ## Shared Framework Reference
 
-For framework-wide concerns (endpoint template macros canonical list, error type taxonomy, anti-patterns, maintainer email policy, white-label policy, naming conventions, aliasing semantics, test harness contract), the four review skills share [../../shared/framework-utilities.md](../../shared/framework-utilities.md). The pr-triage drift checks (Step 2) reference this file.
+For framework-wide concerns (endpoint template macros canonical list, error type taxonomy, anti-patterns, maintainer email policy, white-label policy, naming conventions, aliasing semantics, test harness contract), the four review skills share [../shared/framework-utilities.md](../shared/framework-utilities.md). The pr-triage drift checks (Step 2) reference this file.
 
 ---
 

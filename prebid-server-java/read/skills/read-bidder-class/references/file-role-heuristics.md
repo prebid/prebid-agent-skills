@@ -4,7 +4,7 @@ Deterministic mapping rules from `src/main/java/org/prebid/server/bidder/{xyz}/*
 
 The role enum (closed 5-value set, mirrors Go's 6-value enum minus `data-table` — `data-table` is Go-only because Java records IAB-category tables in YAML config (`iab_category_storage.storage_kind: yaml-inlined`) per ADR-001 D2 rather than a separate file): `implementation, models, parsers, types, utils`.
 
-Cross-language counterpart: [../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md](../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md). The Java rules below intentionally produce the same role tags for analogous files so cross-language pair fixtures stay diffable.
+Cross-language counterpart: [../../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md](../../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md). The Java rules below intentionally produce the same role tags for analogous files so cross-language pair fixtures stay diffable.
 
 ---
 
@@ -102,7 +102,7 @@ When a cross-language pair is being read, the role tags should match for analogo
 ## Sources
 
 - [SKILL.md](../SKILL.md) Step 1 — file inventory.
-- [../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../prebid-server-go/read/skills/shared/adapter-spec.md) — full schema reference for `code.file_layout.*`.
-- [../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json](../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json) (`$defs/Code`) — JSON Schema declaration.
-- Go counterpart: [../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md](../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md).
-- Lint script: [../../../../scripts/lib/lint-java-roles.py](../../../../scripts/lib/lint-java-roles.py) — gates the enum at CI time.
+- [../../../../../prebid-server-go/read/skills/shared/adapter-spec.md](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md) — full schema reference for `code.file_layout.*`.
+- [../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json](../../../../../prebid-server-go/read/skills/shared/adapter-spec.schema.json) (`$defs/Code`) — JSON Schema declaration.
+- Go counterpart: [../../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md](../../../../../prebid-server-go/read/skills/read-adapter-code/references/file-role-heuristics.md).
+- Lint script: [../../../../../scripts/lib/lint-java-roles.py](../../../../../scripts/lib/lint-java-roles.py) — gates the enum at CI time.

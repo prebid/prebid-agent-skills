@@ -105,7 +105,7 @@ Detection rule (this skill executes when reading the NEW yaml):
 - Iterate `aliases[]` from Step 5 looking for tilde-inherit entries.
 - For each tilde-inherit entry (`alias_name`), query the orchestrator's known-YAML registry: does `bidder-config/{alias_name}.yaml` exist at the resolved commit?
   - If YES — it is a normal sibling alias. Skip rename detection for this entry.
-  - If NO — it is a candidate alias-back-after-rename. Cross-reference [../../../prebid-server-java/references/new-bid-adapter-prs.md](../../references/new-bid-adapter-prs.md) Pattern Index for the `alias-back-via-tilde` + `bidder-rename-major-version` tags. Confirmed-rename criteria:
+  - If NO — it is a candidate alias-back-after-rename. Cross-reference [../../../prebid-server-java/references/new-bid-adapter-prs.md](../../../references/new-bid-adapter-prs.md) Pattern Index for the `alias-back-via-tilde` + `bidder-rename-major-version` tags. Confirmed-rename criteria:
     - The PR introducing the new YAML is tagged `bidder-rename-major-version` AND `alias-back-via-tilde`, AND
     - The orchestrator's discovery confirms the old YAML was deleted at the same commit.
 - When confirmed, emit:

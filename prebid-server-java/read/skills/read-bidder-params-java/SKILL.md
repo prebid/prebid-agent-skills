@@ -189,7 +189,7 @@ The orchestrator computes the SHA on each side independently and surfaces a `bid
 
 ## Verification
 
-The Java kobler golden at [`prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`](../../../test-fixtures/kobler.golden.spec.yaml) is the reference output. Its `bidder_params_sha256` is:
+The Java kobler golden at [`prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml) is the reference output. Its `bidder_params_sha256` is:
 
 ```
 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
@@ -211,7 +211,7 @@ Per-step verification:
 - Canonical schema: [`prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md) (`bidder_params_json:`, `bidder_params_sha256:`, `params:` block, `ext_pojo_construction`)
 - Behavior taxonomy: [`prebid-server-go/read/skills/shared/behavior-taxonomy.md`](../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.md) (`combinators_used[]`, `framework_choice`, `custom_unmarshal.kind`, `where_branched`)
 - Port translation rules: [`prebid-server-go/read/skills/shared/port-translation-rules.md`](../../../../prebid-server-go/read/skills/shared/port-translation-rules.md) (R5 — bidder_params_json byte-identical contract; R9 — flexible-type idiom mismatch)
-- Java kobler golden: [`prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`](../../../test-fixtures/kobler.golden.spec.yaml) (`bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685`)
+- Java kobler golden: [`prebid-server-java/read/test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml) (`bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685`)
 - Go counterpart: [`prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml`](../../../../prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml) (same SHA — cross-language contract)
 - Java reference list with `Patterns Demonstrated`: [`prebid-server-java/references/new-bid-adapter-prs.md`](../../../../prebid-server-java/references/new-bid-adapter-prs.md) (Lombok-and-Jackson patterns under "Code & Adapter Patterns (Java-specific)")
 - Sister Go skill (structural template, written in parallel): `prebid-server-go/read/skills/read-bidder-params/`
