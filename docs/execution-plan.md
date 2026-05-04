@@ -20,7 +20,7 @@ This plan integrates findings from the 3-round PR review, the cross-language ada
 |---|---|---|---|
 | 0 — Frontmatter standardization | 0.5 day | +20 | All SKILLs versioned `1.0.0` SemVer |
 | 1 — Restoration | 2 days | -50 / +30 | All H/M bugs fixed; CI gating restored |
-| 1.5 — Golden audit | 1.5 days | TBD per audit | All 22 goldens pass upstream-faithfulness check |
+| 1.5 — Golden audit | 1.5 days | TBD per audit | All 40 goldens pass upstream-faithfulness check |
 | 2 — Schema spine | 4 days | -1,500 / +1,000 | JSON Schema authoritative; new fields per ADR-001/007; Rules 44-46 land |
 | 3 — Conciseness | 5 days | -2,500 / +800 | SKILLs ≤250 lines; 10 mechanical scripts in `scripts/lib/` (revised up from 3 days per audit B5) |
 | 4 — Methodology | 3 days | +1,500 | Drift detection, PR audit, coverage report, CI gates, `Makefile`, `templates/empty-adapter-spec.yaml` |
@@ -79,7 +79,7 @@ Author `scripts/audit-golden.py <bidder>` — a **deterministic-subset** of the 
 - Re-checks fixture inventory by directory listing
 - Reports diffs as `docs/audits/golden-audit-<date>.md`
 
-Run on all 22 goldens; fix any inaccuracies discovered before schema migration locks them in. Round 2 spot-checked 4 bidders manually; Phase 1.5 covers the remaining 18 mechanically.
+Run on all 40 goldens; fix any inaccuracies discovered before schema migration locks them in. Round 2 spot-checked 4 bidders manually; Phase 1.5 covers the remaining 36 mechanically.
 
 For LLM-required work (novelty classification, new-pattern surfacing), Phase 4.2's `audit-pr.py` is a separate workflow that calls the Claude API.
 
@@ -117,7 +117,7 @@ Cut: 700 lines of YAML pseudo-code (encoded in JSON Schema now) + 400 lines of d
 
 ### 2.3 — Goldens validate against schema
 
-Add `validate_goldens_against_schema()` to `scripts/tests/test_schema_contract.py`. Run on all 22 goldens. Decide each of the 36 truly-undocumented paths per ADR-001 D1/D4/D5.
+Add `validate_goldens_against_schema()` to `scripts/tests/test_schema_contract.py`. Run on all 40 goldens. Decide each of the 36 truly-undocumented paths per ADR-001 D1/D4/D5.
 
 ### 2.4 — Behavior taxonomy as data
 
@@ -137,7 +137,7 @@ Implement `scripts/lib/lint-port-rules.py` for the 5 mechanizable rules: 5, 9, 3
 
 ### 2.7 — Migrate goldens + CHANGELOG
 
-Apply schema migrations to all 22 goldens:
+Apply schema migrations to all 40 goldens:
 - `iab_category_storage.injection` → `delivery_mechanism` (bulk rename)
 - huaweiads-Java `code.naming.*` → `code_naming.*` (move block)
 - huaweiads-Java `registry.test_application_properties.*` → `tests.test_application_properties.*` (rename per ADR-001 D6)
@@ -151,7 +151,7 @@ Apply schema migrations to all 22 goldens:
 
 **Audit C2 — CHANGELOG.md**: Phase 2.7 includes a `CHANGELOG.md` entry summarizing all schema changes (rename `injection→delivery_mechanism`, new fields F1-F5, Rules 44-46, Rule 43 sub-types).
 
-**End state**: schema is machine-readable single source of truth. 22 goldens auto-validate. The 36 phantom paths are decided. Rules 44-46 land with master samples (Phase 5 fills in the goldens that pressure-test them). CHANGELOG documents the migration for future maintainers.
+**End state**: schema is machine-readable single source of truth. 40 goldens auto-validate. The 36 phantom paths are decided. Rules 44-46 land with master samples (Phase 5 fills in the goldens that pressure-test them). CHANGELOG documents the migration for future maintainers.
 
 ## Phase 3 — Conciseness (3 days, 5-7 commits)
 

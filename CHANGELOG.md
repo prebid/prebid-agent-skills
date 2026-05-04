@@ -741,7 +741,7 @@ Bumped to **46 rules** (was 43).
 - `scripts/render-taxonomy.py` (Phase 2.4), `scripts/render-port-rules.py` (Phase 2.5).
 - `scripts/audit-golden.py` — Phase 1.5 golden-vs-upstream audit (5 checks, all 22 goldens pass).
 - `scripts/tests/test_schema_jsonschema.py` — meta-schema validity + per-golden + Go/Java discrimination tests.
-- `scripts/tests/test_schema_contract.py` — schema-derived registry covering 254 paths / 641 dotted paths.
+- `scripts/tests/test_schema_contract.py` — schema-derived registry validating dotted-path references in SKILL.md prose against the canonical schema (counts evolve with each schema bump; live count surfaced via `python3 scripts/tests/test_schema_contract.py --verbose`).
 - `scripts/tests/test_render_taxonomy.py`, `scripts/tests/test_render_port_rules.py`, `scripts/tests/test_lint_port_rules.py`.
 - `Makefile` with targets `make ci`, `make test`, `make audit-goldens`, `make audit-pr`, `make coverage`, `make render-taxonomy`, `make render-port-rules`, `make lint-port-rules`.
 - `.github/workflows/round-trip-ci.yml`, `.github/known-broken-pairs.txt`.
