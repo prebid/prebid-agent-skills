@@ -1,16 +1,19 @@
 # Changelog
 
-All notable changes to the Adapter Specification schema, behavior taxonomy, and
-port-translation rules. Format follows [Keep a Changelog](https://keepachangelog.com/);
-versioning is per ADR-001 D7 (SemVer string `X.Y.Z`).
+All notable changes to the Adapter Specification schema, behavior taxonomy,
+port-translation rules, and port-report schema. Format follows
+[Keep a Changelog](https://keepachangelog.com/); versioning is per ADR-001 D7
+(SemVer string `X.Y.Z`).
 
-The three independently-versioned artifacts are:
+The four independently-versioned artifacts are:
 
 - **adapter_spec_version** — the JSON Schema at `prebid-server-go/read/skills/shared/adapter-spec.schema.json`
 - **taxonomy_version** — the behavior taxonomy at `prebid-server-go/read/skills/shared/behavior-taxonomy.yaml`
 - **port_translation_rules_version** — the rule corpus at `prebid-server-go/read/skills/shared/port-translation-rules.yaml`
+- **port_report_version** — the port-report schema at `prebid-server-go/read/skills/shared/port-report.schema.json` (promoted to first-class artifact in Phase D1.4; previously tracked in narrative form)
 
-Every entry references the ADRs (`docs/decisions/`) that drove the change.
+Every entry header lists all four at their current state for reproducibility.
+Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
@@ -80,7 +83,7 @@ Fidelity tracking (1 field):
 
 ---
 
-## [adapter_spec_version 1.2.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-03
+## [adapter_spec_version 1.2.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.1.0] — 2026-05-03
 
 Wave 11b / Phase 2.8 — schema closure + gate enforcement reality alignment.
 Closes 17 accidentally-open `additionalProperties: true` sites that were
@@ -326,7 +329,7 @@ Corpus-coupled decisions deferred:
 
 ---
 
-## [adapter_spec_version 1.1.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-03
+## [adapter_spec_version 1.1.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.1.0] — 2026-05-03
 
 ADR-007 (novel-pattern schema additions): F1, F3, F4, F5 admitted to the schema
 as `$defs`. NOT `$ref`-wired into top-level `Code` yet — adapter_spec_version
@@ -733,7 +736,7 @@ implementation will reference these design docs.
 
 ---
 
-## [adapter_spec_version 1.0.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] — 2026-05-02
+## [adapter_spec_version 1.0.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.1.0] — 2026-05-02
 
 First official versioned release. Cuts the schema spine and the data-driven
 taxonomy + rule corpus loose from the legacy hand-authored Markdown.

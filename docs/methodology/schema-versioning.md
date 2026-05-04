@@ -1,19 +1,28 @@
 # Schema versioning policy
 
-How the three independently-versioned artifacts evolve over time and how
+How the four independently-versioned artifacts evolve over time and how
 consumers handle the transition.
 
-## The three versioned artifacts
+## The four versioned artifacts
 
 | Artifact | File | Field that records it |
 |---|---|---|
 | Adapter Specification schema | `prebid-server-go/read/skills/shared/adapter-spec.schema.json` | `adapter_spec_version` (top-level, REQUIRED on every spec) |
 | Behavior taxonomy | `prebid-server-go/read/skills/shared/behavior-taxonomy.yaml` | `taxonomy_version` (top-level on goldens) |
 | Port-translation rules | `prebid-server-go/read/skills/shared/port-translation-rules.yaml` | `rules_version` (top-level in the YAML; not stamped on goldens) |
+| Port-report schema | `prebid-server-go/read/skills/shared/port-report.schema.json` | `port_report_version` (top-level, REQUIRED on every port report; consumed by Phase F reflection loop) |
 
 Each artifact follows **SemVer string format** `X.Y.Z` per ADR-001 D7.
 Phase 2.7 dropped the legacy integer form (`adapter_spec_version: 1`); the
-current minimum is `"1.0.0"`.
+current minimum is `"1.0.0"`. Phase D1.4 promoted `port_report_version`
+to a first-class versioned artifact alongside the original three —
+previously tracked in narrative form within CHANGELOG entries, now
+declared explicitly with the same MAJOR / MINOR / PATCH increment
+rules below. The CHANGELOG entry header convention is the four-element
+form `[adapter_spec_version X.Y.Z] · [taxonomy_version X.Y.Z] ·
+[port_translation_rules_version X.Y.Z] · [port_report_version X.Y.Z] —
+date`; entries that don't bump every artifact still list each at its
+current version for reproducibility.
 
 ## Increment rules
 

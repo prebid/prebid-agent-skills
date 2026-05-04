@@ -145,6 +145,23 @@ def normalize_bidder_name(
 # ---------------------------------------------------------------------------
 
 
+# R5-strict keys per scripts/lib/r5_check.R5_STRICT_KEYS, scoped to
+# bidder_info subfields that legitimately vary per-alias. The
+# schema_interpretation.* keys (params.schema_interpretation.required_fields,
+# combinators_used, flexible_types) are tied to the bidder-params JSON
+# schema and CANNOT vary per-alias — the alias inherits the parent's
+# bidder-params identity by reference. They are intentionally excluded.
+_R5_ALIASABLE_KEYS: Tuple[str, ...] = (
+    "capabilities",
+    "endpoint",
+    "geoscope",
+    "gvl_vendor_id",
+    "endpoint_compression",
+    "modifying_vast_xml_allowed",
+    "maintainer",
+)
+
+
 def alias_graph_invert(
     parent_spec: Dict[str, Any],
     alias_specs: List[Dict[str, Any]],
@@ -180,13 +197,11 @@ def alias_graph_invert(
                 continue
             bi = alias.get("bidder_info", {}) or {}
             entry: Dict[str, Any] = {}
-            # Java-side per-alias overrides typically: endpoint, geoscope,
-            # capabilities differences. Include keys from the alias's
-            # bidder_info that diverge from the parent's.
+            # Forward keys from the alias's bidder_info that diverge from the
+            # parent's. R5-strict alias-eligible subset (see _R5_ALIASABLE_KEYS).
             parent_bi = parent_spec.get("bidder_info", {}) or {}
             for k, v in bi.items():
-                if k in {"capabilities", "endpoint", "geoscope", "gvl_vendor_id",
-                         "endpoint_compression", "modifying_vast_xml_allowed"}:
+                if k in _R5_ALIASABLE_KEYS:
                     if v != parent_bi.get(k):
                         entry[k] = v
             out[alias_name] = entry
@@ -218,6 +233,9 @@ def alias_graph_invert(
 def iab_table_translate(
     direction: str,
     source_artifact: Union[str, Dict[str, Any]],
+    *,
+    package_name: str = "iab",
+    var_name: str = "iabCategories",
 ) -> Union[str, Dict[str, Any]]:
     """Rule 42 IAB-cat storage translation.
 
@@ -231,13 +249,23 @@ def iab_table_translate(
 
     - ``'go-to-java'``: input is the Go file source as a string; output
       is the Java-side dict ready for YAML emission under
-      ``adapters.{bidder}.iab-cat-mapping``.
+      ``adapters.{bidder}.iab-cat-mapping``. ``package_name`` and
+      ``var_name`` arguments are ignored (Go-only metadata; Java has no
+      analog).
     - ``'java-to-go'``: input is the Java YAML mapping dict; output is
-      the Go data-file source as a string.
+      the Go data-file source as a string. ``package_name`` and
+      ``var_name`` control the Go file's ``package`` declaration and
+      ``var`` name; defaults are the upstream-canonical ``iab`` and
+      ``iabCategories``.
 
     The Go-data-file extraction parses the ``map[string]string`` literal
-    after a ``var iabCategories = map[string]string{`` opener; the helper
-    is robust to whitespace but requires the upstream-conventional layout.
+    after a ``var <name> = map[string]string{`` opener. The brace counter
+    skips Go string literals (so ``"}"`` inside a value does not close
+    the map) and the entry regex tolerates ``\\"``-escaped quotes inside
+    string values. Round-trip preserves the mapping; package/var names
+    are NOT preserved through go-to-java→java-to-go because the Java
+    YAML has no place to record them — pass them explicitly to
+    ``java-to-go`` if a non-default file shape is needed.
     """
     if direction == "go-to-java":
         if not isinstance(source_artifact, str):
@@ -246,30 +274,45 @@ def iab_table_translate(
     if direction == "java-to-go":
         if not isinstance(source_artifact, dict):
             raise TypeError("java-to-go expects Java YAML dict")
-        return _emit_go_iab_table(source_artifact)
+        return _emit_go_iab_table(source_artifact, package_name=package_name, var_name=var_name)
     raise ValueError(f"direction={direction!r} not supported; expected 'go-to-java' or 'java-to-go'")
 
 
 _IAB_GO_OPENER_RE = re.compile(
-    r"var\s+\w*[Ii]ab\w*\s*=\s*map\[string\]string\s*\{",
+    r"var\s+(\w*[Ii]ab\w*)\s*=\s*map\[string\]string\s*\{",
     re.MULTILINE,
-)
-_IAB_GO_ENTRY_RE = re.compile(
-    r'"([^"]*)"\s*:\s*"([^"]*)"\s*,?',
 )
 
 
 def _parse_go_iab_table(source: str) -> Dict[str, str]:
-    """Extract the Go ``map[string]string`` literal as a Python dict."""
+    """Extract the Go ``map[string]string`` literal as a Python dict.
+
+    Brace counter is string-literal-aware: ``"}"`` and ``"{"`` inside Go
+    double-quoted strings do not affect nesting. Backslash escapes
+    (e.g., ``\\"``, ``\\\\``) are honored so that ``"a\\"b"`` parses as
+    a single string literal containing ``a"b``.
+    """
     m = _IAB_GO_OPENER_RE.search(source)
     if not m:
         raise ValueError("could not find Go IAB map opener (`var <name> = map[string]string{`)")
     body_start = m.end()
-    # Find matching closing brace at same nesting level.
     depth = 1
     end = None
+    in_string = False
+    escaped = False
     for idx in range(body_start, len(source)):
         ch = source[idx]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            continue
         if ch == "{":
             depth += 1
         elif ch == "}":
@@ -280,15 +323,83 @@ def _parse_go_iab_table(source: str) -> Dict[str, str]:
     if end is None:
         raise ValueError("unterminated Go map literal")
     body = source[body_start:end]
+    return _parse_go_map_entries(body)
+
+
+def _parse_go_map_entries(body: str) -> Dict[str, str]:
+    """Tokenize ``"key": "value",`` pairs out of a Go map body.
+
+    Tolerates whitespace and embedded backslash-escaped quotes in either
+    key or value. Ignores trailing commas and inter-entry whitespace.
+    """
     out: Dict[str, str] = {}
-    for em in _IAB_GO_ENTRY_RE.finditer(body):
-        out[em.group(1)] = em.group(2)
+    pos = 0
+    n = len(body)
+    while pos < n:
+        # Skip whitespace and commas.
+        while pos < n and body[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= n:
+            break
+        # Expect a key-string opening quote.
+        if body[pos] != '"':
+            # Unexpected token — advance one char and continue (best-effort).
+            pos += 1
+            continue
+        key, pos = _consume_go_string(body, pos)
+        # Skip whitespace + ':'.
+        while pos < n and body[pos] in " \t\r\n":
+            pos += 1
+        if pos >= n or body[pos] != ":":
+            raise ValueError(f"expected ':' after key at position {pos}")
+        pos += 1
+        while pos < n and body[pos] in " \t\r\n":
+            pos += 1
+        if pos >= n or body[pos] != '"':
+            raise ValueError(f"expected value-string at position {pos}")
+        value, pos = _consume_go_string(body, pos)
+        out[key] = value
     return out
 
 
-def _emit_go_iab_table(mapping: Dict[str, Any]) -> str:
-    """Emit the Go ``map[string]string`` literal source from a Python dict."""
-    lines = ["package iab", "", "var iabCategories = map[string]string{"]
+def _consume_go_string(body: str, pos: int) -> Tuple[str, int]:
+    """Consume a Go double-quoted string starting at ``body[pos] == '\"'``.
+
+    Returns the unescaped value and the position immediately after the
+    closing quote. Honors ``\\"``, ``\\\\``, ``\\n``, ``\\t`` escape
+    sequences. Raises ``ValueError`` on an unterminated string.
+    """
+    assert body[pos] == '"'
+    pos += 1
+    chars: List[str] = []
+    n = len(body)
+    while pos < n:
+        ch = body[pos]
+        if ch == "\\" and pos + 1 < n:
+            nxt = body[pos + 1]
+            chars.append({"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}.get(nxt, nxt))
+            pos += 2
+            continue
+        if ch == '"':
+            return "".join(chars), pos + 1
+        chars.append(ch)
+        pos += 1
+    raise ValueError("unterminated Go string literal")
+
+
+def _emit_go_iab_table(
+    mapping: Dict[str, Any],
+    *,
+    package_name: str = "iab",
+    var_name: str = "iabCategories",
+) -> str:
+    """Emit the Go ``map[string]string`` literal source from a Python dict.
+
+    ``package_name`` and ``var_name`` control the file's ``package``
+    line and ``var`` identifier; defaults are upstream-canonical
+    (``iab`` / ``iabCategories``).
+    """
+    lines = [f"package {package_name}", "", f"var {var_name} = map[string]string{{"]
     for k in sorted(mapping.keys()):
         v = mapping[k]
         lines.append(f'\t{json.dumps(k)}: {json.dumps(str(v))},')
@@ -414,44 +525,84 @@ def alphabetical_insert(
     ``exchange/adapter_builders.go`` (import + map entry) without
     disturbing the rest of the file.
 
-    ``marker_pattern`` is a regex that identifies a line WITHIN the
-    block where insertion should happen. The helper finds the contiguous
-    run of matching lines, sorts the run + ``insert_line`` together
-    case-insensitively (ties broken by case-sensitive ASCII so
-    ``BidderAaA`` < ``BidderAaa``), and rewrites the file with the new
-    line at the correct position.
+    ``marker_pattern`` is a regex that identifies lines that belong to
+    a target block. The helper:
+
+    1. Identifies all contiguous runs of matching lines. A run is
+       broken by ANY non-matching line (closing brace, blank line, the
+       opener of a sibling block). This is how openrtb_ext/bidders.go's
+       two ``const ( ... )`` blocks (10 Reserved* + 261 Bidder*) are
+       discriminated by the same marker pattern.
+    2. Picks the longest run as the target block. Ties raise
+       ``ValueError`` — the caller must use a more specific pattern.
+    3. Inserts ``insert_line`` at the correct ``(s.lower(), s)``
+       lexicographic position via ``bisect_left`` — the helper does NOT
+       re-sort the existing block. Upstream HEAD has ~20 of 261
+       entries that are locally out-of-order under
+       ``(s.lower(), s)``; re-sorting would create unrelated diffs in
+       the port PR. Local violations are preserved; the new entry
+       lands at canonical position.
+
+    Sort key: ``(s.lower(), s)`` — case-insensitive primary,
+    case-sensitive ASCII tiebreak. Closest match to upstream order
+    (verified against ``openrtb_ext/bidders.go`` HEAD; plain ASCII has
+    136 mismatches versus 20 for ``(lower, s)``).
 
     ``language`` is recorded for error messages but does not currently
-    change behavior — both Go and Java upstream sort alphabetically with
-    the same case-insensitive primary key.
+    change behavior — both Go and Java upstream sort with the same
+    primary key.
 
-    The function is idempotent: inserting a line that already exists in
-    the block is a no-op (no duplicate).
+    The function is idempotent: inserting a line that already exists
+    in the target block is a no-op (no duplicate).
 
-    Raises ``ValueError`` if ``marker_pattern`` matches no lines.
+    Raises ``ValueError`` if ``marker_pattern`` matches no lines, or
+    if multiple matched runs tie for longest (caller must disambiguate
+    via a more specific pattern).
     """
+    import bisect
+
     fp = Path(file_path)
     text = fp.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     pattern = re.compile(marker_pattern)
-    matched_idxs = [i for i, ln in enumerate(lines) if pattern.search(ln)]
-    if not matched_idxs:
+
+    runs: List[List[int]] = []
+    current: List[int] = []
+    for i, ln in enumerate(lines):
+        if pattern.search(ln):
+            current.append(i)
+        else:
+            if current:
+                runs.append(current)
+                current = []
+    if current:
+        runs.append(current)
+    if not runs:
         raise ValueError(
             f"marker_pattern={marker_pattern!r} matched no lines in {fp} "
             f"(language={language})"
         )
-    # The block is the contiguous range covering all matches (including
-    # any non-matching lines between matches — typical when the block
-    # has a few annotated entries).
-    block_start = matched_idxs[0]
-    block_end = matched_idxs[-1] + 1
+    longest_size = max(len(r) for r in runs)
+    longest_runs = [r for r in runs if len(r) == longest_size]
+    if len(longest_runs) > 1:
+        raise ValueError(
+            f"marker_pattern={marker_pattern!r} produced {len(longest_runs)} "
+            f"contiguous runs of length {longest_size} (tie). Use a more "
+            f"specific pattern to disambiguate (file: {fp})."
+        )
+    target_run = longest_runs[0]
+    block_start = target_run[0]
+    block_end = target_run[-1] + 1
     block_lines = lines[block_start:block_end]
-    # Sort key: case-insensitive primary, case-sensitive secondary.
+
     sort_key: Callable[[str], Tuple[str, str]] = lambda s: (s.lower(), s)
     canonical_insert = insert_line if insert_line.endswith("\n") else insert_line + "\n"
     if canonical_insert in block_lines:
         return  # idempotent: already present
-    new_block = sorted(block_lines + [canonical_insert], key=sort_key)
+
+    keys = [sort_key(ln) for ln in block_lines]
+    pos = bisect.bisect_left(keys, sort_key(canonical_insert))
+    new_block = block_lines[:pos] + [canonical_insert] + block_lines[pos:]
     new_lines = lines[:block_start] + new_block + lines[block_end:]
     fp.write_text("".join(new_lines), encoding="utf-8")
 

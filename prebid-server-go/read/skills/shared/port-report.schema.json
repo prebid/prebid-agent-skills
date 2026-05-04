@@ -136,8 +136,8 @@
     },
     "source_pr_merged_commit_sha": {
       "type": ["string", "null"],
-      "pattern": "^([a-f0-9]{40})?$",
-      "description": "Phase D 0.2.0. 40-hex SHA of the merge commit that landed the source adapter. Provenance: anchors the port to a specific upstream snapshot, so that future cross-version replay (Phase F) can reproduce the exact source state. Null when source_pr_url is null or the source state predates the repo's git history."
+      "pattern": "^[a-f0-9]{40}$",
+      "description": "Phase D 0.2.0. 40-hex SHA of the merge commit that landed the source adapter. Provenance: anchors the port to a specific upstream snapshot, so that future cross-version replay (Phase F) can reproduce the exact source state. Null when source_pr_url is null or the source state predates the repo's git history. Empty string is NOT admitted — pattern requires exactly 40 hex chars when the field is a string (Phase D review M-D)."
     },
     "source_discussion_anchors": {
       "type": "array",
@@ -273,8 +273,18 @@
         },
         "conflicts_summary": {
           "type": ["string", "null"],
-          "description": "Free-text describing what conflicted. Required (non-null) when conflicts_detected is true."
+          "description": "Free-text describing what conflicted. Required (non-null, non-empty string) when conflicts_detected is true; the if/then below enforces this declaratively (Phase D review M-D)."
         }
+      },
+      "if": {
+        "properties": { "conflicts_detected": { "const": true } },
+        "required": ["conflicts_detected"]
+      },
+      "then": {
+        "properties": {
+          "conflicts_summary": { "type": "string", "minLength": 1 }
+        },
+        "required": ["conflicts_summary"]
       }
     },
 

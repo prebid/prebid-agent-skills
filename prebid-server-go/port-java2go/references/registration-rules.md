@@ -33,9 +33,11 @@ const (
 )
 ```
 
-Insertion: alphabetical by **constant name** (`Bidder{X}` form). Case-sensitive ASCII sort matches upstream `gofmt`'s natural ordering. Numeric prefixes (e.g., `Bidder33Across`) sort BEFORE letters (per `'3' < 'A'` in ASCII).
+Insertion: at the canonical position under sort key `(s.lower(), s)` — case-insensitive primary (matching upstream's predominant convention; verified against `prebid/prebid-server` HEAD `f601e3f3db83`), with case-sensitive ASCII tiebreak. Numeric prefixes (e.g., `Bidder33Across`) sort before letters because `'3'.lower()` is still `'3'` and `'3' < 'a'` in ASCII.
 
-`port_engine.alphabetical_insert(file_path, marker_pattern=r'BidderName\s*=\s*"', insert_line=...)` — the marker pattern matches every existing line in the const block. The helper sorts case-insensitively (primary) with case-sensitive ASCII tiebreak (matching Python's `(s.lower(), s)` ordering).
+**The helper does NOT re-sort the existing block.** Upstream HEAD has ~20 of 261 entries that are locally out-of-order under `(s.lower(), s)` — `BidderAdtrgtme` precedes `BidderAdtelligent`, `BidderEdge226` precedes `BidderDmx`, etc. Re-sorting would create ~20 unrelated diffs in every port PR. `port_engine.alphabetical_insert` uses `bisect.bisect_left` against the existing block's sort keys, finding the canonical position for the new entry while preserving every existing line's position.
+
+`port_engine.alphabetical_insert(file_path, marker_pattern=r'Bidder\w+\s+BidderName\s*=', insert_line=...)`. The helper finds all contiguous runs of marker-matching lines and picks the longest as the target block. Since `bidders.go` carries TWO `const ( ... )` blocks (10 Reserved* + 261 Bidder*), this scoping prevents the new entry from landing in the wrong block. If two runs tie for longest, the helper raises `ValueError` and the caller must use a more specific marker.
 
 ### Region B — the `coreBidderNames` slice
 
@@ -48,7 +50,7 @@ var coreBidderNames = []BidderName{
 }
 ```
 
-Same alphabetical-by-constant-name ordering. `port_engine.alphabetical_insert` is invoked separately for this region (different marker pattern: `r'^\s+Bidder\w+,\s*$'`).
+Same `(s.lower(), s)` insertion semantics. `port_engine.alphabetical_insert` is invoked separately for this region with a distinct marker pattern (`r'^\s+Bidder\w+,\s*$'` — matches the slice-entry shape, not the const-block shape, so no scoping ambiguity arises).
 
 ### Pre-emit validation
 
@@ -70,7 +72,7 @@ import (
 )
 ```
 
-Insertion: alphabetical by **import path** (the bidder package directory name; lowercase). Case-sensitive ASCII sort. The marker pattern: `r'"github.com/prebid/prebid-server/v\d+/adapters/'`.
+Insertion: by **import path** (the bidder package directory name; all lowercase since upstream package names are lowercase). Sort key `(s.lower(), s)` — for an all-lowercase block, the primary key alone is decisive, so this matches plain-ASCII sort here. The marker pattern: `r'"github.com/prebid/prebid-server/v\d+/adapters/'`.
 
 ### Region B — the dispatch-map entries
 
@@ -99,12 +101,18 @@ For empire-parent ports (Rule 33 inverse), the alias children get THEIR OWN `sta
 ## Sort key reference
 
 For all alphabetical inserts, the sort key is `(s.lower(), s)`:
-- Primary: case-insensitive (lowercase form)
-- Tiebreak: case-sensitive ASCII (uppercase letters sort before lowercase per ASCII)
+- Primary: case-insensitive (lowercase form).
+- Tiebreak: case-sensitive ASCII (uppercase letters sort before lowercase per ASCII).
+
+This was chosen because empirical comparison against `prebid/prebid-server` HEAD `f601e3f3db83` showed:
+- 20 of 261 entries out-of-order under `(s.lower(), s)` — local violations the upstream maintainers haven't normalized.
+- 136 of 261 out-of-order under plain case-sensitive ASCII — the latter would be wrong for nearly half the entries (e.g., `BidderAJA` would sort before `BidderAax` under plain ASCII because `'J' < 'a'`).
+
+`(s.lower(), s)` is the closer canonical form. The 20 local violations in upstream are preserved by the helper's `bisect.bisect_left` insertion strategy (no whole-block re-sort) — see `scripts/lib/port_engine.alphabetical_insert` docstring.
 
 Examples:
-- `BidderAax`, `BidderAdkernel`, `BidderAdkernelAdn`, `BidderAdverxo` → in this order (case-insensitive within prefix-equal entries; tiebreak is ASCII-stable but rarely matters since each entry has a distinct case-insensitive prefix).
-- The case-sensitive tiebreak surfaces for entries like `BidderEMX` vs `BidderEmx` (rare; not currently in the corpus).
+- `BidderAax`, `BidderAdkernel`, `BidderAdkernelAdn`, `BidderAdverxo` → in this order (case-insensitive monotone increasing).
+- The case-sensitive tiebreak surfaces for entries like `BidderEMX` vs `BidderEmx` (rare; not currently in the corpus). When upstream's local order violates the formula (e.g., `BidderAdtrgtme` precedes `BidderAdtelligent`), the helper preserves the violation rather than spuriously normalizing — port PRs touch only the new line.
 
 ## Connection to other rules
 

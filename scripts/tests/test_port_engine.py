@@ -166,6 +166,55 @@ class TestAliasGraphInvert(unittest.TestCase):
         with self.assertRaises(ValueError):
             alias_graph_invert({}, [], direction="bidirectional")
 
+    def test_maintainer_override_propagates(self):
+        """Per R5-strict (post-Wave-11b _maintainer_eq), maintainer email is the
+        runtime invariant; an alias may legitimately override it. The helper
+        forwards the override rather than silently dropping it."""
+        parent = {
+            "meta": {"bidder_name": "smarthub"},
+            "bidder_info": {
+                "endpoint": "https://example.com/bid",
+                "maintainer": {"email": "support@smarthub.com"},
+            },
+        }
+        alias = {
+            "meta": {"bidder_name": "smarthub_eu"},
+            "bidder_info": {
+                "endpoint": "https://example.com/bid",
+                "maintainer": {"email": "eu-support@smarthub.com"},
+            },
+        }
+        result = alias_graph_invert(parent, [alias], direction="go-to-java")
+        self.assertIn("maintainer", result["smarthub_eu"])
+        self.assertEqual(
+            result["smarthub_eu"]["maintainer"],
+            {"email": "eu-support@smarthub.com"},
+        )
+
+    def test_schema_interpretation_keys_NOT_aliasable(self):
+        """params.schema_interpretation.* fields are tied to bidder-params
+        identity; aliases inherit by reference and CANNOT override them.
+        The helper does NOT forward these keys even if a malformed alias
+        spec carries them."""
+        parent = {
+            "meta": {"bidder_name": "kobler"},
+            "bidder_info": {"endpoint": "https://example.com/bid"},
+        }
+        alias = {
+            "meta": {"bidder_name": "kobler_alt"},
+            "bidder_info": {
+                "endpoint": "https://example.com/bid",
+                # Malformed: alias attempting schema_interpretation override.
+                # (Not a valid R5 case but worth guarding against.)
+            },
+            "params": {
+                "schema_interpretation": {"required_fields": ["x", "y"]},
+            },
+        }
+        result = alias_graph_invert(parent, [alias], direction="go-to-java")
+        self.assertNotIn("schema_interpretation", result["kobler_alt"])
+        self.assertNotIn("required_fields", result["kobler_alt"])
+
 
 # ---------------------------------------------------------------------------
 # Helper 4: iab_table_translate (Rule 42)
@@ -219,6 +268,58 @@ var iabCategories = map[string]string{
             iab_table_translate("go-to-java", {"IAB1": "x"})  # dict where string expected
         with self.assertRaises(TypeError):
             iab_table_translate("java-to-go", "string")  # string where dict expected
+
+    def test_brace_inside_string_value_does_not_close_map(self):
+        """A literal '}' inside a Go string value must not be parsed as the
+        map's closing brace."""
+        go_source = '''package iab
+
+var iabCategories = map[string]string{
+    "IAB1": "Arts {with brace}",
+    "IAB2": "Cars",
+}
+'''
+        result = iab_table_translate("go-to-java", go_source)
+        self.assertEqual(result, {
+            "IAB1": "Arts {with brace}",
+            "IAB2": "Cars",
+        })
+
+    def test_escaped_quote_inside_value_handled(self):
+        """A backslash-escaped quote inside a value must parse correctly."""
+        # Use a raw string to construct: "IAB1": "Has \"escaped\" quotes",
+        go_source = (
+            'package iab\n\n'
+            'var iabCategories = map[string]string{\n'
+            '    "IAB1": "Has \\"escaped\\" quotes",\n'
+            '    "IAB2": "Plain",\n'
+            '}\n'
+        )
+        result = iab_table_translate("go-to-java", go_source)
+        self.assertEqual(result["IAB1"], 'Has "escaped" quotes')
+        self.assertEqual(result["IAB2"], "Plain")
+
+    def test_custom_package_and_var_name_in_emit(self):
+        """java-to-go honors package_name and var_name kwargs."""
+        result = iab_table_translate(
+            "java-to-go",
+            {"IAB1": "Arts"},
+            package_name="customiab",
+            var_name="categoryMap",
+        )
+        self.assertIn("package customiab", result)
+        self.assertIn("var categoryMap = map[string]string{", result)
+
+    def test_non_default_var_name_parses_back(self):
+        """Parser accepts any var name matching the *iab* pattern (case-insensitive)."""
+        go_source = '''package custom
+
+var bidderIabCategoryTable = map[string]string{
+    "IAB1": "Arts",
+}
+'''
+        result = iab_table_translate("go-to-java", go_source)
+        self.assertEqual(result, {"IAB1": "Arts"})
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +467,101 @@ class TestAlphabeticalInsert(unittest.TestCase):
             fp.write_text("package openrtb_ext\n")
             with self.assertRaises(ValueError):
                 alphabetical_insert(fp, r"BidderName = ", "    NewLine")
+
+    def test_picks_longest_run_when_pattern_matches_two_blocks(self):
+        """Two const blocks share the marker pattern; helper picks the
+        longer (the actual bidder block) and leaves the smaller (reserved)
+        alone."""
+        with TemporaryDirectory() as td:
+            fp = Path(td) / "bidders.go"
+            fp.write_text(
+                "package openrtb_ext\n"
+                "\n"
+                "const (\n"
+                '    BidderReservedAll BidderName = "all"\n'
+                '    BidderReservedData BidderName = "data"\n'
+                ")\n"
+                "\n"
+                "const (\n"
+                '    BidderAax       BidderName = "aax"\n'
+                '    BidderAdkernel  BidderName = "adkernel"\n'
+                '    BidderAdverxo   BidderName = "adverxo"\n'
+                '    BidderKobler    BidderName = "kobler"\n'
+                ")\n"
+            )
+            alphabetical_insert(
+                fp,
+                marker_pattern=r'Bidder\w+\s+BidderName\s*=',
+                insert_line='    BidderEdge226   BidderName = "edge226"',
+            )
+            text = fp.read_text()
+            lines = text.splitlines()
+            # Reserved block stays untouched (only 2 entries).
+            reserved_lines = [ln for ln in lines if "BidderReserved" in ln]
+            self.assertEqual(len(reserved_lines), 2)
+            # New entry lands between BidderAdverxo and BidderKobler.
+            idx_adv = next(i for i, ln in enumerate(lines) if "BidderAdverxo " in ln)
+            idx_edge = next(i for i, ln in enumerate(lines) if "BidderEdge226" in ln)
+            idx_kob = next(i for i, ln in enumerate(lines) if "BidderKobler " in ln)
+            self.assertLess(idx_adv, idx_edge)
+            self.assertLess(idx_edge, idx_kob)
+
+    def test_preserves_existing_local_violations(self):
+        """Upstream HEAD has ~20 entries locally out-of-order vs (lower, s);
+        helper must NOT re-sort the existing block, only insert at the
+        canonical position for the new entry."""
+        with TemporaryDirectory() as td:
+            fp = Path(td) / "bidders.go"
+            # Deliberately swap two entries (BidderAdtelligent / BidderAdtrgtme)
+            # to mimic the real upstream local violation.
+            fp.write_text(
+                "package openrtb_ext\n"
+                "\n"
+                "const (\n"
+                '    BidderAax        BidderName = "aax"\n'
+                '    BidderAdtrgtme   BidderName = "adtrgtme"\n'  # out of order
+                '    BidderAdtelligent BidderName = "adtelligent"\n'  # belongs before adtrgtme
+                '    BidderKobler     BidderName = "kobler"\n'
+                ")\n"
+            )
+            alphabetical_insert(
+                fp,
+                marker_pattern=r'Bidder\w+\s+BidderName\s*=',
+                insert_line='    BidderVungle     BidderName = "vungle"',
+            )
+            text = fp.read_text()
+            lines = text.splitlines()
+            # The existing local violation MUST be preserved.
+            adtrgtme_idx = next(i for i, ln in enumerate(lines) if "BidderAdtrgtme " in ln)
+            adtellig_idx = next(i for i, ln in enumerate(lines) if "BidderAdtelligent " in ln)
+            self.assertLess(adtrgtme_idx, adtellig_idx,
+                            "helper must preserve existing local violations; not re-sort")
+            # New entry lands at correct (lower, s) position (after kobler).
+            kob_idx = next(i for i, ln in enumerate(lines) if "BidderKobler " in ln)
+            vungle_idx = next(i for i, ln in enumerate(lines) if "BidderVungle " in ln)
+            self.assertLess(kob_idx, vungle_idx)
+
+    def test_tie_among_longest_runs_raises(self):
+        """If two contiguous runs are equal length, helper refuses to guess."""
+        with TemporaryDirectory() as td:
+            fp = Path(td) / "ambiguous.go"
+            fp.write_text(
+                "const (\n"
+                '    A BidderName = "a"\n'
+                '    B BidderName = "b"\n'
+                ")\n"
+                "\n"
+                "const (\n"
+                '    C BidderName = "c"\n'
+                '    D BidderName = "d"\n'
+                ")\n"
+            )
+            with self.assertRaises(ValueError):
+                alphabetical_insert(
+                    fp,
+                    marker_pattern=r'BidderName\s*=',
+                    insert_line='    E BidderName = "e"',
+                )
 
 
 # ---------------------------------------------------------------------------
