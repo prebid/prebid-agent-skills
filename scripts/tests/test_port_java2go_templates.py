@@ -774,6 +774,183 @@ class TestCurrencyConversionEmission(unittest.TestCase):
         self.assertIn("var errs []error", rendered)
 
 
+class TestCustomHeadersEmission(unittest.TestCase):
+    """D3.8 B3 — TIER 1 item 3 (custom-headers extension). When
+    `ctx.custom_headers` is a non-empty list of `{name, value}` dicts the
+    template appends one `headers.Add(name, value)` call per entry inside
+    standardHeaders(), AFTER the universal Content-Type + Accept pair.
+
+    None or `[]` → no extras emitted (kobler-shape baseline preserved).
+
+    Affects 5/16 (31%) of corpus per d3.8-template-coverage-audit:
+    adkernelAdn (X-OpenRTB-Version), elementaltv (X-OpenRTB-Version),
+    freewheelssp (Componentid), smarthub (Prebid-Adapter-Ver), and
+    vungle (X-OpenRTB-Version).
+    """
+
+    def _standard_headers_block(self, rendered: str) -> str:
+        """Slice out the standardHeaders() function body for assertions."""
+        idx = rendered.find("func standardHeaders")
+        self.assertGreaterEqual(idx, 0, "standardHeaders() should always emit")
+        nxt = rendered.find("\nfunc ", idx + 5)
+        if nxt < 0:
+            nxt = len(rendered)
+        return rendered[idx:nxt]
+
+    def test_zero_custom_headers_none_emits_baseline(self):
+        """`ctx.custom_headers = None` → only Content-Type + Accept (2 calls)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = None
+        rendered = _render("bidder.go.j2", ctx)
+        block = self._standard_headers_block(rendered)
+        self.assertIn(
+            'headers.Add("Content-Type", "application/json;charset=utf-8")', block
+        )
+        self.assertIn('headers.Add("Accept", "application/json")', block)
+        self.assertEqual(block.count("headers.Add("), 2)
+
+    def test_zero_custom_headers_empty_list_emits_baseline(self):
+        """`ctx.custom_headers = []` → only Content-Type + Accept (2 calls)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = []
+        rendered = _render("bidder.go.j2", ctx)
+        block = self._standard_headers_block(rendered)
+        self.assertEqual(block.count("headers.Add("), 2)
+
+    def test_missing_custom_headers_emits_baseline(self):
+        """Backwards compat: ctx without `custom_headers` key at all renders
+        identically to None/[] (the existing bidder ctxs in this file omit
+        it; this test pins that behavior so older callers don't break)."""
+        ctx = _kobler_bidder_go_ctx()
+        # _kobler_bidder_go_ctx() does not set custom_headers — leave it absent.
+        self.assertNotIn("custom_headers", ctx)
+        rendered = _render("bidder.go.j2", ctx)
+        block = self._standard_headers_block(rendered)
+        self.assertEqual(block.count("headers.Add("), 2)
+
+    def test_one_custom_header_emits_three_adds(self):
+        """One ctx.custom_headers entry → 3 headers.Add calls total."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = [{"name": "X-OpenRTB-Version", "value": "2.5"}]
+        rendered = _render("bidder.go.j2", ctx)
+        block = self._standard_headers_block(rendered)
+        self.assertEqual(block.count("headers.Add("), 3)
+        self.assertIn('headers.Add("X-OpenRTB-Version", "2.5")', block)
+
+    def test_multiple_custom_headers_preserve_declared_order(self):
+        """Multiple entries must emit in declaration order — assert via
+        lexical index of each line within standardHeaders() body."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = [
+            {"name": "X-OpenRTB-Version", "value": "2.5"},
+            {"name": "Componentid", "value": "prebid-go"},
+            {"name": "Prebid-Adapter-Ver", "value": "1.0.0"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        block = self._standard_headers_block(rendered)
+        # All three custom calls present.
+        self.assertEqual(block.count("headers.Add("), 5)  # 2 universal + 3 custom
+        # Lexical ordering matches declaration order.
+        accept_idx = block.index('headers.Add("Accept"')
+        version_idx = block.index('headers.Add("X-OpenRTB-Version"')
+        component_idx = block.index('headers.Add("Componentid"')
+        adapter_ver_idx = block.index('headers.Add("Prebid-Adapter-Ver"')
+        # Custom headers come after the universal Accept.
+        self.assertLess(accept_idx, version_idx)
+        # Declared order: version → componentid → adapter-ver.
+        self.assertLess(version_idx, component_idx)
+        self.assertLess(component_idx, adapter_ver_idx)
+        # And the function still closes with `return headers`.
+        self.assertLess(adapter_ver_idx, block.index("return headers"))
+
+    def test_custom_header_name_with_hyphens_quoted_correctly(self):
+        """Header names with hyphens (canonical mixed-case) must be JSON-quoted
+        verbatim — no transformation, no lowercasing."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = [
+            {"name": "X-OpenRTB-Version", "value": "2.5"},
+            {"name": "Prebid-Adapter-Ver", "value": "1.0.0"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # Mixed-case name preserved exactly (audit F-new-6: don't canonicalize).
+        self.assertIn('headers.Add("X-OpenRTB-Version", "2.5")', rendered)
+        self.assertNotIn("x-openrtb-version", rendered)
+        self.assertIn('headers.Add("Prebid-Adapter-Ver", "1.0.0")', rendered)
+
+    def test_custom_header_value_with_special_chars_json_escaped(self):
+        """Header values with special chars (semicolons, quotes, backslashes)
+        must be properly escaped via the tojson filter so the emitted Go
+        string literal compiles. Go's double-quoted string escape rules are
+        JSON-compatible for these characters."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = [
+            # Semicolon + slash + equals — common in mime-type-style values.
+            {"name": "X-Content-Like", "value": "application/json;charset=utf-8"},
+            # Embedded backslash.
+            {"name": "X-Path", "value": "a\\b"},
+            # Embedded double quote.
+            {"name": "X-Quote", "value": 'has "q"'},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # Semicolon/slash pass through unchanged (no escaping needed).
+        self.assertIn(
+            'headers.Add("X-Content-Like", "application/json;charset=utf-8")',
+            rendered,
+        )
+        # Backslash escaped to \\ in JSON, which is also Go's escape form.
+        self.assertIn('headers.Add("X-Path", "a\\\\b")', rendered)
+        # Double quotes escaped to \" — also matches Go's escape form.
+        self.assertIn('headers.Add("X-Quote", "has \\"q\\"")', rendered)
+
+    def test_empty_string_name_or_value_emitted_literally(self):
+        """Edge: empty-string name or value is NOT the template's job to
+        validate. Pin that the template emits whatever the spec hands it
+        (operator catches degenerate specs upstream)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = [
+            {"name": "", "value": "v"},
+            {"name": "n", "value": ""},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn('headers.Add("", "v")', rendered)
+        self.assertIn('headers.Add("n", "")', rendered)
+
+    def test_custom_headers_render_is_position_correct_in_function_body(self):
+        """Custom headers must be inserted BETWEEN the universal Accept call
+        and the `return headers` closer — not before Content-Type, not after
+        return. Pins the structural position so a future edit doesn't
+        accidentally move them."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["custom_headers"] = [{"name": "X-OpenRTB-Version", "value": "2.5"}]
+        rendered = _render("bidder.go.j2", ctx)
+        block = self._standard_headers_block(rendered)
+        ct_idx = block.index('headers.Add("Content-Type"')
+        accept_idx = block.index('headers.Add("Accept"')
+        custom_idx = block.index('headers.Add("X-OpenRTB-Version"')
+        return_idx = block.index("return headers")
+        self.assertLess(ct_idx, accept_idx)
+        self.assertLess(accept_idx, custom_idx)
+        self.assertLess(custom_idx, return_idx)
+
+    def test_custom_headers_does_not_interact_with_b1_b2_emissions(self):
+        """B1's bid-type signature flip and B2's currency helper live
+        elsewhere in the file. Confirm enabling custom_headers alongside
+        both does not corrupt either emission."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = True  # B2 path
+        ctx["bid_type_resolution"] = "by-bid-mtype"  # B1 error-flip path
+        ctx["bid_type_fallback_action"] = "throw"
+        ctx["custom_headers"] = [{"name": "X-OpenRTB-Version", "value": "2.5"}]
+        rendered = _render("bidder.go.j2", ctx)
+        # B3 (custom header) emitted.
+        self.assertIn('headers.Add("X-OpenRTB-Version", "2.5")', rendered)
+        # B1 (error-returning getBidType) still flipped.
+        self.assertIn("(openrtb_ext.BidType, error)", rendered)
+        # B2 (currency helper) still present.
+        self.assertIn("func convertImpCurrency(", rendered)
+        self.assertIn('"strings"', rendered)
+
+
 class TestModuleVersionInOtherTemplates(unittest.TestCase):
     """D3-B1: bidder-test.go.j2 and params-test.go.j2 also import from
     the prebid-server module path; both must be parameterized."""

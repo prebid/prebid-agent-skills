@@ -96,6 +96,25 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         for the canonical pin.
   ctx.imports_extra           : list[str] — caller-collected; one fully-qualified import
                                             per entry; alphabetical.
+  ctx.custom_headers          : list[{name: str, value: str}] | None — extra headers
+                                            beyond the universal Content-Type +
+                                            Accept pair, appended inside
+                                            standardHeaders(). None or [] → no extras
+                                            emitted (preserves the kobler-shape
+                                            two-header baseline). Each entry produces
+                                            one `headers.Add({{name}}, {{value}})`
+                                            line in declaration order.
+                                            Header NAMES SHOULD be passed in canonical
+                                            mixed-case (e.g., "X-OpenRTB-Version", not
+                                            "x-openrtb-version"). The template emits
+                                            literally what the spec provides via the
+                                            tojson filter; per-spec normalization is a
+                                            spec-hygiene concern (audit F-new-6 noted
+                                            Go-side specs sometimes carried lowercase
+                                            forms — fix at the spec layer, not here).
+                                            Affects ~31% of corpus (adkernelAdn,
+                                            elementaltv, freewheelssp, smarthub,
+                                            vungle).
   ctx.javadoc_summary         : str|null — // doc comment above package var or struct
 #}
 {# ---------------- Internal helpers (bid type resolution) ---------------- #}
@@ -525,6 +544,11 @@ func standardHeaders() http.Header {
 	headers := http.Header{}
 	headers.Add("Content-Type", "application/json;charset=utf-8")
 	headers.Add("Accept", "application/json")
+{% if ctx.custom_headers %}
+{% for h in ctx.custom_headers %}
+	headers.Add({{ h.name | tojson }}, {{ h.value | tojson }})
+{% endfor %}
+{% endif %}
 	return headers
 }
 {% if ctx.uses_currency_conversion %}
