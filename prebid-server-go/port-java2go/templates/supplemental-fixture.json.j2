@@ -123,8 +123,9 @@ unknown values before invoking this template.
     {
       "expectedRequest": {
         "uri": {{ ctx.uri | tojson }},
-        "body": {{ ctx.expected_request_body | tojson }},
-        "impIDs": {{ ctx.imp_ids | tojson }}
+        "body": {{ ctx.expected_request_body | tojson }}{% if ctx.imp_ids %},
+        "impIDs": {{ ctx.imp_ids | tojson }}{% endif %}
+
       },
       "mockResponse": {
 {% if kind == "status-204" %}

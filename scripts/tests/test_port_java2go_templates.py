@@ -1556,7 +1556,8 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
     def test_imp_ids_emit_per_F_new_12(self):
         """F-new-12 (canary v2): adapterstest.RunJSONBidderTest asserts
         non-empty expectedRequest.impIDs. The supplemental template emits
-        impIDs unconditionally (per spec; ctx.imp_ids is required)."""
+        impIDs when present in ctx (matching exemplary template's guard;
+        Reviewer M6 alignment)."""
         ctx = _supplemental_fixture_ctx("status-204")
         ctx["imp_ids"] = ["imp-A", "imp-B"]
         rendered = _render("supplemental-fixture.json.j2", ctx)
@@ -1565,7 +1566,8 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
             parsed["httpCalls"][0]["expectedRequest"]["impIDs"],
             ["imp-A", "imp-B"],
         )
-        # Render correctness across all 5 known kinds — impIDs always present.
+        # Render correctness across all 5 known kinds — impIDs always present
+        # when supplied.
         for kind in ("status-204", "status-400", "status-404",
                      "no-response-body", "malformed-body"):
             ctx2 = _supplemental_fixture_ctx(kind)
@@ -1576,6 +1578,32 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
                 ["imp-A", "imp-B"],
                 f"impIDs missing for kind={kind}",
             )
+
+    def test_imp_ids_omitted_when_absent_or_empty(self):
+        """Reviewer M6: previously the supplemental template emitted
+        `"impIDs": null` when ctx.imp_ids was missing — diverges from
+        exemplary template's `{% if call.imp_ids %}` guard. After the M6
+        fix the impIDs key is omitted entirely when absent or empty,
+        consistent with exemplary."""
+        ctx = _supplemental_fixture_ctx("status-204")
+        # imp_ids deliberately missing
+        ctx.pop("imp_ids", None)
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertNotIn(
+            "impIDs",
+            parsed["httpCalls"][0]["expectedRequest"],
+            "impIDs key should be omitted when ctx.imp_ids is absent (M6)",
+        )
+        # And same for empty list.
+        ctx2 = _supplemental_fixture_ctx("status-204")
+        ctx2["imp_ids"] = []
+        parsed2 = json.loads(_render("supplemental-fixture.json.j2", ctx2))
+        self.assertNotIn(
+            "impIDs",
+            parsed2["httpCalls"][0]["expectedRequest"],
+            "impIDs key should be omitted when ctx.imp_ids is empty list (M6)",
+        )
 
     def test_passthrough_body_default(self):
         """The expected_request_body == mock_bid_request case (passthrough
