@@ -50,10 +50,11 @@ Both consume the cross-language translation rules at `prebid-server-go/read/skil
 
 - D4.4 — beachfront fixture (ADR-007 F1 multi-endpoint-by-mediatype master sample) — Go + Java goldens + dual-spec assertions; also master sample for Rule 35 typed-config-subclass and Rule 9 parameterized-request-type. Corpus expanded 40 → 42 goldens, 16 → 17 dual-specs.
 
-**Pending operator-side work** (out-of-session against local upstream clones; review team can run on a real prebid-server-{go,java} checkout):
+**Operator-side validation status**:
 
-- D2.8 — port-go2java validation against the 6 MVP pairs (kobler, aax, adkernelAdn, adverxo, vungle, thetradedesk): `mvn -B compile`, `mvn -B checkstyle:check`, Jacoco line-coverage ≥ 90%, R5 state matches expectation per [execution plan §D2.3](docs/execution-plan-phase-d.md).
-- D3.8 — port-java2go validation against the same 6 pairs reversed: `go build`, `go vet`, `gofmt -s -l`, `./scripts/check_coverage.sh ≥ 80%`, `TestBidderUniquenessGatekeeping`, R5 state per [§D3.3](docs/execution-plan-phase-d.md).
+- **D3.8 — port-java2go: COMPLETE (2026-05-05).** All 6 MVP pairs (kobler, aax, adkernelAdn, adverxo, vungle, thetradedesk) demonstrably portable Java → Go end-to-end via 7 canary runs. Trajectory `5 clean / 2 after-fix / 2 FAIL` (canary 1) → 3 consecutive `10 clean / 0 / 0` (canaries 5-7); final canary cleared D3.3 gate 3's 80% coverage threshold (81.4%). port-java2go SKILL bumped 0.3.0 → 0.5.0. Traces under `docs/runs/d3.8-*-canary-*.md`; corpus audit at `docs/runs/d3.8-template-coverage-audit.md`.
+- **port-java2go v1.0.0 promotion blockers** (out of D3.8 scope; tracked for follow-up): template-macro / multi-token-substitution real bodies (F-new-2, F-new-27); per-key batching template branch (F-new-7 EXT-A); imp-id-correlation template branch (F-new-7 EXT-B); `naming_form_resolution` ctx schema (F-new-34 Rule 46); a non-MVP validation canary (fresh adapter outside the 6-pair MVP set) clearing all 8 gates with ≤1 retry. Full enumeration of ~33 D3.8 findings in canary 7 trace.
+- **D2.8 — port-go2java: PENDING.** Out-of-session against local upstream Java clones; same 6 MVP pairs reversed. `mvn -B compile`, `mvn -B checkstyle:check`, Jacoco line-coverage ≥ 90%, R5 state per [execution plan §D2.3](docs/execution-plan-phase-d.md).
 
 ## Phase E — Review-skill expansion + cross-skill integration (partially shipped)
 

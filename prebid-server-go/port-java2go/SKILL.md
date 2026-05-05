@@ -1,14 +1,22 @@
 ---
 name: port-java2go
 description: Translates a Java-source Adapter Spec (prebid-server-java/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/java/{bidder}.yaml) into Go artifacts under prebid-server-go/adapters/{bidder}/ plus paired YAML, bidder-params, exemplary fixtures, and registry entries. USE WHEN porting a new (or existing) Java bid adapter to the Go codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
-version: 0.3.0
+version: 0.5.0
 ---
 
 # port-java2go (Java → Go)
 
-> **Status: D3 templates complete.** Pipeline prose authored (D3.1); all 6 Go-side templates shipped (D3.2): `bidder-info.yaml.j2`, `imp-ext-pojo.go.j2`, `bidder-test.go.j2`, `params-test.go.j2`, `exemplary-fixture.json.j2`, `bidder.go.j2`. Remaining D3 work: end-to-end operator validation against the 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) using a local `prebid-server` clone — `go build ./adapters/{bidder}/...`, `gofmt -s -l`, `go vet`, `go test`, `./scripts/check_coverage.sh ≥ 80%`, `TestBidderUniquenessGatekeeping`. Frontmatter bumps to 1.0.0 once each MVP pair clears all 8 gates per `docs/execution-plan-phase-d.md` §D3.3.
+> **Status: D3.8 operator validation complete.** All 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) demonstrably portable end-to-end via 7 canaries; trajectory `5 clean / 2 after-fix / 2 FAIL` → 3 consecutive `10 clean / 0 / 0`; final canary cleared D3.3 gate 3's 80% coverage threshold. Pipeline prose authored (D3.1); 7 Go-side templates shipped (D3.2 + D3.8 supplemental-fixture); 2 port_engine helpers added (`exemplary_fixture_assemble_java_to_go`, `simulate_makerequests_mutations`); 8 template-body extensions landed (B1 unified `getBidType` / B2 currency-conversion / B3 custom-headers / F-new-1 imp_ext=none / F-new-14 legacy-raw-go status branching / F-new-12 impIDs / F-new-22 inject_empty_user / F-new-23 supplemental gating).
 >
-> **D3 ships production-grade**, not exploratory. The empirical Go→Java dominance in merged PRs (12+ vs 0 in 18 months) reflects current tooling limits, not user need or maintainer disinterest. Phase D removes that asymmetry as a first-class deliverable.
+> **Production-ready for canary porting** with 1-2 hour operator hand-fill per pair (workarounds documented in each canary trace under `docs/runs/d3.8-*-canary-*.md`). NOT YET v1.0.0. Promotion to v1.0.0 needs:
+>
+> 1. Template-macro / multi-token-substitution real bodies (F-new-2, F-new-27 — confirmed in 2/5 canaries; currently TODO stubs)
+> 2. Per-key batching template branch (F-new-7 EXT-A — adkernelAdn)
+> 3. imp-id-correlation template branch (F-new-7 EXT-B — adkernelAdn)
+> 4. `naming_form_resolution` ctx schema (F-new-34 Rule 46 master-sample)
+> 5. A non-MVP validation canary (fresh adapter outside the 6-pair MVP set) succeeding with ≤1 retry
+>
+> Audit + spike: `docs/runs/d3.8-template-coverage-audit.md`, `docs/runs/d3.8-mvp-pairs-spike-2026-05-05.md`. 7 canary traces under `docs/runs/d3.8-*-canary-*.md`. ~33 distinct findings across the series (full enumeration in canary 7 trace).
 
 ## What this skill does
 
