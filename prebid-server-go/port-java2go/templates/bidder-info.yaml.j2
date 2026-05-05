@@ -35,7 +35,7 @@ endpointCompression: {{ ctx.endpoint_compression }}
 maintainer:
   email: {{ ctx.maintainer_email }}
 {% endif %}
-{% if ctx.gvl_vendor_id is not none %}
+{% if ctx.gvl_vendor_id is not none and ctx.gvl_vendor_id != 0 %}
 gvlVendorID: {{ ctx.gvl_vendor_id }}
 {% endif %}
 {% if ctx.modifying_vast_xml %}

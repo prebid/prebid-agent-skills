@@ -40,7 +40,7 @@ The orchestrator runs seven steps in this fixed order. Steps 1–4 are sequentia
 
 Resolution depends on `--source-mode`:
 
-- `local` — `git -C <java-checkout> rev-parse <ref>`. For `branch=master`, accepts a stale local checkout but warns if `git fetch --dry-run` shows drift.
+- `local` — `git -C <java-checkout> rev-parse <ref>`. For `branch=master`, accepts a stale local checkout but warns if `git fetch --dry-run` shows drift. Note: `--source-mode=local` produces `provenance.source.fetch_method: "local-checkout"` in the spec (NOT `local`); the schema enum at `prebid-server-go/read/skills/shared/adapter-spec.schema.json` admits only `{github-raw, local-checkout, gh-cli}`.
 - `github-raw` — uses GitHub's `repos/prebid/prebid-server-java/commits/{ref}` API to resolve, then fetches blobs from `raw.githubusercontent.com`.
 - `gh-cli` — `gh api repos/prebid/prebid-server-java/commits/{ref} --jq .sha`.
 
@@ -65,7 +65,7 @@ The orchestrator MUST discover all of:
 6. `src/test/java/org/prebid/server/bidder/{xyz}/{Xyz}BidderTest.java` (unit tests, hand-written `@Test` methods)
 7. `src/test/java/org/prebid/server/it/{Xyz}Test.java` (integration test class — note: per-alias IT classes also live here; e.g., Adverxo aliases ship `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java`)
 8. `src/test/resources/org/prebid/server/it/openrtb2/{xyz}/test-{name}-{request,response,auction-request,auction-response}.json` (the 4-file split fixture set; see Rule 36 in `port-translation-rules.md`)
-9. `src/test/resources/test-application.properties` (central registry — orchestrator detects appended entries; see warnings)
+9. `src/test/resources/org/prebid/server/it/test-application.properties` (central registry under the IT package — orchestrator detects appended entries; see warnings)
 
 If file (1) or (2) is missing AND a parent declares `aliases.{bidder}`, take the alias short-circuit in Step 4. Otherwise missing files are recorded as `provenance.warnings` entries with type `missing-expected-file`.
 

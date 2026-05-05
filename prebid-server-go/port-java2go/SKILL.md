@@ -223,6 +223,47 @@ These two states are direction-specific — a `fail-source-omits` in one directi
 
 **Assemble + write.** Same algorithm as D2 §Step 7. Build the dict per `../read/skills/shared/port-report.schema.json` v0.2.0; flip `port_run.{source_lang: "java", target_lang: "go"}`. Call `port_engine.port_report_emit(report, path=output_root / "port-report.json")` for schema-validated write.
 
+**Canonical shape (kobler, abridged ~30 lines).** Operators repeatedly drift from the schema (D3.8 canary's first emit had 20 schema errors). Use this as the structural reference; `additionalProperties: false` on the top-level + most subobjects, so non-schema fields like `$schema`, `emitted_files`, `pr_shape`, `registry_inserts`, `bidder_params_sha256_match`, `note` (in rules_consumed), `rule_ref` (in human_todos), `rule_id` (in unresolved_translations) MUST NOT be added:
+
+```json
+{
+  "port_report_version": "0.2.0",
+  "port_translation_rules_version": "0.2.0",
+  "port_run": {
+    "run_id": "2026-05-05T0426Z-9f2a",
+    "source_lang": "java",
+    "target_lang": "go",
+    "source_spec_sha": "2acced97389d03e8b4a8d2b8f5c238a5505815286525b86284dd0ab2144d6ff7",
+    "target_branch": "feat/d3.8-kobler-canary"
+  },
+  "rules_consumed": [
+    { "rule_id": 38, "verdict": "applied", "summary": "bidder-params byte-copy Java→Go (sha256 matches)" },
+    { "rule_id": 35, "verdict": "applied-with-warning", "summary": "Java config subclass devEndpoint not preserved — operator must hand-fill resolveEndpoint() for dev-prod toggle" }
+  ],
+  "quirks_emitted": [
+    { "id": "dev-endpoint-handling", "summary": "Java typed config subclass `KoblerConfigurationProperties.devEndpoint` must be hand-mapped on Go side.", "edge_case_taxon": "port-fidelity-divergence" }
+  ],
+  "r5_check": { "state": "pass", "byte_equal_fields": ["bidder_params_sha256"], "warn_fields": [], "fail_fields": [], "summary": "kobler is the canonical R5-pass baseline." },
+  "source_pr_url": "https://github.com/prebid/prebid-server-java/pull/3684",
+  "source_pr_merged_commit_sha": null,
+  "source_discussion_anchors": [],
+  "re_authored_paragraphs": [],
+  "recommended_pr_title": "New Adapter: Kobler",
+  "target_pr_label_recommendations": [],
+  "upstream_bugs_to_file": [],
+  "companion_docs_pr_draft": null,
+  "pre_submit_rebase": null,
+  "human_todos": [
+    { "category": "byte-divergence-warning", "summary": "devEndpoint not preserved by template; operator must add Go-side dev-prod logic in resolveEndpoint().", "evidence_path": "src/main/java/org/prebid/server/spring/config/bidder/KoblerConfiguration.java" }
+  ],
+  "unresolved_translations": [
+    { "pattern_summary": "currency-conversion logic in MakeRequests body has no template branch for has_currency_helper=true.", "reason": "novel-pattern-needs-schema-addition", "candidate_rule_id": null, "evidence_path": "prebid-server-go/port-java2go/templates/bidder.go.j2" }
+  ]
+}
+```
+
+The full canary report at `.tmp/full-loop/2026-05-05T0426Z-9f2a/go/port-report.json` is schema-valid against v0.2.0 and shows representative population of every field.
+
 **Operator handoff.** Final message summarizes: emitted files at `output_root` (count + tree), `r5_check.state`, human_todos count + brief list, unresolved_translations count + brief list, next operator steps (review emission, run `gofmt -s -l + go vet + go test ./adapters/{bidder}/...` locally if not done, run `./scripts/check_coverage.sh`, open PR with `recommended_pr_title`, submit companion docs PR).
 
 The SKILL exits 0 on success regardless of `r5_check.state` — fail states are surfaced to the operator. Exit non-zero only on hard failures (Step 1 schema violation, Step 4 SHA mismatch, Step 5 prefix uniqueness collision, Step 7 schema violation).

@@ -12,11 +12,14 @@ exemplary-fixture.json.j2 and supplemental fixtures).
 Inputs:
   ctx.package_name       : str  — Go package name (matches the bidder dir)
   ctx.bidder_constant    : str  — full constant ref (e.g., "openrtb_ext.BidderKobler")
-  ctx.bidder_class_root  : str  — PascalCase root (used in test function names)
   ctx.module_version     : str  — Go module major version (current "v4")
 
 The Builder signature is canonical (3-arg: name, config, server). Test
 just exercises Builder + the fixture-driven RunJSONBidderTest loop.
+
+The function name is hardcoded to `TestJsonSamples` per Go upstream
+convention (100% of recently-merged adapter PRs). The test pkg is the
+bidder pkg, so the function name does not need to encode bidder identity.
 #}
 package {{ ctx.package_name }}
 
@@ -28,7 +31,7 @@ import (
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
 )
 
-func Test{{ ctx.bidder_class_root }}(t *testing.T) {
+func TestJsonSamples(t *testing.T) {
 	bidder, buildErr := Builder({{ ctx.bidder_constant }}, config.Adapter{
 		Endpoint: "https://test.example.com/bid",
 	}, config.Server{ExternalUrl: "http://hosturl.com", GvlID: 1, DataCenter: "2"})

@@ -43,7 +43,9 @@ Inputs (mirror of bidder.java.j2 ctx):
 package {{ ctx.package_name }}
 
 import (
+{% if ctx.has_extra_info %}
 	"encoding/json"
+{% endif %}
 	"fmt"
 	"net/http"
 
