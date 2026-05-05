@@ -988,6 +988,205 @@ class TestModuleVersionInOtherTemplates(unittest.TestCase):
         self.assertNotIn("/v3/", rendered)
 
 
+def _supplemental_fixture_ctx(scenario_kind: str) -> Dict[str, Any]:
+    """Synthetic kobler-equivalent context for supplemental-fixture.json.j2."""
+    return {
+        "scenario_kind": scenario_kind,
+        "mock_bid_request": {
+            "id": "test-request-id",
+            "imp": [
+                {
+                    "id": "test-imp-id",
+                    "banner": {"format": [{"w": 300, "h": 250}]},
+                },
+            ],
+        },
+        "uri": "http://fake.endpoint",
+        "expected_request_body": {
+            "id": "test-request-id",
+            "imp": [
+                {
+                    "id": "test-imp-id",
+                    "banner": {"format": [{"w": 300, "h": 250}]},
+                },
+            ],
+            "cur": ["USD"],
+        },
+        "imp_ids": ["test-imp-id"],
+    }
+
+
+class TestSupplementalFixtureJ2(unittest.TestCase):
+    """D3.3 gate-3 coverage helper — supplemental fixtures pad upstream
+    Go test coverage for kobler-shape adapters whose 1-scenario Java IT
+    cannot exercise non-200 / no-body / malformed-body branches alone.
+
+    The template covers 5 scenario_kind values, each kobler-shape-
+    agnostic (works for any adapter using canonical-go-helpers status
+    handling OR kobler's legacy-raw 204+other-non-200 shape):
+
+      status-204 / status-400 / status-404 / no-response-body /
+      malformed-body
+
+    Error-string sources (verified against
+    `prebid-server/adapters/response.go`):
+
+      * status-400 / status-404 errors: emitted by
+        `adapters.CheckResponseStatusCodeForErrors` —
+        "Unexpected status code: %d. Run with request.debug = 1 for
+        more info" (NO trailing period).
+      * malformed-body error: emitted by
+        `util/jsonutil.Unmarshal` when the response body is a JSON
+        string starting with `"` —
+        `expect { or n, but found "` — matches upstream kobler
+        `wrong-response-body-type.json`.
+      * status-204 / no-response-body: NO error — kobler adapter
+        short-circuits via `IsResponseStatusCodeNoContent` and
+        `responseData.Body == nil` respectively, returning (nil, nil).
+        Matches upstream kobler `status-204.json` and
+        `no-response-body.json`.
+    """
+
+    def test_status_204_emits_204_no_errors(self):
+        ctx = _supplemental_fixture_ctx("status-204")
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertEqual(parsed["httpCalls"][0]["mockResponse"]["status"], 204)
+        # 204 path: no errors, no body field.
+        self.assertNotIn("expectedMakeBidsErrors", parsed)
+        self.assertNotIn("body", parsed["httpCalls"][0]["mockResponse"])
+        # Empty expectedBidResponses preserved (matches upstream kobler shape).
+        self.assertEqual(parsed["expectedBidResponses"], [])
+
+    def test_status_400_emits_400_with_error(self):
+        ctx = _supplemental_fixture_ctx("status-400")
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        mock = parsed["httpCalls"][0]["mockResponse"]
+        self.assertEqual(mock["status"], 400)
+        # Body is present and is an empty object (matches upstream teads
+        # status-400.json shape; satisfies adapterstest's body-required
+        # assertion when status != 204).
+        self.assertEqual(mock["body"], {})
+        # Error string matches CheckResponseStatusCodeForErrors verbatim
+        # (adapters/response.go line 13: no trailing period).
+        errs = parsed["expectedMakeBidsErrors"]
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(
+            errs[0]["value"],
+            "Unexpected status code: 400. Run with request.debug = 1 for more info",
+        )
+        self.assertEqual(errs[0]["comparison"], "literal")
+
+    def test_status_404_emits_404_with_error(self):
+        ctx = _supplemental_fixture_ctx("status-404")
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        mock = parsed["httpCalls"][0]["mockResponse"]
+        self.assertEqual(mock["status"], 404)
+        self.assertEqual(mock["body"], {})
+        errs = parsed["expectedMakeBidsErrors"]
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(
+            errs[0]["value"],
+            "Unexpected status code: 404. Run with request.debug = 1 for more info",
+        )
+        self.assertEqual(errs[0]["comparison"], "literal")
+
+    def test_no_response_body_emits_200_null_body(self):
+        ctx = _supplemental_fixture_ctx("no-response-body")
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        mock = parsed["httpCalls"][0]["mockResponse"]
+        self.assertEqual(mock["status"], 200)
+        # Body field omitted entirely (matches upstream kobler
+        # no-response-body.json — adapterstest delivers Body==nil to the
+        # adapter, which kobler-shape adapters short-circuit on).
+        self.assertNotIn("body", mock)
+        # No errors expected (kobler short-circuits with (nil, nil)).
+        self.assertNotIn("expectedMakeBidsErrors", parsed)
+        self.assertEqual(parsed["expectedBidResponses"], [])
+
+    def test_malformed_body_emits_invalid_json_string(self):
+        ctx = _supplemental_fixture_ctx("malformed-body")
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        mock = parsed["httpCalls"][0]["mockResponse"]
+        self.assertEqual(mock["status"], 200)
+        # Body is the literal JSON string "this is not json" — adapterstest's
+        # json.RawMessage delivery means the adapter sees the raw 18 bytes
+        # `"this is not json"` (with quotes). jsonutil.Unmarshal sees first
+        # byte `"` and emits the canonical `expect { or n, but found "`.
+        self.assertEqual(mock["body"], "this is not json")
+        errs = parsed["expectedMakeBidsErrors"]
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0]["value"], 'expect { or n, but found "')
+        self.assertEqual(errs[0]["comparison"], "literal")
+
+    def test_unknown_scenario_kind_renders_empty_or_errors(self):
+        """Defensive: unknown scenario_kind values render a parse-clean but
+        empty mockResponse + expectedBidResponses=[]. The renderer is
+        expected to validate scenario_kind upstream and reject unknowns
+        before invoking this template; this test pins the fail-graceful
+        behavior so a rogue ctx does not crash the render."""
+        ctx = _supplemental_fixture_ctx("status-200")  # unrecognized
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        # Empty mockResponse: only the structural braces, no status/body.
+        self.assertEqual(parsed["httpCalls"][0]["mockResponse"], {})
+        self.assertNotIn("expectedMakeBidsErrors", parsed)
+        self.assertEqual(parsed["expectedBidResponses"], [])
+
+    def test_imp_ids_emit_per_F_new_12(self):
+        """F-new-12 (canary v2): adapterstest.RunJSONBidderTest asserts
+        non-empty expectedRequest.impIDs. The supplemental template emits
+        impIDs unconditionally (per spec; ctx.imp_ids is required)."""
+        ctx = _supplemental_fixture_ctx("status-204")
+        ctx["imp_ids"] = ["imp-A", "imp-B"]
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertEqual(
+            parsed["httpCalls"][0]["expectedRequest"]["impIDs"],
+            ["imp-A", "imp-B"],
+        )
+        # Render correctness across all 5 known kinds — impIDs always present.
+        for kind in ("status-204", "status-400", "status-404",
+                     "no-response-body", "malformed-body"):
+            ctx2 = _supplemental_fixture_ctx(kind)
+            ctx2["imp_ids"] = ["imp-A", "imp-B"]
+            parsed2 = json.loads(_render("supplemental-fixture.json.j2", ctx2))
+            self.assertEqual(
+                parsed2["httpCalls"][0]["expectedRequest"]["impIDs"],
+                ["imp-A", "imp-B"],
+                f"impIDs missing for kind={kind}",
+            )
+
+    def test_passthrough_body_default(self):
+        """The expected_request_body == mock_bid_request case (passthrough
+        adapters like kobler/aax/freewheelssp): both should appear identically
+        in the rendered JSON."""
+        ctx = _supplemental_fixture_ctx("status-204")
+        ctx["expected_request_body"] = ctx["mock_bid_request"]
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertEqual(
+            parsed["mockBidRequest"],
+            parsed["httpCalls"][0]["expectedRequest"]["body"],
+        )
+
+    def test_uri_emitted_verbatim(self):
+        """The TEST_ENDPOINT URI must be emitted verbatim — adapterstest
+        compares it to the URI the adapter constructs in MakeRequests."""
+        ctx = _supplemental_fixture_ctx("status-204")
+        ctx["uri"] = "https://bid.essrtb.com/bid/prebid_server_rtb_call"
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertEqual(
+            parsed["httpCalls"][0]["expectedRequest"]["uri"],
+            "https://bid.essrtb.com/bid/prebid_server_rtb_call",
+        )
+
+
 class TestRequiredArtifacts(unittest.TestCase):
     """Sanity: every Go template referenced by SKILL.md Step 5 exists."""
 

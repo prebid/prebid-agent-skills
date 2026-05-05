@@ -1,0 +1,140 @@
+{# Go supplemental fixture template — emits one
+adapters/{bidder}/{bidder}test/supplemental/{scenario_kind}.json file
+per supported error-path scenario. Kobler-shape-agnostic: every
+adapter that uses canonical-go-helpers status handling (or kobler's
+legacy-raw 204+other-non-200 form) can use these fixtures unchanged.
+
+The template covers 5 supplemental scenarios that pad coverage with
+zero per-adapter customization:
+
+  1. status-204         — no-content path; mockResponse.status=204 with
+                          no body, expectedBidResponses=[] and NO
+                          expectedMakeBidsErrors. Matches upstream
+                          kobler `status-204.json` exactly.
+
+  2. status-400         — bad-request path. mockResponse.status=400,
+                          body={}. expectedMakeBidsErrors[0].value =
+                          "Unexpected status code: 400. Run with
+                          request.debug = 1 for more info" — emitted
+                          verbatim by adapters.CheckResponseStatusCode
+                          ForErrors() in `prebid-server/adapters/
+                          response.go` (canonical-go-helpers). Note: NO
+                          trailing period — the canonical helper omits
+                          it, while kobler's bespoke legacy-raw branch
+                          adds one. Use the canonical form here so
+                          fixtures work for the >70%-of-corpus that
+                          uses CheckResponseStatusCodeForErrors.
+
+  3. status-404         — other-non-200 path. status=404, body={}.
+                          Same error template as status-400 but with
+                          404. Emitted as BadServerResponse by
+                          CheckResponseStatusCodeForErrors's else-
+                          branch. Matches upstream kobler `status-
+                          404.json` modulo the trailing-period drift
+                          (kobler emits trailing period, canonical
+                          helper does not).
+
+  4. no-response-body   — 200-with-null-body path. status=200, body
+                          omitted (or `null`). For kobler-shape
+                          adapters (`responseData.Body == nil` short-
+                          circuit), this returns (nil, nil) — no
+                          error, expectedBidResponses=[]. Canonical-
+                          helper adapters that don't short-circuit may
+                          surface a jsonutil "unexpected end of JSON"
+                          error here; for shape-agnosticism we match
+                          upstream kobler `no-response-body.json` (no
+                          error). Per-adapter overrides handle the
+                          divergence.
+
+  5. malformed-body     — 200-with-non-JSON-string-body path. status=
+                          200, body="this is not json" (literal JSON
+                          string — adapterstest delivers the raw
+                          16-byte content `"this is not json"` to the
+                          adapter). jsonutil.Unmarshal sees first
+                          byte `"` (the opening quote of the JSON-
+                          encoded string) and emits the literal error
+                          `expect { or n, but found "` —
+                          matches upstream kobler `wrong-response-
+                          body-type.json`.
+
+Inputs:
+  ctx.scenario_kind         : str  — one of "status-204", "status-400",
+                                     "status-404", "no-response-body",
+                                     "malformed-body". Drives the
+                                     body+status+expected-error shape.
+  ctx.mock_bid_request      : dict — the BidRequest the harness feeds
+                                     to MakeRequests (typically equal
+                                     to the exemplary fixture's
+                                     mockBidRequest; the error path is
+                                     independent of imp shape).
+  ctx.uri                   : str  — endpoint URL the adapter resolves
+                                     to. Use the canonical
+                                     TEST_ENDPOINT pinned by the
+                                     port_engine renderer.
+  ctx.expected_request_body : dict — what MakeRequests produces. For
+                                     passthrough, equals
+                                     mock_bid_request.
+  ctx.imp_ids               : list[str] — required by adapterstest
+                                          framework (F-new-12).
+
+The emitted JSON shape for each scenario_kind matches the upstream
+upstream-Go conventions referenced above. Unknown scenario_kind
+values render an empty mockResponse + no expectedMakeBidsErrors —
+the renderer is expected to validate the kind upstream and reject
+unknown values before invoking this template.
+#}
+{% set kind = ctx.scenario_kind %}
+{
+  "mockBidRequest": {{ ctx.mock_bid_request | tojson }},
+  "httpCalls": [
+    {
+      "expectedRequest": {
+        "uri": {{ ctx.uri | tojson }},
+        "body": {{ ctx.expected_request_body | tojson }},
+        "impIDs": {{ ctx.imp_ids | tojson }}
+      },
+      "mockResponse": {
+{% if kind == "status-204" %}
+        "status": 204
+{% elif kind == "status-400" %}
+        "status": 400,
+        "body": {}
+{% elif kind == "status-404" %}
+        "status": 404,
+        "body": {}
+{% elif kind == "no-response-body" %}
+        "status": 200
+{% elif kind == "malformed-body" %}
+        "status": 200,
+        "body": "this is not json"
+{% endif %}
+      }
+    }
+  ],
+{% if kind == "status-204" or kind == "no-response-body" %}
+  "expectedBidResponses": []
+{% elif kind == "status-400" %}
+  "expectedMakeBidsErrors": [
+    {
+      "value": "Unexpected status code: 400. Run with request.debug = 1 for more info",
+      "comparison": "literal"
+    }
+  ]
+{% elif kind == "status-404" %}
+  "expectedMakeBidsErrors": [
+    {
+      "value": "Unexpected status code: 404. Run with request.debug = 1 for more info",
+      "comparison": "literal"
+    }
+  ]
+{% elif kind == "malformed-body" %}
+  "expectedMakeBidsErrors": [
+    {
+      "value": "expect { or n, but found \"",
+      "comparison": "literal"
+    }
+  ]
+{% else %}
+  "expectedBidResponses": []
+{% endif %}
+}
