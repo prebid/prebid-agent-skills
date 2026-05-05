@@ -13,6 +13,8 @@ Run from repo root:
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 from typing import Any, Dict
@@ -1599,6 +1601,364 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
             parsed["httpCalls"][0]["expectedRequest"]["uri"],
             "https://bid.essrtb.com/bid/prebid_server_rtb_call",
         )
+
+
+# ---------------------------------------------------------------------------
+# Per-pair ctx helpers for TestRenderedGoCompiles.
+#
+# Sources (per docs/runs/d3.8-mvp-pairs-spike-2026-05-05.md + each pair's
+# canary trace under docs/runs/d3.8-{pair}-canary-*.md):
+#   - vungle:        canary v3 § "Pipeline executed" + spike per-pair table
+#   - aax:           canary  § Pipeline + § "ctx values" near line 65-69
+#   - adverxo:       canary  § Pipeline + § "ctx values" near line 66-70
+#   - thetradedesk:  canary  § Pipeline + § "ctx values" near line 68-73
+#   - adkernelAdn:   canary  § Pipeline + § "ctx values" near line 77-84
+#
+# These mirror the ctx the renderer actually wired up at canary time. Where
+# the renderer applied an alias-mapping (e.g. thetradedesk's spec value
+# `bid-mtype-switch` → ctx value `by-bid-mtype`, F-new-7), the post-mapping
+# value is reflected here — i.e. the ctx as the template SEES it, not the
+# raw spec value.
+# ---------------------------------------------------------------------------
+
+
+def _vungle_bidder_go_ctx() -> Dict[str, Any]:
+    """Vungle canary v3 ctx (B1 constant + B2 currency + B3 custom-headers)."""
+    return {
+        "package_name": "vungle",
+        "bidder_class_root": "Vungle",
+        "uses_currency_conversion": True,
+        "imp_ext_class_root": "Vungle",
+        "imp_ext_unmarshal_kind": "standard-two-phase",
+        "batching_kind": "per-imp",
+        "batching_max_imps": None,
+        "endpoint_resolution_kind": "static",
+        "http_status_kind": "canonical-helpers",
+        "bid_type_resolution": "constant",
+        "bid_type_constant": "video",
+        "bid_type_fallback_action": "throw",
+        "has_extra_info": False,
+        "module_version": GO_MODULE_VERSION,
+        "imports_extra": [],
+        "javadoc_summary": None,
+        "custom_headers": [{"name": "X-OpenRTB-Version", "value": "2.6"}],
+    }
+
+
+def _aax_bidder_go_ctx() -> Dict[str, Any]:
+    """Aax canary ctx (F-new-1 imp_ext=none + F-new-14 legacy-raw-go +
+    method-chain 3-step + Rule 35 has_extra_info=True). Endpoint-kind
+    `query-parameter-augmentation` exercises the `else`-TODO branch in
+    resolveEndpoint — render compiles (TODO is just a comment + naked
+    `return a.endpoint`); this pins current behavior, not desired final
+    semantics (F-new-26)."""
+    return {
+        "package_name": "aax",
+        "bidder_class_root": "Aax",
+        "uses_currency_conversion": False,
+        "imp_ext_class_root": "Aax",
+        "imp_ext_unmarshal_kind": "none",
+        "batching_kind": "single-batched",
+        "batching_max_imps": None,
+        "endpoint_resolution_kind": "query-parameter-augmentation",
+        "http_status_kind": "legacy-raw-go",
+        "legacy_raw_status_handlers": [
+            {"status_code": 400, "error_kind": "BadInput"},
+        ],
+        "bid_type_resolution": "method-chain-fallback",
+        "bid_type_method_chain": [
+            {"method": "by-bid-ext-typed-field",
+             "field": "bid.ext.adCodeType",
+             "fallback_action": "next"},
+            {"method": "by-imp-mediatype",
+             "fallback_action": "next"},
+            {"method": "throw"},
+        ],
+        "has_extra_info": True,
+        "module_version": GO_MODULE_VERSION,
+        "imports_extra": [],
+        "javadoc_summary": None,
+    }
+
+
+def _adverxo_bidder_go_ctx() -> Dict[str, Any]:
+    """Adverxo canary ctx (B1 by-bid-mtype throw + B2 currency +
+    multi-token-substitution endpoint TODO). The `multi-token-substitution`
+    endpoint kind falls to the template's TODO-stub branch which still
+    returns `a.endpoint` — gofmt parses it; this pins CURRENT BEHAVIOR
+    (compile-clean stub), not the eventual macro-resolution emission
+    (F-new-26)."""
+    return {
+        "package_name": "adverxo",
+        "bidder_class_root": "Adverxo",
+        "uses_currency_conversion": True,
+        "imp_ext_class_root": "Adverxo",
+        "imp_ext_unmarshal_kind": "standard-two-phase",
+        "batching_kind": "per-imp",
+        "batching_max_imps": None,
+        "endpoint_resolution_kind": "multi-token-substitution",
+        "http_status_kind": "canonical-helpers",
+        "bid_type_resolution": "by-bid-mtype",
+        "bid_type_fallback_action": "throw",
+        "has_extra_info": False,
+        "module_version": GO_MODULE_VERSION,
+        "imports_extra": [],
+        "javadoc_summary": None,
+    }
+
+
+def _thetradedesk_bidder_go_ctx() -> Dict[str, Any]:
+    """TheTradeDesk canary ctx (F-new-7 bid-mtype-switch alias +
+    template-macro endpoint TODO + F-new-31 has_extra_info=False
+    workaround). `bid_type_resolution` is the renderer-mapped value
+    `by-bid-mtype` (not the raw spec value `bid-mtype-switch`).
+    `has_extra_info=False` is a renderer-side workaround for the
+    empty-extraInfo-struct TODO emission — pins current behavior."""
+    return {
+        "package_name": "thetradedesk",
+        "bidder_class_root": "TheTradeDesk",
+        "uses_currency_conversion": False,
+        "imp_ext_class_root": "TheTradeDesk",
+        "imp_ext_unmarshal_kind": "standard-two-phase",
+        "batching_kind": "single-batched",
+        "batching_max_imps": None,
+        "endpoint_resolution_kind": "template-macro",
+        "http_status_kind": "canonical-helpers",
+        "bid_type_resolution": "by-bid-mtype",
+        "bid_type_fallback_action": "throw",
+        "has_extra_info": False,
+        "module_version": GO_MODULE_VERSION,
+        "imports_extra": [],
+        "javadoc_summary": None,
+    }
+
+
+def _adkerneladn_bidder_go_ctx() -> Dict[str, Any]:
+    """AdkernelAdn canary ctx (per-key→single-batched workaround +
+    imp-id-correlation→by-bid-mtype workaround + template-macro TODO +
+    custom_headers Java-canonical mixed-case). Pins current renderer
+    behavior; the raw spec uses `per-key` batching and
+    `imp-id-correlation` bid-type, neither of which the template
+    supports — F-new-7 EXT-A and EXT-B."""
+    return {
+        "package_name": "adkerneladn",
+        "bidder_class_root": "AdkernelAdn",
+        "uses_currency_conversion": False,
+        "imp_ext_class_root": "AdkernelAdn",
+        "imp_ext_unmarshal_kind": "standard-two-phase",
+        "batching_kind": "single-batched",
+        "batching_max_imps": None,
+        "endpoint_resolution_kind": "template-macro",
+        "http_status_kind": "canonical-helpers",
+        "bid_type_resolution": "by-bid-mtype",
+        "bid_type_fallback_action": "return-default",
+        "bid_type_fallback_value": "banner",
+        "has_extra_info": False,
+        "module_version": GO_MODULE_VERSION,
+        "imports_extra": [],
+        "javadoc_summary": None,
+        "custom_headers": [{"name": "X-OpenRTB-Version", "value": "2.5"}],
+    }
+
+
+class TestRenderedGoCompiles(unittest.TestCase):
+    """Verify that rendered Go source actually parses via `gofmt -e`.
+
+    Reviewer L1 architectural fix: previous H2/H3/H4/H6 escapes show that
+    nothing in the test pipeline invoked Go tooling against rendered
+    output. A template can pass Jinja rendering AND every existing
+    substring-presence test yet still produce Go source `gofmt`/`go vet`/
+    `go build` reject. This class plugs that gap with a universal
+    parse-time check and 4 targeted regressions for the reviewer's HIGH
+    findings.
+
+    Skip behavior: if `gofmt` is not on PATH (CI environments without a
+    Go toolchain), every test in this class is skipped via
+    `setUpClass`. The skip leaves the rest of the suite green; a
+    Go-equipped CI run picks the checks up.
+
+    Scope intentionally limited to `gofmt -e`: parses Go source without
+    needing module context. `go vet`/`go build` would catch additional
+    semantic bugs (e.g. unreachable-code H3) but require a working
+    GOPATH/module — out of scope here. See module docstring for how to
+    add those gated behind an opt-in env var.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if shutil.which("gofmt") is None:
+            raise unittest.SkipTest(
+                "gofmt not on PATH; skipping rendered-Go compile tests"
+            )
+
+    def _gofmt_check(self, rendered: str, file_label: str) -> None:
+        """Run `gofmt -e` against rendered source; assert exit 0.
+
+        On non-zero, fails the test with a message including gofmt's
+        stderr and the rendered source — operators reading the failure
+        immediately see what syntax broke."""
+        result = subprocess.run(
+            ["gofmt", "-e"],
+            input=rendered.encode(),
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(
+                f"gofmt rejected rendered {file_label} (exit={result.returncode}):\n"
+                f"--- stderr ---\n{result.stderr.decode()}\n"
+                f"--- rendered ---\n{rendered}"
+            )
+
+    # ----- Per-pair MVP shape compile checks -------------------------------
+
+    def test_kobler_shape_compiles(self):
+        rendered = _render("bidder.go.j2", _kobler_bidder_go_ctx())
+        self._gofmt_check(rendered, "kobler bidder.go")
+
+    def test_vungle_shape_compiles(self):
+        rendered = _render("bidder.go.j2", _vungle_bidder_go_ctx())
+        self._gofmt_check(rendered, "vungle bidder.go")
+
+    def test_aax_shape_compiles(self):
+        rendered = _render("bidder.go.j2", _aax_bidder_go_ctx())
+        self._gofmt_check(rendered, "aax bidder.go")
+
+    def test_adverxo_shape_compiles(self):
+        rendered = _render("bidder.go.j2", _adverxo_bidder_go_ctx())
+        self._gofmt_check(rendered, "adverxo bidder.go")
+
+    def test_thetradedesk_shape_compiles(self):
+        rendered = _render("bidder.go.j2", _thetradedesk_bidder_go_ctx())
+        self._gofmt_check(rendered, "thetradedesk bidder.go")
+
+    def test_adkerneladn_shape_compiles(self):
+        rendered = _render("bidder.go.j2", _adkerneladn_bidder_go_ctx())
+        self._gofmt_check(rendered, "adkernelAdn bidder.go")
+
+    # ----- Reviewer HIGH-finding regressions -------------------------------
+
+    def test_h2_method_chain_all_next_compiles(self):
+        """H2 regression: chain with all-`next` steps must compile (prior
+        bug: 'missing return at end of function'). Reviewer's H2 was
+        fixed via the terminal-catchall return at end of getBidType — this
+        test pins that the rendered Go actually parses."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {"method": "by-imp-mediatype", "fallback_action": "next"},
+            {"method": "by-imp-mediatype", "fallback_action": "next"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        self._gofmt_check(rendered, "method-chain all-next bidder.go")
+
+    def test_h3_method_chain_mid_chain_throw_compiles(self):
+        """H3 regression: chain with mid-chain throw + later steps must
+        parse via gofmt (prior bug: unreachable-code emit). gofmt -e
+        only guarantees parse-cleanness; semantic unreachable detection
+        is `go vet`'s job (out of scope here, see class docstring), but
+        a parse failure here would indicate a regression in the
+        terminating-return suppression logic."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {"method": "by-imp-mediatype", "fallback_action": "throw"},
+            {"method": "hardcoded", "hardcoded_value": "BidTypeBanner",
+             "fallback_action": "return-default"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        self._gofmt_check(rendered, "method-chain mid-chain-throw bidder.go")
+
+    def test_h4_simulator_output_no_empty_string_keys(self):
+        """H4 regression: `simulate_makerequests_mutations` with
+        `device-zero-fields` must DELETE the named keys (not assign
+        empty strings). The rendered exemplary-fixture JSON's
+        mockBidRequest.device must NOT contain `"ip": ""` — Go's
+        omitempty marshaling deletes empty fields, so a fixture with
+        `"ip": ""` would byte-mismatch the actual emitted body."""
+        # Late import to avoid hard-coupling this test file's import
+        # graph to scripts.lib.port_engine when port_engine is absent
+        # (this test is the only consumer of simulate_makerequests_mutations
+        # in this test file).
+        from scripts.lib.port_engine import simulate_makerequests_mutations
+
+        mock = {
+            "id": "r1",
+            "device": {"ip": "1.2.3.4", "ipv6": "::1", "ua": "Mozilla/5.0"},
+            "imp": [{"id": "imp-1",
+                     "banner": {"format": [{"w": 300, "h": 250}]}}],
+        }
+        mutated = simulate_makerequests_mutations(mock, [
+            {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
+        ])
+        # Direct assertion on simulator output — H4's contract is
+        # at the simulator wire-form, BEFORE the fixture template.
+        self.assertNotIn(
+            "ip", mutated["device"],
+            "device-zero-fields must delete `ip`, not assign empty string",
+        )
+        self.assertNotIn(
+            "ipv6", mutated["device"],
+            "device-zero-fields must delete `ipv6`, not assign empty string",
+        )
+
+        # Render through exemplary-fixture.json.j2 with the mutated
+        # body; the rendered JSON must also not contain `"ip": ""`.
+        ctx = _kobler_exemplary_fixture_ctx()
+        ctx["mock_bid_request"] = mutated
+        rendered = _render("exemplary-fixture.json.j2", ctx)
+        # Substring check on the wire form — the only way `ip` could
+        # appear in device after the simulator deleted it would be if
+        # the fixture template re-introduced it.
+        self.assertNotIn(
+            '"ip": ""', rendered,
+            'rendered fixture must not contain `"ip": ""` (H4 wire-form check)',
+        )
+        self.assertNotIn(
+            '"ipv6": ""', rendered,
+            'rendered fixture must not contain `"ipv6": ""` (H4 wire-form check)',
+        )
+        # And confirm the rendered JSON is parse-clean (sanity).
+        parsed = json.loads(rendered)
+        self.assertNotIn("ip", parsed["mockBidRequest"]["device"])
+        self.assertNotIn("ipv6", parsed["mockBidRequest"]["device"])
+        # Other device fields preserved end-to-end.
+        self.assertEqual(parsed["mockBidRequest"]["device"]["ua"], "Mozilla/5.0")
+
+    def test_h6_orphan_enum_value_falls_through_to_todo(self):
+        """H6 regression: an unrecognized `bid_type_resolution` value
+        (such as a previously-supported enum that was removed during
+        consolidation, e.g. `ext-prebid-video-placement`) must hit the
+        catchall `else` branch — emit a TODO comment AND a banner default
+        return — so the rendered Go still compiles. Pins that adding new
+        bid-type kinds or removing old ones doesn't accidentally crash
+        the template OR emit invalid Go."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "ext-prebid-video-placement"
+        rendered = _render("bidder.go.j2", ctx)
+        # TODO comment fires.
+        self.assertIn(
+            "TODO[port-java2go]: bid_type_resolution=ext-prebid-video-placement",
+            rendered,
+            "orphan bid_type_resolution must emit TODO catchall comment",
+        )
+        # Banner default emitted.
+        self.assertIn(
+            "return openrtb_ext.BidTypeBanner",
+            rendered,
+            "orphan bid_type_resolution must emit banner default return",
+        )
+        # And the rendered Go parses.
+        self._gofmt_check(rendered, "orphan-enum bidder.go")
+
+    # ----- Optional bonus: imp-ext-pojo also gofmt-clean ------------------
+
+    def test_imp_ext_pojo_compiles(self):
+        """imp-ext-pojo.go.j2 emits to the openrtb_ext package — this
+        is the cross-package POJO every adapter parsing imp.ext.bidder
+        relies on. Render the kobler shape and gofmt-check."""
+        rendered = _render("imp-ext-pojo.go.j2", _kobler_imp_ext_pojo_ctx())
+        self._gofmt_check(rendered, "kobler imp-ext-pojo.go")
 
 
 class TestRequiredArtifacts(unittest.TestCase):
