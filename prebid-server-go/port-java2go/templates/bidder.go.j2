@@ -16,7 +16,21 @@ template emits code that's already gofmt-clean for the canonical case.
 Inputs (mirror of bidder.java.j2 ctx):
   ctx.package_name            : str  — Go package name (e.g., "kobler", "adkernelAdn")
   ctx.bidder_class_root       : str  — PascalCase root used in Builder + helpers
-  ctx.uses_currency_conversion: bool — currency_conversion.used (Rule 28)
+  ctx.uses_currency_conversion: bool — currency_conversion.used (Rule 28).
+                                        When true, emits (a) a `convertImpCurrency`
+                                        helper at end of file (modeled on upstream
+                                        kobler.go ~lines 149-161, hardcoded
+                                        supportedCurrency="USD"), (b) a `"strings"`
+                                        import for `strings.ToUpper`, and (c) a
+                                        per-imp call to convertImpCurrency BEFORE
+                                        parseImpExt in all three batching branches
+                                        (single-batched, per-imp, max-imps-per-request).
+                                        On conversion error the call site appends
+                                        to errors and `continue`s — safer default
+                                        than upstream kobler's hard-return; operator
+                                        can flip if they want kobler-strict semantics.
+                                        Affects ~31% of corpus (adverxo, beachfront,
+                                        kobler, limelightDigital, vungle).
   ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref
   ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct"
   ctx.batching_kind           : str  — "single-batched" | "per-imp" | "max-imps-per-request"
@@ -124,6 +138,9 @@ import (
 {% endif %}
 	"fmt"
 	"net/http"
+{% if ctx.uses_currency_conversion %}
+	"strings"
+{% endif %}
 
 	"github.com/prebid/openrtb/v20/openrtb2"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters"
@@ -169,6 +186,12 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 	var errors []error
 {% if ctx.batching_kind == "single-batched" %}
 	for i := range request.Imp {
+{% if ctx.uses_currency_conversion %}
+		if err := convertImpCurrency(&request.Imp[i], reqInfo); err != nil {
+			errors = append(errors, err)
+			continue
+		}
+{% endif %}
 		if _, err := parseImpExt(&request.Imp[i]); err != nil {
 			errors = append(errors, err)
 		}
@@ -191,6 +214,12 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 {% elif ctx.batching_kind == "per-imp" %}
 	requests := make([]*adapters.RequestData, 0, len(request.Imp))
 	for i := range request.Imp {
+{% if ctx.uses_currency_conversion %}
+		if err := convertImpCurrency(&request.Imp[i], reqInfo); err != nil {
+			errors = append(errors, err)
+			continue
+		}
+{% endif %}
 		if _, err := parseImpExt(&request.Imp[i]); err != nil {
 			errors = append(errors, err)
 			continue
@@ -217,6 +246,12 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 	requests := make([]*adapters.RequestData, 0, len(chunks))
 	for _, chunk := range chunks {
 		for i := range chunk {
+{% if ctx.uses_currency_conversion %}
+			if err := convertImpCurrency(&chunk[i], reqInfo); err != nil {
+				errors = append(errors, err)
+				continue
+			}
+{% endif %}
 			if _, err := parseImpExt(&chunk[i]); err != nil {
 				errors = append(errors, err)
 			}
@@ -492,6 +527,33 @@ func standardHeaders() http.Header {
 	headers.Add("Accept", "application/json")
 	return headers
 }
+{% if ctx.uses_currency_conversion %}
+
+// Rule 28 — currency_conversion.used. Adapter converts non-USD imp.bidfloor
+// to USD via reqInfo.ConvertCurrency before forwarding the request. Pattern
+// cribbed from upstream adapters/kobler/kobler.go (canonical 13-line shape).
+// TODO[port-java2go]: hardcoded supportedCurrency="USD". When a future spec
+// field (currency_conversion.target) lands, parameterize this constant from
+// ctx.currency_conversion_target.
+const supportedCurrency = "USD"
+
+// convertImpCurrency converts imp.bidfloor to USD when set in another
+// currency. On conversion error the per-imp call site appends to errors and
+// continues to the next imp (vs upstream kobler.go which hard-returns); the
+// safer default is to skip the misconfigured imp rather than reject the
+// whole batch. Operator can flip to early-return for kobler-strict semantics.
+func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) error {
+	if imp.BidFloor > 0 && imp.BidFloorCur != "" && strings.ToUpper(imp.BidFloorCur) != supportedCurrency {
+		convertedValue, err := reqInfo.ConvertCurrency(imp.BidFloor, imp.BidFloorCur, supportedCurrency)
+		if err != nil {
+			return err
+		}
+		imp.BidFloor = convertedValue
+		imp.BidFloorCur = supportedCurrency
+	}
+	return nil
+}
+{% endif %}
 {% if ctx.batching_kind == "max-imps-per-request" %}
 
 func chunkImps(imps []openrtb2.Imp, chunkSize int) [][]openrtb2.Imp {

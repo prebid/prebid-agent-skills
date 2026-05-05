@@ -643,6 +643,137 @@ class TestBidTypeResolutionBranches(unittest.TestCase):
         self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
 
 
+class TestCurrencyConversionEmission(unittest.TestCase):
+    """D3.8 B2 — TIER 1 item 2 (F5). When `ctx.uses_currency_conversion`
+    is True the template emits:
+
+      1. `const supportedCurrency = "USD"` + `func convertImpCurrency(...)`
+         helper at end of file (modeled on upstream kobler.go shape).
+      2. `"strings"` import for `strings.ToUpper`.
+      3. Per-imp `convertImpCurrency(&imp, reqInfo)` call BEFORE `parseImpExt`
+         in all three batching branches (single-batched, per-imp,
+         max-imps-per-request).
+
+    When False (~69% of corpus), nothing is emitted — no helper, no call,
+    no `"strings"` import. Negative-path test preserves the
+    kobler-without-currency-conversion case.
+
+    Affects 5/16 (31%) of corpus per d3.8-template-coverage-audit F5:
+    adverxo, beachfront, kobler, limelightDigital, vungle.
+    """
+
+    def test_helper_emitted_when_uses_currency_conversion_true(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = True
+        rendered = _render("bidder.go.j2", ctx)
+        # Constant + function declaration.
+        self.assertIn('const supportedCurrency = "USD"', rendered)
+        self.assertIn(
+            "func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) error",
+            rendered,
+        )
+        # Body uses strings.ToUpper to canonicalize the input currency.
+        self.assertIn("strings.ToUpper(imp.BidFloorCur)", rendered)
+        # And reqInfo.ConvertCurrency on the *adapters.ExtraRequestInfo receiver.
+        self.assertIn(
+            "reqInfo.ConvertCurrency(imp.BidFloor, imp.BidFloorCur, supportedCurrency)",
+            rendered,
+        )
+        # The "strings" import is present.
+        self.assertIn('"strings"', rendered)
+
+    def test_per_imp_call_in_single_batched(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = True
+        ctx["batching_kind"] = "single-batched"
+        rendered = _render("bidder.go.j2", ctx)
+        # Call appears in the body.
+        self.assertIn(
+            "if err := convertImpCurrency(&request.Imp[i], reqInfo); err != nil",
+            rendered,
+        )
+        # And precedes the parseImpExt call (lexical order).
+        currency_idx = rendered.index("convertImpCurrency(&request.Imp[i]")
+        parse_idx = rendered.index("parseImpExt(&request.Imp[i])")
+        self.assertLess(currency_idx, parse_idx)
+
+    def test_per_imp_call_in_per_imp_batching(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = True
+        ctx["batching_kind"] = "per-imp"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn(
+            "if err := convertImpCurrency(&request.Imp[i], reqInfo); err != nil",
+            rendered,
+        )
+        # Precedes parseImpExt in the per-imp loop too.
+        currency_idx = rendered.index("convertImpCurrency(&request.Imp[i]")
+        parse_idx = rendered.index("parseImpExt(&request.Imp[i])")
+        self.assertLess(currency_idx, parse_idx)
+
+    def test_per_imp_call_in_max_imps_batching(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = True
+        ctx["batching_kind"] = "max-imps-per-request"
+        ctx["batching_max_imps"] = 5
+        rendered = _render("bidder.go.j2", ctx)
+        # In the chunk's inner per-imp loop, the call references &chunk[i].
+        self.assertIn(
+            "if err := convertImpCurrency(&chunk[i], reqInfo); err != nil",
+            rendered,
+        )
+        currency_idx = rendered.index("convertImpCurrency(&chunk[i]")
+        parse_idx = rendered.index("parseImpExt(&chunk[i])")
+        self.assertLess(currency_idx, parse_idx)
+        # Chunker helper still emits.
+        self.assertIn(
+            "func chunkImps(imps []openrtb2.Imp, chunkSize int) [][]openrtb2.Imp",
+            rendered,
+        )
+
+    def test_no_helper_when_uses_currency_conversion_false(self):
+        """The 11/16 (69%) of corpus that does NOT use currency conversion
+        must render cleanly with no helper, no call, no `"strings"` import."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = False
+        rendered = _render("bidder.go.j2", ctx)
+        # Helper absent in all forms.
+        self.assertNotIn("supportedCurrency", rendered)
+        self.assertNotIn("convertImpCurrency", rendered)
+        self.assertNotIn("strings.ToUpper", rendered)
+        # And no `"strings"` import line — would trigger Go unused-import error.
+        self.assertNotIn('"strings"', rendered)
+
+    def test_no_helper_negative_path_preserves_kobler_no_cc(self):
+        """Edge: a kobler-shaped adapter could in principle disable currency
+        conversion (B2 must not break that). Confirm the body still emits a
+        usable parseImpExt loop without the currency call."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = False
+        ctx["batching_kind"] = "per-imp"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertNotIn("convertImpCurrency", rendered)
+        # Per-imp body still emits parseImpExt directly.
+        self.assertIn("parseImpExt(&request.Imp[i])", rendered)
+        self.assertIn("perImp := *request", rendered)
+
+    def test_helper_does_not_break_b1_signature_flip(self):
+        """B1 added the `_bid_type_returns_error` signature flip in
+        getBidType. The currency helper lives at end of file and is
+        body-independent of the bid-type return shape — confirm both can
+        coexist (e.g. by-bid-mtype + uses_currency_conversion=True)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["uses_currency_conversion"] = True
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        ctx["bid_type_fallback_action"] = "throw"
+        rendered = _render("bidder.go.j2", ctx)
+        # Currency helper present.
+        self.assertIn("func convertImpCurrency(", rendered)
+        # B1 error-returning signature still present.
+        self.assertIn("(openrtb_ext.BidType, error)", rendered)
+        self.assertIn("var errs []error", rendered)
+
+
 class TestModuleVersionInOtherTemplates(unittest.TestCase):
     """D3-B1: bidder-test.go.j2 and params-test.go.j2 also import from
     the prebid-server module path; both must be parameterized."""
