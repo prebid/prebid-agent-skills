@@ -26,9 +26,53 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         "query-parameter-augmentation" | "dev-prod-toggle"
                                         | "multi-token-substitution"
   ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw"
-  ctx.bid_type_resolution     : str  — "imp-mediatype-introspection" |
-                                        "ext-prebid-video-placement" | "constant-banner"
-                                        | "method-chain-fallback"
+  ctx.bid_type_resolution     : str  — discriminator. One of:
+                                          "imp-mediatype-introspection",
+                                          "ext-prebid-video-placement",
+                                          "constant" (or legacy alias "constant-banner"),
+                                          "method-chain-fallback",
+                                          "by-bid-mtype",
+                                          "by-bid-ext-typed-field".
+  ctx.bid_type_constant       : str|None — "banner"|"video"|"audio"|"native". REQUIRED
+                                            when bid_type_resolution=="constant". For
+                                            backwards compat, legacy "constant-banner"
+                                            implies bid_type_constant="banner".
+  ctx.bid_type_method_chain   : list|None — REQUIRED when
+                                            bid_type_resolution=="method-chain-fallback".
+                                            Each step is a dict with keys:
+                                              - method: str — one of
+                                                  "by-bid-ext-typed-field",
+                                                  "by-imp-mediatype",
+                                                  "by-request-uri-suffix",
+                                                  "hardcoded",
+                                                  "throw"
+                                              - field: str|None — JSON path the step
+                                                  reads (e.g. "bid.ext.prebid.type")
+                                              - hardcoded_value: str|None — for
+                                                  method=="hardcoded", canonical Go enum
+                                                  name (e.g. "BidTypeBanner")
+                                              - fallback_action: str — "next" |
+                                                  "return-default" | "throw"
+  ctx.bid_type_ext_field      : dict|None — REQUIRED when
+                                            bid_type_resolution=="by-bid-ext-typed-field"
+                                            (single-step throws). Keys:
+                                              - struct_name: str — the typed wrapper Go
+                                                  struct already defined (e.g. "bidExt")
+                                              - field_path: str — Go expression that
+                                                  yields the string value to parse, in
+                                                  scope where `bidExt` is the unmarshaled
+                                                  struct (e.g. "bidExt.MediaType",
+                                                  "bidExt.Appnexus.BidType")
+                                              - parse_via: str — "openrtb_ext.ParseBidType"
+                                                  (string fields) or "switch-int" (numeric
+                                                  fields, requires `int_cases` mapping).
+                                              - int_cases: list[dict]|None — when
+                                                  parse_via=="switch-int", each entry is
+                                                  {value: int, bid_type: "banner"|...}.
+  ctx.bid_type_fallback_action: str|None — for "by-bid-mtype" branch. One of
+                                            "return-default" or "throw".
+  ctx.bid_type_fallback_value : str|None — when fallback_action=="return-default",
+                                            "banner"|"video"|"audio"|"native".
   ctx.has_extra_info          : bool — true when source has ExtraAdapterInfo (Rule 35
                                         inverse demoted Java typed config to Go opaque
                                         JSON string); imports + struct fields adjust.
@@ -40,6 +84,38 @@ Inputs (mirror of bidder.java.j2 ctx):
                                             per entry; alphabetical.
   ctx.javadoc_summary         : str|null — // doc comment above package var or struct
 #}
+{# ---------------- Internal helpers (bid type resolution) ---------------- #}
+{# Map a short bid-type string ("banner"|"video"|"audio"|"native") to the
+   canonical Go openrtb_ext enum literal. Fail loudly when the input is not
+   one of the four supported short forms — caller passed a value the Go
+   side has no symbol for, and silently emitting `BidTypeOther` would make
+   the broken Go code look correct at render time. #}
+{%- set _bid_type_short_to_go = {
+    "banner": "BidTypeBanner",
+    "video":  "BidTypeVideo",
+    "audio":  "BidTypeAudio",
+    "native": "BidTypeNative",
+} -%}
+{# Decide whether getBidType returns (BidType, error). True iff a "throw"
+   fallback exists anywhere in the resolution shape. Computed once so the
+   function declaration AND the MakeBids caller site stay in sync. #}
+{%- set _bid_type_chain = ctx.bid_type_method_chain or [] -%}
+{%- set _chain_has_throw = _bid_type_chain | selectattr("fallback_action", "equalto", "throw") | list | length > 0 -%}
+{%- set _chain_has_throw_method = _bid_type_chain | selectattr("method", "equalto", "throw") | list | length > 0 -%}
+{%- set _bid_type_returns_error = (
+    ctx.bid_type_resolution == "by-bid-ext-typed-field"
+    or (ctx.bid_type_resolution == "by-bid-mtype" and ctx.bid_type_fallback_action == "throw")
+    or (ctx.bid_type_resolution == "method-chain-fallback" and (_chain_has_throw or _chain_has_throw_method))
+) -%}
+{# Inline suffix appended after a successful BidType return. Empty for the
+   no-error signature; ", nil" for the error-returning signature. Used as
+   a plain string substitution so adjacent newlines don't get eaten by
+   trim_blocks=True. #}
+{%- if _bid_type_returns_error -%}
+{%- set _ok_suffix = ", nil" -%}
+{%- else -%}
+{%- set _ok_suffix = "" -%}
+{%- endif -%}
 package {{ ctx.package_name }}
 
 import (
@@ -194,6 +270,24 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 
 	bidderResponse := adapters.NewBidderResponse()
 	bidderResponse.Currency = bidResponse.Cur
+{% if _bid_type_returns_error %}
+	var errs []error
+	for _, seatBid := range bidResponse.SeatBid {
+		for i := range seatBid.Bid {
+			bid := &seatBid.Bid[i]
+			bidType, err := getBidType(bid, request.Imp)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			bidderResponse.Bids = append(bidderResponse.Bids, &adapters.TypedBid{
+				Bid:     bid,
+				BidType: bidType,
+			})
+		}
+	}
+	return bidderResponse, errs
+{% else %}
 	for _, seatBid := range bidResponse.SeatBid {
 		for i := range seatBid.Bid {
 			bid := &seatBid.Bid[i]
@@ -204,6 +298,7 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 		}
 	}
 	return bidderResponse, nil
+{% endif %}
 }
 
 func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}, error) {
@@ -240,9 +335,27 @@ func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 {% endif %}
 }
 
+{% if _bid_type_returns_error %}
+func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) (openrtb_ext.BidType, error) {
+{% else %}
 func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
+{% endif %}
+{% if ctx.bid_type_resolution == "constant-banner" or ctx.bid_type_resolution == "constant" %}
+{# constant-{type} branch. Legacy "constant-banner" resolves to BidTypeBanner.
+   "constant" requires ctx.bid_type_constant in {banner,video,audio,native};
+   fail loudly via Jinja UndefinedError if the operator passes an unknown
+   type (else we'd silently emit `return openrtb_ext.` which compiles to
+   nothing useful and looks correct in template review). #}
 {% if ctx.bid_type_resolution == "constant-banner" %}
-	return openrtb_ext.BidTypeBanner
+{% set _const_short = "banner" %}
+{% else %}
+{% set _const_short = ctx.bid_type_constant %}
+{% endif %}
+{% if _const_short not in _bid_type_short_to_go %}
+{# Trigger an UndefinedError loud enough to surface the bad input. #}
+{{ _bid_type_short_to_go.unknown_bid_type_constant_passed_to_template.fail }}
+{% endif %}
+	return openrtb_ext.{{ _bid_type_short_to_go[_const_short] }}
 {% elif ctx.bid_type_resolution == "imp-mediatype-introspection" %}
 	for i := range imps {
 		if imps[i].ID == bid.ImpID {
@@ -259,10 +372,117 @@ func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
 		}
 	}
 	return openrtb_ext.BidTypeBanner
+{% elif ctx.bid_type_resolution == "by-bid-mtype" %}
+{# Rule 23 — switch on openrtb2.Bid.MType (1=Banner, 2=Video, 3=Audio, 4=Native).
+   Pattern cribbed from upstream adapters/adverxo/adverxo.go and
+   adapters/teqblaze/teqblaze.go. Fallback shape is data-driven via
+   ctx.bid_type_fallback_action. #}
+	switch bid.MType {
+	case openrtb2.MarkupBanner:
+		return openrtb_ext.BidTypeBanner{{ _ok_suffix }}
+	case openrtb2.MarkupVideo:
+		return openrtb_ext.BidTypeVideo{{ _ok_suffix }}
+	case openrtb2.MarkupAudio:
+		return openrtb_ext.BidTypeAudio{{ _ok_suffix }}
+	case openrtb2.MarkupNative:
+		return openrtb_ext.BidTypeNative{{ _ok_suffix }}
+	}
+{% if ctx.bid_type_fallback_action == "throw" %}
+	return "", fmt.Errorf("could not define media type for bid: %s", bid.ImpID)
+{% else %}
+	return openrtb_ext.{{ _bid_type_short_to_go[ctx.bid_type_fallback_value or "banner"] }}
+{% endif %}
+{% elif ctx.bid_type_resolution == "by-bid-ext-typed-field" %}
+{# Rule 24 — single-step typed-field read with throw-on-missing fallback.
+   Pattern cribbed from upstream adapters/appnexus/appnexus.go (numeric
+   switch via parse_via=switch-int) and adapters/smarthub/smarthub.go
+   (string parse via openrtb_ext.ParseBidType). Caller has already declared
+   the wrapper struct (ctx.bid_type_ext_field.struct_name) elsewhere in
+   this file (typically next to the response-extension types). #}
+	var bidExt {{ ctx.bid_type_ext_field.struct_name }}
+	if err := jsonutil.Unmarshal(bid.Ext, &bidExt); err != nil {
+		return "", fmt.Errorf("imp %s: failed parsing bid.ext: %w", bid.ImpID, err)
+	}
+{% if ctx.bid_type_ext_field.parse_via == "switch-int" %}
+	switch {{ ctx.bid_type_ext_field.field_path }} {
+{% for case in ctx.bid_type_ext_field.int_cases %}
+	case {{ case.value }}:
+		return openrtb_ext.{{ _bid_type_short_to_go[case.bid_type] }}, nil
+{% endfor %}
+	default:
+		return "", fmt.Errorf("unrecognized bid type %v for imp %s", {{ ctx.bid_type_ext_field.field_path }}, bid.ImpID)
+	}
+{% else %}
+	bidType, err := openrtb_ext.ParseBidType(string({{ ctx.bid_type_ext_field.field_path }}))
+	if err != nil {
+		return "", fmt.Errorf("imp %s: unable to parse bid type from bid.ext: %w", bid.ImpID, err)
+	}
+	return bidType, nil
+{% endif %}
+{% elif ctx.bid_type_resolution == "method-chain-fallback" %}
+{# Method-chain walker. Each step either returns a BidType (success), falls
+   through to the next step ("next"), returns the chain-default
+   ("return-default"), or returns an error ("throw"). Pattern cribbed from
+   upstream adapters/kobler/kobler.go (2-step) and adapters/aax/aax.go
+   (3-step). Steps emit straight-line Go (no loop construct) — Jinja
+   unrolls the chain at render time. #}
+{% for step in _bid_type_chain %}
+{% if step.method == "by-bid-ext-typed-field" %}
+{# Canonical shape: read bid.ext.prebid.type via openrtb_ext.ExtBid +
+   openrtb_ext.ParseBidType (kobler-shaped). For non-prebid.type fields
+   (e.g. aax's bid.ext.adCodeType), emit a TODO so the operator wires
+   the bidder-specific typed wrapper. #}
+{% if step.field == "bid.ext.prebid.type" %}
+	if bid.Ext != nil {
+		var bidExt openrtb_ext.ExtBid
+		if err := jsonutil.Unmarshal(bid.Ext, &bidExt); err == nil && bidExt.Prebid != nil {
+			if mediaType, err := openrtb_ext.ParseBidType(string(bidExt.Prebid.Type)); err == nil {
+				return mediaType{{ _ok_suffix }}
+			}
+		}
+	}
+{% else %}
+	// TODO[port-java2go]: by-bid-ext-typed-field step reads {{ step.field }}.
+	// Non-canonical path — operator declares a typed struct + unmarshal here.
+{% endif %}
+{% elif step.method == "by-imp-mediatype" %}
+	for i := range imps {
+		if imps[i].ID == bid.ImpID {
+			if imps[i].Video != nil {
+				return openrtb_ext.BidTypeVideo{{ _ok_suffix }}
+			}
+			if imps[i].Native != nil {
+				return openrtb_ext.BidTypeNative{{ _ok_suffix }}
+			}
+			if imps[i].Audio != nil {
+				return openrtb_ext.BidTypeAudio{{ _ok_suffix }}
+			}
+			if imps[i].Banner != nil {
+				return openrtb_ext.BidTypeBanner{{ _ok_suffix }}
+			}
+			break
+		}
+	}
+{% elif step.method == "by-request-uri-suffix" %}
+	// TODO[port-java2go]: by-request-uri-suffix step requires the externalRequest
+	// pointer (not currently passed to getBidType). Operator threads it through.
+	// Reference: upstream adapters/beachfront/beachfront.go getBidType.
+{% elif step.method == "hardcoded" %}
+	return openrtb_ext.{{ step.hardcoded_value }}{{ _ok_suffix }}
+{% elif step.method == "throw" %}
+	return "", fmt.Errorf("unable to determine bid type for imp %s", bid.ImpID)
+{% endif %}
+{% if step.fallback_action == "throw" and step.method != "throw" %}
+	return "", fmt.Errorf("unable to determine bid type for imp %s", bid.ImpID)
+{% elif step.fallback_action == "return-default" and step.method != "hardcoded" %}
+{% set _default_const = ctx.bid_type_fallback_value or "banner" %}
+	return openrtb_ext.{{ _bid_type_short_to_go[_default_const] }}{{ _ok_suffix }}
+{% endif %}
+{% endfor %}
 {% else %}
 	// TODO[port-java2go]: bid_type_resolution={{ ctx.bid_type_resolution }}
 	// requires per-bidder customization (Rule 23-25).
-	return openrtb_ext.BidTypeBanner
+	return openrtb_ext.BidTypeBanner{{ _ok_suffix }}
 {% endif %}
 }
 

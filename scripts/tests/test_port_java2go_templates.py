@@ -163,13 +163,22 @@ class TestBidderInfoYamlJ2(unittest.TestCase):
 
     def test_camel_case_keys(self):
         """Go uses camelCase YAML keys, NOT kebab-case (Java side)."""
-        rendered = _render("bidder-info.yaml.j2", _kobler_bidder_info_ctx())
+        ctx = _kobler_bidder_info_ctx()
+        ctx["gvl_vendor_id"] = 8  # non-zero so the gvlVendorID line emits (F9)
+        rendered = _render("bidder-info.yaml.j2", ctx)
         # Camel-case names should appear.
         self.assertIn("endpointCompression", rendered)
         self.assertIn("gvlVendorID", rendered)
         # Kebab-case (Java side) should NOT appear.
         self.assertNotIn("endpoint-compression", rendered)
         self.assertNotIn("gvl-vendor-id", rendered)
+
+    def test_gvl_vendor_id_omitted_when_zero(self):
+        """F9: Go upstream convention omits gvlVendorID when value is 0."""
+        ctx = _kobler_bidder_info_ctx()
+        self.assertEqual(ctx["gvl_vendor_id"], 0)  # fixture matches kobler reality
+        rendered = _render("bidder-info.yaml.j2", ctx)
+        self.assertNotIn("gvlVendorID", rendered)
 
     def test_modifying_vast_xml_omitted_when_false(self):
         rendered = _render("bidder-info.yaml.j2", _kobler_bidder_info_ctx())
@@ -237,7 +246,9 @@ class TestBidderTestGoJ2(unittest.TestCase):
     def test_renders_test_function(self):
         rendered = _render("bidder-test.go.j2", _kobler_bidder_test_ctx())
         self.assertIn("package kobler", rendered)
-        self.assertIn("func TestKobler(t *testing.T) {", rendered)
+        # F10: Go upstream convention is TestJsonSamples (100% of merged
+        # adapter PRs use this name regardless of bidder).
+        self.assertIn("func TestJsonSamples(t *testing.T) {", rendered)
         self.assertIn("openrtb_ext.BidderKobler", rendered)
         self.assertIn('adapterstest.RunJSONBidderTest(t, "koblertest", bidder)', rendered)
 
@@ -386,6 +397,250 @@ class TestBidderGoJ2(unittest.TestCase):
         ctx["batching_max_imps"] = 5
         rendered = _render("bidder.go.j2", ctx)
         self.assertIn("ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp)", rendered)
+
+
+class TestBidTypeResolutionBranches(unittest.TestCase):
+    """D3.8 F8 fix — bidder.go.j2 getBidType covers 4 corpus patterns:
+
+    1. constant-{type} generalization (banner|video|audio|native)
+    2. by-bid-mtype (Rule 23 switch on bid.MType)
+    3. by-bid-ext-typed-field (Rule 24 typed-field read with throw-on-miss)
+    4. method-chain-fallback (multi-step walker; kobler 2-step + aax 3-step)
+
+    These tests assert key substrings (NOT exact strings) so the post-emit
+    `gofmt -s -w` step has latitude to canonicalize formatting.
+    """
+
+    # --------------------------- constant-{type} ---------------------------
+
+    def test_constant_legacy_banner_alias(self):
+        """Backwards-compat: existing `constant-banner` value still works."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "constant-banner"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
+        # No-error signature.
+        self.assertIn("func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {", rendered)
+
+    def test_constant_video(self):
+        """freewheelssp + vungle pattern (12% of corpus)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "constant"
+        ctx["bid_type_constant"] = "video"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("return openrtb_ext.BidTypeVideo", rendered)
+
+    def test_constant_audio(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "constant"
+        ctx["bid_type_constant"] = "audio"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("return openrtb_ext.BidTypeAudio", rendered)
+
+    def test_constant_native(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "constant"
+        ctx["bid_type_constant"] = "native"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("return openrtb_ext.BidTypeNative", rendered)
+
+    def test_constant_banner_via_generalized_branch(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "constant"
+        ctx["bid_type_constant"] = "banner"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
+
+    def test_constant_unknown_type_fails_loudly(self):
+        """Operator passes a type that doesn't exist on the Go side — render
+        MUST fail (not silently emit broken Go) so the audit notices."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "constant"
+        ctx["bid_type_constant"] = "other"
+        with self.assertRaises(Exception):
+            _render("bidder.go.j2", ctx)
+
+    # --------------------------- by-bid-mtype ----------------------------
+
+    def test_by_bid_mtype_throw_emits_switch_and_error(self):
+        """adverxo, teqblaze 2 + thetradedesk's bid-mtype-switch variant
+        (combined 19% of corpus)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        ctx["bid_type_fallback_action"] = "throw"
+        rendered = _render("bidder.go.j2", ctx)
+        # Switch on bid.MType with all four cases.
+        self.assertIn("switch bid.MType", rendered)
+        self.assertIn("case openrtb2.MarkupBanner", rendered)
+        self.assertIn("case openrtb2.MarkupVideo", rendered)
+        self.assertIn("case openrtb2.MarkupAudio", rendered)
+        self.assertIn("case openrtb2.MarkupNative", rendered)
+        # Error-returning signature.
+        self.assertIn("(openrtb_ext.BidType, error)", rendered)
+        # Error fallback.
+        self.assertIn('return "", fmt.Errorf', rendered)
+        # MakeBids caller threads errors through.
+        self.assertIn("var errs []error", rendered)
+        self.assertIn("errs = append(errs, err)", rendered)
+        self.assertIn("return bidderResponse, errs", rendered)
+
+    def test_by_bid_mtype_return_default_no_error(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        ctx["bid_type_fallback_action"] = "return-default"
+        ctx["bid_type_fallback_value"] = "video"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("switch bid.MType", rendered)
+        # No-error signature.
+        self.assertIn("func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {", rendered)
+        # Fallback returns the configured constant.
+        self.assertIn("return openrtb_ext.BidTypeVideo", rendered)
+        # MakeBids caller uses the no-error signature.
+        self.assertIn("BidType: getBidType(bid, request.Imp),", rendered)
+
+    # ----------------------- by-bid-ext-typed-field ----------------------
+
+    def test_by_bid_ext_typed_field_string_parse(self):
+        """smarthub shape — string field parsed via openrtb_ext.ParseBidType."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "by-bid-ext-typed-field"
+        ctx["bid_type_ext_field"] = {
+            "struct_name": "bidExt",
+            "field_path": "bidExt.MediaType",
+            "parse_via": "openrtb_ext.ParseBidType",
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("var bidExt bidExt", rendered)
+        self.assertIn("jsonutil.Unmarshal(bid.Ext, &bidExt)", rendered)
+        self.assertIn("openrtb_ext.ParseBidType(string(bidExt.MediaType))", rendered)
+        # Error-returning signature.
+        self.assertIn("(openrtb_ext.BidType, error)", rendered)
+
+    def test_by_bid_ext_typed_field_switch_int(self):
+        """appnexus shape — numeric field with switch over int values."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "by-bid-ext-typed-field"
+        ctx["bid_type_ext_field"] = {
+            "struct_name": "bidExt",
+            "field_path": "bidExt.Appnexus.BidType",
+            "parse_via": "switch-int",
+            "int_cases": [
+                {"value": 0, "bid_type": "banner"},
+                {"value": 1, "bid_type": "video"},
+                {"value": 3, "bid_type": "native"},
+            ],
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("switch bidExt.Appnexus.BidType", rendered)
+        self.assertIn("case 0:", rendered)
+        self.assertIn("return openrtb_ext.BidTypeBanner, nil", rendered)
+        self.assertIn("case 1:", rendered)
+        self.assertIn("return openrtb_ext.BidTypeVideo, nil", rendered)
+        self.assertIn("case 3:", rendered)
+        self.assertIn("return openrtb_ext.BidTypeNative, nil", rendered)
+        self.assertIn("default:", rendered)
+        self.assertIn("unrecognized bid type", rendered)
+
+    # --------------------- method-chain-fallback ------------------------
+
+    def test_method_chain_kobler_2_step(self):
+        """Kobler shape: by-bid-ext-typed-field(bid.ext.prebid.type) →
+        hardcoded(BidTypeBanner). No throw → no-error signature."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {
+                "method": "by-bid-ext-typed-field",
+                "field": "bid.ext.prebid.type",
+                "fallback_action": "next",
+            },
+            {
+                "method": "hardcoded",
+                "hardcoded_value": "BidTypeBanner",
+                "fallback_action": "return-default",
+            },
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # Step 1 emits the canonical kobler.go shape.
+        self.assertIn("var bidExt openrtb_ext.ExtBid", rendered)
+        self.assertIn("openrtb_ext.ParseBidType(string(bidExt.Prebid.Type))", rendered)
+        self.assertIn("return mediaType", rendered)
+        # Step 2 emits the hardcoded fallback.
+        self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
+        # No-error signature (no throw step in chain).
+        self.assertIn("func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {", rendered)
+
+    def test_method_chain_aax_3_step(self):
+        """Aax shape: by-bid-ext-typed-field(non-canonical adCodeType) →
+        by-imp-mediatype → throw. Verifies multi-step loop construct works
+        AND that the chain emits an error-returning signature."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {
+                "method": "by-bid-ext-typed-field",
+                "field": "bid.ext.adCodeType",
+                "fallback_action": "next",
+            },
+            {
+                "method": "by-imp-mediatype",
+                "fallback_action": "next",
+            },
+            {
+                "method": "throw",
+            },
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # Step 1 (non-canonical field) emits TODO comment.
+        self.assertIn("TODO[port-java2go]: by-bid-ext-typed-field step reads bid.ext.adCodeType", rendered)
+        # Step 2 (by-imp-mediatype) emits the imp walk.
+        self.assertIn("for i := range imps", rendered)
+        self.assertIn("if imps[i].ID == bid.ImpID", rendered)
+        self.assertIn("return openrtb_ext.BidTypeVideo, nil", rendered)
+        self.assertIn("return openrtb_ext.BidTypeNative, nil", rendered)
+        self.assertIn("return openrtb_ext.BidTypeBanner, nil", rendered)
+        # Step 3 (throw) emits the error return.
+        self.assertIn('return "", fmt.Errorf("unable to determine bid type for imp', rendered)
+        # Error-returning signature.
+        self.assertIn("(openrtb_ext.BidType, error)", rendered)
+
+    def test_method_chain_zero_steps_falls_through(self):
+        """Defensive: 0-step chain renders without crashing (operator's spec
+        is malformed but template should not blow up at render time)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = []
+        # Should render — body is empty, but Go would not compile. The TODO
+        # branch is the right place for this; here we just verify Jinja
+        # doesn't crash on the empty list.
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("func getBidType", rendered)
+
+    def test_method_chain_one_step_renders(self):
+        """Defensive: 1-step chain — effectively single-method but uses the
+        method-chain branch instead of the dedicated single-step branches."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {
+                "method": "hardcoded",
+                "hardcoded_value": "BidTypeBanner",
+                "fallback_action": "return-default",
+            },
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
+
+    # ------------- unknown / TODO fallthrough -----------------------------
+
+    def test_unknown_resolution_falls_through_with_todo(self):
+        """If ctx.bid_type_resolution is unrecognized, emit a TODO comment +
+        BidTypeBanner fallback (existing pattern, preserved)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "string-sniff-adm-substring"  # corpus-known but unimplemented
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("TODO[port-java2go]: bid_type_resolution=string-sniff-adm-substring", rendered)
+        self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
 
 
 class TestModuleVersionInOtherTemplates(unittest.TestCase):
