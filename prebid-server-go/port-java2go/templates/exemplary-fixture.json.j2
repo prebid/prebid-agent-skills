@@ -51,7 +51,9 @@ adapters/{bidder}/{bidder}test/supplemental/.
     {
       "expectedRequest": {
         "uri": {{ call.uri | tojson }},
-        "body": {{ call.body | tojson }}
+        "body": {{ call.body | tojson }}{% if call.imp_ids %},
+        "impIDs": {{ call.imp_ids | tojson }}{% endif %}
+
       },
       "mockResponse": {
         "status": {{ call.status }}{% if call.response %},

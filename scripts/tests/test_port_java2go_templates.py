@@ -297,6 +297,26 @@ class TestExemplaryFixtureJ2(unittest.TestCase):
         self.assertEqual(parsed["expectedBidResponses"][0]["currency"], "USD")
         self.assertEqual(parsed["expectedBidResponses"][0]["bids"][0]["type"], "banner")
 
+    def test_imp_ids_emit_when_provided(self):
+        """F-new-12 (canary v2): Go test framework requires expectedRequest.impIDs
+        — adapterstest.RunJSONBidderTest asserts non-empty. The template must emit
+        impIDs from ctx.http_calls[].imp_ids when provided."""
+        ctx = _kobler_exemplary_fixture_ctx()
+        ctx["http_calls"][0]["imp_ids"] = ["imp_id"]
+        rendered = _render("exemplary-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertEqual(parsed["httpCalls"][0]["expectedRequest"]["impIDs"], ["imp_id"])
+
+    def test_imp_ids_omitted_when_absent(self):
+        """Backward compat: existing ctx without imp_ids must still render
+        a valid expectedRequest (the Go test framework will still error since
+        impIDs is required, but the template must not blow up on missing key)."""
+        ctx = _kobler_exemplary_fixture_ctx()
+        # imp_ids deliberately not set
+        rendered = _render("exemplary-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        self.assertNotIn("impIDs", parsed["httpCalls"][0]["expectedRequest"])
+
 
 class TestBidderGoJ2(unittest.TestCase):
     """Tests for templates/bidder.go.j2 — the heaviest port-java2go template."""
