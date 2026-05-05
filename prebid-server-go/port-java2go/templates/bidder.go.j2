@@ -32,14 +32,47 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         Affects ~31% of corpus (adverxo, beachfront,
                                         kobler, limelightDigital, vungle).
   ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref
-  ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct"
+  ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct" | "none".
+                                        "none" (~12% corpus: aax, optidigital)
+                                        skips both the per-imp parseImpExt() call
+                                        from each batching branch's per-imp loop
+                                        AND the parseImpExt helper function
+                                        entirely. Used when imp.ext.bidder has no
+                                        required fields and the adapter forwards
+                                        the request without imp.ext inspection.
   ctx.batching_kind           : str  — "single-batched" | "per-imp" | "max-imps-per-request"
                                         | "format-split" | "pod-grouping"
   ctx.batching_max_imps       : int|null
   ctx.endpoint_resolution_kind: str  — "static" | "single-token-substitution" |
                                         "query-parameter-augmentation" | "dev-prod-toggle"
                                         | "multi-token-substitution"
-  ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw"
+  ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw" |
+                                        "legacy-raw-go". The "legacy-raw-go"
+                                        variant emits the same baseline 204+200
+                                        check as "legacy-raw" but additionally
+                                        consumes ctx.legacy_raw_status_handlers
+                                        for per-status branching (see below).
+  ctx.legacy_raw_status_handlers : list[{status_code: int, error_kind: str}] |
+                                        None — Per-status branches inserted
+                                        between the 204 short-circuit and the
+                                        generic non-200 catchall. Each entry
+                                        emits one
+                                        `if responseData.StatusCode == http.StatusXxx { ... &errortypes.{error_kind}{...} }`
+                                        block in declared order. Common shape
+                                        (aax): `[{status_code: 400, error_kind:
+                                        "BadInput"}]` produces the 400→BadInput
+                                        branch; the existing non-200 fallthrough
+                                        becomes BadServerResponse. Only consulted
+                                        when http_status_kind=="legacy-raw-go";
+                                        ignored otherwise. None / [] preserves
+                                        the original 2-branch (204 / non-200
+                                        generic) behavior for back-compat.
+                                        Affects ~3/16 (19%) of corpus.
+                                        Status-code constants use http.StatusXxx
+                                        Go names when canonical (StatusBadRequest=
+                                        400, StatusOK=200, StatusNoContent=204,
+                                        StatusNotFound=404, etc.); non-canonical
+                                        codes fall back to integer literals.
   ctx.bid_type_resolution     : str  — discriminator. One of:
                                           "imp-mediatype-introspection",
                                           "ext-prebid-video-placement",
@@ -149,6 +182,40 @@ Inputs (mirror of bidder.java.j2 ctx):
 {%- else -%}
 {%- set _ok_suffix = "" -%}
 {%- endif -%}
+{# F-new-1: imp_ext_unmarshal_kind=="none" skips both the per-imp call AND
+   the parseImpExt helper. Compute once so call sites + helper definition
+   stay in sync. #}
+{%- set _emit_parse_imp_ext = ctx.imp_ext_unmarshal_kind != "none" -%}
+{# F-new-1 partner: when neither currency-conversion nor parseImpExt has any
+   per-imp work to do, the single-batched / max-imps inner loops collapse to
+   an empty body. Drop the loop entirely (Go lints empty loops; upstream
+   aax.go has no per-imp loop at all in MakeRequests). #}
+{%- set _has_per_imp_work = ctx.uses_currency_conversion or _emit_parse_imp_ext -%}
+{# F-new-14: legacy-raw-go per-status handlers schema. None / [] means
+   back-compat (existing 2-branch shape). Populated list means emit per-status
+   branches BEFORE the generic non-200 catchall — and the catchall flips from
+   `fmt.Errorf` to `&errortypes.BadServerResponse{}` (matches upstream aax). #}
+{%- set _legacy_raw_handlers = ctx.legacy_raw_status_handlers or [] -%}
+{%- set _legacy_raw_go_with_handlers = (
+    ctx.http_status_kind == "legacy-raw-go" and (_legacy_raw_handlers | length > 0)
+) -%}
+{# Map a small set of common status codes to their canonical net/http
+   constant names. Codes outside this set fall back to integer literals
+   in the emitted Go (still compiles; just less idiomatic). #}
+{%- set _http_status_const_map = {
+    200: "http.StatusOK",
+    204: "http.StatusNoContent",
+    400: "http.StatusBadRequest",
+    401: "http.StatusUnauthorized",
+    403: "http.StatusForbidden",
+    404: "http.StatusNotFound",
+    408: "http.StatusRequestTimeout",
+    429: "http.StatusTooManyRequests",
+    500: "http.StatusInternalServerError",
+    502: "http.StatusBadGateway",
+    503: "http.StatusServiceUnavailable",
+    504: "http.StatusGatewayTimeout",
+} -%}
 package {{ ctx.package_name }}
 
 import (
@@ -164,6 +231,9 @@ import (
 	"github.com/prebid/openrtb/v20/openrtb2"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/config"
+{% if _legacy_raw_go_with_handlers %}
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/errortypes"
+{% endif %}
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/util/jsonutil"
 {% for imp in ctx.imports_extra %}
@@ -204,6 +274,7 @@ func Builder(_ openrtb_ext.BidderName, cfg config.Adapter, _ config.Server) (ada
 func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.ExtraRequestInfo) ([]*adapters.RequestData, []error) {
 	var errors []error
 {% if ctx.batching_kind == "single-batched" %}
+{% if _has_per_imp_work %}
 	for i := range request.Imp {
 {% if ctx.uses_currency_conversion %}
 		if err := convertImpCurrency(&request.Imp[i], reqInfo); err != nil {
@@ -211,11 +282,14 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			continue
 		}
 {% endif %}
+{% if _emit_parse_imp_ext %}
 		if _, err := parseImpExt(&request.Imp[i]); err != nil {
 			errors = append(errors, err)
 		}
+{% endif %}
 	}
 
+{% endif %}
 	body, err := jsonutil.Marshal(request)
 	if err != nil {
 		return nil, append(errors, err)
@@ -239,10 +313,12 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			continue
 		}
 {% endif %}
+{% if _emit_parse_imp_ext %}
 		if _, err := parseImpExt(&request.Imp[i]); err != nil {
 			errors = append(errors, err)
 			continue
 		}
+{% endif %}
 		perImp := *request
 		perImp.Imp = []openrtb2.Imp{request.Imp[i]}
 		body, err := jsonutil.Marshal(&perImp)
@@ -264,6 +340,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 	chunks := chunkImps(request.Imp, maxImpsPerRequest)
 	requests := make([]*adapters.RequestData, 0, len(chunks))
 	for _, chunk := range chunks {
+{% if _has_per_imp_work %}
 		for i := range chunk {
 {% if ctx.uses_currency_conversion %}
 			if err := convertImpCurrency(&chunk[i], reqInfo); err != nil {
@@ -271,10 +348,13 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 				continue
 			}
 {% endif %}
+{% if _emit_parse_imp_ext %}
 			if _, err := parseImpExt(&chunk[i]); err != nil {
 				errors = append(errors, err)
 			}
+{% endif %}
 		}
+{% endif %}
 		chunkRequest := *request
 		chunkRequest.Imp = chunk
 		body, err := jsonutil.Marshal(&chunkRequest)
@@ -307,6 +387,32 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 	}
 	if err := adapters.CheckResponseStatusCodeForErrors(responseData); err != nil {
 		return nil, []error{err}
+	}
+{% elif _legacy_raw_go_with_handlers %}
+{# F-new-14: legacy-raw-go with per-status handlers. Emit the 204 short-circuit,
+   then one branch per declared status_code → error_kind, then the generic
+   non-200 catchall (BadServerResponse — matches upstream aax shape). The
+   per-status handlers' messages use the canonical
+   "Unexpected status code: %d. Run with request.debug = 1 for more info" form
+   to match upstream prebid-server's CheckResponseStatusCodeForErrors output. #}
+	if responseData.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+{% for handler in _legacy_raw_handlers %}
+{% if handler.status_code in _http_status_const_map %}
+	if responseData.StatusCode == {{ _http_status_const_map[handler.status_code] }} {
+{% else %}
+	if responseData.StatusCode == {{ handler.status_code }} {
+{% endif %}
+		return nil, []error{&errortypes.{{ handler.error_kind }}{
+			Message: fmt.Sprintf("Unexpected status code: %d. Run with request.debug = 1 for more info", responseData.StatusCode),
+		}}
+	}
+{% endfor %}
+	if responseData.StatusCode != http.StatusOK {
+		return nil, []error{&errortypes.BadServerResponse{
+			Message: fmt.Sprintf("Unexpected status code: %d. Run with request.debug = 1 for more info", responseData.StatusCode),
+		}}
 	}
 {% else %}
 	if responseData.StatusCode == http.StatusNoContent {
@@ -355,6 +461,7 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 {% endif %}
 }
 
+{% if _emit_parse_imp_ext %}
 func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}, error) {
 {% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
 	var bidderExt adapters.ExtImpBidder
@@ -374,6 +481,7 @@ func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_roo
 	return &ext, nil
 {% endif %}
 }
+{% endif %}
 
 func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 {% if ctx.endpoint_resolution_kind == "static" %}

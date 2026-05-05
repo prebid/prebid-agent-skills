@@ -35,16 +35,25 @@ zero per-adapter customization:
                           helper does not).
 
   4. no-response-body   — 200-with-null-body path. status=200, body
-                          omitted (or `null`). For kobler-shape
-                          adapters (`responseData.Body == nil` short-
-                          circuit), this returns (nil, nil) — no
-                          error, expectedBidResponses=[]. Canonical-
-                          helper adapters that don't short-circuit may
-                          surface a jsonutil "unexpected end of JSON"
-                          error here; for shape-agnosticism we match
-                          upstream kobler `no-response-body.json` (no
-                          error). Per-adapter overrides handle the
-                          divergence.
+                          omitted. Two-shape gated emission (F-new-23):
+                            * legacy-raw-go (kobler-style with
+                              `responseData.Body == nil` short-circuit):
+                              returns (nil, nil) — no error,
+                              expectedBidResponses=[]. Matches upstream
+                              kobler `no-response-body.json`.
+                            * canonical-helpers (vungle/smarthub/etc.;
+                              no nil-body short-circuit): falls through
+                              to `jsonutil.Unmarshal(empty)` which
+                              jsoniter answers with `expect { or n, but
+                              found <next-byte>`. The next-byte varies
+                              by jsoniter version, so the fixture
+                              asserts the error via
+                              `"comparison": "startswith"` against the
+                              `"expect { or n, but found"` prefix.
+                              Matches upstream flatads
+                              `response-200-without-body.json`.
+                          Selection is driven by ctx.http_status_kind
+                          (default: legacy-raw-go for back-compat).
 
   5. malformed-body     — 200-with-non-JSON-string-body path. status=
                           200, body="this is not json" (literal JSON
@@ -76,6 +85,26 @@ Inputs:
                                      mock_bid_request.
   ctx.imp_ids               : list[str] — required by adapterstest
                                           framework (F-new-12).
+  ctx.http_status_kind      : str | None — gates the no-response-body
+                                          scenario only (F-new-23).
+                                          One of:
+                                            * "legacy-raw-go" (default
+                                              when None / absent) —
+                                              kobler-shape, body-nil
+                                              short-circuit returns
+                                              (nil, nil) with no error.
+                                            * "canonical-helpers" —
+                                              vungle/smarthub-shape;
+                                              jsonutil.Unmarshal on
+                                              empty body errors with
+                                              the "expect { or n, but
+                                              found" prefix; emitted
+                                              via startswith comparison.
+                                          Other scenario_kind values
+                                          (status-204/400/404/malformed-
+                                          body) are unaffected and
+                                          render identically regardless
+                                          of http_status_kind.
 
 The emitted JSON shape for each scenario_kind matches the upstream
 upstream-Go conventions referenced above. Unknown scenario_kind
@@ -84,6 +113,10 @@ the renderer is expected to validate the kind upstream and reject
 unknown values before invoking this template.
 #}
 {% set kind = ctx.scenario_kind %}
+{# F-new-23: gate the no-response-body scenario on http_status_kind.
+   Default to "legacy-raw-go" when absent or None to preserve
+   pre-F-new-23 callers (kobler-shape) that didn't pass this field. #}
+{% set status_kind = ctx.http_status_kind if ctx.http_status_kind else "legacy-raw-go" %}
 {
   "mockBidRequest": {{ ctx.mock_bid_request | tojson }},
   "httpCalls": [
@@ -111,7 +144,16 @@ unknown values before invoking this template.
       }
     }
   ],
-{% if kind == "status-204" or kind == "no-response-body" %}
+{% if kind == "status-204" %}
+  "expectedBidResponses": []
+{% elif kind == "no-response-body" and status_kind == "canonical-helpers" %}
+  "expectedMakeBidsErrors": [
+    {
+      "value": "expect { or n, but found",
+      "comparison": "startswith"
+    }
+  ]
+{% elif kind == "no-response-body" %}
   "expectedBidResponses": []
 {% elif kind == "status-400" %}
   "expectedMakeBidsErrors": [

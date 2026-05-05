@@ -418,6 +418,252 @@ class TestBidderGoJ2(unittest.TestCase):
         rendered = _render("bidder.go.j2", ctx)
         self.assertIn("ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp)", rendered)
 
+    # ----------------- F-new-1: imp_ext_unmarshal_kind=="none" --------------
+    # Affects ~12% of corpus (aax, optidigital). When imp.ext.bidder has no
+    # required schema fields the adapter forwards the request without
+    # inspecting imp.ext, so neither the per-imp parseImpExt() call nor the
+    # parseImpExt helper function should be emitted.
+
+    def test_imp_ext_unmarshal_none_skips_parseImpExt_call(self):
+        """F-new-1: with imp_ext_unmarshal_kind='none' the per-imp
+        parseImpExt(...) call MUST NOT appear in MakeRequests body."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["imp_ext_unmarshal_kind"] = "none"
+        # Disable currency conversion so the single-batched loop has no
+        # other per-imp work and collapses entirely (matches upstream aax).
+        ctx["uses_currency_conversion"] = False
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertNotIn("parseImpExt", rendered)
+
+    def test_imp_ext_unmarshal_none_skips_parseImpExt_helper(self):
+        """F-new-1: the parseImpExt helper function declaration MUST NOT
+        emit when imp_ext_unmarshal_kind='none' (else Go raises an
+        unused-function compile error / lint warning)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["imp_ext_unmarshal_kind"] = "none"
+        ctx["uses_currency_conversion"] = False
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertNotIn("func parseImpExt", rendered)
+
+    def test_imp_ext_unmarshal_standard_two_phase_unchanged(self):
+        """F-new-1 regression: existing 'standard-two-phase' branch
+        unchanged — kobler default ctx still emits both call AND helper."""
+        rendered = _render("bidder.go.j2", _kobler_bidder_go_ctx())
+        # Per-imp call site present.
+        self.assertIn("parseImpExt(&request.Imp[i])", rendered)
+        # Helper function declaration present.
+        self.assertIn("func parseImpExt(imp *openrtb2.Imp)", rendered)
+        # Two-phase body present.
+        self.assertIn("var bidderExt adapters.ExtImpBidder", rendered)
+
+    def test_imp_ext_unmarshal_none_with_currency_conversion_keeps_loop(self):
+        """F-new-1 partner case: imp_ext_unmarshal='none' AND
+        uses_currency_conversion=True → loop is preserved (currency call
+        still runs per-imp), but parseImpExt call is dropped from inside."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["imp_ext_unmarshal_kind"] = "none"
+        ctx["uses_currency_conversion"] = True
+        rendered = _render("bidder.go.j2", ctx)
+        # Loop still emits because currency conversion is still per-imp work.
+        self.assertIn("for i := range request.Imp", rendered)
+        self.assertIn("convertImpCurrency(&request.Imp[i]", rendered)
+        # parseImpExt absent.
+        self.assertNotIn("parseImpExt", rendered)
+
+    def test_imp_ext_unmarshal_none_per_imp_batching(self):
+        """F-new-1 with per-imp batching: outer loop is structural (builds
+        per-imp requests), so it stays. Just the parseImpExt block goes."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["imp_ext_unmarshal_kind"] = "none"
+        ctx["uses_currency_conversion"] = False
+        ctx["batching_kind"] = "per-imp"
+        rendered = _render("bidder.go.j2", ctx)
+        # Loop kept.
+        self.assertIn("for i := range request.Imp", rendered)
+        self.assertIn("perImp := *request", rendered)
+        # parseImpExt absent.
+        self.assertNotIn("parseImpExt", rendered)
+
+    # ------------- F-new-14: legacy-raw-go per-status branching -----------
+    # Affects ~3/16 (19%) of corpus. Legacy-raw-go adapters that have
+    # bidder-specific status handling (aax: 204/400/other) need per-status
+    # branches with errortypes.{BadInput,BadServerResponse,...}.
+
+    def test_legacy_raw_with_status_handlers_emits_per_status_branches(self):
+        """F-new-14 baseline: a single 400->BadInput handler emits the 204
+        short-circuit AND the StatusBadRequest BadInput branch."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = "legacy-raw-go"
+        ctx["legacy_raw_status_handlers"] = [
+            {"status_code": 400, "error_kind": "BadInput"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # 204 short-circuit always present in legacy-raw-go.
+        self.assertIn("responseData.StatusCode == http.StatusNoContent", rendered)
+        # 400 -> BadInput branch.
+        self.assertIn("responseData.StatusCode == http.StatusBadRequest", rendered)
+        self.assertIn("&errortypes.BadInput{", rendered)
+        self.assertIn(
+            "Unexpected status code: %d. Run with request.debug = 1 for more info",
+            rendered,
+        )
+        # Catchall flips from generic fmt.Errorf to BadServerResponse.
+        self.assertIn("&errortypes.BadServerResponse{", rendered)
+        self.assertIn("responseData.StatusCode != http.StatusOK", rendered)
+        # Generic legacy-raw fmt.Errorf string MUST NOT appear when handlers populated.
+        self.assertNotIn('fmt.Errorf("unexpected status code: %d"', rendered)
+
+    def test_legacy_raw_status_handlers_3branch_aax_shape(self):
+        """F-new-14 aax shape: 204 -> return nil; 400 -> BadInput;
+        other-non-200 -> BadServerResponse. Verify all three branches appear
+        in declared order with the correct errortypes."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = "legacy-raw-go"
+        ctx["legacy_raw_status_handlers"] = [
+            {"status_code": 400, "error_kind": "BadInput"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # Lexical ordering matches upstream aax.go exactly.
+        no_content_idx = rendered.index("responseData.StatusCode == http.StatusNoContent")
+        bad_request_idx = rendered.index("responseData.StatusCode == http.StatusBadRequest")
+        bad_input_idx = rendered.index("&errortypes.BadInput{")
+        not_ok_idx = rendered.index("responseData.StatusCode != http.StatusOK")
+        bad_server_idx = rendered.index("&errortypes.BadServerResponse{")
+        self.assertLess(no_content_idx, bad_request_idx)
+        self.assertLess(bad_request_idx, bad_input_idx)
+        self.assertLess(bad_input_idx, not_ok_idx)
+        self.assertLess(not_ok_idx, bad_server_idx)
+
+    def test_legacy_raw_status_handlers_multi_status_in_declared_order(self):
+        """F-new-14 ordering: multiple handlers emit in declaration order,
+        not sorted by status code (operator controls precedence)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = "legacy-raw-go"
+        ctx["legacy_raw_status_handlers"] = [
+            {"status_code": 404, "error_kind": "BadInput"},
+            {"status_code": 400, "error_kind": "BadInput"},
+            {"status_code": 429, "error_kind": "BadServerResponse"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        i_404 = rendered.index("http.StatusNotFound")
+        i_400 = rendered.index("http.StatusBadRequest")
+        i_429 = rendered.index("http.StatusTooManyRequests")
+        # Declared order: 404, 400, 429.
+        self.assertLess(i_404, i_400)
+        self.assertLess(i_400, i_429)
+
+    def test_legacy_raw_no_handlers_uses_2branch_default(self):
+        """F-new-14 backward compat: legacy-raw-go without handlers (None)
+        falls back to the existing 2-branch shape (matches legacy-raw)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = "legacy-raw-go"
+        ctx["legacy_raw_status_handlers"] = None
+        rendered = _render("bidder.go.j2", ctx)
+        # 204 + non-200 generic — same as the bare legacy-raw branch.
+        self.assertIn("responseData.StatusCode == http.StatusNoContent", rendered)
+        self.assertIn(
+            'return nil, []error{fmt.Errorf("unexpected status code: %d"',
+            rendered,
+        )
+        # No errortypes branches emitted.
+        self.assertNotIn("errortypes", rendered)
+
+    def test_legacy_raw_empty_handlers_uses_2branch_default(self):
+        """F-new-14 backward compat: empty list also preserves 2-branch."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = "legacy-raw-go"
+        ctx["legacy_raw_status_handlers"] = []
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn(
+            'return nil, []error{fmt.Errorf("unexpected status code: %d"',
+            rendered,
+        )
+        self.assertNotIn("errortypes", rendered)
+
+    def test_canonical_helpers_ignores_legacy_raw_field(self):
+        """F-new-14 isolation: with http_status_kind='canonical-helpers'
+        the legacy_raw_status_handlers field is silently ignored — caller
+        ctx is not validated, but the canonical-helpers branch is rendered
+        unchanged (no errortypes import, no per-status branches)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = "canonical-helpers"
+        ctx["legacy_raw_status_handlers"] = [
+            {"status_code": 400, "error_kind": "BadInput"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # Canonical-helpers branch active.
+        self.assertIn("adapters.IsResponseStatusCodeNoContent(responseData)", rendered)
+        self.assertIn("adapters.CheckResponseStatusCodeForErrors(responseData)", rendered)
+        # Per-status branches NOT emitted.
+        self.assertNotIn("&errortypes.BadInput{", rendered)
+        self.assertNotIn("&errortypes.BadServerResponse{", rendered)
+        # And the errortypes import line is absent.
+        self.assertNotIn("/v4/errortypes", rendered)
+
+    def test_errortypes_import_emit_when_handlers_populated(self):
+        """F-new-14 import gating: errortypes import line emits ONLY when
+        legacy-raw-go AND handlers are populated."""
+        # Case 1: handlers populated -> import present.
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = "legacy-raw-go"
+        ctx["legacy_raw_status_handlers"] = [
+            {"status_code": 400, "error_kind": "BadInput"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn(
+            '"github.com/prebid/prebid-server/v4/errortypes"',
+            rendered,
+        )
+
+        # Case 2: legacy-raw-go without handlers -> no import.
+        ctx2 = _kobler_bidder_go_ctx()
+        ctx2["http_status_kind"] = "legacy-raw-go"
+        ctx2["legacy_raw_status_handlers"] = None
+        rendered2 = _render("bidder.go.j2", ctx2)
+        self.assertNotIn("/v4/errortypes", rendered2)
+
+        # Case 3: canonical-helpers with handlers -> no import.
+        ctx3 = _kobler_bidder_go_ctx()
+        ctx3["http_status_kind"] = "canonical-helpers"
+        ctx3["legacy_raw_status_handlers"] = [
+            {"status_code": 400, "error_kind": "BadInput"},
+        ]
+        rendered3 = _render("bidder.go.j2", ctx3)
+        self.assertNotIn("/v4/errortypes", rendered3)
+
+    def test_legacy_raw_status_handlers_aax_full_combination(self):
+        """F-new-14 + F-new-1 integration: full aax shape — imp_ext='none',
+        legacy-raw-go with 400->BadInput, no currency conversion, 3-step
+        method-chain bid type. Verifies the two findings compose cleanly."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["imp_ext_unmarshal_kind"] = "none"
+        ctx["uses_currency_conversion"] = False
+        ctx["http_status_kind"] = "legacy-raw-go"
+        ctx["legacy_raw_status_handlers"] = [
+            {"status_code": 400, "error_kind": "BadInput"},
+        ]
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {"method": "by-bid-ext-typed-field", "field": "bid.ext.adCodeType",
+             "fallback_action": "next"},
+            {"method": "by-imp-mediatype", "fallback_action": "next"},
+            {"method": "throw"},
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # F-new-1: parseImpExt absent, no per-imp loop.
+        self.assertNotIn("parseImpExt", rendered)
+        self.assertNotIn("for i := range request.Imp", rendered)
+        # F-new-14: 3-branch status handling.
+        self.assertIn("&errortypes.BadInput{", rendered)
+        self.assertIn("&errortypes.BadServerResponse{", rendered)
+        # 3-step bid-type chain produces error-returning signature.
+        self.assertIn("(openrtb_ext.BidType, error)", rendered)
+        # Errortypes import.
+        self.assertIn(
+            '"github.com/prebid/prebid-server/v4/errortypes"',
+            rendered,
+        )
+
 
 class TestBidTypeResolutionBranches(unittest.TestCase):
     """D3.8 F8 fix — bidder.go.j2 getBidType covers 4 corpus patterns:
@@ -1045,6 +1291,17 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
         `responseData.Body == nil` respectively, returning (nil, nil).
         Matches upstream kobler `status-204.json` and
         `no-response-body.json`.
+
+    F-new-23 (post-vungle canary v3): the no-response-body scenario
+    is gated on `ctx.http_status_kind`. Canonical-helpers adapters
+    (vungle/smarthub/etc.) have no nil-body short-circuit and instead
+    fall through to `jsonutil.Unmarshal(empty)`, which jsoniter
+    answers with `expect { or n, but found <next-byte>`. The fixture
+    asserts that error via `comparison: startswith` against the
+    `"expect { or n, but found"` prefix (matches upstream flatads
+    `response-200-without-body.json`). Default behavior (when
+    `http_status_kind` is absent or None) preserves the legacy-raw-go
+    kobler shape for back-compat with pre-F-new-23 callers.
     """
 
     def test_status_204_emits_204_no_errors(self):
@@ -1106,6 +1363,110 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
         # No errors expected (kobler short-circuits with (nil, nil)).
         self.assertNotIn("expectedMakeBidsErrors", parsed)
         self.assertEqual(parsed["expectedBidResponses"], [])
+
+    def test_no_response_body_legacy_raw_go_unchanged(self):
+        """F-new-23: explicit `http_status_kind="legacy-raw-go"` reproduces
+        the pre-F-new-23 kobler shape (status 200, no body, no errors,
+        empty expectedBidResponses). Pins that the legacy path is
+        byte-identical to the existing default."""
+        ctx = _supplemental_fixture_ctx("no-response-body")
+        ctx["http_status_kind"] = "legacy-raw-go"
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        mock = parsed["httpCalls"][0]["mockResponse"]
+        self.assertEqual(mock["status"], 200)
+        self.assertNotIn("body", mock)
+        # Kobler-shape: no errors, empty expectedBidResponses.
+        self.assertNotIn("expectedMakeBidsErrors", parsed)
+        self.assertEqual(parsed["expectedBidResponses"], [])
+
+    def test_no_response_body_canonical_helpers_jsonutil_unmarshal_error(self):
+        """F-new-23: `http_status_kind="canonical-helpers"` flips the
+        no-response-body scenario from kobler-shape (no error) to the
+        flatads-shape jsonutil.Unmarshal error. The body-nil case
+        falls through to `jsonutil.Unmarshal(empty)`, which jsoniter
+        answers with `expect { or n, but found <next-byte>`. Since
+        the trailing byte varies (empty/`]`/etc.), the fixture asserts
+        the error via `comparison: startswith` against the prefix
+        `"expect { or n, but found"`. Matches upstream flatads
+        `response-200-without-body.json`."""
+        ctx = _supplemental_fixture_ctx("no-response-body")
+        ctx["http_status_kind"] = "canonical-helpers"
+        rendered = _render("supplemental-fixture.json.j2", ctx)
+        parsed = json.loads(rendered)
+        mock = parsed["httpCalls"][0]["mockResponse"]
+        # mockResponse shape unchanged: status=200, body omitted.
+        self.assertEqual(mock["status"], 200)
+        self.assertNotIn("body", mock)
+        # expectedBidResponses MUST NOT appear — the canonical-helpers
+        # branch surfaces an error rather than a (nil, nil) short-circuit.
+        self.assertNotIn("expectedBidResponses", parsed)
+        # The error string MUST use startswith comparison against the
+        # jsonutil prefix.
+        errs = parsed["expectedMakeBidsErrors"]
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0]["value"], "expect { or n, but found")
+        self.assertEqual(errs[0]["comparison"], "startswith")
+
+    def test_no_response_body_default_http_status_kind_absent(self):
+        """F-new-23 backward-compat: when `ctx.http_status_kind` is
+        absent OR explicitly None, the template defaults to
+        legacy-raw-go (kobler-shape), preserving pre-F-new-23 callers
+        verbatim. Pinned for both forms."""
+        # Form 1: key absent.
+        ctx_absent = _supplemental_fixture_ctx("no-response-body")
+        self.assertNotIn("http_status_kind", ctx_absent)
+        rendered_absent = _render("supplemental-fixture.json.j2", ctx_absent)
+        parsed_absent = json.loads(rendered_absent)
+        self.assertNotIn(
+            "expectedMakeBidsErrors", parsed_absent,
+            "absent http_status_kind must default to legacy-raw-go (no error)",
+        )
+        self.assertEqual(parsed_absent["expectedBidResponses"], [])
+
+        # Form 2: key present but None.
+        ctx_none = _supplemental_fixture_ctx("no-response-body")
+        ctx_none["http_status_kind"] = None
+        rendered_none = _render("supplemental-fixture.json.j2", ctx_none)
+        parsed_none = json.loads(rendered_none)
+        self.assertNotIn(
+            "expectedMakeBidsErrors", parsed_none,
+            "None http_status_kind must default to legacy-raw-go (no error)",
+        )
+        self.assertEqual(parsed_none["expectedBidResponses"], [])
+
+        # Both forms must be byte-equal to the explicit "legacy-raw-go"
+        # render (the gate is structural, not just expectation-level).
+        ctx_explicit = _supplemental_fixture_ctx("no-response-body")
+        ctx_explicit["http_status_kind"] = "legacy-raw-go"
+        rendered_explicit = _render(
+            "supplemental-fixture.json.j2", ctx_explicit
+        )
+        self.assertEqual(rendered_absent, rendered_explicit)
+        self.assertEqual(rendered_none, rendered_explicit)
+
+    def test_other_scenario_kinds_unaffected_by_http_status_kind(self):
+        """F-new-23 scope guard: the gate applies ONLY to no-response-body.
+        For the other 4 scenario_kind values (status-204/400/404/
+        malformed-body), the rendered output MUST be byte-identical
+        regardless of http_status_kind."""
+        for kind in ("status-204", "status-400", "status-404", "malformed-body"):
+            ctx_legacy = _supplemental_fixture_ctx(kind)
+            ctx_legacy["http_status_kind"] = "legacy-raw-go"
+            ctx_canonical = _supplemental_fixture_ctx(kind)
+            ctx_canonical["http_status_kind"] = "canonical-helpers"
+            ctx_absent = _supplemental_fixture_ctx(kind)
+            r_legacy = _render("supplemental-fixture.json.j2", ctx_legacy)
+            r_canonical = _render("supplemental-fixture.json.j2", ctx_canonical)
+            r_absent = _render("supplemental-fixture.json.j2", ctx_absent)
+            self.assertEqual(
+                r_legacy, r_canonical,
+                f"http_status_kind must not affect scenario_kind={kind}",
+            )
+            self.assertEqual(
+                r_legacy, r_absent,
+                f"absent http_status_kind must equal legacy-raw-go for {kind}",
+            )
 
     def test_malformed_body_emits_invalid_json_string(self):
         ctx = _supplemental_fixture_ctx("malformed-body")
