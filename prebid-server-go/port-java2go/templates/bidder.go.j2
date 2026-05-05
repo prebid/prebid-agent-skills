@@ -75,11 +75,17 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         codes fall back to integer literals.
   ctx.bid_type_resolution     : str  — discriminator. One of:
                                           "imp-mediatype-introspection",
-                                          "ext-prebid-video-placement",
                                           "constant" (or legacy alias "constant-banner"),
                                           "method-chain-fallback",
                                           "by-bid-mtype",
                                           "by-bid-ext-typed-field".
+                                          (Reviewer H6 correction: removed
+                                          "ext-prebid-video-placement" — listed
+                                          but no template branch implements it,
+                                          and no audit pair uses it. Add the
+                                          enum value back together with a
+                                          template branch when a real bidder
+                                          surfaces this pattern.)
   ctx.bid_type_constant       : str|None — "banner"|"video"|"audio"|"native". REQUIRED
                                             when bid_type_resolution=="constant". For
                                             backwards compat, legacy "constant-banner"
@@ -634,13 +640,25 @@ func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
 {% elif step.method == "throw" %}
 	return "", fmt.Errorf("unable to determine bid type for imp %s", bid.ImpID)
 {% endif %}
-{% if step.fallback_action == "throw" and step.method != "throw" %}
+{# Reviewer H3 correction: only emit the terminating return on the final
+   step. Earlier steps' fallback_action exists for documentation but the
+   actual flow control is "fall through to the next step on no-match" —
+   the previous unconditional emit produced unreachable code after a
+   non-last "throw". #}
+{% if loop.last and step.fallback_action == "throw" and step.method != "throw" %}
 	return "", fmt.Errorf("unable to determine bid type for imp %s", bid.ImpID)
-{% elif step.fallback_action == "return-default" and step.method != "hardcoded" %}
+{% elif loop.last and step.fallback_action == "return-default" and step.method != "hardcoded" %}
 {% set _default_const = ctx.bid_type_fallback_value or "banner" %}
 	return openrtb_ext.{{ _bid_type_short_to_go[_default_const] }}{{ _ok_suffix }}
 {% endif %}
 {% endfor %}
+{# Reviewer H2 correction: emit a terminal catchall return after the chain.
+   When every step's fallback_action is "next" (no throw, no return-default),
+   the function would otherwise compile-fail with "missing return at end".
+   Catchall uses ctx.bid_type_fallback_value (default "banner"). For an
+   error-returning signature, the catchall returns the default + nil. #}
+{% set _final_default = ctx.bid_type_fallback_value or "banner" %}
+	return openrtb_ext.{{ _bid_type_short_to_go[_final_default] }}{{ _ok_suffix }}
 {% else %}
 	// TODO[port-java2go]: bid_type_resolution={{ ctx.bid_type_resolution }}
 	// requires per-bidder customization (Rule 23-25).

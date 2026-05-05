@@ -1118,13 +1118,20 @@ def simulate_makerequests_mutations(
 
 
 def _apply_device_zero_fields(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    # Mirror Go's `device.IP = ""` wire form: Go's openrtb2.Device fields
+    # carry omitempty tags on IP, IPv6, etc., so the marshaled wire form
+    # OMITS the keys after zeroing. Python's json.dumps has no omitempty
+    # equivalent, so emitting `device[k] = ""` would carry `"ip": ""` on
+    # the wire — divergent from upstream Go's actual marshal output. We
+    # mirror Go's wire form by deleting the keys (same idiom as
+    # _apply_user_null below; F-new-35 ex post facto correction).
     device = req.get("device")
     if not isinstance(device, dict):
         return  # no Device → no-op
     fields = op.get("fields") or []
     for fname in fields:
         if fname in device:
-            device[fname] = ""
+            del device[fname]
 
 
 def _apply_user_null(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
@@ -1302,6 +1309,13 @@ def _apply_imp_tagid_from_ext(req: Dict[str, Any], op: Dict[str, Any]) -> None:
         raise ValueError(
             f"imp-tagid-from-ext requires non-empty 'ext_field_name'; got {field_name!r}"
         )
+    # Reviewer H5 correction: prefer explicit `slot_name` (the imp.ext
+    # key whose value-dict carries the target field) over the legacy
+    # first-match heuristic. The heuristic mis-routes when imp-ext-rewrap
+    # has installed the same content under multiple slots (vungle case).
+    # Pass `slot_name` for unambiguous routing; the heuristic remains as
+    # a back-compat fallback for callers that haven't migrated.
+    slot_name = op.get("slot_name")
     imps = req.get("imp")
     if not isinstance(imps, list):
         return
@@ -1311,17 +1325,18 @@ def _apply_imp_tagid_from_ext(req: Dict[str, Any], op: Dict[str, Any]) -> None:
         ext = imp.get("ext")
         if not isinstance(ext, dict):
             continue
-        # Walk imp.ext for any value-dict containing the named field, in
-        # insertion order. (Slot order is operator-supplied; we just locate
-        # the first dict carrying the named field.)
-        found_value = None
+        if isinstance(slot_name, str) and slot_name:
+            slot = ext.get(slot_name)
+            if isinstance(slot, dict) and field_name in slot:
+                imp["tagid"] = slot[field_name]
+            continue
+        # Back-compat fallback: walk imp.ext for any value-dict containing
+        # the named field, insertion-order. Documented as ambiguous when
+        # multiple slots could match.
         for v in ext.values():
             if isinstance(v, dict) and field_name in v:
-                found_value = v[field_name]
+                imp["tagid"] = v[field_name]
                 break
-        if found_value is None:
-            continue
-        imp["tagid"] = found_value
 
 
 def _apply_currency_normalize_to_list(req: Dict[str, Any], op: Dict[str, Any]) -> None:

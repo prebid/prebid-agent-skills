@@ -14,6 +14,7 @@ Run from repo root:
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -975,18 +976,21 @@ class TestSimulateMakerequestsMutations(unittest.TestCase):
 
     # --- Op 1: device-zero-fields ------------------------------------------
 
-    def test_device_zero_fields_zeros_named_fields(self):
+    def test_device_zero_fields_deletes_named_fields(self):
+        # Mirror Go's omitempty wire form: zeroed fields are DELETED from the
+        # marshaled body, not emitted as empty strings. (Reviewer H4
+        # correction; was =""→ del.)
         req = self._kobler_shape_request()
         out = simulate_makerequests_mutations(req, [
             {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
         ])
-        self.assertEqual(out["device"]["ip"], "")
-        self.assertEqual(out["device"]["ipv6"], "")
+        self.assertNotIn("ip", out["device"])
+        self.assertNotIn("ipv6", out["device"])
         # Other fields preserved.
         self.assertEqual(out["device"]["ua"], "Mozilla/5.0")
 
-    def test_device_zero_fields_only_present_fields_zeroed(self):
-        """Defensive: device with only IPv6 present (no IP) → only IPv6 zeroed."""
+    def test_device_zero_fields_only_present_fields_deleted(self):
+        """Defensive: device with only IPv6 present (no IP) → only IPv6 deleted."""
         req = {
             "id": "r1",
             "device": {"ipv6": "::1", "ua": "Mozilla/5.0"},
@@ -995,8 +999,8 @@ class TestSimulateMakerequestsMutations(unittest.TestCase):
         out = simulate_makerequests_mutations(req, [
             {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
         ])
-        self.assertEqual(out["device"]["ipv6"], "")
-        self.assertNotIn("ip", out["device"])
+        self.assertNotIn("ipv6", out["device"])
+        self.assertNotIn("ip", out["device"])  # was already absent; stays absent
         self.assertEqual(out["device"]["ua"], "Mozilla/5.0")
 
     def test_device_zero_fields_no_device_key_no_op(self):
@@ -1264,6 +1268,52 @@ class TestSimulateMakerequestsMutations(unittest.TestCase):
         ])
         self.assertNotIn("tagid", out["imp"][0])
 
+    def test_imp_tagid_from_ext_explicit_slot_name(self):
+        """H5 correction: when slot_name is given, read from THAT slot only.
+        Disambiguates the rewrap-installs-duplicates case where two slots
+        carry similar content but the operator wants a specific one."""
+        req = {
+            "imp": [
+                {
+                    "id": "i1",
+                    "ext": {
+                        "bidder": {"placementRefId": "from-bidder-slot"},
+                        "vungle": {"placementRefId": "from-vungle-slot"},
+                    },
+                }
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {
+                "kind": "imp-tagid-from-ext",
+                "ext_field_name": "placementRefId",
+                "slot_name": "vungle",
+            },
+        ])
+        self.assertEqual(out["imp"][0]["tagid"], "from-vungle-slot")
+
+    def test_imp_tagid_from_ext_explicit_slot_skipped_when_slot_absent(self):
+        """H5: when slot_name is given but the slot doesn't exist, skip
+        rather than fall back to the first-match heuristic."""
+        req = {
+            "imp": [
+                {
+                    "id": "i1",
+                    "ext": {
+                        "bidder": {"placementRefId": "should-not-be-picked"},
+                    },
+                }
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {
+                "kind": "imp-tagid-from-ext",
+                "ext_field_name": "placementRefId",
+                "slot_name": "vungle",  # not present in ext
+            },
+        ])
+        self.assertNotIn("tagid", out["imp"][0])
+
     # --- Op 15: currency-normalize-to-list ---------------------------------
 
     def test_currency_normalize_to_list_appends_when_missing(self):
@@ -1298,8 +1348,9 @@ class TestSimulateMakerequestsMutations(unittest.TestCase):
             {"kind": "user-null"},
             {"kind": "currency-normalize-to-list", "currency": "USD"},
         ])
-        self.assertEqual(out["device"]["ip"], "")
-        self.assertEqual(out["device"]["ipv6"], "")
+        # device-zero-fields deletes (omitempty wire form)
+        self.assertNotIn("ip", out["device"])
+        self.assertNotIn("ipv6", out["device"])
         self.assertNotIn("user", out)
         self.assertEqual(out["cur"], ["USD"])
 
@@ -1385,14 +1436,28 @@ class TestSimulateMakerequestsMutations(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-# Repo-local path to the prebid-server-java clone (hosting the kobler IT
-# fixtures used by the canary-shape regression test). Keep aligned with
-# the rest of port_engine.py's path conventions.
-_JAVA_CLONE = Path("/Users/quantum/Documents/GitHub/prebid-server-java")
-_KOBLER_IT_DIR = (
-    _JAVA_CLONE
-    / "src/test/resources/org/prebid/server/it/openrtb2/kobler"
-)
+# Kobler IT 4-file fixture set used by the canary-shape regression test
+# (`test_kobler_shape_passthrough`). Pinned snapshot from
+# prebid-server-java SHA a1fe64e123d6 (Phase D3.8 canary); committed at
+# scripts/tests/fixtures/kobler-it/ so the regression actually runs in CI
+# rather than silently skip-testing on contributor machines (Reviewer H1
+# correction).
+#
+# To re-snap from a newer upstream Java SHA, copy the 4 JSON files at
+# `<java-clone>/src/test/resources/org/prebid/server/it/openrtb2/kobler/`
+# into `scripts/tests/fixtures/kobler-it/` and update the SHA noted above.
+# Set `PREBID_SERVER_JAVA_CLONE=<path>` in the environment to opt into
+# reading from a live clone instead of the committed snapshot.
+_KOBLER_IT_DIR_ENV = os.environ.get("PREBID_SERVER_JAVA_CLONE")
+if _KOBLER_IT_DIR_ENV:
+    _KOBLER_IT_DIR = (
+        Path(_KOBLER_IT_DIR_ENV)
+        / "src/test/resources/org/prebid/server/it/openrtb2/kobler"
+    )
+else:
+    _KOBLER_IT_DIR = (
+        Path(__file__).resolve().parent / "fixtures" / "kobler-it"
+    )
 
 
 def _load_kobler_it_fixtures() -> Dict[str, Dict[str, Any]]:

@@ -871,16 +871,69 @@ class TestBidTypeResolutionBranches(unittest.TestCase):
         self.assertIn("(openrtb_ext.BidType, error)", rendered)
 
     def test_method_chain_zero_steps_falls_through(self):
-        """Defensive: 0-step chain renders without crashing (operator's spec
-        is malformed but template should not blow up at render time)."""
+        """Defensive: 0-step chain renders without crashing AND emits the
+        terminal catchall return (Reviewer H2 correction). Previously the
+        function ended without a return statement → Go compile-fail."""
         ctx = _kobler_bidder_go_ctx()
         ctx["bid_type_resolution"] = "method-chain-fallback"
         ctx["bid_type_method_chain"] = []
-        # Should render — body is empty, but Go would not compile. The TODO
-        # branch is the right place for this; here we just verify Jinja
-        # doesn't crash on the empty list.
         rendered = _render("bidder.go.j2", ctx)
         self.assertIn("func getBidType", rendered)
+        # H2: terminal catchall return must always be emitted.
+        self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
+
+    def test_method_chain_all_next_emits_terminal_catchall(self):
+        """H2 regression: chain where every step has fallback_action='next'
+        (no terminating throw or return-default) must still emit a terminal
+        return at end-of-function. Previously this produced
+        'missing return at end of function' Go compile error."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {
+                "method": "by-imp-mediatype",
+                "fallback_action": "next",
+            },
+            {
+                "method": "by-imp-mediatype",
+                "fallback_action": "next",
+            },
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # The terminal catchall return must follow the chain body.
+        # Order check: getBidType { ... terminal-return ... }
+        getBidType_start = rendered.index("func getBidType")
+        terminal_return = rendered.find("return openrtb_ext.BidTypeBanner", getBidType_start)
+        self.assertGreater(terminal_return, getBidType_start,
+                           "terminal catchall return missing after method-chain")
+
+    def test_method_chain_mid_chain_throw_does_not_emit_unreachable_code(self):
+        """H3 regression: mid-chain step with fallback_action='throw' must
+        NOT emit its terminating return (which would make subsequent steps
+        unreachable). Only the LAST step's terminating action emits."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "method-chain-fallback"
+        ctx["bid_type_method_chain"] = [
+            {
+                "method": "by-imp-mediatype",
+                "fallback_action": "throw",  # mid-chain throw — should NOT emit terminating return
+            },
+            {
+                "method": "hardcoded",
+                "hardcoded_value": "BidTypeBanner",
+                "fallback_action": "return-default",  # last-step terminal return
+            },
+        ]
+        rendered = _render("bidder.go.j2", ctx)
+        # Count occurrences of the throw-style error message; should be 0
+        # because the second (last) step's fallback_action is return-default.
+        # The mid-chain throw should NOT have produced its terminating
+        # return either.
+        self.assertEqual(
+            rendered.count('return "", fmt.Errorf("unable to determine bid type for imp %s"'),
+            0,
+            "mid-chain throw emitted unreachable terminating return (H3 regression)"
+        )
 
     def test_method_chain_one_step_renders(self):
         """Defensive: 1-step chain — effectively single-method but uses the
