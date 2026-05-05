@@ -21,9 +21,11 @@ from typing import Any, Dict, List, Tuple
 
 from scripts.lib.port_engine import (
     DEFAULT_NAME_ALLOW_LIST,
+    TEST_ENDPOINT,
     alias_graph_invert,
     alphabetical_insert,
     byte_copy,
+    exemplary_fixture_assemble_java_to_go,
     gofmt_post_process,
     iab_table_translate,
     imp_ext_shape_transform_java_to_go,
@@ -31,6 +33,7 @@ from scripts.lib.port_engine import (
     port_report_emit,
     prefix_uniqueness_check,
     r5_check_at_port_time,
+    simulate_makerequests_mutations,
 )
 
 
@@ -918,6 +921,921 @@ class TestImpExtShapeTransformJavaToGo(unittest.TestCase):
         self.assertEqual(out["imp"][0], "not-a-dict")
         self.assertEqual(out["imp"][1]["ext"], {"bidder": {"test": True}})
         self.assertIsNone(out["imp"][2])
+
+
+# ---------------------------------------------------------------------------
+# Helper 12: simulate_makerequests_mutations (D3.8 F-new-16 fixture-body sim)
+# ---------------------------------------------------------------------------
+
+
+class TestSimulateMakerequestsMutations(unittest.TestCase):
+    """D3.8 F-new-16: simulate the Go adapter's MakeRequests mutations on a
+    mockBidRequest to produce the expected ``httpCalls[].expectedRequest.body``
+    for flat exemplary fixtures. Covers 15 canonical mutation ops drawn from
+    kobler / vungle / adkernelAdn / thetradedesk / adverxo upstream adapters."""
+
+    def _kobler_shape_request(self) -> Dict[str, Any]:
+        """Minimal kobler-shape request with Device + User + single banner imp."""
+        return {
+            "id": "request_id",
+            "device": {"ip": "1.2.3.4", "ipv6": "::1", "ua": "Mozilla/5.0"},
+            "user": {"buyeruid": "abc"},
+            "imp": [
+                {
+                    "id": "imp_id",
+                    "banner": {"h": 250, "w": 300},
+                    "ext": {"bidder": {"test": False}},
+                }
+            ],
+            "tmax": 5000,
+        }
+
+    def test_empty_mutations_returns_deepcopy(self):
+        req = self._kobler_shape_request()
+        out = simulate_makerequests_mutations(req, [])
+        self.assertEqual(out, req)
+        # Verify deepcopy: mutating the result must not affect the input.
+        out["imp"][0]["banner"]["w"] = 999
+        self.assertEqual(req["imp"][0]["banner"]["w"], 300)
+
+    def test_input_dict_not_mutated(self):
+        req = self._kobler_shape_request()
+        snapshot = json.loads(json.dumps(req))
+        _ = simulate_makerequests_mutations(req, [
+            {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
+            {"kind": "user-null"},
+        ])
+        # Caller's dict unchanged.
+        self.assertEqual(req, snapshot)
+
+    def test_unknown_op_kind_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            simulate_makerequests_mutations({}, [{"kind": "no-such-op"}])
+        self.assertIn("no-such-op", str(ctx.exception))
+
+    # --- Op 1: device-zero-fields ------------------------------------------
+
+    def test_device_zero_fields_zeros_named_fields(self):
+        req = self._kobler_shape_request()
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
+        ])
+        self.assertEqual(out["device"]["ip"], "")
+        self.assertEqual(out["device"]["ipv6"], "")
+        # Other fields preserved.
+        self.assertEqual(out["device"]["ua"], "Mozilla/5.0")
+
+    def test_device_zero_fields_only_present_fields_zeroed(self):
+        """Defensive: device with only IPv6 present (no IP) → only IPv6 zeroed."""
+        req = {
+            "id": "r1",
+            "device": {"ipv6": "::1", "ua": "Mozilla/5.0"},
+            "imp": [],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
+        ])
+        self.assertEqual(out["device"]["ipv6"], "")
+        self.assertNotIn("ip", out["device"])
+        self.assertEqual(out["device"]["ua"], "Mozilla/5.0")
+
+    def test_device_zero_fields_no_device_key_no_op(self):
+        req = {"id": "r1", "imp": []}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
+        ])
+        self.assertNotIn("device", out)
+
+    # --- Op 2: user-null ----------------------------------------------------
+
+    def test_user_null_removes_user_key(self):
+        req = self._kobler_shape_request()
+        out = simulate_makerequests_mutations(req, [{"kind": "user-null"}])
+        self.assertNotIn("user", out)
+        # Other fields untouched.
+        self.assertEqual(out["device"], req["device"])
+
+    def test_user_null_no_user_key_no_op(self):
+        req = {"id": "r1", "imp": []}
+        out = simulate_makerequests_mutations(req, [{"kind": "user-null"}])
+        self.assertEqual(out, {"id": "r1", "imp": []})
+
+    # --- Op 3: imp-bidfloor-convert-to-usd ---------------------------------
+
+    def test_imp_bidfloor_convert_usd_passthrough_when_already_usd(self):
+        req = {
+            "id": "r1",
+            "imp": [
+                {"id": "i1", "bidfloor": 1.5, "bidfloorcur": "USD"},
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-bidfloor-convert-to-usd"},
+        ])
+        self.assertEqual(out["imp"][0]["bidfloor"], 1.5)
+        self.assertEqual(out["imp"][0]["bidfloorcur"], "USD")
+
+    def test_imp_bidfloor_convert_usd_retags_non_usd(self):
+        """bidfloorcur != USD with positive bidfloor → bidfloorcur set to USD,
+        bidfloor untouched (caller pre-converts)."""
+        req = {
+            "id": "r1",
+            "imp": [
+                {"id": "i1", "bidfloor": 1.42, "bidfloorcur": "EUR"},
+                {"id": "i2", "bidfloor": 0, "bidfloorcur": "EUR"},  # 0 → no-op
+                {"id": "i3"},  # no bidfloor → no-op
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-bidfloor-convert-to-usd"},
+        ])
+        # i1: re-tagged.
+        self.assertEqual(out["imp"][0]["bidfloorcur"], "USD")
+        self.assertEqual(out["imp"][0]["bidfloor"], 1.42)
+        # i2: 0 bidfloor → unchanged.
+        self.assertEqual(out["imp"][1]["bidfloorcur"], "EUR")
+        # i3: missing fields → unchanged.
+        self.assertNotIn("bidfloorcur", out["imp"][2])
+
+    # --- Op 4: imp-ext-strip-after-extraction ------------------------------
+
+    def test_imp_ext_strip_removes_ext_per_imp(self):
+        req = {
+            "imp": [
+                {"id": "i1", "ext": {"bidder": {"x": 1}}},
+                {"id": "i2", "ext": {"bidder": {"x": 2}, "tid": "abc"}},
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-ext-strip-after-extraction"},
+        ])
+        for imp in out["imp"]:
+            self.assertNotIn("ext", imp)
+
+    # --- Op 5: imp-ext-rewrap-with-bidder-slot -----------------------------
+
+    def test_imp_ext_rewrap_adds_named_slot_with_bidder_content(self):
+        """vungle pattern: imp.ext gains a `vungle` key carrying bidder content;
+        bidder slot remains (mirrors the embedded-struct marshaler shape)."""
+        req = {
+            "imp": [
+                {
+                    "id": "i1",
+                    "ext": {
+                        "bidder": {"placementRefId": "abc", "pubAppStoreID": "xyz"},
+                        "prebid": {"storedrequest": {"id": "stored"}},
+                    },
+                }
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-ext-rewrap-with-bidder-slot", "slot_name": "vungle"},
+        ])
+        ext = out["imp"][0]["ext"]
+        self.assertIn("vungle", ext)
+        self.assertEqual(ext["vungle"], {"placementRefId": "abc", "pubAppStoreID": "xyz"})
+        # bidder slot preserved (vungleImpressionExt embeds ExtImpBidder).
+        self.assertIn("bidder", ext)
+        # prebid passes through.
+        self.assertEqual(ext["prebid"], {"storedrequest": {"id": "stored"}})
+
+    def test_imp_ext_rewrap_missing_slot_name_raises(self):
+        with self.assertRaises(ValueError):
+            simulate_makerequests_mutations(
+                {"imp": [{"ext": {"bidder": {}}}]},
+                [{"kind": "imp-ext-rewrap-with-bidder-slot"}],
+            )
+
+    # --- Op 6: site-null ---------------------------------------------------
+
+    def test_site_null_removes_site_key(self):
+        req = {"site": {"id": "s1", "domain": "example.com"}, "imp": []}
+        out = simulate_makerequests_mutations(req, [{"kind": "site-null"}])
+        self.assertNotIn("site", out)
+
+    # --- Op 7: app-replace-with-synthesis ----------------------------------
+
+    def test_app_replace_with_synthesis_uses_payload(self):
+        req = {"site": {"id": "s1"}, "imp": []}
+        synth = {"publisher": {"id": "vungle-pub-123"}, "id": "appstore-id"}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "app-replace-with-synthesis", "app_synthesis_payload": synth},
+        ])
+        self.assertEqual(out["app"], synth)
+        # Deep-copied: mutating output must not touch the op's payload.
+        out["app"]["publisher"]["id"] = "mutated"
+        self.assertEqual(synth["publisher"]["id"], "vungle-pub-123")
+
+    def test_app_replace_with_synthesis_missing_payload_raises(self):
+        with self.assertRaises(ValueError):
+            simulate_makerequests_mutations(
+                {"imp": []},
+                [{"kind": "app-replace-with-synthesis"}],
+            )
+
+    # --- Op 8: site-publisher-rewrite --------------------------------------
+
+    def test_site_publisher_rewrite_overwrites_id(self):
+        req = {
+            "site": {"id": "s1", "publisher": {"id": "old", "name": "OldCo"}},
+            "imp": [],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "site-publisher-rewrite", "publisher_id": "ttd-supply-1"},
+        ])
+        self.assertEqual(out["site"]["publisher"]["id"], "ttd-supply-1")
+        # Other publisher fields preserved.
+        self.assertEqual(out["site"]["publisher"]["name"], "OldCo")
+
+    def test_site_publisher_rewrite_no_site_no_op(self):
+        req = {"imp": []}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "site-publisher-rewrite", "publisher_id": "p1"},
+        ])
+        self.assertNotIn("site", out)
+
+    # --- Op 9: app-publisher-rewrite ---------------------------------------
+
+    def test_app_publisher_rewrite_overwrites_id(self):
+        req = {
+            "app": {"id": "a1", "publisher": {"id": "old"}},
+            "imp": [],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "app-publisher-rewrite", "publisher_id": "ttd-supply-2"},
+        ])
+        self.assertEqual(out["app"]["publisher"]["id"], "ttd-supply-2")
+
+    # --- Op 10: site-publisher-null ----------------------------------------
+
+    def test_site_publisher_null_removes_publisher(self):
+        req = {
+            "site": {"id": "s1", "publisher": {"id": "p1"}, "domain": "x.com"},
+            "imp": [],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "site-publisher-null"},
+        ])
+        self.assertNotIn("publisher", out["site"])
+        # Other site fields preserved.
+        self.assertEqual(out["site"]["domain"], "x.com")
+
+    # --- Op 11: site-domain-clear ------------------------------------------
+
+    def test_site_domain_clear_sets_empty_string(self):
+        """Go's `Site.Domain = ""` produces an empty-string field on the wire,
+        not a missing key (Site.Domain has no omitempty tag)."""
+        req = {"site": {"id": "s1", "domain": "example.com"}, "imp": []}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "site-domain-clear"},
+        ])
+        self.assertIn("domain", out["site"])
+        self.assertEqual(out["site"]["domain"], "")
+
+    # --- Op 12: app-publisher-null -----------------------------------------
+
+    def test_app_publisher_null_removes_publisher(self):
+        req = {"app": {"id": "a1", "publisher": {"id": "p1"}}, "imp": []}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "app-publisher-null"},
+        ])
+        self.assertNotIn("publisher", out["app"])
+
+    # --- Op 13: banner-format-fill-wh --------------------------------------
+
+    def test_banner_format_fill_wh_fills_when_missing(self):
+        req = {
+            "imp": [
+                {
+                    "id": "i1",
+                    "banner": {"format": [{"w": 728, "h": 90}, {"w": 300, "h": 250}]},
+                },
+                # imp with W/H already set — must NOT be touched.
+                {
+                    "id": "i2",
+                    "banner": {"w": 320, "h": 50, "format": [{"w": 728, "h": 90}]},
+                },
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "banner-format-fill-wh"},
+        ])
+        # i1: w/h filled from format[0]; format[0] dropped.
+        self.assertEqual(out["imp"][0]["banner"]["w"], 728)
+        self.assertEqual(out["imp"][0]["banner"]["h"], 90)
+        self.assertEqual(out["imp"][0]["banner"]["format"], [{"w": 300, "h": 250}])
+        # i2: untouched (had explicit w/h).
+        self.assertEqual(out["imp"][1]["banner"]["w"], 320)
+        self.assertEqual(out["imp"][1]["banner"]["h"], 50)
+        self.assertEqual(out["imp"][1]["banner"]["format"], [{"w": 728, "h": 90}])
+
+    def test_banner_format_fill_wh_no_banner_no_op(self):
+        req = {"imp": [{"id": "i1", "video": {"w": 640, "h": 480}}]}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "banner-format-fill-wh"},
+        ])
+        self.assertNotIn("banner", out["imp"][0])
+
+    # --- Op 14: imp-tagid-from-ext -----------------------------------------
+
+    def test_imp_tagid_from_ext_copies_value(self):
+        """Vungle's `imp.TagID = bidderImpExt.PlacementRefID` mirrored as
+        a per-imp tagid copy from a named field inside imp.ext.{any-slot}."""
+        req = {
+            "imp": [
+                {
+                    "id": "i1",
+                    "ext": {
+                        "bidder": {"placementRefId": "vungle-placement-abc"},
+                        "vungle": {"placementRefId": "vungle-placement-abc"},
+                    },
+                }
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId"},
+        ])
+        self.assertEqual(out["imp"][0]["tagid"], "vungle-placement-abc")
+
+    def test_imp_tagid_from_ext_skipped_when_field_absent(self):
+        req = {"imp": [{"id": "i1", "ext": {"bidder": {"x": 1}}}]}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId"},
+        ])
+        self.assertNotIn("tagid", out["imp"][0])
+
+    # --- Op 15: currency-normalize-to-list ---------------------------------
+
+    def test_currency_normalize_to_list_appends_when_missing(self):
+        req = {"cur": ["EUR"], "imp": []}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "currency-normalize-to-list", "currency": "USD"},
+        ])
+        self.assertEqual(out["cur"], ["EUR", "USD"])
+
+    def test_currency_normalize_to_list_no_op_when_present(self):
+        req = {"cur": ["USD", "EUR"], "imp": []}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "currency-normalize-to-list", "currency": "USD"},
+        ])
+        self.assertEqual(out["cur"], ["USD", "EUR"])
+
+    def test_currency_normalize_to_list_creates_list_when_missing(self):
+        req = {"imp": []}
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "currency-normalize-to-list", "currency": "USD"},
+        ])
+        self.assertEqual(out["cur"], ["USD"])
+
+    # --- Multi-op sequence + ordering -------------------------------------
+
+    def test_kobler_full_sequence_applies_in_order(self):
+        """Three-op kobler simulation: zero device IP/IPv6, null user, append USD
+        currency. Verifies ops accumulate; output reflects all three changes."""
+        req = self._kobler_shape_request()
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "device-zero-fields", "fields": ["ip", "ipv6"]},
+            {"kind": "user-null"},
+            {"kind": "currency-normalize-to-list", "currency": "USD"},
+        ])
+        self.assertEqual(out["device"]["ip"], "")
+        self.assertEqual(out["device"]["ipv6"], "")
+        self.assertNotIn("user", out)
+        self.assertEqual(out["cur"], ["USD"])
+
+    def test_adkernel_multi_imp_sequence(self):
+        """adkernelAdn-shape: two imps, one banner+W/H, one banner+format-only.
+        Sequence: strip imp.ext, null Site.Publisher, clear Site.Domain,
+        null App.Publisher, fill Banner.W/H from format[0]."""
+        req = {
+            "site": {"id": "s1", "publisher": {"id": "p1"}, "domain": "example.com"},
+            "app": {"id": "a1", "publisher": {"id": "ap1"}},
+            "imp": [
+                {"id": "i1", "ext": {"bidder": {}}, "banner": {"w": 320, "h": 50}},
+                {"id": "i2", "ext": {"bidder": {}}, "banner": {"format": [{"w": 728, "h": 90}]}},
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-ext-strip-after-extraction"},
+            {"kind": "site-publisher-null"},
+            {"kind": "site-domain-clear"},
+            {"kind": "app-publisher-null"},
+            {"kind": "banner-format-fill-wh"},
+        ])
+        # imp.ext stripped on every imp.
+        self.assertNotIn("ext", out["imp"][0])
+        self.assertNotIn("ext", out["imp"][1])
+        # Site.Publisher nulled, domain cleared.
+        self.assertNotIn("publisher", out["site"])
+        self.assertEqual(out["site"]["domain"], "")
+        # App.Publisher nulled.
+        self.assertNotIn("publisher", out["app"])
+        # Banner W/H untouched on i1 (already set), filled on i2.
+        self.assertEqual(out["imp"][0]["banner"]["w"], 320)
+        self.assertEqual(out["imp"][1]["banner"]["w"], 728)
+        self.assertEqual(out["imp"][1]["banner"]["h"], 90)
+        self.assertEqual(out["imp"][1]["banner"]["format"], [])
+
+    def test_vungle_site_to_app_synthesis_sequence(self):
+        """vungle-shape: imp.ext rewrap, imp.tagid from ext, site=null,
+        app=synthesis-payload."""
+        req = {
+            "site": {"id": "site-1"},
+            "imp": [
+                {
+                    "id": "i1",
+                    "ext": {"bidder": {"placementRefId": "p-abc", "pubAppStoreID": "x123"}},
+                    "banner": {"w": 320, "h": 50},
+                }
+            ],
+        }
+        out = simulate_makerequests_mutations(req, [
+            {"kind": "imp-ext-rewrap-with-bidder-slot", "slot_name": "vungle"},
+            {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId"},
+            {"kind": "site-null"},
+            {
+                "kind": "app-replace-with-synthesis",
+                "app_synthesis_payload": {"id": "x123"},
+            },
+        ])
+        self.assertNotIn("site", out)
+        self.assertEqual(out["app"], {"id": "x123"})
+        self.assertEqual(out["imp"][0]["tagid"], "p-abc")
+        # vungle slot installed; bidder slot retained (matches embedded-struct shape).
+        self.assertIn("vungle", out["imp"][0]["ext"])
+        self.assertIn("bidder", out["imp"][0]["ext"])
+
+    def test_unknown_op_kind_includes_supported_kinds(self):
+        """Defensive: error message lists supported kinds for operator
+        diagnostics (caller can grep the list)."""
+        try:
+            simulate_makerequests_mutations({}, [{"kind": "site-publisher-frobnicate"}])
+        except ValueError as e:
+            msg = str(e)
+            self.assertIn("site-publisher-frobnicate", msg)
+            # A few sentinel kinds the operator can use to confirm coverage.
+            self.assertIn("user-null", msg)
+            self.assertIn("device-zero-fields", msg)
+            return
+        self.fail("expected ValueError")
+
+
+# ---------------------------------------------------------------------------
+# Helper 13: exemplary_fixture_assemble_java_to_go (D3.8 canary v2: F-new-9/10/11/13)
+# ---------------------------------------------------------------------------
+
+
+# Repo-local path to the prebid-server-java clone (hosting the kobler IT
+# fixtures used by the canary-shape regression test). Keep aligned with
+# the rest of port_engine.py's path conventions.
+_JAVA_CLONE = Path("/Users/quantum/Documents/GitHub/prebid-server-java")
+_KOBLER_IT_DIR = (
+    _JAVA_CLONE
+    / "src/test/resources/org/prebid/server/it/openrtb2/kobler"
+)
+
+
+def _load_kobler_it_fixtures() -> Dict[str, Dict[str, Any]]:
+    """Load the kobler 4-file IT fixture set as plain dicts.
+
+    The canary-shape regression test (``test_kobler_shape_passthrough``)
+    exercises the helper end-to-end against actual Java IT inputs, so the
+    test reads the fixtures from the upstream-Java clone at runtime.
+    """
+    return {
+        "auction_request": json.loads(
+            (_KOBLER_IT_DIR / "test-auction-kobler-request.json").read_text()
+        ),
+        "auction_response": json.loads(
+            (_KOBLER_IT_DIR / "test-auction-kobler-response.json").read_text()
+        ),
+        "bid_request": json.loads(
+            (_KOBLER_IT_DIR / "test-kobler-bid-request.json").read_text()
+        ),
+        "bid_response": json.loads(
+            (_KOBLER_IT_DIR / "test-kobler-bid-response.json").read_text()
+        ),
+    }
+
+
+class TestExemplaryFixtureAssembleJavaToGo(unittest.TestCase):
+    """D3.8 canary v2 helper: bundles F-new-9/10/11/13 fixture-authoring
+    concerns into a single ctx-assembly call so future Java→Go canaries
+    don't rediscover the same shape contract.
+
+    Coverage map:
+      F-new-9  : test_cur_fallback_when_bid_response_missing_cur,
+                 test_cur_no_fallback_when_bid_response_has_cur,
+                 test_cur_lenient_on_conflict
+      F-new-10 : test_test_endpoint_default,
+                 test_test_endpoint_override,
+                 test_test_endpoint_constant_canonical
+      F-new-11 : test_expected_bids_from_bare_bid_response,
+                 test_expected_bids_empty_seatbid,
+                 test_expected_bids_default_type_banner,
+                 test_expected_bids_custom_default_type
+      F-new-12 : test_imp_ids_from_mock_bid_request,
+                 test_imp_ids_empty_when_no_imp
+      F-new-13 : test_expected_request_body_simulator_called,
+                 test_expected_request_body_default_passthrough
+      Misc     : test_kobler_shape_passthrough,
+                 test_imp_ext_shape_transform_applied,
+                 test_input_dicts_not_mutated,
+                 test_empty_bidder_name_raises
+    """
+
+    # ----- F-new-9 cur fallback ------------------------------------------------
+
+    def test_cur_fallback_when_bid_response_missing_cur(self):
+        """F-new-9: bid-response without ``cur``; auction-response with
+        ``cur: USD`` → http_calls[0].response.cur should be ``USD``."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r", "cur": "USD"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},  # no cur
+            java_bidder_name="kobler",
+        )
+        self.assertEqual(ctx["http_calls"][0]["response"]["cur"], "USD")
+
+    def test_cur_no_fallback_when_bid_response_has_cur(self):
+        """F-new-9: bid-response cur=EUR, auction-response cur=USD →
+        http_calls[0].response.cur should remain EUR (don't override the
+        bid-response's own cur)."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r", "cur": "USD"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": [], "cur": "EUR"},
+            java_bidder_name="kobler",
+        )
+        self.assertEqual(ctx["http_calls"][0]["response"]["cur"], "EUR")
+
+    def test_cur_lenient_on_conflict(self):
+        """F-new-9 design decision: lenient mode on cur conflict — the
+        bid-response value wins, no error raised. Per the audit doc,
+        bid-response is closer to upstream-true ground truth."""
+        # Should NOT raise even though the two responses disagree.
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r", "cur": "USD"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": [], "cur": "EUR"},
+            java_bidder_name="kobler",
+        )
+        # Lenient: bid-response wins.
+        self.assertEqual(ctx["http_calls"][0]["response"]["cur"], "EUR")
+
+    # ----- F-new-10 TEST_ENDPOINT ---------------------------------------------
+
+    def test_test_endpoint_default(self):
+        """F-new-10: default ``test_endpoint`` matches the canonical Builder
+        URL bidder-test.go.j2 emits."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+        )
+        self.assertEqual(
+            ctx["http_calls"][0]["uri"],
+            "https://test.example.com/bid",
+        )
+
+    def test_test_endpoint_override(self):
+        """F-new-10: caller can override ``test_endpoint`` if a future
+        bidder-test.go variant uses a non-standard URL."""
+        custom = "https://custom.example.com/bid"
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+            test_endpoint=custom,
+        )
+        self.assertEqual(ctx["http_calls"][0]["uri"], custom)
+
+    def test_test_endpoint_constant_canonical(self):
+        """F-new-10: the ``TEST_ENDPOINT`` module constant matches the URL
+        emitted by ``bidder-test.go.j2``'s Builder() invocation. This is
+        the single-source-of-truth contract — if either side changes, the
+        other must follow in the same commit."""
+        self.assertEqual(TEST_ENDPOINT, "https://test.example.com/bid")
+
+    # ----- F-new-11 expected_bids ---------------------------------------------
+
+    def test_expected_bids_from_bare_bid_response(self):
+        """F-new-11: bid-response has the BARE bid (no exp, no ext);
+        auction-response has the framework-ENRICHED bid (with exp,
+        ext.origbidcpm). Helper must derive expected_bids from the bare
+        bid-response — using auction-response would inject the framework
+        enrichments into the fixture and the Go test would fail JSON
+        comparison."""
+        bare_bid = {
+            "id": "bid_id",
+            "impid": "imp_id",
+            "price": 3.33,
+        }
+        enriched_bid = {
+            **bare_bid,
+            "exp": 300,  # framework-added
+            "ext": {  # framework-added
+                "origbidcpm": 3.33,
+                "prebid": {"meta": {"adaptercode": "kobler"}, "type": "banner"},
+            },
+        }
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={
+                "id": "r",
+                "cur": "USD",
+                "seatbid": [{"bid": [enriched_bid]}],
+            },
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": [{"bid": [bare_bid]}]},
+            java_bidder_name="kobler",
+        )
+        self.assertEqual(len(ctx["expected_bids"]), 1)
+        self.assertEqual(ctx["expected_bids"][0]["bid"], bare_bid)
+        # The bid is BARE: no exp, no ext fields beyond what bid-response had.
+        self.assertNotIn("exp", ctx["expected_bids"][0]["bid"])
+        self.assertNotIn("ext", ctx["expected_bids"][0]["bid"])
+
+    def test_expected_bids_empty_seatbid(self):
+        """F-new-11: empty seatbid → expected_bids is an empty list (no
+        crash, no None)."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+        )
+        self.assertEqual(ctx["expected_bids"], [])
+
+    def test_expected_bids_default_type_banner(self):
+        """F-new-11: default ``default_bid_type`` is ``"banner"``."""
+        bid = {"id": "b1", "impid": "i1", "price": 1.0}
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": [{"bid": [bid]}]},
+            java_bidder_name="kobler",
+        )
+        self.assertEqual(ctx["expected_bids"][0]["type"], "banner")
+
+    def test_expected_bids_custom_default_type(self):
+        """F-new-11: vungle-shape — caller passes ``default_bid_type='video'``
+        to match the hardcoded BidType.video the upstream adapter returns."""
+        bid = {"id": "b1", "impid": "i1", "price": 1.0}
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r", "imp": []},
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": [{"bid": [bid]}]},
+            java_bidder_name="vungle",
+            default_bid_type="video",
+        )
+        self.assertEqual(ctx["expected_bids"][0]["type"], "video")
+
+    # ----- F-new-12 imp_ids ----------------------------------------------------
+
+    def test_imp_ids_from_mock_bid_request(self):
+        """F-new-12: multi-imp auction-request → imp_ids contains all imp
+        IDs in their original order."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={
+                "id": "r",
+                "imp": [
+                    {"id": "i1", "ext": {"adverxo": {"placementId": 1}}},
+                    {"id": "i2", "ext": {"adverxo": {"placementId": 2}}},
+                    {"id": "i3", "ext": {"adverxo": {"placementId": 3}}},
+                ],
+            },
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="adverxo",
+        )
+        self.assertEqual(ctx["http_calls"][0]["imp_ids"], ["i1", "i2", "i3"])
+
+    def test_imp_ids_empty_when_no_imp(self):
+        """F-new-12: malformed auction-request without imp[] → imp_ids is
+        an empty list (no crash, no error)."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={"id": "r"},  # no imp[]
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+        )
+        self.assertEqual(ctx["http_calls"][0]["imp_ids"], [])
+
+    # ----- F-new-13 expected_request_body --------------------------------------
+
+    def test_expected_request_body_simulator_called(self):
+        """F-new-13 non-passthrough: caller supplies a simulator that
+        returns a modified mock_bid_request; assert http_calls[0].body
+        carries the modification."""
+        def simulator(req: Dict[str, Any]) -> Dict[str, Any]:
+            out = dict(req)
+            out["secure"] = 1  # simulate adapter adding secure=1
+            return out
+
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={
+                "id": "r",
+                "imp": [
+                    {
+                        "id": "i1",
+                        "ext": {"kobler": {"test": False}},
+                    }
+                ],
+            },
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+            expected_request_body_simulator=simulator,
+        )
+        self.assertEqual(ctx["http_calls"][0]["body"]["secure"], 1)
+        # mock_bid_request itself remains unmutated by simulator-output.
+        self.assertNotIn("secure", ctx["mock_bid_request"])
+
+    def test_expected_request_body_default_passthrough(self):
+        """F-new-13 passthrough fallback: no simulator → body equals
+        mock_bid_request (the F4-transformed form, NOT the original Java
+        auction-request)."""
+        java_auction_request = {
+            "id": "r",
+            "imp": [
+                {
+                    "id": "i1",
+                    "ext": {"kobler": {"test": False}},
+                }
+            ],
+        }
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request=java_auction_request,
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+        )
+        # Body equals mock_bid_request (with imp.ext.bidder, NOT imp.ext.kobler).
+        self.assertEqual(ctx["http_calls"][0]["body"], ctx["mock_bid_request"])
+        self.assertEqual(
+            ctx["http_calls"][0]["body"]["imp"][0]["ext"],
+            {"bidder": {"test": False}},
+        )
+        # Body is NOT the original Java auction-request shape.
+        self.assertNotIn("kobler", ctx["http_calls"][0]["body"]["imp"][0]["ext"])
+
+    # ----- Misc / integration --------------------------------------------------
+
+    def test_kobler_shape_passthrough(self):
+        """Canary-v2 regression: feeding kobler's actual 4-file fixtures
+        through the helper (default simulator = passthrough) produces a
+        ctx that matches what canary v2 emitted modulo dict-key ordering.
+
+        The expected ctx is reconstructed from
+        ``.tmp/full-loop/2026-05-05T0721Z-5c7f/go/adapters/kobler/koblertest/exemplary/canonical_banner.json``.
+        Canary v2 was the source-of-truth shape that gate 2 passed
+        against; if this test breaks, the helper drifted from the
+        gate-passing shape contract.
+        """
+        if not _KOBLER_IT_DIR.is_dir():
+            self.skipTest(f"kobler IT fixture dir absent: {_KOBLER_IT_DIR}")
+        f = _load_kobler_it_fixtures()
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request=f["auction_request"],
+            java_auction_response=f["auction_response"],
+            java_bid_request=f["bid_request"],
+            java_bid_response=f["bid_response"],
+            java_bidder_name="kobler",
+        )
+
+        # mock_bid_request: F4-transformed kobler auction-request.
+        self.assertEqual(
+            ctx["mock_bid_request"]["imp"][0]["ext"],
+            {"bidder": {"test": False}},
+        )
+        self.assertNotIn("kobler", ctx["mock_bid_request"]["imp"][0]["ext"])
+
+        # http_calls[0] shape.
+        self.assertEqual(len(ctx["http_calls"]), 1)
+        call = ctx["http_calls"][0]
+        self.assertEqual(call["uri"], "https://test.example.com/bid")
+        self.assertEqual(call["status"], 200)
+        self.assertEqual(call["imp_ids"], ["imp_id"])
+        # body == mockBidRequest (passthrough fallback).
+        self.assertEqual(call["body"], ctx["mock_bid_request"])
+        # response: cur fallback applied (kobler bid-response has no cur).
+        self.assertEqual(call["response"]["cur"], "USD")
+
+        # expected_bids: bare bid from bid-response (no exp, no ext).
+        self.assertEqual(len(ctx["expected_bids"]), 1)
+        eb = ctx["expected_bids"][0]
+        self.assertEqual(eb["type"], "banner")
+        self.assertNotIn("exp", eb["bid"])
+        self.assertNotIn("ext", eb["bid"])
+        # Specific field values from kobler test-kobler-bid-response.json.
+        self.assertEqual(eb["bid"]["id"], "bid_id")
+        self.assertEqual(eb["bid"]["impid"], "imp_id")
+        self.assertEqual(eb["bid"]["price"], 3.33)
+
+        # expected_currency: from auction-response.cur (USD).
+        self.assertEqual(ctx["expected_currency"], "USD")
+
+    def test_imp_ext_shape_transform_applied(self):
+        """The helper applies F4 (imp.ext.<bidder> → imp.ext.bidder) to
+        the auction-request before assembling the ctx."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={
+                "id": "r",
+                "imp": [
+                    {
+                        "id": "imp_id",
+                        "banner": {"h": 250, "w": 300},
+                        "ext": {"kobler": {"test": False}},
+                    }
+                ],
+            },
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+        )
+        # The Java per-bidder slot is renamed to Go-canonical "bidder".
+        self.assertEqual(
+            ctx["mock_bid_request"]["imp"][0]["ext"],
+            {"bidder": {"test": False}},
+        )
+        # The Java slot key is GONE from the emitted ctx.
+        self.assertNotIn(
+            "kobler",
+            ctx["mock_bid_request"]["imp"][0]["ext"],
+        )
+
+    def test_input_dicts_not_mutated(self):
+        """Pass-by-reference safety: the helper deepcopies internally so
+        the caller's input dicts come out unchanged after the call.
+        Lets the caller compare before/after or feed the same fixtures
+        into multiple helpers without surprise mutation."""
+        java_auction_request = {
+            "id": "r",
+            "imp": [
+                {"id": "i1", "ext": {"kobler": {"test": False}}},
+            ],
+        }
+        java_auction_response = {"id": "r", "cur": "USD"}
+        java_bid_request = {"id": "r"}
+        # Critical: bid-response WITHOUT cur — the helper would otherwise
+        # be tempted to mutate the input to add cur.
+        java_bid_response = {"id": "r", "seatbid": []}
+
+        # Snapshot inputs for after-comparison.
+        snapshot = {
+            "auction_request": json.loads(json.dumps(java_auction_request)),
+            "auction_response": json.loads(json.dumps(java_auction_response)),
+            "bid_request": json.loads(json.dumps(java_bid_request)),
+            "bid_response": json.loads(json.dumps(java_bid_response)),
+        }
+
+        _ = exemplary_fixture_assemble_java_to_go(
+            java_auction_request=java_auction_request,
+            java_auction_response=java_auction_response,
+            java_bid_request=java_bid_request,
+            java_bid_response=java_bid_response,
+            java_bidder_name="kobler",
+        )
+
+        # All inputs preserved verbatim.
+        self.assertEqual(java_auction_request, snapshot["auction_request"])
+        self.assertEqual(java_auction_response, snapshot["auction_response"])
+        self.assertEqual(java_bid_request, snapshot["bid_request"])
+        self.assertEqual(java_bid_response, snapshot["bid_response"])
+        # Specifically: F4 did not rename in-place.
+        self.assertIn("kobler", java_auction_request["imp"][0]["ext"])
+        self.assertNotIn("bidder", java_auction_request["imp"][0]["ext"])
+        # Specifically: cur fallback did not add cur to the input.
+        self.assertNotIn("cur", java_bid_response)
+
+    def test_empty_bidder_name_raises(self):
+        """Defensive: empty/None bidder_name raises ValueError (forwarded
+        from the F4 helper but caught here too so the failure surfaces at
+        the wrapper layer's signature)."""
+        with self.assertRaises(ValueError):
+            exemplary_fixture_assemble_java_to_go(
+                java_auction_request={"id": "r", "imp": []},
+                java_auction_response={"id": "r"},
+                java_bid_request={"id": "r"},
+                java_bid_response={"id": "r", "seatbid": []},
+                java_bidder_name="",
+            )
 
 
 if __name__ == "__main__":  # pragma: no cover
