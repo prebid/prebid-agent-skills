@@ -1,6 +1,6 @@
 """scripts/lib/port_engine.py — Phase D1.2 + D4.3 mechanical helpers for port skills.
 
-Ten helpers wrapping deterministic mechanical operations the
+Eleven helpers wrapping deterministic mechanical operations the
 ``port-go2java`` / ``port-java2go`` SKILLs invoke. Prose-driven SKILL
 bodies walk the 46 port-translation rules; this engine provides the
 small bag of structurally-mechanical transformations that don't fit
@@ -8,7 +8,8 @@ cleanly into prose (byte-copy, name normalization, alias-graph
 inversion, IAB data-table translation, alphabetical insert into
 ``bidders.go`` / ``adapter_builders.go``, prefix-uniqueness pre-check,
 ``gofmt`` post-process, R5 at port time, schema-validated port-report
-emit, and pre-submit checkstyle dry-run).
+emit, pre-submit checkstyle dry-run, and Java→Go ``imp.ext`` shape
+transform for Rule 36 inverse fixture authoring).
 
 Public API
 ----------
@@ -23,6 +24,7 @@ Public API
 - ``prefix_uniqueness_check(target_lang, bidder_name, *, existing_names=None) -> Tuple[bool, List[str]]``
 - ``gofmt_post_process(file_paths) -> Tuple[bool, str]``
 - ``mvn_checkstyle_dry_run(target_clone, *, pom_file='extra/pom.xml', runner=None) -> Tuple[bool, List[Dict]]``
+- ``imp_ext_shape_transform_java_to_go(fixture_dict, java_bidder_name) -> Dict[str, Any]``
 
 Each helper has a corresponding test class in
 ``scripts/tests/test_port_engine.py``. Helpers that consume external
@@ -32,6 +34,7 @@ hooks so the tests stay deterministic.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import hashlib
 import json
@@ -869,4 +872,92 @@ def _parse_checkstyle_violations(stdout: str, stderr: str) -> List[Dict[str, Any
                 "message": m.group("msg").strip(),
                 "rule": m.group("rule"),
             })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Helper 11 — imp_ext_shape_transform_java_to_go (Rule 36 inverse, fixture side)
+# ---------------------------------------------------------------------------
+
+
+def imp_ext_shape_transform_java_to_go(
+    fixture_dict: Dict[str, Any],
+    java_bidder_name: str,
+) -> Dict[str, Any]:
+    """Rule 36 inverse — rewrite Java per-bidder ``imp.ext`` slot key to Go's
+    canonical ``"bidder"`` key for every imp in an auction-request fixture.
+
+    Java's pre-adapter processor leaves the auction-request's ``imp.ext`` as
+    ``{<bidder_name>: {...}}`` (the per-bidder slot, e.g. ``imp.ext.kobler``).
+    Go's adapter unmarshals ``imp.ext.bidder`` (post-PrebidServer-Go split).
+    When ``port-java2go`` re-authors a Java IT 4-file fixture set into a Go
+    flat exemplary fixture, it copies the Java auction-request verbatim into
+    ``mockBidRequest`` and the Go test harness then fails to parse
+    ``imp.ext.bidder``. This helper applies the rename so the emitted
+    ``mockBidRequest.imp[].ext`` is in Go-canonical shape.
+
+    Scope and contract:
+      - Operates on the OUTER auction-request only (Go's ``mockBidRequest``).
+        The caller is expected to pass the dict that will be assigned to
+        ``mockBidRequest`` (either the full fixture root, OR a root with
+        ``mockBidRequest`` already extracted — the helper looks for
+        ``imp[]`` at the top level).
+      - The INNER ``httpCalls[].expectedRequest.body`` (the modified
+        BidRequest the adapter sends upstream) is NOT touched here; that's
+        the operator's hand-fill or a separate pass.
+      - Other ``imp.ext`` keys (``prebid``, ``tid``, ``gpid``, etc.) pass
+        through untouched. Only the per-bidder-name slot key is renamed.
+      - If an ``imp.ext`` already has a ``"bidder"`` key (defensive — should
+        not happen for Java-side fixtures but guards against double-apply),
+        the helper raises ``ValueError`` rather than overwriting.
+      - If an ``imp.ext`` is missing the bidder slot entirely (already-Go
+        shaped, or malformed), that imp is left untouched (no error).
+      - Empty ``imp[]`` array, missing ``imp`` key entirely → no-op return.
+
+    Returns a deep-copied dict; the input is NOT mutated. (Match the
+    clone-and-return convention of ``alias_graph_invert``: callers can
+    treat the returned dict as a fresh artifact safe to serialize.)
+
+    Parameters
+    ----------
+    fixture_dict : dict
+        Auction-request dict containing an ``imp[]`` array. Typically this
+        is ``mockBidRequest`` from a Go exemplary fixture during emit.
+    java_bidder_name : str
+        The Java per-bidder slot key to rename (e.g. ``"kobler"``). Sourced
+        from the spec's ``meta.bidder_name``. Must be a non-empty string.
+
+    Raises
+    ------
+    ValueError
+        If ``java_bidder_name`` is empty/None, or if any imp's ``ext``
+        already contains a ``"bidder"`` key alongside the Java slot.
+    """
+    if not java_bidder_name or not isinstance(java_bidder_name, str):
+        raise ValueError(
+            f"java_bidder_name must be a non-empty string; got {java_bidder_name!r}"
+        )
+    out = copy.deepcopy(fixture_dict)
+    imps = out.get("imp")
+    if not isinstance(imps, list):
+        return out  # no-op: missing imp key (rare malformed fixture)
+    for idx, imp in enumerate(imps):
+        if not isinstance(imp, dict):
+            continue
+        ext = imp.get("ext")
+        if not isinstance(ext, dict):
+            continue
+        if java_bidder_name not in ext:
+            # imp.ext missing the bidder slot entirely — already-Go-shaped
+            # or malformed Java; leave imp untouched per contract.
+            continue
+        if "bidder" in ext:
+            raise ValueError(
+                f"imp[{idx}].ext already has a 'bidder' key alongside "
+                f"{java_bidder_name!r}; refusing to overwrite. The fixture may "
+                f"already be Go-shaped (double-apply) or carry a malformed mix."
+            )
+        # Rename the per-bidder slot key. Other keys (prebid, tid, gpid, ...)
+        # pass through untouched.
+        ext["bidder"] = ext.pop(java_bidder_name)
     return out

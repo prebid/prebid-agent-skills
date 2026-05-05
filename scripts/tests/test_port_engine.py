@@ -26,6 +26,7 @@ from scripts.lib.port_engine import (
     byte_copy,
     gofmt_post_process,
     iab_table_translate,
+    imp_ext_shape_transform_java_to_go,
     normalize_bidder_name,
     port_report_emit,
     prefix_uniqueness_check,
@@ -768,6 +769,155 @@ class TestMvnCheckstyleDryRun(unittest.TestCase):
 class TestDefaultAllowList(unittest.TestCase):
     def test_known_rebrand_present(self):
         self.assertEqual(DEFAULT_NAME_ALLOW_LIST.get("cadent_aperture_mx"), "emxdigital")
+
+
+# ---------------------------------------------------------------------------
+# Helper 11: imp_ext_shape_transform_java_to_go (Rule 36 inverse fixture side)
+# ---------------------------------------------------------------------------
+
+
+class TestImpExtShapeTransformJavaToGo(unittest.TestCase):
+    """D3.8 canary F4: when port-java2go re-authors a Java IT auction-request
+    into a Go flat exemplary fixture, ``imp.ext.{bidder_name}`` (Java per-bidder
+    slot) must be renamed to ``imp.ext.bidder`` (Go canonical) so the emitted
+    ``mockBidRequest`` parses against Go's standard-two-phase unmarshal."""
+
+    def test_single_imp_kobler_shape_transforms(self):
+        """Concrete D3.8 kobler-canary case: imp.ext.kobler.test=false →
+        imp.ext.bidder.test=false."""
+        fixture = {
+            "id": "request_id",
+            "imp": [
+                {
+                    "id": "imp_id",
+                    "banner": {"h": 250, "w": 300},
+                    "ext": {"kobler": {"test": False}},
+                }
+            ],
+            "tmax": 5000,
+        }
+        out = imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertEqual(out["imp"][0]["ext"], {"bidder": {"test": False}})
+        # Sibling fields untouched.
+        self.assertEqual(out["imp"][0]["banner"], {"h": 250, "w": 300})
+        self.assertEqual(out["tmax"], 5000)
+
+    def test_multi_imp_each_gets_transform(self):
+        fixture = {
+            "imp": [
+                {"id": "i1", "ext": {"adverxo": {"placementId": 1}}},
+                {"id": "i2", "ext": {"adverxo": {"placementId": 2}, "tid": "abc"}},
+                {"id": "i3", "ext": {"adverxo": {"placementId": 3}}},
+            ],
+        }
+        out = imp_ext_shape_transform_java_to_go(fixture, "adverxo")
+        for imp in out["imp"]:
+            self.assertIn("bidder", imp["ext"])
+            self.assertNotIn("adverxo", imp["ext"])
+        # Other keys preserved.
+        self.assertEqual(out["imp"][1]["ext"]["tid"], "abc")
+        # Values forwarded intact.
+        self.assertEqual(out["imp"][0]["ext"]["bidder"], {"placementId": 1})
+        self.assertEqual(out["imp"][2]["ext"]["bidder"], {"placementId": 3})
+
+    def test_prebid_key_passes_through_untouched(self):
+        """imp.ext.prebid (rare but possible alongside the bidder slot) MUST
+        pass through unchanged; only the per-bidder-name slot key changes."""
+        fixture = {
+            "imp": [
+                {
+                    "id": "imp_id",
+                    "ext": {
+                        "kobler": {"test": False},
+                        "prebid": {"storedrequest": {"id": "stored-1"}},
+                    },
+                }
+            ],
+        }
+        out = imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertEqual(
+            out["imp"][0]["ext"]["prebid"],
+            {"storedrequest": {"id": "stored-1"}},
+        )
+        self.assertEqual(out["imp"][0]["ext"]["bidder"], {"test": False})
+        self.assertNotIn("kobler", out["imp"][0]["ext"])
+
+    def test_imp_ext_missing_bidder_slot_left_untouched(self):
+        """Already-Go-shaped or malformed Java fixture: imp.ext has no key
+        named after the Java bidder. Helper leaves the imp untouched (no
+        error) so the emitter can recover gracefully."""
+        fixture = {
+            "imp": [
+                {"id": "i1", "ext": {"tid": "t1", "gpid": "/gp/1"}},
+            ],
+        }
+        out = imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertEqual(out["imp"][0]["ext"], {"tid": "t1", "gpid": "/gp/1"})
+        # No 'bidder' key was created.
+        self.assertNotIn("bidder", out["imp"][0]["ext"])
+
+    def test_imp_ext_already_has_bidder_key_raises(self):
+        """Defensive: if imp.ext already carries a 'bidder' key alongside the
+        Java slot, the helper aborts rather than silently overwriting."""
+        fixture = {
+            "imp": [
+                {
+                    "id": "i1",
+                    "ext": {
+                        "kobler": {"test": False},
+                        "bidder": {"existing": True},
+                    },
+                }
+            ],
+        }
+        with self.assertRaises(ValueError) as ctx:
+            imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertIn("bidder", str(ctx.exception))
+        self.assertIn("kobler", str(ctx.exception))
+
+    def test_empty_imp_array_no_op(self):
+        fixture = {"id": "request_id", "imp": []}
+        out = imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertEqual(out, {"id": "request_id", "imp": []})
+
+    def test_missing_imp_key_no_op(self):
+        """Rare malformed fixture lacking imp[] entirely — helper returns
+        the input shape (deep-copied) without erroring."""
+        fixture = {"id": "request_id", "tmax": 5000}
+        out = imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertEqual(out, {"id": "request_id", "tmax": 5000})
+
+    def test_input_dict_not_mutated(self):
+        """Clone semantics: helper returns a new dict; the caller's input is
+        unchanged so a downstream pass can compare before/after if needed."""
+        fixture = {
+            "imp": [{"id": "i1", "ext": {"kobler": {"test": False}}}],
+        }
+        original_snapshot = json.loads(json.dumps(fixture))
+        _ = imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertEqual(fixture, original_snapshot)
+        # Specifically: the Java slot key still present in the input.
+        self.assertIn("kobler", fixture["imp"][0]["ext"])
+        self.assertNotIn("bidder", fixture["imp"][0]["ext"])
+
+    def test_empty_bidder_name_raises(self):
+        with self.assertRaises(ValueError):
+            imp_ext_shape_transform_java_to_go({"imp": []}, "")
+
+    def test_non_dict_imp_entries_skipped_safely(self):
+        """Defensive: malformed imp[] entries that are not dicts (e.g. a stray
+        string) are skipped; valid entries still transform."""
+        fixture = {
+            "imp": [
+                "not-a-dict",
+                {"id": "i2", "ext": {"kobler": {"test": True}}},
+                None,
+            ],
+        }
+        out = imp_ext_shape_transform_java_to_go(fixture, "kobler")
+        self.assertEqual(out["imp"][0], "not-a-dict")
+        self.assertEqual(out["imp"][1]["ext"], {"bidder": {"test": True}})
+        self.assertIsNone(out["imp"][2])
 
 
 if __name__ == "__main__":  # pragma: no cover

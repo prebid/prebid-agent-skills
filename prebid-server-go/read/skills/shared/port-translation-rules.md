@@ -1539,6 +1539,8 @@ Driven by `tests`.
 
 **Notes**: When porting test fixtures, the porter MUST split the Go single-file fixture into 4 Java files (or merge 4 Java files into 1 Go file). The cross-language test harness checks structural parity: same number of cases on both sides, equivalent mock responses. Reference: see `review/skills/adapter-code-pr-review/references/adapter-code-index.md` for the Go fixture format details.
 
+**Rule 36 inverse — `imp.ext` shape transform (Java→Go)**: Java's pre-adapter processor leaves the auction-request's `imp.ext` as `{<bidder_name>: {...}}` (per-bidder slot, e.g. `imp.ext.kobler`); Go's adapter unmarshals `imp.ext.bidder` (post-PrebidServer-Go split). When `port-java2go` re-authors a Java IT auction-request into a Go flat exemplary fixture's `mockBidRequest`, it MUST rename `imp.ext.{bidder_name}` → `imp.ext.bidder` for every imp; other `imp.ext` keys (`prebid`, `tid`, `gpid`) pass through untouched. Mechanical helper: `scripts/lib/port_engine.py::imp_ext_shape_transform_java_to_go(fixture_dict, java_bidder_name)`. The inner `httpCalls[].expectedRequest.body` is NOT in scope here (operator hand-fills the modified BidRequest the adapter sends upstream).
+
 ### Rule 37: Per-alias IT class requirement (Java-only)
 
 **Pattern**: Each Java alias REQUIRES its own integration-test class + 4-file fixture set. Go aliases need NO test files (the parent's tests cover them).
