@@ -27,7 +27,7 @@ Public API
 - ``gofmt_post_process(file_paths) -> Tuple[bool, str]``
 - ``mvn_checkstyle_dry_run(target_clone, *, pom_file='extra/pom.xml', runner=None) -> Tuple[bool, List[Dict]]``
 - ``imp_ext_shape_transform_java_to_go(fixture_dict, java_bidder_name) -> Dict[str, Any]``
-- ``exemplary_fixture_assemble_java_to_go(*, java_auction_request, java_auction_response, java_bid_request, java_bid_response, java_bidder_name, expected_request_body_simulator=None, default_bid_type='banner', test_endpoint=TEST_ENDPOINT) -> Dict[str, Any]``
+- ``exemplary_fixture_assemble_java_to_go(*, java_auction_request, java_auction_response, java_bid_request, java_bid_response, java_bidder_name, expected_request_body_simulator=None, default_bid_type='banner', test_endpoint=TEST_ENDPOINT, inject_empty_user_if_missing=False) -> Dict[str, Any]``
 - ``simulate_makerequests_mutations(bid_request, mutations) -> Dict[str, Any]``
 
 Each helper has a corresponding test class in
@@ -1370,15 +1370,17 @@ _MAKEREQUESTS_MUTATION_APPLIERS: Dict[
 
 
 # ---------------------------------------------------------------------------
-# Helper 13 — exemplary_fixture_assemble_java_to_go (D3.8 canary v2: F-new-9/10/11/13)
+# Helper 13 — exemplary_fixture_assemble_java_to_go (D3.8 canary v2: F-new-9/10/11/13; canary v3: F-new-22)
 # ---------------------------------------------------------------------------
 #
-# Bundles four fixture-authoring concerns the kobler canary v2 surfaced
-# (renderer-level): cur fallback, canonical TEST_ENDPOINT, expected_bids
-# from bid-response, and expectedRequest.body simulation. Promoted from
-# canary v2's one-off renderer to a reusable helper so future Java→Go
-# canaries (vungle, aax, adverxo, thetradedesk, ...) do not rediscover
-# the same shape contract.
+# Bundles fixture-authoring concerns the kobler canary v2 + vungle canary
+# v3 surfaced (renderer-level): cur fallback, canonical TEST_ENDPOINT,
+# expected_bids from bid-response, expectedRequest.body simulation, and
+# opt-in empty-user injection for adapters whose Go side dereferences
+# ``request.User`` without a nil-check. Promoted from canary v2/v3
+# one-off renderers to a reusable helper so future Java→Go canaries
+# (aax, adverxo, thetradedesk, ...) do not rediscover the same shape
+# contract.
 #
 # - F-new-9: bid-response.cur fallback. Java's framework defaults
 #   Currency to USD when bid-response lacks ``cur``; Go's adapter does
@@ -1404,6 +1406,19 @@ _MAKEREQUESTS_MUTATION_APPLIERS: Dict[
 #   (typically a partial of ``simulate_makerequests_mutations`` from
 #   helper 12 above). When omitted, falls back to passthrough — known-
 #   imperfect for non-passthrough but the closest sensible default.
+#
+# - F-new-22: opt-in empty-user injection. Java IT auction-requests
+#   sometimes lack a ``user`` object entirely; Java's bidder code is
+#   null-safe (``ObjectUtil.getIfNotNull(bidRequest.getUser(), ...)``)
+#   so the IT scenario passes upstream. The Go adapter equivalent often
+#   dereferences ``request.User.X`` directly (e.g. vungle.go:68
+#   ``requestCopy.User.BuyerUID``) — nil-panics when User is absent.
+#   Opt-in flag ``inject_empty_user_if_missing=True`` injects ``user: {}``
+#   into the F4-transformed mock_bid_request when ``user`` is absent or
+#   None. ``BuyerUID`` and friends are ``omitempty``-tagged so the
+#   wire-format body matches the no-user case (``user: {}``). Default
+#   False preserves backward-compat with kobler/aax canary v2 callers
+#   whose Go adapters do not deref User unconditionally.
 
 # F-new-10: canonical Builder() test endpoint. Matches the URL the
 # emitted bidder_test.go's Builder invocation passes via
@@ -1515,16 +1530,19 @@ def exemplary_fixture_assemble_java_to_go(
     expected_request_body_simulator: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
     default_bid_type: str = "banner",
     test_endpoint: str = TEST_ENDPOINT,
+    inject_empty_user_if_missing: bool = False,
 ) -> Dict[str, Any]:
     """Assemble the ctx dict for ``exemplary-fixture.json.j2`` from a Java
     IT 4-file fixture set, applying the Rule 36 inverse semantic-coverage
-    transform plus F-new-9/10/11/13 fixture-authoring concerns.
+    transform plus F-new-9/10/11/13 fixture-authoring concerns and the
+    F-new-22 opt-in empty-user injection.
 
     The returned ctx dict matches the exemplary-fixture template's input
     contract (see ``prebid-server-go/port-java2go/templates/exemplary-fixture.json.j2``)::
 
         {
-          "mock_bid_request": <publisher-side BidRequest, F4-transformed>,
+          "mock_bid_request": <publisher-side BidRequest, F4-transformed,
+                                optional user:{} inject>,    # F-new-22
           "http_calls": [
             {
               "uri": <test_endpoint>,                       # F-new-10
@@ -1584,6 +1602,19 @@ def exemplary_fixture_assemble_java_to_go(
         passes via ``config.Adapter{Endpoint: ...}``. Defaults to the
         canonical ``TEST_ENDPOINT`` shared with bidder-test.go.j2.
         Override only if the rendered test uses a non-standard endpoint.
+    inject_empty_user_if_missing : bool
+        F-new-22: when True, after the F4 imp.ext shape transform but
+        before ``expected_request_body_simulator`` is invoked, inject
+        ``user: {}`` into ``mock_bid_request`` if the ``user`` key is
+        absent or None. Pass True for adapters that dereference
+        ``request.User`` without a nil-check (e.g. vungle vungle.go:68
+        ``requestCopy.User.BuyerUID``). The empty struct's fields are
+        ``omitempty``-tagged so wire-format matches the no-user case
+        (the body emits ``"user": {}``). Defaults to False to preserve
+        backward compatibility with kobler/aax callers whose Go
+        adapters do not deref User unconditionally. The simulator (when
+        supplied) sees the same post-injection mock_bid_request the
+        harness will feed to MakeRequests.
 
     Returns
     -------
@@ -1615,6 +1646,13 @@ def exemplary_fixture_assemble_java_to_go(
     mock_bid_request = imp_ext_shape_transform_java_to_go(
         java_auction_request, java_bidder_name
     )
+
+    # Step 1b — F-new-22 opt-in empty-user injection. Runs after F4 and
+    # before the simulator (Step 4) so the simulator sees the same
+    # mock_bid_request the harness will feed to MakeRequests. No-op when
+    # the auction-request already carries a (non-None) ``user`` object.
+    if inject_empty_user_if_missing and mock_bid_request.get("user") is None:
+        mock_bid_request["user"] = {}
 
     # Step 2 — F-new-9 cur fallback on bid-response.
     bid_response_with_cur = _apply_cur_fallback(java_bid_response, java_auction_response)

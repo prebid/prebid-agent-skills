@@ -1419,9 +1419,10 @@ def _load_kobler_it_fixtures() -> Dict[str, Dict[str, Any]]:
 
 
 class TestExemplaryFixtureAssembleJavaToGo(unittest.TestCase):
-    """D3.8 canary v2 helper: bundles F-new-9/10/11/13 fixture-authoring
-    concerns into a single ctx-assembly call so future Java→Go canaries
-    don't rediscover the same shape contract.
+    """D3.8 canary v2/v3 helper: bundles F-new-9/10/11/13 fixture-authoring
+    concerns plus the F-new-22 opt-in empty-user injection into a single
+    ctx-assembly call so future Java→Go canaries don't rediscover the
+    same shape contract.
 
     Coverage map:
       F-new-9  : test_cur_fallback_when_bid_response_missing_cur,
@@ -1438,6 +1439,10 @@ class TestExemplaryFixtureAssembleJavaToGo(unittest.TestCase):
                  test_imp_ids_empty_when_no_imp
       F-new-13 : test_expected_request_body_simulator_called,
                  test_expected_request_body_default_passthrough
+      F-new-22 : test_inject_empty_user_when_absent,
+                 test_inject_empty_user_when_user_is_None,
+                 test_inject_empty_user_no_op_when_user_present,
+                 test_inject_empty_user_default_false_preserves_absent_user
       Misc     : test_kobler_shape_passthrough,
                  test_imp_ext_shape_transform_applied,
                  test_input_dicts_not_mutated,
@@ -1693,6 +1698,93 @@ class TestExemplaryFixtureAssembleJavaToGo(unittest.TestCase):
         )
         # Body is NOT the original Java auction-request shape.
         self.assertNotIn("kobler", ctx["http_calls"][0]["body"]["imp"][0]["ext"])
+
+    # ----- F-new-22 inject_empty_user_if_missing -------------------------------
+
+    def test_inject_empty_user_when_absent(self):
+        """F-new-22: auction-request has no ``user`` key + flag=True →
+        mock_bid_request gets ``user: {}`` injected, and the passthrough
+        expectedRequest.body carries the same injected empty user
+        (matches what the harness will feed to MakeRequests)."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={
+                "id": "r",
+                "imp": [
+                    {"id": "i1", "ext": {"vungle": {"placementId": "p1"}}},
+                ],
+                # no "user" key
+            },
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="vungle",
+            inject_empty_user_if_missing=True,
+        )
+        self.assertEqual(ctx["mock_bid_request"]["user"], {})
+        # Passthrough body sees the post-injection mock_bid_request.
+        self.assertEqual(ctx["http_calls"][0]["body"]["user"], {})
+
+    def test_inject_empty_user_when_user_is_None(self):
+        """F-new-22: auction-request has ``user: null`` (explicit None) +
+        flag=True → mock_bid_request's user becomes ``{}``. Treats
+        explicit None the same as absent (both fail Go's
+        ``request.User.X`` direct deref)."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={
+                "id": "r",
+                "imp": [
+                    {"id": "i1", "ext": {"vungle": {"placementId": "p1"}}},
+                ],
+                "user": None,
+            },
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="vungle",
+            inject_empty_user_if_missing=True,
+        )
+        self.assertEqual(ctx["mock_bid_request"]["user"], {})
+
+    def test_inject_empty_user_no_op_when_user_present(self):
+        """F-new-22: auction-request already carries ``user`` with content
+        + flag=True → injection is a no-op; the existing user object
+        passes through untouched. Don't clobber real fixture data."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={
+                "id": "r",
+                "imp": [
+                    {"id": "i1", "ext": {"vungle": {"placementId": "p1"}}},
+                ],
+                "user": {"buyeruid": "abc"},
+            },
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="vungle",
+            inject_empty_user_if_missing=True,
+        )
+        self.assertEqual(
+            ctx["mock_bid_request"]["user"], {"buyeruid": "abc"}
+        )
+
+    def test_inject_empty_user_default_false_preserves_absent_user(self):
+        """F-new-22 backward-compat: default flag (False) leaves an absent
+        user absent. kobler/aax canary v2 callers rely on this; the
+        helper must NOT silently change their emitted ctx."""
+        ctx = exemplary_fixture_assemble_java_to_go(
+            java_auction_request={
+                "id": "r",
+                "imp": [
+                    {"id": "i1", "ext": {"kobler": {"test": False}}},
+                ],
+                # no "user" key, default flag = False.
+            },
+            java_auction_response={"id": "r"},
+            java_bid_request={"id": "r"},
+            java_bid_response={"id": "r", "seatbid": []},
+            java_bidder_name="kobler",
+        )
+        self.assertNotIn("user", ctx["mock_bid_request"])
 
     # ----- Misc / integration --------------------------------------------------
 
