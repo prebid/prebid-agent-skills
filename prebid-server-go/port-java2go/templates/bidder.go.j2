@@ -16,19 +16,116 @@ template emits code that's already gofmt-clean for the canonical case.
 Inputs (mirror of bidder.java.j2 ctx):
   ctx.package_name            : str  — Go package name (e.g., "kobler", "adkernelAdn")
   ctx.bidder_class_root       : str  — PascalCase root used in Builder + helpers
-  ctx.uses_currency_conversion: bool — currency_conversion.used (Rule 28)
+  ctx.uses_currency_conversion: bool — currency_conversion.used (Rule 28).
+                                        When true, emits (a) a `convertImpCurrency`
+                                        helper at end of file (modeled on upstream
+                                        kobler.go ~lines 149-161, hardcoded
+                                        supportedCurrency="USD"), (b) a `"strings"`
+                                        import for `strings.ToUpper`, and (c) a
+                                        per-imp call to convertImpCurrency BEFORE
+                                        parseImpExt in all three batching branches
+                                        (single-batched, per-imp, max-imps-per-request).
+                                        On conversion error the call site appends
+                                        to errors and `continue`s — safer default
+                                        than upstream kobler's hard-return; operator
+                                        can flip if they want kobler-strict semantics.
+                                        Affects ~31% of corpus (adverxo, beachfront,
+                                        kobler, limelightDigital, vungle).
   ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref
-  ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct"
+  ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct" | "none".
+                                        "none" (~12% corpus: aax, optidigital)
+                                        skips both the per-imp parseImpExt() call
+                                        from each batching branch's per-imp loop
+                                        AND the parseImpExt helper function
+                                        entirely. Used when imp.ext.bidder has no
+                                        required fields and the adapter forwards
+                                        the request without imp.ext inspection.
   ctx.batching_kind           : str  — "single-batched" | "per-imp" | "max-imps-per-request"
                                         | "format-split" | "pod-grouping"
   ctx.batching_max_imps       : int|null
   ctx.endpoint_resolution_kind: str  — "static" | "single-token-substitution" |
                                         "query-parameter-augmentation" | "dev-prod-toggle"
                                         | "multi-token-substitution"
-  ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw"
-  ctx.bid_type_resolution     : str  — "imp-mediatype-introspection" |
-                                        "ext-prebid-video-placement" | "constant-banner"
-                                        | "method-chain-fallback"
+  ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw" |
+                                        "legacy-raw-go". The "legacy-raw-go"
+                                        variant emits the same baseline 204+200
+                                        check as "legacy-raw" but additionally
+                                        consumes ctx.legacy_raw_status_handlers
+                                        for per-status branching (see below).
+  ctx.legacy_raw_status_handlers : list[{status_code: int, error_kind: str}] |
+                                        None — Per-status branches inserted
+                                        between the 204 short-circuit and the
+                                        generic non-200 catchall. Each entry
+                                        emits one
+                                        `if responseData.StatusCode == http.StatusXxx { ... &errortypes.{error_kind}{...} }`
+                                        block in declared order. Common shape
+                                        (aax): `[{status_code: 400, error_kind:
+                                        "BadInput"}]` produces the 400→BadInput
+                                        branch; the existing non-200 fallthrough
+                                        becomes BadServerResponse. Only consulted
+                                        when http_status_kind=="legacy-raw-go";
+                                        ignored otherwise. None / [] preserves
+                                        the original 2-branch (204 / non-200
+                                        generic) behavior for back-compat.
+                                        Affects ~3/16 (19%) of corpus.
+                                        Status-code constants use http.StatusXxx
+                                        Go names when canonical (StatusBadRequest=
+                                        400, StatusOK=200, StatusNoContent=204,
+                                        StatusNotFound=404, etc.); non-canonical
+                                        codes fall back to integer literals.
+  ctx.bid_type_resolution     : str  — discriminator. One of:
+                                          "imp-mediatype-introspection",
+                                          "constant" (or legacy alias "constant-banner"),
+                                          "method-chain-fallback",
+                                          "by-bid-mtype",
+                                          "by-bid-ext-typed-field".
+                                          (Reviewer H6 correction: removed
+                                          "ext-prebid-video-placement" — listed
+                                          but no template branch implements it,
+                                          and no audit pair uses it. Add the
+                                          enum value back together with a
+                                          template branch when a real bidder
+                                          surfaces this pattern.)
+  ctx.bid_type_constant       : str|None — "banner"|"video"|"audio"|"native". REQUIRED
+                                            when bid_type_resolution=="constant". For
+                                            backwards compat, legacy "constant-banner"
+                                            implies bid_type_constant="banner".
+  ctx.bid_type_method_chain   : list|None — REQUIRED when
+                                            bid_type_resolution=="method-chain-fallback".
+                                            Each step is a dict with keys:
+                                              - method: str — one of
+                                                  "by-bid-ext-typed-field",
+                                                  "by-imp-mediatype",
+                                                  "by-request-uri-suffix",
+                                                  "hardcoded",
+                                                  "throw"
+                                              - field: str|None — JSON path the step
+                                                  reads (e.g. "bid.ext.prebid.type")
+                                              - hardcoded_value: str|None — for
+                                                  method=="hardcoded", canonical Go enum
+                                                  name (e.g. "BidTypeBanner")
+                                              - fallback_action: str — "next" |
+                                                  "return-default" | "throw"
+  ctx.bid_type_ext_field      : dict|None — REQUIRED when
+                                            bid_type_resolution=="by-bid-ext-typed-field"
+                                            (single-step throws). Keys:
+                                              - struct_name: str — the typed wrapper Go
+                                                  struct already defined (e.g. "bidExt")
+                                              - field_path: str — Go expression that
+                                                  yields the string value to parse, in
+                                                  scope where `bidExt` is the unmarshaled
+                                                  struct (e.g. "bidExt.MediaType",
+                                                  "bidExt.Appnexus.BidType")
+                                              - parse_via: str — "openrtb_ext.ParseBidType"
+                                                  (string fields) or "switch-int" (numeric
+                                                  fields, requires `int_cases` mapping).
+                                              - int_cases: list[dict]|None — when
+                                                  parse_via=="switch-int", each entry is
+                                                  {value: int, bid_type: "banner"|...}.
+  ctx.bid_type_fallback_action: str|None — for "by-bid-mtype" branch. One of
+                                            "return-default" or "throw".
+  ctx.bid_type_fallback_value : str|None — when fallback_action=="return-default",
+                                            "banner"|"video"|"audio"|"native".
   ctx.has_extra_info          : bool — true when source has ExtraAdapterInfo (Rule 35
                                         inverse demoted Java typed config to Go opaque
                                         JSON string); imports + struct fields adjust.
@@ -38,18 +135,111 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         for the canonical pin.
   ctx.imports_extra           : list[str] — caller-collected; one fully-qualified import
                                             per entry; alphabetical.
+  ctx.custom_headers          : list[{name: str, value: str}] | None — extra headers
+                                            beyond the universal Content-Type +
+                                            Accept pair, appended inside
+                                            standardHeaders(). None or [] → no extras
+                                            emitted (preserves the kobler-shape
+                                            two-header baseline). Each entry produces
+                                            one `headers.Add({{name}}, {{value}})`
+                                            line in declaration order.
+                                            Header NAMES SHOULD be passed in canonical
+                                            mixed-case (e.g., "X-OpenRTB-Version", not
+                                            "x-openrtb-version"). The template emits
+                                            literally what the spec provides via the
+                                            tojson filter; per-spec normalization is a
+                                            spec-hygiene concern (audit F-new-6 noted
+                                            Go-side specs sometimes carried lowercase
+                                            forms — fix at the spec layer, not here).
+                                            Affects ~31% of corpus (adkernelAdn,
+                                            elementaltv, freewheelssp, smarthub,
+                                            vungle).
   ctx.javadoc_summary         : str|null — // doc comment above package var or struct
 #}
+{# ---------------- Internal helpers (bid type resolution) ---------------- #}
+{# Map a short bid-type string ("banner"|"video"|"audio"|"native") to the
+   canonical Go openrtb_ext enum literal. Fail loudly when the input is not
+   one of the four supported short forms — caller passed a value the Go
+   side has no symbol for, and silently emitting `BidTypeOther` would make
+   the broken Go code look correct at render time. #}
+{%- set _bid_type_short_to_go = {
+    "banner": "BidTypeBanner",
+    "video":  "BidTypeVideo",
+    "audio":  "BidTypeAudio",
+    "native": "BidTypeNative",
+} -%}
+{# Decide whether getBidType returns (BidType, error). True iff a "throw"
+   fallback exists anywhere in the resolution shape. Computed once so the
+   function declaration AND the MakeBids caller site stay in sync. #}
+{%- set _bid_type_chain = ctx.bid_type_method_chain or [] -%}
+{%- set _chain_has_throw = _bid_type_chain | selectattr("fallback_action", "equalto", "throw") | list | length > 0 -%}
+{%- set _chain_has_throw_method = _bid_type_chain | selectattr("method", "equalto", "throw") | list | length > 0 -%}
+{%- set _bid_type_returns_error = (
+    ctx.bid_type_resolution == "by-bid-ext-typed-field"
+    or (ctx.bid_type_resolution == "by-bid-mtype" and ctx.bid_type_fallback_action == "throw")
+    or (ctx.bid_type_resolution == "method-chain-fallback" and (_chain_has_throw or _chain_has_throw_method))
+) -%}
+{# Inline suffix appended after a successful BidType return. Empty for the
+   no-error signature; ", nil" for the error-returning signature. Used as
+   a plain string substitution so adjacent newlines don't get eaten by
+   trim_blocks=True. #}
+{%- if _bid_type_returns_error -%}
+{%- set _ok_suffix = ", nil" -%}
+{%- else -%}
+{%- set _ok_suffix = "" -%}
+{%- endif -%}
+{# F-new-1: imp_ext_unmarshal_kind=="none" skips both the per-imp call AND
+   the parseImpExt helper. Compute once so call sites + helper definition
+   stay in sync. #}
+{%- set _emit_parse_imp_ext = ctx.imp_ext_unmarshal_kind != "none" -%}
+{# F-new-1 partner: when neither currency-conversion nor parseImpExt has any
+   per-imp work to do, the single-batched / max-imps inner loops collapse to
+   an empty body. Drop the loop entirely (Go lints empty loops; upstream
+   aax.go has no per-imp loop at all in MakeRequests). #}
+{%- set _has_per_imp_work = ctx.uses_currency_conversion or _emit_parse_imp_ext -%}
+{# F-new-14: legacy-raw-go per-status handlers schema. None / [] means
+   back-compat (existing 2-branch shape). Populated list means emit per-status
+   branches BEFORE the generic non-200 catchall — and the catchall flips from
+   `fmt.Errorf` to `&errortypes.BadServerResponse{}` (matches upstream aax). #}
+{%- set _legacy_raw_handlers = ctx.legacy_raw_status_handlers or [] -%}
+{%- set _legacy_raw_go_with_handlers = (
+    ctx.http_status_kind == "legacy-raw-go" and (_legacy_raw_handlers | length > 0)
+) -%}
+{# Map a small set of common status codes to their canonical net/http
+   constant names. Codes outside this set fall back to integer literals
+   in the emitted Go (still compiles; just less idiomatic). #}
+{%- set _http_status_const_map = {
+    200: "http.StatusOK",
+    204: "http.StatusNoContent",
+    400: "http.StatusBadRequest",
+    401: "http.StatusUnauthorized",
+    403: "http.StatusForbidden",
+    404: "http.StatusNotFound",
+    408: "http.StatusRequestTimeout",
+    429: "http.StatusTooManyRequests",
+    500: "http.StatusInternalServerError",
+    502: "http.StatusBadGateway",
+    503: "http.StatusServiceUnavailable",
+    504: "http.StatusGatewayTimeout",
+} -%}
 package {{ ctx.package_name }}
 
 import (
+{% if ctx.has_extra_info %}
 	"encoding/json"
+{% endif %}
 	"fmt"
 	"net/http"
+{% if ctx.uses_currency_conversion %}
+	"strings"
+{% endif %}
 
 	"github.com/prebid/openrtb/v20/openrtb2"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/config"
+{% if _legacy_raw_go_with_handlers %}
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/errortypes"
+{% endif %}
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/util/jsonutil"
 {% for imp in ctx.imports_extra %}
@@ -90,12 +280,22 @@ func Builder(_ openrtb_ext.BidderName, cfg config.Adapter, _ config.Server) (ada
 func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.ExtraRequestInfo) ([]*adapters.RequestData, []error) {
 	var errors []error
 {% if ctx.batching_kind == "single-batched" %}
+{% if _has_per_imp_work %}
 	for i := range request.Imp {
+{% if ctx.uses_currency_conversion %}
+		if err := convertImpCurrency(&request.Imp[i], reqInfo); err != nil {
+			errors = append(errors, err)
+			continue
+		}
+{% endif %}
+{% if _emit_parse_imp_ext %}
 		if _, err := parseImpExt(&request.Imp[i]); err != nil {
 			errors = append(errors, err)
 		}
+{% endif %}
 	}
 
+{% endif %}
 	body, err := jsonutil.Marshal(request)
 	if err != nil {
 		return nil, append(errors, err)
@@ -113,10 +313,18 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 {% elif ctx.batching_kind == "per-imp" %}
 	requests := make([]*adapters.RequestData, 0, len(request.Imp))
 	for i := range request.Imp {
+{% if ctx.uses_currency_conversion %}
+		if err := convertImpCurrency(&request.Imp[i], reqInfo); err != nil {
+			errors = append(errors, err)
+			continue
+		}
+{% endif %}
+{% if _emit_parse_imp_ext %}
 		if _, err := parseImpExt(&request.Imp[i]); err != nil {
 			errors = append(errors, err)
 			continue
 		}
+{% endif %}
 		perImp := *request
 		perImp.Imp = []openrtb2.Imp{request.Imp[i]}
 		body, err := jsonutil.Marshal(&perImp)
@@ -138,11 +346,21 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 	chunks := chunkImps(request.Imp, maxImpsPerRequest)
 	requests := make([]*adapters.RequestData, 0, len(chunks))
 	for _, chunk := range chunks {
+{% if _has_per_imp_work %}
 		for i := range chunk {
+{% if ctx.uses_currency_conversion %}
+			if err := convertImpCurrency(&chunk[i], reqInfo); err != nil {
+				errors = append(errors, err)
+				continue
+			}
+{% endif %}
+{% if _emit_parse_imp_ext %}
 			if _, err := parseImpExt(&chunk[i]); err != nil {
 				errors = append(errors, err)
 			}
+{% endif %}
 		}
+{% endif %}
 		chunkRequest := *request
 		chunkRequest.Imp = chunk
 		body, err := jsonutil.Marshal(&chunkRequest)
@@ -176,6 +394,32 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 	if err := adapters.CheckResponseStatusCodeForErrors(responseData); err != nil {
 		return nil, []error{err}
 	}
+{% elif _legacy_raw_go_with_handlers %}
+{# F-new-14: legacy-raw-go with per-status handlers. Emit the 204 short-circuit,
+   then one branch per declared status_code → error_kind, then the generic
+   non-200 catchall (BadServerResponse — matches upstream aax shape). The
+   per-status handlers' messages use the canonical
+   "Unexpected status code: %d. Run with request.debug = 1 for more info" form
+   to match upstream prebid-server's CheckResponseStatusCodeForErrors output. #}
+	if responseData.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+{% for handler in _legacy_raw_handlers %}
+{% if handler.status_code in _http_status_const_map %}
+	if responseData.StatusCode == {{ _http_status_const_map[handler.status_code] }} {
+{% else %}
+	if responseData.StatusCode == {{ handler.status_code }} {
+{% endif %}
+		return nil, []error{&errortypes.{{ handler.error_kind }}{
+			Message: fmt.Sprintf("Unexpected status code: %d. Run with request.debug = 1 for more info", responseData.StatusCode),
+		}}
+	}
+{% endfor %}
+	if responseData.StatusCode != http.StatusOK {
+		return nil, []error{&errortypes.BadServerResponse{
+			Message: fmt.Sprintf("Unexpected status code: %d. Run with request.debug = 1 for more info", responseData.StatusCode),
+		}}
+	}
 {% else %}
 	if responseData.StatusCode == http.StatusNoContent {
 		return nil, nil
@@ -192,6 +436,24 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 
 	bidderResponse := adapters.NewBidderResponse()
 	bidderResponse.Currency = bidResponse.Cur
+{% if _bid_type_returns_error %}
+	var errs []error
+	for _, seatBid := range bidResponse.SeatBid {
+		for i := range seatBid.Bid {
+			bid := &seatBid.Bid[i]
+			bidType, err := getBidType(bid, request.Imp)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			bidderResponse.Bids = append(bidderResponse.Bids, &adapters.TypedBid{
+				Bid:     bid,
+				BidType: bidType,
+			})
+		}
+	}
+	return bidderResponse, errs
+{% else %}
 	for _, seatBid := range bidResponse.SeatBid {
 		for i := range seatBid.Bid {
 			bid := &seatBid.Bid[i]
@@ -202,8 +464,10 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 		}
 	}
 	return bidderResponse, nil
+{% endif %}
 }
 
+{% if _emit_parse_imp_ext %}
 func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}, error) {
 {% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
 	var bidderExt adapters.ExtImpBidder
@@ -223,6 +487,7 @@ func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_roo
 	return &ext, nil
 {% endif %}
 }
+{% endif %}
 
 func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 {% if ctx.endpoint_resolution_kind == "static" %}
@@ -238,9 +503,27 @@ func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 {% endif %}
 }
 
+{% if _bid_type_returns_error %}
+func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) (openrtb_ext.BidType, error) {
+{% else %}
 func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
+{% endif %}
+{% if ctx.bid_type_resolution == "constant-banner" or ctx.bid_type_resolution == "constant" %}
+{# constant-{type} branch. Legacy "constant-banner" resolves to BidTypeBanner.
+   "constant" requires ctx.bid_type_constant in {banner,video,audio,native};
+   fail loudly via Jinja UndefinedError if the operator passes an unknown
+   type (else we'd silently emit `return openrtb_ext.` which compiles to
+   nothing useful and looks correct in template review). #}
 {% if ctx.bid_type_resolution == "constant-banner" %}
-	return openrtb_ext.BidTypeBanner
+{% set _const_short = "banner" %}
+{% else %}
+{% set _const_short = ctx.bid_type_constant %}
+{% endif %}
+{% if _const_short not in _bid_type_short_to_go %}
+{# Trigger an UndefinedError loud enough to surface the bad input. #}
+{{ _bid_type_short_to_go.unknown_bid_type_constant_passed_to_template.fail }}
+{% endif %}
+	return openrtb_ext.{{ _bid_type_short_to_go[_const_short] }}
 {% elif ctx.bid_type_resolution == "imp-mediatype-introspection" %}
 	for i := range imps {
 		if imps[i].ID == bid.ImpID {
@@ -257,10 +540,129 @@ func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
 		}
 	}
 	return openrtb_ext.BidTypeBanner
+{% elif ctx.bid_type_resolution == "by-bid-mtype" %}
+{# Rule 23 — switch on openrtb2.Bid.MType (1=Banner, 2=Video, 3=Audio, 4=Native).
+   Pattern cribbed from upstream adapters/adverxo/adverxo.go and
+   adapters/teqblaze/teqblaze.go. Fallback shape is data-driven via
+   ctx.bid_type_fallback_action. #}
+	switch bid.MType {
+	case openrtb2.MarkupBanner:
+		return openrtb_ext.BidTypeBanner{{ _ok_suffix }}
+	case openrtb2.MarkupVideo:
+		return openrtb_ext.BidTypeVideo{{ _ok_suffix }}
+	case openrtb2.MarkupAudio:
+		return openrtb_ext.BidTypeAudio{{ _ok_suffix }}
+	case openrtb2.MarkupNative:
+		return openrtb_ext.BidTypeNative{{ _ok_suffix }}
+	}
+{% if ctx.bid_type_fallback_action == "throw" %}
+	return "", fmt.Errorf("could not define media type for bid: %s", bid.ImpID)
+{% else %}
+	return openrtb_ext.{{ _bid_type_short_to_go[ctx.bid_type_fallback_value or "banner"] }}
+{% endif %}
+{% elif ctx.bid_type_resolution == "by-bid-ext-typed-field" %}
+{# Rule 24 — single-step typed-field read with throw-on-missing fallback.
+   Pattern cribbed from upstream adapters/appnexus/appnexus.go (numeric
+   switch via parse_via=switch-int) and adapters/smarthub/smarthub.go
+   (string parse via openrtb_ext.ParseBidType). Caller has already declared
+   the wrapper struct (ctx.bid_type_ext_field.struct_name) elsewhere in
+   this file (typically next to the response-extension types). #}
+	var bidExt {{ ctx.bid_type_ext_field.struct_name }}
+	if err := jsonutil.Unmarshal(bid.Ext, &bidExt); err != nil {
+		return "", fmt.Errorf("imp %s: failed parsing bid.ext: %w", bid.ImpID, err)
+	}
+{% if ctx.bid_type_ext_field.parse_via == "switch-int" %}
+	switch {{ ctx.bid_type_ext_field.field_path }} {
+{% for case in ctx.bid_type_ext_field.int_cases %}
+	case {{ case.value }}:
+		return openrtb_ext.{{ _bid_type_short_to_go[case.bid_type] }}, nil
+{% endfor %}
+	default:
+		return "", fmt.Errorf("unrecognized bid type %v for imp %s", {{ ctx.bid_type_ext_field.field_path }}, bid.ImpID)
+	}
+{% else %}
+	bidType, err := openrtb_ext.ParseBidType(string({{ ctx.bid_type_ext_field.field_path }}))
+	if err != nil {
+		return "", fmt.Errorf("imp %s: unable to parse bid type from bid.ext: %w", bid.ImpID, err)
+	}
+	return bidType, nil
+{% endif %}
+{% elif ctx.bid_type_resolution == "method-chain-fallback" %}
+{# Method-chain walker. Each step either returns a BidType (success), falls
+   through to the next step ("next"), returns the chain-default
+   ("return-default"), or returns an error ("throw"). Pattern cribbed from
+   upstream adapters/kobler/kobler.go (2-step) and adapters/aax/aax.go
+   (3-step). Steps emit straight-line Go (no loop construct) — Jinja
+   unrolls the chain at render time. #}
+{% for step in _bid_type_chain %}
+{% if step.method == "by-bid-ext-typed-field" %}
+{# Canonical shape: read bid.ext.prebid.type via openrtb_ext.ExtBid +
+   openrtb_ext.ParseBidType (kobler-shaped). For non-prebid.type fields
+   (e.g. aax's bid.ext.adCodeType), emit a TODO so the operator wires
+   the bidder-specific typed wrapper. #}
+{% if step.field == "bid.ext.prebid.type" %}
+	if bid.Ext != nil {
+		var bidExt openrtb_ext.ExtBid
+		if err := jsonutil.Unmarshal(bid.Ext, &bidExt); err == nil && bidExt.Prebid != nil {
+			if mediaType, err := openrtb_ext.ParseBidType(string(bidExt.Prebid.Type)); err == nil {
+				return mediaType{{ _ok_suffix }}
+			}
+		}
+	}
+{% else %}
+	// TODO[port-java2go]: by-bid-ext-typed-field step reads {{ step.field }}.
+	// Non-canonical path — operator declares a typed struct + unmarshal here.
+{% endif %}
+{% elif step.method == "by-imp-mediatype" %}
+	for i := range imps {
+		if imps[i].ID == bid.ImpID {
+			if imps[i].Video != nil {
+				return openrtb_ext.BidTypeVideo{{ _ok_suffix }}
+			}
+			if imps[i].Native != nil {
+				return openrtb_ext.BidTypeNative{{ _ok_suffix }}
+			}
+			if imps[i].Audio != nil {
+				return openrtb_ext.BidTypeAudio{{ _ok_suffix }}
+			}
+			if imps[i].Banner != nil {
+				return openrtb_ext.BidTypeBanner{{ _ok_suffix }}
+			}
+			break
+		}
+	}
+{% elif step.method == "by-request-uri-suffix" %}
+	// TODO[port-java2go]: by-request-uri-suffix step requires the externalRequest
+	// pointer (not currently passed to getBidType). Operator threads it through.
+	// Reference: upstream adapters/beachfront/beachfront.go getBidType.
+{% elif step.method == "hardcoded" %}
+	return openrtb_ext.{{ step.hardcoded_value }}{{ _ok_suffix }}
+{% elif step.method == "throw" %}
+	return "", fmt.Errorf("unable to determine bid type for imp %s", bid.ImpID)
+{% endif %}
+{# Reviewer H3 correction: only emit the terminating return on the final
+   step. Earlier steps' fallback_action exists for documentation but the
+   actual flow control is "fall through to the next step on no-match" —
+   the previous unconditional emit produced unreachable code after a
+   non-last "throw". #}
+{% if loop.last and step.fallback_action == "throw" and step.method != "throw" %}
+	return "", fmt.Errorf("unable to determine bid type for imp %s", bid.ImpID)
+{% elif loop.last and step.fallback_action == "return-default" and step.method != "hardcoded" %}
+{% set _default_const = ctx.bid_type_fallback_value or "banner" %}
+	return openrtb_ext.{{ _bid_type_short_to_go[_default_const] }}{{ _ok_suffix }}
+{% endif %}
+{% endfor %}
+{# Reviewer H2 correction: emit a terminal catchall return after the chain.
+   When every step's fallback_action is "next" (no throw, no return-default),
+   the function would otherwise compile-fail with "missing return at end".
+   Catchall uses ctx.bid_type_fallback_value (default "banner"). For an
+   error-returning signature, the catchall returns the default + nil. #}
+{% set _final_default = ctx.bid_type_fallback_value or "banner" %}
+	return openrtb_ext.{{ _bid_type_short_to_go[_final_default] }}{{ _ok_suffix }}
 {% else %}
 	// TODO[port-java2go]: bid_type_resolution={{ ctx.bid_type_resolution }}
 	// requires per-bidder customization (Rule 23-25).
-	return openrtb_ext.BidTypeBanner
+	return openrtb_ext.BidTypeBanner{{ _ok_suffix }}
 {% endif %}
 }
 
@@ -268,8 +670,40 @@ func standardHeaders() http.Header {
 	headers := http.Header{}
 	headers.Add("Content-Type", "application/json;charset=utf-8")
 	headers.Add("Accept", "application/json")
+{% if ctx.custom_headers %}
+{% for h in ctx.custom_headers %}
+	headers.Add({{ h.name | tojson }}, {{ h.value | tojson }})
+{% endfor %}
+{% endif %}
 	return headers
 }
+{% if ctx.uses_currency_conversion %}
+
+// Rule 28 — currency_conversion.used. Adapter converts non-USD imp.bidfloor
+// to USD via reqInfo.ConvertCurrency before forwarding the request. Pattern
+// cribbed from upstream adapters/kobler/kobler.go (canonical 13-line shape).
+// TODO[port-java2go]: hardcoded supportedCurrency="USD". When a future spec
+// field (currency_conversion.target) lands, parameterize this constant from
+// ctx.currency_conversion_target.
+const supportedCurrency = "USD"
+
+// convertImpCurrency converts imp.bidfloor to USD when set in another
+// currency. On conversion error the per-imp call site appends to errors and
+// continues to the next imp (vs upstream kobler.go which hard-returns); the
+// safer default is to skip the misconfigured imp rather than reject the
+// whole batch. Operator can flip to early-return for kobler-strict semantics.
+func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) error {
+	if imp.BidFloor > 0 && imp.BidFloorCur != "" && strings.ToUpper(imp.BidFloorCur) != supportedCurrency {
+		convertedValue, err := reqInfo.ConvertCurrency(imp.BidFloor, imp.BidFloorCur, supportedCurrency)
+		if err != nil {
+			return err
+		}
+		imp.BidFloor = convertedValue
+		imp.BidFloorCur = supportedCurrency
+	}
+	return nil
+}
+{% endif %}
 {% if ctx.batching_kind == "max-imps-per-request" %}
 
 func chunkImps(imps []openrtb2.Imp, chunkSize int) [][]openrtb2.Imp {

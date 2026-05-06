@@ -17,6 +17,98 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-05 (D3.8 operator validation complete)
+
+Phase D3.8 — port-java2go SKILL exercised end-to-end against all 6 MVP
+pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`,
+`thetradedesk`) via 7 canary runs. Trajectory: `5 clean / 2 after-fix /
+2 FAIL` (canary 1) → 3 consecutive `10 clean / 0 / 0` (canaries 5-7);
+final canary cleared D3.3 gate 3's 80% coverage threshold (81.4%). All
+6 MVPs demonstrably portable.
+
+`port-java2go` SKILL frontmatter bumped 0.3.0 → **0.5.0** (status
+banner updated; v1.0.0 promotion criteria enumerated). NOT YET v1.0.0;
+4 HIGH-priority promotion blockers tracked in canary 7 trace.
+
+### Added — port_engine helpers (Phase 1)
+
+- `port_engine.exemplary_fixture_assemble_java_to_go(*, ...)` — assembles
+  exemplary-fixture.json.j2 ctx from a Java IT 4-file fixture set;
+  absorbs F-new-9 (cur fallback), F-new-10 (TEST_ENDPOINT constant),
+  F-new-11 (expected_bids from bid-response), F-new-13 (passthrough
+  body simulator hook). Includes `inject_empty_user_if_missing` opt-in
+  for vungle-shaped User-deref bidders (F-new-22).
+- `port_engine.simulate_makerequests_mutations(bid_request, mutations)` —
+  applies sequence of MakeRequests mutation ops; 15 op kinds covering
+  Device/User/Imp/Site/App rewrite patterns observed across the corpus
+  (kobler IP/UA/User zeroing, vungle Site→App synthesis, adkernelAdn
+  publisher-null + format-fill, etc.).
+- `port_engine.imp_ext_shape_transform_java_to_go(fixture_dict,
+  java_bidder_name)` — Rule 36 inverse imp.ext slot rewrite (F4 from
+  canary 1).
+- `port_engine.TEST_ENDPOINT` constant — single source of truth for
+  bidder-test.go.j2's Builder URI + expectedRequest.uri across renderer
+  + tests.
+
+### Added — port-java2go template extensions (Stage A + B + Phase 2)
+
+- `bidder.go.j2` — unified `getBidType` body (B1: 4 new branches —
+  constant-{banner,video,audio,native}, by-bid-mtype, by-bid-ext-typed-field
+  single-step, method-chain-fallback). Currency-conversion helper
+  emission gated on `uses_currency_conversion` (B2). Custom-headers
+  list-driven via `custom_headers` ctx (B3). `imp_ext_unmarshal_kind=none`
+  branch skips parseImpExt entirely (F-new-1; aax+optidigital pattern).
+  `legacy_raw_status_handlers` schema for per-status error emission
+  (F-new-14; aax shape).
+- `bidder-info.yaml.j2` — `gvlVendorID` omitted when 0 (F9; matches Go
+  upstream convention).
+- `bidder-test.go.j2` — hardcoded `TestJsonSamples` function name (F10;
+  100% of merged Go adapter PRs).
+- `exemplary-fixture.json.j2` — `expectedRequest.impIDs` emit (F-new-12;
+  required by adapterstest framework).
+- `supplemental-fixture.json.j2` (NEW) — kobler-shape-agnostic
+  supplemental-fixture template with 5 scenario kinds (status-204,
+  status-400, status-404, no-response-body, malformed-body); gated on
+  `http_status_kind` for canonical-helpers vs legacy-raw-go behavior
+  (F-new-23).
+
+### Fixed — reviewer follow-ups
+
+- `port_engine._apply_device_zero_fields` uses `del` (mirroring Go's
+  omitempty wire form) instead of `=""` (which would emit empty-string
+  keys diverging from upstream Go's marshal output; reviewer H4).
+- `port_engine._apply_imp_tagid_from_ext` accepts explicit `slot_name`
+  param to disambiguate when imp-ext-rewrap installs duplicate content
+  under multiple slots (reviewer H5; back-compat first-match heuristic
+  preserved).
+- Kobler IT 4-file fixture set committed to
+  `scripts/tests/fixtures/kobler-it/` so the canary regression test
+  (`test_kobler_shape_passthrough`) actually runs in CI rather than
+  silent-skipping (reviewer H1). `PREBID_SERVER_JAVA_CLONE` env var
+  opts into reading from a live Java clone.
+- `bidder.go.j2` method-chain branch emits a terminal catchall return
+  after the chain unconditionally (reviewer H2; previously
+  non-terminating Go function for all-`next` chains). Mid-chain
+  `fallback_action: throw` no longer emits unreachable terminating
+  return — only the LAST step's fallback emits (reviewer H3).
+- `bidder.go.j2` docstring `bid_type_resolution` enum no longer lists
+  `ext-prebid-video-placement` — orphan value with no template branch
+  and no audit-pair usage (reviewer H6).
+
+### Added — D3.8 traces
+
+- 7 canary findings docs at `docs/runs/d3.8-*-canary-*.md`
+- Cross-language pairs corpus audit at
+  `docs/runs/d3.8-template-coverage-audit.md`
+- Pre-canary spike at `docs/runs/d3.8-mvp-pairs-spike-2026-05-05.md`
+
+Test suite: 346 → 480+ passing across the D3.8 series (~134 new tests
+including 18 fixture-assemble + 33 mutation-simulator + 9 supplemental-
+fixture + 13 unified-getBidType + render tests for B2/B3/F-new-1/F-new-14
+plus reviewer regression tests for H2/H3/H4/H5).
+
+---
+
 ## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-04 (engineering complete)
 
 Phase D engineering layer complete. D0 + D1 set up the port-skill

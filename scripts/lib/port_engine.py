@@ -1,6 +1,6 @@
 """scripts/lib/port_engine.py — Phase D1.2 + D4.3 mechanical helpers for port skills.
 
-Ten helpers wrapping deterministic mechanical operations the
+Mechanical helpers wrapping deterministic operations the
 ``port-go2java`` / ``port-java2go`` SKILLs invoke. Prose-driven SKILL
 bodies walk the 46 port-translation rules; this engine provides the
 small bag of structurally-mechanical transformations that don't fit
@@ -8,7 +8,10 @@ cleanly into prose (byte-copy, name normalization, alias-graph
 inversion, IAB data-table translation, alphabetical insert into
 ``bidders.go`` / ``adapter_builders.go``, prefix-uniqueness pre-check,
 ``gofmt`` post-process, R5 at port time, schema-validated port-report
-emit, and pre-submit checkstyle dry-run).
+emit, pre-submit checkstyle dry-run, Java→Go ``imp.ext`` shape
+transform for Rule 36 inverse fixture authoring, and Go-adapter
+MakeRequests mutation simulation for D3.8 F-new-16 fixture body
+authoring).
 
 Public API
 ----------
@@ -23,6 +26,9 @@ Public API
 - ``prefix_uniqueness_check(target_lang, bidder_name, *, existing_names=None) -> Tuple[bool, List[str]]``
 - ``gofmt_post_process(file_paths) -> Tuple[bool, str]``
 - ``mvn_checkstyle_dry_run(target_clone, *, pom_file='extra/pom.xml', runner=None) -> Tuple[bool, List[Dict]]``
+- ``imp_ext_shape_transform_java_to_go(fixture_dict, java_bidder_name) -> Dict[str, Any]``
+- ``exemplary_fixture_assemble_java_to_go(*, java_auction_request, java_auction_response, java_bid_request, java_bid_response, java_bidder_name, expected_request_body_simulator=None, default_bid_type='banner', test_endpoint=TEST_ENDPOINT, inject_empty_user_if_missing=False) -> Dict[str, Any]``
+- ``simulate_makerequests_mutations(bid_request, mutations) -> Dict[str, Any]``
 
 Each helper has a corresponding test class in
 ``scripts/tests/test_port_engine.py``. Helpers that consume external
@@ -32,6 +38,7 @@ hooks so the tests stay deterministic.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import hashlib
 import json
@@ -870,3 +877,846 @@ def _parse_checkstyle_violations(stdout: str, stderr: str) -> List[Dict[str, Any
                 "rule": m.group("rule"),
             })
     return out
+
+
+# ---------------------------------------------------------------------------
+# Helper 11 — imp_ext_shape_transform_java_to_go (Rule 36 inverse, fixture side)
+# ---------------------------------------------------------------------------
+
+
+def imp_ext_shape_transform_java_to_go(
+    fixture_dict: Dict[str, Any],
+    java_bidder_name: str,
+) -> Dict[str, Any]:
+    """Rule 36 inverse — rewrite Java per-bidder ``imp.ext`` slot key to Go's
+    canonical ``"bidder"`` key for every imp in an auction-request fixture.
+
+    Java's pre-adapter processor leaves the auction-request's ``imp.ext`` as
+    ``{<bidder_name>: {...}}`` (the per-bidder slot, e.g. ``imp.ext.kobler``).
+    Go's adapter unmarshals ``imp.ext.bidder`` (post-PrebidServer-Go split).
+    When ``port-java2go`` re-authors a Java IT 4-file fixture set into a Go
+    flat exemplary fixture, it copies the Java auction-request verbatim into
+    ``mockBidRequest`` and the Go test harness then fails to parse
+    ``imp.ext.bidder``. This helper applies the rename so the emitted
+    ``mockBidRequest.imp[].ext`` is in Go-canonical shape.
+
+    Scope and contract:
+      - Operates on the OUTER auction-request only (Go's ``mockBidRequest``).
+        The caller is expected to pass the dict that will be assigned to
+        ``mockBidRequest`` (either the full fixture root, OR a root with
+        ``mockBidRequest`` already extracted — the helper looks for
+        ``imp[]`` at the top level).
+      - The INNER ``httpCalls[].expectedRequest.body`` (the modified
+        BidRequest the adapter sends upstream) is NOT touched here; that's
+        the operator's hand-fill or a separate pass.
+      - Other ``imp.ext`` keys (``prebid``, ``tid``, ``gpid``, etc.) pass
+        through untouched. Only the per-bidder-name slot key is renamed.
+      - If an ``imp.ext`` already has a ``"bidder"`` key (defensive — should
+        not happen for Java-side fixtures but guards against double-apply),
+        the helper raises ``ValueError`` rather than overwriting.
+      - If an ``imp.ext`` is missing the bidder slot entirely (already-Go
+        shaped, or malformed), that imp is left untouched (no error).
+      - Empty ``imp[]`` array, missing ``imp`` key entirely → no-op return.
+
+    Returns a deep-copied dict; the input is NOT mutated. (Match the
+    clone-and-return convention of ``alias_graph_invert``: callers can
+    treat the returned dict as a fresh artifact safe to serialize.)
+
+    Parameters
+    ----------
+    fixture_dict : dict
+        Auction-request dict containing an ``imp[]`` array. Typically this
+        is ``mockBidRequest`` from a Go exemplary fixture during emit.
+    java_bidder_name : str
+        The Java per-bidder slot key to rename (e.g. ``"kobler"``). Sourced
+        from the spec's ``meta.bidder_name``. Must be a non-empty string.
+
+    Raises
+    ------
+    ValueError
+        If ``java_bidder_name`` is empty/None, or if any imp's ``ext``
+        already contains a ``"bidder"`` key alongside the Java slot.
+    """
+    if not java_bidder_name or not isinstance(java_bidder_name, str):
+        raise ValueError(
+            f"java_bidder_name must be a non-empty string; got {java_bidder_name!r}"
+        )
+    out = copy.deepcopy(fixture_dict)
+    imps = out.get("imp")
+    if not isinstance(imps, list):
+        return out  # no-op: missing imp key (rare malformed fixture)
+    for idx, imp in enumerate(imps):
+        if not isinstance(imp, dict):
+            continue
+        ext = imp.get("ext")
+        if not isinstance(ext, dict):
+            continue
+        if java_bidder_name not in ext:
+            # imp.ext missing the bidder slot entirely — already-Go-shaped
+            # or malformed Java; leave imp untouched per contract.
+            continue
+        if "bidder" in ext:
+            raise ValueError(
+                f"imp[{idx}].ext already has a 'bidder' key alongside "
+                f"{java_bidder_name!r}; refusing to overwrite. The fixture may "
+                f"already be Go-shaped (double-apply) or carry a malformed mix."
+            )
+        # Rename the per-bidder slot key. Other keys (prebid, tid, gpid, ...)
+        # pass through untouched.
+        ext["bidder"] = ext.pop(java_bidder_name)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Helper 12 — simulate_makerequests_mutations (D3.8 F-new-16 fixture-body sim)
+# ---------------------------------------------------------------------------
+
+
+def simulate_makerequests_mutations(
+    bid_request: Dict[str, Any],
+    mutations: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Apply a sequence of MakeRequests mutation ops to a bid-request dict.
+
+    D3.8 F-new-16 helper: ports of non-passthrough Go adapters need an
+    accurate ``httpCalls[].expectedRequest.body`` in their flat exemplary
+    fixture (Go testCommon harness). The Go adapter's MakeRequests rewrites
+    the prebid-server-internal BidRequest before serializing it onto the
+    wire (sanitize Device/User, rewrite Site/App, fill Banner.W/H from
+    format[0], strip imp.Ext, etc.) — fixtures must reflect that mutated
+    body, not the input. Helper-less, fixtures end up shaped like the
+    auction request (passthrough assumption) and Go-side test runs fail
+    body-shape comparison.
+
+    The helper takes a list of mutation OPERATIONS observed across the
+    corpus (D3.8 spike doc: ``docs/runs/d3.8-mvp-pairs-spike-2026-05-05.md``)
+    and applies them in order to a deepcopy of the input. Each op is a
+    dict with a string ``kind`` field plus op-specific params. Unknown
+    kinds raise ``ValueError`` listing the offending op-kind.
+
+    Supported op kinds (canonical via D3.8 spike F-new-16 / F-new-20):
+
+    1. ``device-zero-fields`` (params: ``fields: list[str]``) —
+       kobler/beachfront pattern. Zeros out specific Device fields
+       (typically ``ip`` / ``ipv6``). No-op if Device key absent or
+       a named field absent.
+    2. ``user-null`` — kobler/beachfront pattern. Sets ``user=None``
+       (i.e., removes the ``user`` key, equivalent to ``request.User = nil``
+       in Go).
+    3. ``imp-bidfloor-convert-to-usd`` — kobler/adverxo/limelightDigital/
+       vungle pattern. Caller is responsible for supplying converted
+       values via ``imp.bidfloor`` already; helper just normalizes
+       ``imp.bidfloorcur`` to ``"USD"`` when it's set to a non-USD
+       currency on imps with a positive bidfloor. The helper CANNOT
+       perform the actual conversion (no FX rate data); it documents
+       the contract that fixture authors must pre-convert.
+    4. ``imp-ext-strip-after-extraction`` — adkernelAdn pattern (F-new-20).
+       Sets ``imp.ext=None`` for every imp (equivalent to ``imp.Ext = nil``
+       in Go's ``compatImpression``).
+    5. ``imp-ext-rewrap-with-bidder-slot`` (params: ``slot_name: str``) —
+       vungle pattern. Re-wraps ``imp.ext`` so existing bidder content
+       moves under the named slot key (the inverse of F4's transform):
+       ``{"bidder": {...}, "prebid": {...}}`` → ``{"vungle": {...},
+       "prebid": {...}, "bidder": {...}}`` where the slot value is the
+       existing ``bidder`` dict. Per the upstream ``vungleImpressionExt``
+       struct, the bidder-slot is preserved AND the named slot is added
+       (the Go marshaler emits both fields).
+    6. ``site-null`` — vungle pattern. Sets ``site=None`` during Site→App
+       synthesis.
+    7. ``app-replace-with-synthesis`` (params: ``app_synthesis_payload:
+       dict``) — vungle pattern. Replaces ``app`` with the operator-
+       supplied synthesis payload. The actual synthesis logic is bidder-
+       specific (vungle uses ``bidderImpExt.PubAppStoreID``); the helper
+       cannot derive the payload, so the caller computes it from the
+       bidder spec and passes it in verbatim.
+    8. ``site-publisher-rewrite`` (params: ``publisher_id: str``) —
+       thetradedesk pattern. Overwrites ``site.publisher.id``. No-op if
+       site or site.publisher absent.
+    9. ``app-publisher-rewrite`` (params: ``publisher_id: str``) —
+       thetradedesk pattern. Overwrites ``app.publisher.id``. No-op if
+       app or app.publisher absent.
+    10. ``site-publisher-null`` — adkernelAdn pattern. Sets
+        ``site.publisher=None`` (equivalent to ``Site.Publisher = nil``).
+    11. ``site-domain-clear`` — adkernelAdn pattern. Sets ``site.domain=""``.
+    12. ``app-publisher-null`` — adkernelAdn pattern. Sets
+        ``app.publisher=None``.
+    13. ``banner-format-fill-wh`` — adkernelAdn / thetradedesk pattern.
+        For every imp with a ``banner`` and missing ``banner.w`` / ``banner.h``,
+        copies ``w``/``h`` from the first ``banner.format[]`` entry and
+        drops format[0] from the array. Matches Go's
+        ``compatBannerImpression``.
+    14. ``imp-tagid-from-ext`` (params: ``ext_field_name: str``,
+        ``slot_name: str``) — vungle pattern. For every imp, sets
+        ``imp.tagid`` to ``imp.ext[slot_name][ext_field_name]`` when both
+        keys resolve to a value. ``slot_name`` is REQUIRED (raises
+        ``ValueError`` if absent or empty) — vungle is the only canonical
+        caller and it has a known slot ("vungle"); requiring the slot
+        eliminates the cross-slot mis-route the prior heuristic was
+        prone to (PR #5 reviewer F-2).
+    15. ``currency-normalize-to-list`` (params: ``currency: str``) —
+        kobler pattern. Appends the currency to ``cur`` if not present.
+        No-op if ``cur`` already contains the currency.
+
+    Implementation notes:
+      - Always deepcopies the input. The caller's ``bid_request`` is
+        never mutated.
+      - When an op references a path that doesn't exist (e.g.,
+        ``device-zero-fields`` on a request with no ``device``), the
+        op is skipped silently. Java-IT-derived fixtures sometimes lack
+        fields the Go adapter would otherwise touch.
+      - For ``imp-bidfloor-convert-to-usd``: this op is a no-op when
+        ``bidfloorcur=="USD"`` (the common case in passthrough fixtures);
+        when ``bidfloorcur != "USD"``, the helper sets
+        ``bidfloorcur="USD"`` and leaves ``bidfloor`` as-is (caller is
+        responsible for passing in pre-converted values). This matches
+        Go's mutation semantics where the BidFloor field is overwritten
+        with a converted numeric value the helper cannot compute.
+      - The op list is applied in caller-supplied order. Some op
+        sequences are dependency-bound; the helper does NOT enforce
+        ordering — the caller (renderer) is responsible. Known
+        dependency pairs (PR #5 reviewer F-3 — non-exhaustive but
+        covers every pattern observed across the 6 MVP canaries):
+
+          (a) ``imp-ext-rewrap-with-bidder-slot`` BEFORE
+              ``imp-tagid-from-ext`` when the tagid is sourced from
+              the rewrapped slot (vungle).
+          (b) ``site-null`` BEFORE ``app-replace-with-synthesis``
+              (vungle's Site→App handoff: null the existing site, then
+              install the synthesized app).
+          (c) ``imp-ext-strip-after-extraction`` LAST among imp.ext
+              touches (adkernelAdn) — it nulls imp.ext, so any later
+              imp.ext-reading op (including ``imp-tagid-from-ext``)
+              reads None and silently no-ops.
+
+        All other op pairs commute (touch disjoint paths). When the
+        renderer's call site is reviewed in a canary trace, mis-ordering
+        surfaces as a fixture diff against the live Go-side test —
+        not a Python error — so audit the trace whenever a new bidder
+        introduces a novel mutation sequence.
+
+    Parameters
+    ----------
+    bid_request : dict
+        The Go-shape ``mockBidRequest`` (or the BidRequest-equivalent
+        dict the operator wants to simulate the adapter's output of).
+        Must be deepcopy-safe (a JSON-loaded dict satisfies this).
+    mutations : list[dict]
+        Ordered op list. Each op is ``{"kind": <str>, ...op-params}``.
+
+    Returns
+    -------
+    dict
+        Deep-copied ``bid_request`` with all mutations applied in order.
+
+    Raises
+    ------
+    ValueError
+        If any op's ``kind`` is not in the supported set. The error
+        message includes the unrecognized kind for diagnostics.
+    """
+    out = copy.deepcopy(bid_request)
+    for idx, op in enumerate(mutations):
+        if not isinstance(op, dict):
+            raise ValueError(
+                f"mutations[{idx}] is not a dict: {op!r}"
+            )
+        kind = op.get("kind")
+        applier = _MAKEREQUESTS_MUTATION_APPLIERS.get(kind)
+        if applier is None:
+            raise ValueError(
+                f"mutations[{idx}] has unsupported kind={kind!r}; "
+                f"supported kinds: {sorted(_MAKEREQUESTS_MUTATION_APPLIERS.keys())}"
+            )
+        applier(out, op)
+    return out
+
+
+# ---- Per-op appliers --------------------------------------------------------
+
+
+def _apply_device_zero_fields(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    # Mirror Go's `device.IP = ""` wire form: Go's openrtb2.Device fields
+    # carry omitempty tags on IP, IPv6, etc., so the marshaled wire form
+    # OMITS the keys after zeroing. Python's json.dumps has no omitempty
+    # equivalent, so emitting `device[k] = ""` would carry `"ip": ""` on
+    # the wire — divergent from upstream Go's actual marshal output. We
+    # mirror Go's wire form by deleting the keys (same idiom as
+    # _apply_user_null below; F-new-35 ex post facto correction).
+    device = req.get("device")
+    if not isinstance(device, dict):
+        return  # no Device → no-op
+    fields = op.get("fields") or []
+    for fname in fields:
+        if fname in device:
+            del device[fname]
+
+
+def _apply_user_null(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    # Match Go's `request.User = nil` semantics: remove the key entirely
+    # so the JSON-marshaled body omits the field. (`json.dumps({...,
+    # "user": None})` would emit `"user":null`, but Go's `omitempty` tag
+    # on BidRequest.User would drop it. We mirror Go's wire form.)
+    if "user" in req:
+        del req["user"]
+
+
+def _apply_imp_bidfloor_convert_to_usd(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    imps = req.get("imp")
+    if not isinstance(imps, list):
+        return
+    for imp in imps:
+        if not isinstance(imp, dict):
+            continue
+        bidfloor = imp.get("bidfloor")
+        bidfloorcur = imp.get("bidfloorcur")
+        # Helper contract: only re-tag bidfloorcur. Caller pre-converts the
+        # numeric value. Skip imps where conversion is not applicable.
+        if (
+            isinstance(bidfloor, (int, float))
+            and bidfloor > 0
+            and isinstance(bidfloorcur, str)
+            and bidfloorcur != ""
+            and bidfloorcur.upper() != "USD"
+        ):
+            imp["bidfloorcur"] = "USD"
+
+
+def _apply_imp_ext_strip_after_extraction(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    imps = req.get("imp")
+    if not isinstance(imps, list):
+        return
+    for imp in imps:
+        if not isinstance(imp, dict):
+            continue
+        # Match Go's `imp.Ext = nil`: remove the key so the JSON-marshaled
+        # body has no `ext` field on this imp.
+        if "ext" in imp:
+            del imp["ext"]
+
+
+def _apply_imp_ext_rewrap_with_bidder_slot(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    slot_name = op.get("slot_name")
+    if not isinstance(slot_name, str) or not slot_name:
+        raise ValueError(
+            f"imp-ext-rewrap-with-bidder-slot requires a non-empty 'slot_name'; got {slot_name!r}"
+        )
+    imps = req.get("imp")
+    if not isinstance(imps, list):
+        return
+    for imp in imps:
+        if not isinstance(imp, dict):
+            continue
+        ext = imp.get("ext")
+        if not isinstance(ext, dict):
+            continue
+        # vungleImpressionExt is `{*ExtImpBidder, vungle: ImpExtVungle}` —
+        # i.e., the marshaled JSON has BOTH the embedded bidder/prebid keys
+        # AND a new `vungle` key carrying the bidder-slot content. We mirror
+        # that shape: copy the existing `bidder` content under the new slot
+        # key without removing it (the bidder slot stays for the embedded-
+        # struct path).
+        bidder_content = ext.get("bidder")
+        if bidder_content is None:
+            # No bidder slot to rewrap; skip without erroring (defensive).
+            continue
+        ext[slot_name] = copy.deepcopy(bidder_content)
+
+
+def _apply_site_null(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    if "site" in req:
+        del req["site"]
+
+
+def _apply_app_replace_with_synthesis(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    payload = op.get("app_synthesis_payload")
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "app-replace-with-synthesis requires 'app_synthesis_payload' (dict); "
+            f"got {type(payload).__name__}"
+        )
+    req["app"] = copy.deepcopy(payload)
+
+
+def _apply_site_publisher_rewrite(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    pub_id = op.get("publisher_id")
+    if not isinstance(pub_id, str):
+        raise ValueError(
+            f"site-publisher-rewrite requires 'publisher_id' (str); got {pub_id!r}"
+        )
+    site = req.get("site")
+    if not isinstance(site, dict):
+        return
+    publisher = site.get("publisher")
+    if not isinstance(publisher, dict):
+        return
+    publisher["id"] = pub_id
+
+
+def _apply_app_publisher_rewrite(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    pub_id = op.get("publisher_id")
+    if not isinstance(pub_id, str):
+        raise ValueError(
+            f"app-publisher-rewrite requires 'publisher_id' (str); got {pub_id!r}"
+        )
+    app = req.get("app")
+    if not isinstance(app, dict):
+        return
+    publisher = app.get("publisher")
+    if not isinstance(publisher, dict):
+        return
+    publisher["id"] = pub_id
+
+
+def _apply_site_publisher_null(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    site = req.get("site")
+    if not isinstance(site, dict):
+        return
+    if "publisher" in site:
+        del site["publisher"]
+
+
+def _apply_site_domain_clear(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    site = req.get("site")
+    if not isinstance(site, dict):
+        return
+    # Match Go's `Site.Domain = ""` — set to empty string (NOT delete) since
+    # Go's openrtb2.Site.Domain has no omitempty tag and the marshaled body
+    # carries `"domain":""` after the rewrite.
+    site["domain"] = ""
+
+
+def _apply_app_publisher_null(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    app = req.get("app")
+    if not isinstance(app, dict):
+        return
+    if "publisher" in app:
+        del app["publisher"]
+
+
+def _apply_banner_format_fill_wh(req: Dict[str, Any], _op: Dict[str, Any]) -> None:
+    imps = req.get("imp")
+    if not isinstance(imps, list):
+        return
+    for imp in imps:
+        if not isinstance(imp, dict):
+            continue
+        banner = imp.get("banner")
+        if not isinstance(banner, dict):
+            continue
+        # Go's compatBannerImpression: only fills if BOTH W and H are nil.
+        if banner.get("w") is not None or banner.get("h") is not None:
+            continue
+        formats = banner.get("format")
+        if not isinstance(formats, list) or not formats:
+            continue
+        first = formats[0]
+        if not isinstance(first, dict):
+            continue
+        if "w" in first:
+            banner["w"] = first["w"]
+        if "h" in first:
+            banner["h"] = first["h"]
+        # Drop format[0] from the list (mirrors `banner.Format = banner.Format[1:]`).
+        banner["format"] = formats[1:]
+
+
+def _apply_imp_tagid_from_ext(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    field_name = op.get("ext_field_name")
+    if not isinstance(field_name, str) or not field_name:
+        raise ValueError(
+            f"imp-tagid-from-ext requires non-empty 'ext_field_name'; got {field_name!r}"
+        )
+    slot_name = op.get("slot_name")
+    if not isinstance(slot_name, str) or not slot_name:
+        raise ValueError(
+            f"imp-tagid-from-ext requires non-empty 'slot_name' (the imp.ext "
+            f"key whose value-dict carries the target field); got {slot_name!r}"
+        )
+    imps = req.get("imp")
+    if not isinstance(imps, list):
+        return
+    for imp in imps:
+        if not isinstance(imp, dict):
+            continue
+        ext = imp.get("ext")
+        if not isinstance(ext, dict):
+            continue
+        slot = ext.get(slot_name)
+        if isinstance(slot, dict) and field_name in slot:
+            imp["tagid"] = slot[field_name]
+
+
+def _apply_currency_normalize_to_list(req: Dict[str, Any], op: Dict[str, Any]) -> None:
+    currency = op.get("currency")
+    if not isinstance(currency, str) or not currency:
+        raise ValueError(
+            f"currency-normalize-to-list requires non-empty 'currency'; got {currency!r}"
+        )
+    cur = req.get("cur")
+    if cur is None:
+        # Per Go semantics: kobler appends to `request.Cur` only if not
+        # present; if Cur is nil, the append yields a one-element slice.
+        req["cur"] = [currency]
+        return
+    if not isinstance(cur, list):
+        # Defensive: malformed `cur` field (string, dict, etc.) — leave
+        # untouched. Go-side would have failed unmarshal earlier.
+        return
+    if currency in cur:
+        return
+    cur.append(currency)
+
+
+# Dispatch table — populated AFTER the appliers are defined so the names
+# resolve. Keeping it adjacent keeps the kind-string registry obvious.
+_MAKEREQUESTS_MUTATION_APPLIERS: Dict[
+    str,
+    Callable[[Dict[str, Any], Dict[str, Any]], None],
+] = {
+    "device-zero-fields": _apply_device_zero_fields,
+    "user-null": _apply_user_null,
+    "imp-bidfloor-convert-to-usd": _apply_imp_bidfloor_convert_to_usd,
+    "imp-ext-strip-after-extraction": _apply_imp_ext_strip_after_extraction,
+    "imp-ext-rewrap-with-bidder-slot": _apply_imp_ext_rewrap_with_bidder_slot,
+    "site-null": _apply_site_null,
+    "app-replace-with-synthesis": _apply_app_replace_with_synthesis,
+    "site-publisher-rewrite": _apply_site_publisher_rewrite,
+    "app-publisher-rewrite": _apply_app_publisher_rewrite,
+    "site-publisher-null": _apply_site_publisher_null,
+    "site-domain-clear": _apply_site_domain_clear,
+    "app-publisher-null": _apply_app_publisher_null,
+    "banner-format-fill-wh": _apply_banner_format_fill_wh,
+    "imp-tagid-from-ext": _apply_imp_tagid_from_ext,
+    "currency-normalize-to-list": _apply_currency_normalize_to_list,
+}
+
+
+# ---------------------------------------------------------------------------
+# Helper 13 — exemplary_fixture_assemble_java_to_go (D3.8 canary v2: F-new-9/10/11/13; canary v3: F-new-22)
+# ---------------------------------------------------------------------------
+#
+# Bundles fixture-authoring concerns the kobler canary v2 + vungle canary
+# v3 surfaced (renderer-level): cur fallback, canonical TEST_ENDPOINT,
+# expected_bids from bid-response, expectedRequest.body simulation, and
+# opt-in empty-user injection for adapters whose Go side dereferences
+# ``request.User`` without a nil-check. Promoted from canary v2/v3
+# one-off renderers to a reusable helper so future Java→Go canaries
+# (aax, adverxo, thetradedesk, ...) do not rediscover the same shape
+# contract.
+#
+# - F-new-9: bid-response.cur fallback. Java's framework defaults
+#   Currency to USD when bid-response lacks ``cur``; Go's adapter does
+#   ``bidderResponse.Currency = bidResponse.Cur`` directly, so an empty
+#   ``cur`` produces an empty Currency that fails the test expectation.
+#   Helper copies cur from auction-response when bid-response omits it
+#   (lenient on conflicts: bid-response wins, no error).
+#
+# - F-new-10: TEST_ENDPOINT canonical constant. The emitted
+#   bidder_test.go calls Builder() with ``"https://test.example.com/bid"``;
+#   the emitted exemplary fixture's ``expectedRequest.uri`` must match
+#   that, NOT the real bidder-info endpoint. Constant lives at module
+#   scope so other call sites share a single source of truth.
+#
+# - F-new-11: expected_bids derive from bid-response (the bare upstream
+#   bids the adapter receives + the type the adapter computes), NOT from
+#   auction-response (post-prebid-server enriched bids with exp,
+#   ext.origbidcpm, ext.prebid.meta — none of which the adapter generates).
+#
+# - F-new-13: expectedRequest.body simulation. Passthrough adapters
+#   (no per-bidder request mutation) get body == mockBidRequest.
+#   Non-passthrough adapters supply ``expected_request_body_simulator``
+#   (typically a partial of ``simulate_makerequests_mutations`` from
+#   helper 12 above). When omitted, falls back to passthrough — known-
+#   imperfect for non-passthrough but the closest sensible default.
+#
+# - F-new-22: opt-in empty-user injection. Java IT auction-requests
+#   sometimes lack a ``user`` object entirely; Java's bidder code is
+#   null-safe (``ObjectUtil.getIfNotNull(bidRequest.getUser(), ...)``)
+#   so the IT scenario passes upstream. The Go adapter equivalent often
+#   dereferences ``request.User.X`` directly (e.g. vungle.go:68
+#   ``requestCopy.User.BuyerUID``) — nil-panics when User is absent.
+#   Opt-in flag ``inject_empty_user_if_missing=True`` injects ``user: {}``
+#   into the F4-transformed mock_bid_request when ``user`` is absent or
+#   None. ``BuyerUID`` and friends are ``omitempty``-tagged so the
+#   wire-format body matches the no-user case (``user: {}``). Default
+#   False preserves backward-compat with kobler/aax canary v2 callers
+#   whose Go adapters do not deref User unconditionally.
+
+# F-new-10: canonical Builder() test endpoint. Matches the URL the
+# emitted bidder_test.go's Builder invocation passes via
+# ``config.Adapter{Endpoint: ...}``. Renderers/templates that import this
+# constant share a single source of truth so a future endpoint change
+# updates exactly one place.
+TEST_ENDPOINT = "https://test.example.com/bid"
+
+
+def _apply_cur_fallback(
+    bid_response: Dict[str, Any],
+    auction_response: Dict[str, Any],
+) -> Dict[str, Any]:
+    """F-new-9: fill bid-response.cur from auction-response when absent.
+
+    Java IT bid-response often omits ``cur`` because the Java framework
+    defaults Currency to USD before the adapter sees the response. The
+    Go adapter assigns ``bidderResponse.Currency = bidResponse.Cur``
+    directly — empty ``cur`` produces empty Currency that fails Go's
+    test expectation of ``USD``. Bridge by copying ``cur`` from
+    auction-response.
+
+    Lenient on conflicts: when both responses carry a ``cur`` and they
+    differ, the bid-response value wins (it is the upstream-true ground
+    truth; auction-response is post-server). No error is raised — the
+    audit doc/spike intent is best-effort fixture authoring, not
+    strict validation. The reasoning, per the audit doc:
+
+        the bid-response is closer to ground truth.
+
+    Returns a deep-copied bid_response dict; inputs are not mutated.
+    """
+    out = copy.deepcopy(bid_response)
+    if "cur" in out:
+        # Bid-response wins on conflict (lenient mode); no override.
+        return out
+    if isinstance(auction_response, dict) and "cur" in auction_response:
+        out["cur"] = auction_response["cur"]
+    return out
+
+
+def _expected_bids_from_bid_response(
+    bid_response: Dict[str, Any],
+    default_type: str,
+) -> List[Dict[str, Any]]:
+    """F-new-11: derive expected_bids from the BARE upstream bid-response.
+
+    The Go adapter's MakeBids returns the bare bid the upstream sent,
+    paired with the BidType the adapter computed. The Java auction-
+    response captures POST-prebid-server-processing state (extra fields
+    the framework added: ``exp``, ``ext.origbidcpm``, ``ext.prebid.meta``)
+    that the adapter neither generates nor is responsible for — using
+    auction-response bids causes Go's expected vs actual JSON comparison
+    to diverge on every fixture.
+
+    Returns ``[]`` when seatbid is missing or empty. Each entry is
+    ``{"bid": <bare bid dict>, "type": <default_type>}``. The default
+    type is a per-bidder choice (banner is the safe baseline; vungle
+    forces video; native-only bidders use native).
+
+    Bid dicts ARE deep-copied. The outer ``exemplary_fixture_assemble_
+    java_to_go`` helper promises "Inputs are NOT mutated" — without the
+    copy, the returned ctx's ``expected_bids[].bid`` aliases entries
+    inside the caller's ``java_bid_response`` and any downstream mutator
+    leaks through (reviewer F-1, PR #5).
+    """
+    out: List[Dict[str, Any]] = []
+    if not isinstance(bid_response, dict):
+        return out
+    seatbid = bid_response.get("seatbid")
+    if not isinstance(seatbid, list):
+        return out
+    for sb in seatbid:
+        if not isinstance(sb, dict):
+            continue
+        bids = sb.get("bid")
+        if not isinstance(bids, list):
+            continue
+        for bid in bids:
+            if not isinstance(bid, dict):
+                continue
+            out.append({"bid": copy.deepcopy(bid), "type": default_type})
+    return out
+
+
+def _default_expected_request_body(mock_bid_request: Dict[str, Any]) -> Dict[str, Any]:
+    """F-new-13 passthrough fallback: body == mockBidRequest.
+
+    For passthrough adapters (no per-bidder request mutation in MakeRequests),
+    the body the adapter sends upstream is byte-identical to the
+    BidRequest it received. Returns a deep-copied dict so callers can
+    safely mutate or serialize without affecting mock_bid_request.
+
+    Known-imperfect for non-passthrough adapters (currency conversion,
+    macro substitution, native ADM unwrap). Those callers must supply
+    ``expected_request_body_simulator`` to
+    ``exemplary_fixture_assemble_java_to_go``; the typical pattern is to
+    bind ``simulate_makerequests_mutations`` (helper 12) with the
+    bidder's mutation op-list as the simulator.
+    """
+    return copy.deepcopy(mock_bid_request)
+
+
+def exemplary_fixture_assemble_java_to_go(
+    *,
+    java_auction_request: Dict[str, Any],
+    java_auction_response: Dict[str, Any],
+    java_bid_request: Dict[str, Any],
+    java_bid_response: Dict[str, Any],
+    java_bidder_name: str,
+    expected_request_body_simulator: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+    default_bid_type: str = "banner",
+    test_endpoint: str = TEST_ENDPOINT,
+    inject_empty_user_if_missing: bool = False,
+) -> Dict[str, Any]:
+    """Assemble the ctx dict for ``exemplary-fixture.json.j2`` from a Java
+    IT 4-file fixture set, applying the Rule 36 inverse semantic-coverage
+    transform plus F-new-9/10/11/13 fixture-authoring concerns and the
+    F-new-22 opt-in empty-user injection.
+
+    The returned ctx dict matches the exemplary-fixture template's input
+    contract (see ``prebid-server-go/port-java2go/templates/exemplary-fixture.json.j2``)::
+
+        {
+          "mock_bid_request": <publisher-side BidRequest, F4-transformed,
+                                optional user:{} inject>,    # F-new-22
+          "http_calls": [
+            {
+              "uri": <test_endpoint>,                       # F-new-10
+              "body": <expected request body>,              # F-new-13
+              "status": 200,
+              "response": <bid-response with cur fallback>, # F-new-9
+              "imp_ids": [<imp[].id>, ...],                 # F-new-12
+            },
+          ],
+          "expected_bids": [{"bid": ..., "type": ...}, ...],  # F-new-11
+          "expected_currency": <auction-response.cur or "USD">,
+        }
+
+    Parameters
+    ----------
+    java_auction_request : dict
+        Java IT ``test-auction-{bidder}-request.json``: the publisher-
+        side BidRequest the harness feeds to MakeRequests. Imp[].ext
+        carries the per-bidder slot (``imp.ext.{java_bidder_name}``);
+        the F4 helper rewrites it to Go's ``imp.ext.bidder`` shape.
+    java_auction_response : dict
+        Java IT ``test-auction-{bidder}-response.json``: the publisher-
+        visible auction response, used here for ``cur`` fallback
+        (F-new-9) and ``expected_currency`` default.
+    java_bid_request : dict
+        Java IT ``test-{bidder}-bid-request.json``: the framework-
+        enriched bid-request capture. NOT used as ``expectedRequest.body``
+        directly (F-new-13: it carries Java-framework-added fields the
+        Go adapter does not emit). Reserved for future simulator-input
+        use; accepted now so the helper signature stays stable.
+    java_bid_response : dict
+        Java IT ``test-{bidder}-bid-response.json``: the bare upstream
+        bid-response. The cur fallback (F-new-9) and expected_bids
+        derivation (F-new-11) operate on this.
+    java_bidder_name : str
+        The Java per-bidder slot key (e.g. ``"kobler"``). Sourced from
+        the spec's ``meta.bidder_name``. Forwarded to
+        ``imp_ext_shape_transform_java_to_go``.
+    expected_request_body_simulator : Callable[[dict], dict] | None
+        F-new-13: optional callback that receives the F4-transformed
+        ``mock_bid_request`` and returns the body the Go adapter would
+        marshal upstream. Required for non-passthrough adapters
+        (currency conversion, ADM unwrap, macro substitution). Typical
+        pattern: ``functools.partial(simulate_makerequests_mutations,
+        mutations=ops)``. When omitted, the helper falls back to the
+        passthrough body (``body == mock_bid_request``). The simulator
+        may return either the same dict (ok) or a fresh dict; the
+        caller is responsible for not mutating its input if it cares
+        about the original.
+    default_bid_type : str
+        F-new-11: the bid type the Go adapter computes for every
+        upstream bid in the bid-response. Defaults to ``"banner"``.
+        Per-bidder overrides: ``"video"`` for vungle, ``"native"`` for
+        native-only bidders, etc.
+    test_endpoint : str
+        F-new-10: the URL the emitted ``bidder_test.go``'s Builder()
+        passes via ``config.Adapter{Endpoint: ...}``. Defaults to the
+        canonical ``TEST_ENDPOINT`` shared with bidder-test.go.j2.
+        Override only if the rendered test uses a non-standard endpoint.
+    inject_empty_user_if_missing : bool
+        F-new-22: when True, after the F4 imp.ext shape transform but
+        before ``expected_request_body_simulator`` is invoked, inject
+        ``user: {}`` into ``mock_bid_request`` if the ``user`` key is
+        absent or None. Pass True for adapters that dereference
+        ``request.User`` without a nil-check (e.g. vungle vungle.go:68
+        ``requestCopy.User.BuyerUID``). The empty struct's fields are
+        ``omitempty``-tagged so wire-format matches the no-user case
+        (the body emits ``"user": {}``). Defaults to False to preserve
+        backward compatibility with kobler/aax callers whose Go
+        adapters do not deref User unconditionally. The simulator (when
+        supplied) sees the same post-injection mock_bid_request the
+        harness will feed to MakeRequests.
+
+    Returns
+    -------
+    dict
+        The ctx dict ready to feed
+        ``env.get_template("exemplary-fixture.json.j2").render(ctx=...)``.
+
+    Notes on input mutation
+    -----------------------
+    Inputs are NOT mutated. The helper deepcopies anything it modifies
+    (via ``imp_ext_shape_transform_java_to_go`` and ``_apply_cur_fallback``).
+    The simulator callback is invoked with the F4-transformed
+    ``mock_bid_request``; if the simulator mutates that dict, the
+    returned ctx's ``mock_bid_request`` is still the (already-deepcopied)
+    F4 output — the caller's original ``java_auction_request`` is safe
+    regardless.
+
+    Raises
+    ------
+    ValueError
+        If ``java_bidder_name`` is empty/None or not a string.
+    """
+    if not java_bidder_name or not isinstance(java_bidder_name, str):
+        raise ValueError(
+            f"java_bidder_name must be a non-empty string; got {java_bidder_name!r}"
+        )
+
+    # Step 1 — F4 imp.ext shape transform on the auction-request → mock_bid_request.
+    mock_bid_request = imp_ext_shape_transform_java_to_go(
+        java_auction_request, java_bidder_name
+    )
+
+    # Step 1b — F-new-22 opt-in empty-user injection. Runs after F4 and
+    # before the simulator (Step 4) so the simulator sees the same
+    # mock_bid_request the harness will feed to MakeRequests. No-op when
+    # the auction-request already carries a (non-None) ``user`` object.
+    if inject_empty_user_if_missing and mock_bid_request.get("user") is None:
+        mock_bid_request["user"] = {}
+
+    # Step 2 — F-new-9 cur fallback on bid-response.
+    bid_response_with_cur = _apply_cur_fallback(java_bid_response, java_auction_response)
+
+    # Step 3 — F-new-12 imp_ids from the F4-transformed auction-request.
+    imp_ids: List[str] = []
+    imps = mock_bid_request.get("imp")
+    if isinstance(imps, list):
+        for imp in imps:
+            if isinstance(imp, dict) and "id" in imp:
+                imp_ids.append(imp["id"])
+
+    # Step 4 — F-new-13 expected_request_body via simulator or passthrough.
+    if expected_request_body_simulator is not None:
+        expected_request_body = expected_request_body_simulator(mock_bid_request)
+    else:
+        expected_request_body = _default_expected_request_body(mock_bid_request)
+
+    # Step 5 — F-new-11 expected_bids from bid-response.
+    expected_bids = _expected_bids_from_bid_response(java_bid_response, default_bid_type)
+
+    # Step 6 — expected_currency from auction-response (default "USD").
+    expected_currency = "USD"
+    if isinstance(java_auction_response, dict):
+        cur = java_auction_response.get("cur")
+        if isinstance(cur, str) and cur:
+            expected_currency = cur
+
+    # Step 7 — assemble the ctx dict.
+    return {
+        "mock_bid_request": mock_bid_request,
+        "http_calls": [
+            {
+                "uri": test_endpoint,
+                "body": expected_request_body,
+                "status": 200,
+                "response": bid_response_with_cur,
+                "imp_ids": imp_ids,
+            }
+        ],
+        "expected_bids": expected_bids,
+        "expected_currency": expected_currency,
+    }
