@@ -1242,29 +1242,26 @@ class TestSimulateMakerequestsMutations(unittest.TestCase):
 
     # --- Op 14: imp-tagid-from-ext -----------------------------------------
 
-    def test_imp_tagid_from_ext_copies_value(self):
-        """Vungle's `imp.TagID = bidderImpExt.PlacementRefID` mirrored as
-        a per-imp tagid copy from a named field inside imp.ext.{any-slot}."""
-        req = {
-            "imp": [
-                {
-                    "id": "i1",
-                    "ext": {
-                        "bidder": {"placementRefId": "vungle-placement-abc"},
-                        "vungle": {"placementRefId": "vungle-placement-abc"},
-                    },
-                }
-            ],
-        }
-        out = simulate_makerequests_mutations(req, [
-            {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId"},
-        ])
-        self.assertEqual(out["imp"][0]["tagid"], "vungle-placement-abc")
+    def test_imp_tagid_from_ext_requires_slot_name(self):
+        """Reviewer F-2 (PR #5): slot_name is required — no heuristic fallback.
+        Calling without slot_name now raises ValueError so misconfigured ops
+        fail fast at render time rather than silently mis-routing."""
+        req = {"imp": [{"id": "i1", "ext": {"bidder": {"placementRefId": "x"}}}]}
+        with self.assertRaises(ValueError) as cm:
+            simulate_makerequests_mutations(req, [
+                {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId"},
+            ])
+        self.assertIn("slot_name", str(cm.exception))
 
     def test_imp_tagid_from_ext_skipped_when_field_absent(self):
+        """Slot exists but does not contain the named field — no-op."""
         req = {"imp": [{"id": "i1", "ext": {"bidder": {"x": 1}}}]}
         out = simulate_makerequests_mutations(req, [
-            {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId"},
+            {
+                "kind": "imp-tagid-from-ext",
+                "ext_field_name": "placementRefId",
+                "slot_name": "bidder",
+            },
         ])
         self.assertNotIn("tagid", out["imp"][0])
 
@@ -1402,7 +1399,7 @@ class TestSimulateMakerequestsMutations(unittest.TestCase):
         }
         out = simulate_makerequests_mutations(req, [
             {"kind": "imp-ext-rewrap-with-bidder-slot", "slot_name": "vungle"},
-            {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId"},
+            {"kind": "imp-tagid-from-ext", "ext_field_name": "placementRefId", "slot_name": "vungle"},
             {"kind": "site-null"},
             {
                 "kind": "app-replace-with-synthesis",

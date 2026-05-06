@@ -1045,14 +1045,14 @@ def simulate_makerequests_mutations(
         copies ``w``/``h`` from the first ``banner.format[]`` entry and
         drops format[0] from the array. Matches Go's
         ``compatBannerImpression``.
-    14. ``imp-tagid-from-ext`` (params: ``ext_field_name: str``) — vungle
-        pattern. For every imp, sets ``imp.tagid`` from ``imp.ext.{slot}.{field}``
-        where ``slot`` is the vungle slot the rewrap op installed. To
-        keep the helper independent of slot ordering, this op consumes
-        the ``ext_field_name`` value directly: it walks the entire
-        ``imp.ext`` dict looking for a value-typed dict that contains
-        the named field (e.g., ``placementRefId``) and copies the value
-        to ``imp.tagid``. Skipped silently if no candidate found.
+    14. ``imp-tagid-from-ext`` (params: ``ext_field_name: str``,
+        ``slot_name: str``) — vungle pattern. For every imp, sets
+        ``imp.tagid`` to ``imp.ext[slot_name][ext_field_name]`` when both
+        keys resolve to a value. ``slot_name`` is REQUIRED (raises
+        ``ValueError`` if absent or empty) — vungle is the only canonical
+        caller and it has a known slot ("vungle"); requiring the slot
+        eliminates the cross-slot mis-route the prior heuristic was
+        prone to (PR #5 reviewer F-2).
     15. ``currency-normalize-to-list`` (params: ``currency: str``) —
         kobler pattern. Appends the currency to ``cur`` if not present.
         No-op if ``cur`` already contains the currency.
@@ -1072,10 +1072,27 @@ def simulate_makerequests_mutations(
         Go's mutation semantics where the BidFloor field is overwritten
         with a converted numeric value the helper cannot compute.
       - The op list is applied in caller-supplied order. Some op
-        sequences are dependency-bound (e.g., ``imp-ext-rewrap-with-
-        bidder-slot`` must precede ``imp-tagid-from-ext`` if the tagid
-        is sourced from the rewrapped slot); the helper does NOT enforce
-        ordering — the caller (renderer) is responsible.
+        sequences are dependency-bound; the helper does NOT enforce
+        ordering — the caller (renderer) is responsible. Known
+        dependency pairs (PR #5 reviewer F-3 — non-exhaustive but
+        covers every pattern observed across the 6 MVP canaries):
+
+          (a) ``imp-ext-rewrap-with-bidder-slot`` BEFORE
+              ``imp-tagid-from-ext`` when the tagid is sourced from
+              the rewrapped slot (vungle).
+          (b) ``site-null`` BEFORE ``app-replace-with-synthesis``
+              (vungle's Site→App handoff: null the existing site, then
+              install the synthesized app).
+          (c) ``imp-ext-strip-after-extraction`` LAST among imp.ext
+              touches (adkernelAdn) — it nulls imp.ext, so any later
+              imp.ext-reading op (including ``imp-tagid-from-ext``)
+              reads None and silently no-ops.
+
+        All other op pairs commute (touch disjoint paths). When the
+        renderer's call site is reviewed in a canary trace, mis-ordering
+        surfaces as a fixture diff against the live Go-side test —
+        not a Python error — so audit the trace whenever a new bidder
+        introduces a novel mutation sequence.
 
     Parameters
     ----------
@@ -1309,13 +1326,12 @@ def _apply_imp_tagid_from_ext(req: Dict[str, Any], op: Dict[str, Any]) -> None:
         raise ValueError(
             f"imp-tagid-from-ext requires non-empty 'ext_field_name'; got {field_name!r}"
         )
-    # Reviewer H5 correction: prefer explicit `slot_name` (the imp.ext
-    # key whose value-dict carries the target field) over the legacy
-    # first-match heuristic. The heuristic mis-routes when imp-ext-rewrap
-    # has installed the same content under multiple slots (vungle case).
-    # Pass `slot_name` for unambiguous routing; the heuristic remains as
-    # a back-compat fallback for callers that haven't migrated.
     slot_name = op.get("slot_name")
+    if not isinstance(slot_name, str) or not slot_name:
+        raise ValueError(
+            f"imp-tagid-from-ext requires non-empty 'slot_name' (the imp.ext "
+            f"key whose value-dict carries the target field); got {slot_name!r}"
+        )
     imps = req.get("imp")
     if not isinstance(imps, list):
         return
@@ -1325,18 +1341,9 @@ def _apply_imp_tagid_from_ext(req: Dict[str, Any], op: Dict[str, Any]) -> None:
         ext = imp.get("ext")
         if not isinstance(ext, dict):
             continue
-        if isinstance(slot_name, str) and slot_name:
-            slot = ext.get(slot_name)
-            if isinstance(slot, dict) and field_name in slot:
-                imp["tagid"] = slot[field_name]
-            continue
-        # Back-compat fallback: walk imp.ext for any value-dict containing
-        # the named field, insertion-order. Documented as ambiguous when
-        # multiple slots could match.
-        for v in ext.values():
-            if isinstance(v, dict) and field_name in v:
-                imp["tagid"] = v[field_name]
-                break
+        slot = ext.get(slot_name)
+        if isinstance(slot, dict) and field_name in slot:
+            imp["tagid"] = slot[field_name]
 
 
 def _apply_currency_normalize_to_list(req: Dict[str, Any], op: Dict[str, Any]) -> None:
@@ -1494,9 +1501,11 @@ def _expected_bids_from_bid_response(
     type is a per-bidder choice (banner is the safe baseline; vungle
     forces video; native-only bidders use native).
 
-    Bid dicts are NOT deep-copied here — the caller's outer assemble
-    helper does its own deepcopy of inputs upstream of this call, so
-    additional copying would be redundant work.
+    Bid dicts ARE deep-copied. The outer ``exemplary_fixture_assemble_
+    java_to_go`` helper promises "Inputs are NOT mutated" — without the
+    copy, the returned ctx's ``expected_bids[].bid`` aliases entries
+    inside the caller's ``java_bid_response`` and any downstream mutator
+    leaks through (reviewer F-1, PR #5).
     """
     out: List[Dict[str, Any]] = []
     if not isinstance(bid_response, dict):
@@ -1513,7 +1522,7 @@ def _expected_bids_from_bid_response(
         for bid in bids:
             if not isinstance(bid, dict):
                 continue
-            out.append({"bid": bid, "type": default_type})
+            out.append({"bid": copy.deepcopy(bid), "type": default_type})
     return out
 
 
