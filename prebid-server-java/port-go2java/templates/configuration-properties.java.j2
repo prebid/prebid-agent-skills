@@ -22,24 +22,26 @@ BidderConfigurationProperties (which has its own equals/hashCode); without
 callSuper=true Lombok emits a checkstyle warning and Jacoco branch-coverage
 deficit.
 
-Imports:
-- jakarta.validation.constraints.* (only what's referenced via validation_annotations)
-- lombok.{Data, EqualsAndHashCode, NoArgsConstructor}
-- org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties (the parent)
+Imports (per upstream checkstyle.xml `groups="*,/^java|^jakarta/"`, separated=true):
+- lombok.{Data, EqualsAndHashCode, NoArgsConstructor}  (Group * — top)
+- org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties (Group * — top)
+- (blank line separator)
+- jakarta.validation.constraints.* via ctx.imports_extra (Group java/jakarta — bottom)
 
 Caller is responsible for collecting the union of validation-annotation
 imports across all typed_fields; this template assumes ctx.imports_extra
-is the alphabetically-sorted list to emit.
+is the alphabetically-sorted list of jakarta.*/java.* imports to emit at bottom.
 #}
 package org.prebid.server.spring.config.bidder;
 
-{% for imp in ctx.imports_extra %}
-import {{ imp }};
-{% endfor %}
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;
+
+{% for imp in ctx.imports_extra %}
+import {{ imp }};
+{% endfor %}
 
 {% if ctx.javadoc_summary %}
 /**

@@ -39,6 +39,9 @@ The IntegrationTest parent class provides:
 hits the WireMock stub instead of the real bidder URL. The path matches
 the stub URL declared in @TestPropertySource AND in the WireMock stubFor.
 #}
+{%- macro to_camel(s) -%}
+{%- set parts = s.split('_') -%}{{ parts[0] }}{%- for p in parts[1:] -%}{%- if p -%}{{ p[0]|upper }}{{ p[1:] }}{%- endif -%}{%- endfor -%}
+{%- endmacro -%}
 package org.prebid.server.it;
 
 import io.restassured.response.Response;
@@ -75,19 +78,24 @@ public class {{ ctx.bidder_class_root }}Test extends IntegrationTest {
 
 {% for scenario in ctx.scenarios %}
     @Test
-    public void {{ scenario.method_name }}() throws IOException, JSONException {
+    public void {{ to_camel(scenario.method_name) }}() throws IOException, JSONException {
         // {{ scenario.summary }}
         WIRE_MOCK_RULE.stubFor(post(urlPathEqualTo("{{ ctx.endpoint_path }}"))
-                .withRequestBody(equalToJson(jsonFrom("{{ scenario.bid_request_path }}")))
-                .willReturn(aResponse().withBody(jsonFrom("{{ scenario.bid_response_path }}"))));
+                .withRequestBody(equalToJson(jsonFrom(
+                        "{{ scenario.bid_request_path }}")))
+                .willReturn(aResponse().withBody(jsonFrom(
+                        "{{ scenario.bid_response_path }}"))));
 
-        final Response response = responseFor("{{ scenario.auction_request_path }}", Endpoint.openrtb2_auction);
+        final Response response = responseFor(
+                "{{ scenario.auction_request_path }}", Endpoint.openrtb2_auction);
 
 {% set seats = scenario.expected_seats if scenario.expected_seats else [ctx.bidder_name] %}
 {% if seats | length == 1 %}
-        assertJsonEquals("{{ scenario.auction_response_path }}", response, singletonList("{{ seats[0] }}"));
+        assertJsonEquals("{{ scenario.auction_response_path }}",
+                response, singletonList("{{ seats[0] }}"));
 {% else %}
-        assertJsonEquals("{{ scenario.auction_response_path }}", response, asList({% for seat in seats %}"{{ seat }}"{% if not loop.last %}, {% endif %}{% endfor %}));
+        assertJsonEquals("{{ scenario.auction_response_path }}",
+                response, asList({% for seat in seats %}"{{ seat }}"{% if not loop.last %}, {% endif %}{% endfor %}));
 {% endif %}
     }
 

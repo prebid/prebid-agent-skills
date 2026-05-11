@@ -45,9 +45,10 @@ inputs.
 #}
 package org.prebid.server.bidder.{{ ctx.bidder_name }};
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+{% if ctx.bid_type_resolution == "ext-prebid-video-placement" %}
 import com.fasterxml.jackson.databind.JsonNode;
+{% endif %}
 import com.iab.openrtb.request.BidRequest;
 import com.iab.openrtb.request.Imp;
 import com.iab.openrtb.response.Bid;
@@ -61,7 +62,9 @@ import org.prebid.server.bidder.model.BidderBid;
 import org.prebid.server.bidder.model.BidderCall;
 import org.prebid.server.bidder.model.BidderError;
 import org.prebid.server.bidder.model.HttpRequest;
+{% if ctx.http_status_kind != "canonical-helpers" %}
 import org.prebid.server.bidder.model.HttpResponse;
+{% endif %}
 import org.prebid.server.bidder.model.Result;
 {% if ctx.uses_currency_conversion %}
 import org.prebid.server.currency.CurrencyConversionService;
@@ -177,17 +180,11 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 
     @Override
     public Result<List<BidderBid>> makeBids(BidderCall<BidRequest> httpCall, BidRequest bidRequest) {
-        final HttpResponse response = httpCall.getResponse();
 {% if ctx.http_status_kind == "canonical-helpers" %}
-        if (BidderUtil.isResponseStatusCodeNoContent(response)) {
-            return Result.empty();
-        }
-        try {
-            BidderUtil.checkResponseStatusCode(response);
-        } catch (PreBidException e) {
-            return Result.withError(BidderError.badServerResponse(e.getMessage()));
-        }
+        {# Framework default: no explicit status check (Rule 30 — Java's HTTP layer
+        handles 204 NO_CONTENT and non-200 codes before makeBids is invoked). #}
 {% else %}
+        final HttpResponse response = httpCall.getResponse();
         if (response.getStatusCode() == 204) {
             return Result.empty();
         }
@@ -197,9 +194,9 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
         }
 {% endif %}
         try {
-            final BidResponse bidResponse = mapper.decodeValue(response.getBody(), BidResponse.class);
+            final BidResponse bidResponse = mapper.decodeValue(httpCall.getResponse().getBody(), BidResponse.class);
             return Result.withValues(extractBids(bidResponse, bidRequest));
-        } catch (DecodeException | JsonProcessingException e) {
+        } catch (DecodeException e) {
             return Result.withError(BidderError.badServerResponse(e.getMessage()));
         }
     }
