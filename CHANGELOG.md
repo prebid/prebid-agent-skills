@@ -17,6 +17,113 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-11 (D2.8 operator validation complete; port-go2java 0.3.0 → 0.5.0)
+
+D2.8 — operator validation of `port-go2java` SKILL against the 6 MVP pairs
+(kobler, aax, adkernelAdn, adverxo, vungle, thetradedesk) — COMPLETE.
+Mirrors the D3.8 trajectory (which validated port-java2go Java → Go and
+landed 2026-05-05). All 6 MVP canaries now PASS **4 of 7** D2.3 acceptance
+gates: Gate 1 (mvn compile), Gate 4 (mvn checkstyle), Gate 6 (port-report
+schema v0.2.0), Gate 7 (r5_check.state). Gates 2 + 3 (mvn test + Jacoco)
+are operator-fillable scaffolds; Gate 5 has a doc gap in
+[execution-plan-phase-d.md §183](docs/execution-plan-phase-d.md) (referenced
+schema files do not exist in upstream prebid-server-java).
+
+### D2.8 spike (6 canaries × 7 gates × upstream-Java mvn validation)
+
+All 6 canaries executed in a single batch against a `git worktree` of
+upstream `prebid/prebid-server-java` at SHA `a1fe64e123d6` (re-verified
+[repo-rules.md:123](docs/methodology/repo-rules.md) pinning). Per-canary
+traces at:
+- [`docs/runs/d2.8-kobler-canary-2026-05-11.md`](docs/runs/d2.8-kobler-canary-2026-05-11.md)
+- [`docs/runs/d2.8-aax-canary-2026-05-11.md`](docs/runs/d2.8-aax-canary-2026-05-11.md)
+- [`docs/runs/d2.8-adkernelAdn-canary-2026-05-11.md`](docs/runs/d2.8-adkernelAdn-canary-2026-05-11.md)
+- [`docs/runs/d2.8-adverxo-canary-2026-05-11.md`](docs/runs/d2.8-adverxo-canary-2026-05-11.md)
+- [`docs/runs/d2.8-vungle-canary-2026-05-11.md`](docs/runs/d2.8-vungle-canary-2026-05-11.md)
+- [`docs/runs/d2.8-thetradedesk-canary-2026-05-11.md`](docs/runs/d2.8-thetradedesk-canary-2026-05-11.md)
+
+Cross-canary findings + F2 fix milestone at
+[`docs/runs/d2.8-cross-canary-summary.md`](docs/runs/d2.8-cross-canary-summary.md)
+(~25 F-new findings catalogued; semantic dedup across the 6 subagent
+catalogs).
+
+### F2 fix milestone — `port-go2java` SKILL templates retired all gate-blocking defects
+
+**Tier 0** (4 universal checkstyle fixes; commit `440371c`):
+- F-new-58 `BidderDeps` import group order in `configuration.java.j2`
+  (upstream checkstyle uses inverted `groups="*,/^java|^jakarta/"`,
+  `separated=true`).
+- F-new-60 snake_case → camelCase test method names via new `to_camel`
+  Jinja macro in `bidder-test.java.j2` + `it-test.java.j2`.
+- F-new-61 LineLength wraps in IT and BidderTest templates.
+- F-new-96 `JsonNode` import conditional on
+  `ctx.bid_type_resolution == "ext-prebid-video-placement"`.
+
+**Tier 1** (5 universal javac fixes; commit `440371c`):
+- F-new-56 unreachable `JsonProcessingException` dropped from MakeBids
+  multi-catch (`mapper.decodeValue()` only throws `DecodeException`).
+- F-new-57 `.bidderInfo(BidderInfoCreator.create(mapper)::create)` line
+  removed from `configuration.java.j2` (`BidderDepsAssembler` internally
+  creates `BidderInfo` from configurationProperties; matches upstream
+  `KoblerConfiguration`).
+- F-new-59 `lombok.Data` import group order in
+  `configuration-properties.java.j2`.
+- F-new-79 Adverxo `OuterTypeFilename` — new `ctx.config_class_name`
+  override in `configuration.java.j2` supports both
+  `<Root>Configuration` (canonical) and `<Root>BidderConfiguration`
+  (adverxo, dianomi, adnuntius edge cases).
+- F-new-90 `BidderUtil.isResponseStatusCodeNoContent` /
+  `.checkResponseStatusCode` calls removed when
+  `ctx.http_status_kind == "canonical-helpers"` (those methods don't
+  exist in upstream Java; framework handles 204/non-200 before
+  makeBids invoked); `HttpResponse` import made conditional on same.
+
+**Tier 3 step 1** — F-new-78 entity-mutation scaffold (commit `8ec8bb5`):
+- New `port_engine.extract_entity_strategies(source_spec)` helper that
+  reads `source_spec.code.make_requests.mutation.entity_strategies` and
+  returns the `{Entity: strategy_kind}` dict for `ctx.entity_strategies`.
+- `bidder.java.j2` single-batched branch extended with per-imp toBuilder
+  rebuild + `BidRequest.toBuilder()...build()` rebuild emitting per-entity
+  TODO comments for non-passthrough/non-none strategies.
+- SKILL.md Rule 5 prose expanded to document the surface.
+
+**Tier 3 step 2** — F-new-50 family endpoint-resolution scaffolds (commit `b6f3124`):
+- `resolveEndpoint` template extended with structured scaffolds for the
+  4 non-static endpoint kinds across the 6 MVP corpus: dev-prod-toggle
+  (kobler), template-macro (adkernelAdn + thetradedesk),
+  multi-token-substitution (adverxo), query-parameter-augmentation (aax).
+- Each scaffold compiles cleanly with structured TODO comments referencing
+  the upstream Java pattern and source-spec fields the operator consults.
+
+**Tier 3 step 3** — single-canary fidelity scaffolds (commit `d391e98`):
+- F-new-86 vungle ADR-007 F3 Site→App synthesis scaffold (Site
+  `replace-with-app-synthesis` + App `synthesize-app-replacement` TODOs)
+  in both single-batched and per-imp batching branches.
+- F-new-91 + F-new-92 vungle imp.ext three-key wrapper repack + buyer-UID
+  promotion guidance layered onto the Imp toBuilder TODO.
+- F-new-100 thetradedesk ADR-007 F4 bid-post-processing-macros scaffold —
+  new `ctx.has_bid_post_processing_macros` field; extractBids stream
+  inserts `.map(this::applyBidPostProcessingMacros)`; emits the helper
+  method with TODO guidance for `${AUCTION_PRICE}` substitution.
+
+### F-new findings catalogued (D2.8 contributes ~25 findings)
+
+Range: F-new-48 through F-new-104-equiv (semantic dedup across 6 subagent
+catalogs; some IDs are different across subagents but describe the same
+pattern). Universal findings (4-6 canaries reproduce each) retired by
+F2 Tier 0+1. Conditional findings (Rule 35-dependent, F3/F4-specific)
+retired by F2 Tier 1 + Tier 3. Cosmetic / doc findings remain for Tier 4.
+
+### Branch + SKILL version
+
+- Branch: `feat/d2.8-port-go2java-validation` (4 commits).
+- `port-go2java/SKILL.md` frontmatter `0.3.0 → 0.5.0`.
+- `port-go2java` v1.0.0 promotion remains gated on Gates 2 + 3
+  routinely cleared by operator-completed test scaffolds AND a
+  green-field validation canary (D3.8-canary-8 analog).
+
+---
+
 ## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-05 (D3.8 canary 8: teal green-field "best-in-class")
 
 Eighth canary of the D3.8 series — first GREEN-FIELD port of the
