@@ -1720,3 +1720,35 @@ def exemplary_fixture_assemble_java_to_go(
         "expected_bids": expected_bids,
         "expected_currency": expected_currency,
     }
+
+
+def extract_entity_strategies(source_spec: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """Extract entity_strategies dict from a source spec's make_requests block.
+
+    Returns the dict of {Entity: strategy_kind} (e.g., {"Imp": "in-place",
+    "Device": "none", "Site": "replace-with-app-synthesis"}) for use as
+    ctx.entity_strategies in the bidder.java.j2 template's makeHttpRequests
+    scaffold (F-new-78). Returns None if make_requests or entity_strategies is
+    absent.
+
+    The template consumes this dict to emit toBuilder rebuild scaffolds with
+    per-entity TODO comments. Strategy kinds "passthrough" and "none" indicate
+    no mutation and suppress TODO emission for that entity.
+
+    Per port-go2java/SKILL.md Step 5 + Rule 5 (Lombok immutable-rebuild pattern).
+    """
+    if not isinstance(source_spec, dict):
+        return None
+    code = source_spec.get("code")
+    if not isinstance(code, dict):
+        return None
+    make_requests = code.get("make_requests")
+    if not isinstance(make_requests, dict):
+        return None
+    mutation = make_requests.get("mutation")
+    if not isinstance(mutation, dict):
+        return None
+    es = mutation.get("entity_strategies")
+    if not isinstance(es, dict):
+        return None
+    return es

@@ -120,19 +120,59 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
         final List<HttpRequest<BidRequest>> httpRequests = new ArrayList<>();
 
 {% if ctx.batching_kind == "single-batched" %}
-        try {
-            // Per-imp validation: parse imp.ext.bidder for each imp; collect errors.
-            for (Imp imp : bidRequest.getImp()) {
-                parseImpExt(imp);
-            }
-        } catch (PreBidException e) {
-            errors.add(BidderError.badInput(e.getMessage()));
-            if (errors.size() == bidRequest.getImp().size()) {
-                return Result.withErrors(errors);
+        final List<Imp> modifiedImps = new ArrayList<>();
+        for (Imp imp : bidRequest.getImp()) {
+            try {
+                final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
+{% if ctx.entity_strategies and ctx.entity_strategies.Imp and ctx.entity_strategies.Imp not in ("passthrough", "none") %}
+                // TODO[port-go2java]: apply Imp mutation per source spec
+                // entity_strategies.Imp={{ ctx.entity_strategies.Imp }}.
+                // Go-side helpers: {{ ctx.go_helpers_for_imp | default('see source spec') }}.
+                modifiedImps.add(imp.toBuilder()
+                        // .bidfloor(...) .ext(...) .tagid(...) etc.
+                        .build());
+{% else %}
+                modifiedImps.add(imp);
+{% endif %}
+            } catch (PreBidException e) {
+                errors.add(BidderError.badInput(e.getMessage()));
             }
         }
+        if (modifiedImps.isEmpty()) {
+            return Result.withErrors(errors);
+        }
 
+{% set has_request_mutation = ctx.entity_strategies and (
+    (ctx.entity_strategies.Device and ctx.entity_strategies.Device not in ("passthrough", "none")) or
+    (ctx.entity_strategies.User and ctx.entity_strategies.User not in ("passthrough", "none")) or
+    (ctx.entity_strategies.Site and ctx.entity_strategies.Site not in ("passthrough", "none")) or
+    (ctx.entity_strategies.App and ctx.entity_strategies.App not in ("passthrough", "none")) or
+    (ctx.entity_strategies.Cur and ctx.entity_strategies.Cur not in ("passthrough", "none"))
+) %}
+{% if has_request_mutation %}
+        // toBuilder rebuild per source spec entity_strategies (Rule 5 — Lombok immutable-rebuild pattern).
+        final BidRequest modifiedRequest = bidRequest.toBuilder()
+                .imp(modifiedImps)
+{% if ctx.entity_strategies.Device and ctx.entity_strategies.Device not in ("passthrough", "none") %}
+                // TODO[port-go2java]: Device strategy={{ ctx.entity_strategies.Device }}; emit .device(...)
+{% endif %}
+{% if ctx.entity_strategies.User and ctx.entity_strategies.User not in ("passthrough", "none") %}
+                // TODO[port-go2java]: User strategy={{ ctx.entity_strategies.User }}; emit .user(...)
+{% endif %}
+{% if ctx.entity_strategies.Site and ctx.entity_strategies.Site not in ("passthrough", "none") %}
+                // TODO[port-go2java]: Site strategy={{ ctx.entity_strategies.Site }}; emit .site(...)
+{% endif %}
+{% if ctx.entity_strategies.App and ctx.entity_strategies.App not in ("passthrough", "none") %}
+                // TODO[port-go2java]: App strategy={{ ctx.entity_strategies.App }}; emit .app(...)
+{% endif %}
+{% if ctx.entity_strategies.Cur and ctx.entity_strategies.Cur not in ("passthrough", "none") %}
+                // TODO[port-go2java]: Cur strategy={{ ctx.entity_strategies.Cur }}; emit .cur(...)
+{% endif %}
+                .build();
+        httpRequests.add(BidderUtil.defaultRequest(modifiedRequest, resolveEndpoint(modifiedRequest), mapper));
+{% else %}
         httpRequests.add(BidderUtil.defaultRequest(bidRequest, resolveEndpoint(bidRequest), mapper));
+{% endif %}
 {% elif ctx.batching_kind == "per-imp" %}
         for (Imp imp : bidRequest.getImp()) {
             try {
