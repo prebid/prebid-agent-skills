@@ -128,6 +128,16 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
                 // TODO[port-go2java]: apply Imp mutation per source spec
                 // entity_strategies.Imp={{ ctx.entity_strategies.Imp }}.
                 // Go-side helpers: {{ ctx.go_helpers_for_imp | default('see source spec') }}.
+                // Common patterns to consider:
+                //   - .bidfloor / .bidfloorcur — currency conversion (kobler-style; uses
+                //     currencyConversionService.convertCurrency(imp.getBidfloor(),
+                //     bidRequest, imp.getBidfloorcur(), "USD"))
+                //   - .tagid — slot/placement promotion from imp.ext.bidder field
+                //   - .ext — F-new-91 imp.ext repack into {prebid, bidder, <bidder>}
+                //     three-key wrapper (vungle pattern: jacksonMapper.mapper()
+                //     .valueToTree(threeKeyMap) then .ext((ObjectNode) treeNode))
+                //   - F-new-92 buyer-UID promotion: extract imp.ext.bidder.<token_field>
+                //     and stash on user.buyeruid via BidRequest.toBuilder().user(...)
                 modifiedImps.add(imp.toBuilder()
                         // .bidfloor(...) .ext(...) .tagid(...) etc.
                         .build());
@@ -161,9 +171,20 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {% endif %}
 {% if ctx.entity_strategies.Site and ctx.entity_strategies.Site not in ("passthrough", "none") %}
                 // TODO[port-go2java]: Site strategy={{ ctx.entity_strategies.Site }}; emit .site(...)
+{% if ctx.entity_strategies.Site == "replace-with-app-synthesis" %}
+                //   F-new-86 (ADR-007 F3): when bidRequest.getSite()!=null, synthesize
+                //   an App from Site fields (publisher, content, etc.) and set .site(null).
+                //   Vungle pattern: take publisher's app_store_id, build App.builder()
+                //   .id(appStoreId).publisher(site.getPublisher()).build(), then .site(null).
+{% endif %}
 {% endif %}
 {% if ctx.entity_strategies.App and ctx.entity_strategies.App not in ("passthrough", "none") %}
                 // TODO[port-go2java]: App strategy={{ ctx.entity_strategies.App }}; emit .app(...)
+{% if ctx.entity_strategies.App == "synthesize-app-replacement" %}
+                //   F-new-86 (ADR-007 F3): when bidRequest.getApp()!=null, copy and
+                //   override App.id with the per-imp publisher app_store_id from
+                //   imp.ext.bidder. Vungle pattern: app.toBuilder().id(appStoreId).build().
+{% endif %}
 {% endif %}
 {% if ctx.entity_strategies.Cur and ctx.entity_strategies.Cur not in ("passthrough", "none") %}
                 // TODO[port-go2java]: Cur strategy={{ ctx.entity_strategies.Cur }}; emit .cur(...)
@@ -177,8 +198,33 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
         for (Imp imp : bidRequest.getImp()) {
             try {
                 final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
+{% if ctx.entity_strategies and ctx.entity_strategies.Imp and ctx.entity_strategies.Imp not in ("passthrough", "none") %}
+                // TODO[port-go2java]: per-imp mutation per source spec
+                // entity_strategies.Imp={{ ctx.entity_strategies.Imp }}. See single-batched
+                // branch for common patterns (bidfloor cur-convert, tagid, imp.ext repack
+                // F-new-91, buyer-UID promotion F-new-92).
+                final Imp modifiedImp = imp.toBuilder()
+                        // .bidfloor(...) .ext(...) .tagid(...) etc.
+                        .build();
+{% else %}
+                final Imp modifiedImp = imp;
+{% endif %}
                 final BidRequest perImpRequest = bidRequest.toBuilder()
-                        .imp(Collections.singletonList(imp))
+                        .imp(Collections.singletonList(modifiedImp))
+{% if ctx.entity_strategies %}
+{% if ctx.entity_strategies.Site == "replace-with-app-synthesis" %}
+                        // TODO[port-go2java]: F-new-86 (ADR-007 F3) Site→App synthesis.
+                        //   When bidRequest.getSite()!=null, synthesize App from Site fields
+                        //   (using imp.ext.bidder publisher's app_store_id) and set .site(null).
+                        //   Vungle pattern: App.builder().id(appStoreId).publisher(site.getPublisher()).build();
+                        //   then chain .site(null) .app(synthesized).
+{% endif %}
+{% if ctx.entity_strategies.App == "synthesize-app-replacement" %}
+                        // TODO[port-go2java]: F-new-86 (ADR-007 F3) App.id override per-imp.
+                        //   When bidRequest.getApp()!=null, copy and override App.id with
+                        //   imp.ext.bidder.<app_store_id_field>: .app(app.toBuilder().id(appStoreId).build()).
+{% endif %}
+{% endif %}
                         .build();
                 httpRequests.add(BidderUtil.defaultRequest(
                         perImpRequest,
@@ -309,9 +355,32 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
                 .map(SeatBid::getBid)
                 .filter(Objects::nonNull)
                 .flatMap(List::stream)
+{% if ctx.has_bid_post_processing_macros %}
+                .map(this::applyBidPostProcessingMacros)
+{% endif %}
                 .map(bid -> BidderBid.of(bid, resolveBidType(bid, bidRequest), bidResponse.getCur()))
                 .toList();
     }
+{% if ctx.has_bid_post_processing_macros %}
+
+    private Bid applyBidPostProcessingMacros(Bid bid) {
+        // F-new-100 (ADR-007 F4) — bid-post-processing macro substitution.
+        // Master sample: thetradedesk substitutes ${AUCTION_PRICE} into bid.nurl,
+        // bid.adm, and bid.burl using bid.getPrice() formatted via the Go
+        // strconv.FormatFloat(price, 'f', -1, 64) convention. Java equivalent:
+        // BigDecimal.toPlainString() (drops trailing zeros) or String.valueOf().
+        //
+        // TODO[port-go2java]: implement the macro substitution per source spec
+        // helpers (typically resolveAuctionPriceMacros or similar). Pattern:
+        //   final String priceStr = bid.getPrice() != null ? bid.getPrice().toPlainString() : "";
+        //   return bid.toBuilder()
+        //           .nurl(replaceMacro(bid.getNurl(), "${AUCTION_PRICE}", priceStr))
+        //           .adm(replaceMacro(bid.getAdm(), "${AUCTION_PRICE}", priceStr))
+        //           .burl(replaceMacro(bid.getBurl(), "${AUCTION_PRICE}", priceStr))
+        //           .build();
+        return bid;
+    }
+{% endif %}
 
     private BidType resolveBidType(Bid bid, BidRequest bidRequest) {
 {% if ctx.bid_type_resolution == "constant-banner" %}
