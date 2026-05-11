@@ -1722,7 +1722,7 @@ def exemplary_fixture_assemble_java_to_go(
     }
 
 
-def extract_entity_strategies(source_spec: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def extract_entity_strategies(source_spec: Any) -> Optional[Dict[str, str]]:
     """Extract entity_strategies dict from a source spec's make_requests block.
 
     Returns the dict of {Entity: strategy_kind} (e.g., {"Imp": "in-place",
@@ -1731,9 +1731,23 @@ def extract_entity_strategies(source_spec: Dict[str, Any]) -> Optional[Dict[str,
     scaffold (F-new-78). Returns None if make_requests or entity_strategies is
     absent.
 
-    The template consumes this dict to emit toBuilder rebuild scaffolds with
-    per-entity TODO comments. Strategy kinds "passthrough" and "none" indicate
-    no mutation and suppress TODO emission for that entity.
+    Entity scope:
+    - BidRequest-level entities: Imp, Device, User, Site, App, Cur, Source —
+      mutations applied at BidRequest.toBuilder() chain.
+    - Per-imp entities: Banner, Video — mutations applied INSIDE the per-imp
+      Imp.toBuilder() chain (live under imp.banner / imp.video, not
+      bidRequest.banner). The template emits Banner/Video TODO comments
+      within the Imp.toBuilder() block, not at the BidRequest level.
+
+    Strategy-kind contract: the helper does NOT validate values. Expected
+    kinds are {"in-place", "copy-then-mutate", "deep-copy-then-mutate",
+    "append-if-missing", "replace-with-app-synthesis",
+    "synthesize-app-replacement", "passthrough", "none"}, but an unexpected
+    string flows through to the template unmodified — the template's
+    `not in ("passthrough", "none")` guard treats anything else as
+    "emit a TODO", which is conservative but may produce confusing TODOs
+    for malformed input. Caller should validate value-set if strict
+    enforcement is required.
 
     Per port-go2java/SKILL.md Step 5 + Rule 5 (Lombok immutable-rebuild pattern).
     """

@@ -123,8 +123,8 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
         final List<Imp> modifiedImps = new ArrayList<>();
         for (Imp imp : bidRequest.getImp()) {
             try {
-                final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
 {% if ctx.entity_strategies and ctx.entity_strategies.Imp and ctx.entity_strategies.Imp not in ("passthrough", "none") %}
+                final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
                 // TODO[port-go2java]: apply Imp mutation per source spec
                 // entity_strategies.Imp={{ ctx.entity_strategies.Imp }}.
                 // Go-side helpers: {{ ctx.go_helpers_for_imp | default('see source spec') }}.
@@ -142,6 +142,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
                         // .bidfloor(...) .ext(...) .tagid(...) etc.
                         .build());
 {% else %}
+                parseImpExt(imp);
                 modifiedImps.add(imp);
 {% endif %}
             } catch (PreBidException e) {
@@ -197,8 +198,8 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {% elif ctx.batching_kind == "per-imp" %}
         for (Imp imp : bidRequest.getImp()) {
             try {
-                final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
 {% if ctx.entity_strategies and ctx.entity_strategies.Imp and ctx.entity_strategies.Imp not in ("passthrough", "none") %}
+                final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
                 // TODO[port-go2java]: per-imp mutation per source spec
                 // entity_strategies.Imp={{ ctx.entity_strategies.Imp }}. See single-batched
                 // branch for common patterns (bidfloor cur-convert, tagid, imp.ext repack
@@ -207,6 +208,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
                         // .bidfloor(...) .ext(...) .tagid(...) etc.
                         .build();
 {% else %}
+                parseImpExt(imp);
                 final Imp modifiedImp = imp;
 {% endif %}
                 final BidRequest perImpRequest = bidRequest.toBuilder()
@@ -267,8 +269,9 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
     @Override
     public Result<List<BidderBid>> makeBids(BidderCall<BidRequest> httpCall, BidRequest bidRequest) {
 {% if ctx.http_status_kind == "canonical-helpers" %}
-        {# Framework default: no explicit status check (Rule 30 — Java's HTTP layer
-        handles 204 NO_CONTENT and non-200 codes before makeBids is invoked). #}
+        // Rule 30 (canonical-helpers): no explicit status check — Java's HTTP
+        // layer handles 204 NO_CONTENT and non-200 codes before makeBids is
+        // invoked (matches upstream KoblerBidder; framework-default pattern).
 {% else %}
         final HttpResponse response = httpCall.getResponse();
         if (response.getStatusCode() == 204) {

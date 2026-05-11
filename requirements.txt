@@ -14,3 +14,7 @@ PyYAML==6.0.1
 # jsonschema 4.18+ required for full JSON Schema 2020-12 support
 # (used by adapter-spec.schema.json validation in Phase 2+).
 jsonschema==4.23.0
+# Jinja2 used by Phase D2 port-go2java template rendering (port-go2java/templates/*.j2)
+# and exercised by scripts/tests/test_port_go2java_templates.py. Without this pin,
+# the test module's import-guarded skip path masks failures in CI.
+Jinja2==3.0.3
