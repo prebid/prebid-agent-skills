@@ -97,8 +97,46 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         required fields and the adapter forwards
                                         the request without imp.ext inspection.
   ctx.batching_kind           : str  — "single-batched" | "per-imp" | "max-imps-per-request"
-                                        | "format-split" | "pod-grouping"
+                                        | "per-key" | "format-split" | "pod-grouping"
   ctx.batching_max_imps       : int|null
+  ctx.batching_per_key        : dict|None — F-new-7 EXT-A per-key batching schema.
+                                        REQUIRED when ctx.batching_kind == "per-key";
+                                        None / absent for the other batching kinds
+                                        (back-compat preserved). Keys (all str):
+                                          - helper_name: str|None — Go func name for the
+                                              imp-grouping helper. Defaults to
+                                              "dispatchImpressions" (matches upstream
+                                              adkernelAdn.go). Operator overrides for
+                                              bidders that prefer a different name.
+                                          - key_field: str — documents the ExtImp field
+                                              that drives the grouping (e.g., "PublisherID"
+                                              for adkernelAdn). Informational — used in
+                                              the emitted helper's doc comment + the
+                                              port-report rendering, not in the Go body
+                                              (the map key is the WHOLE ExtImp struct,
+                                              not just this field — matches upstream
+                                              shape). REQUIRED for documentation but the
+                                              renderer will still emit when omitted.
+                                        Pattern cribbed from upstream
+                                        adapters/adkernelAdn/adkernelAdn.go (canonical
+                                        canary): `dispatchImpressions(imps, impExts)`
+                                        returns `map[ExtImpAdkernelAdn][]openrtb2.Imp`;
+                                        MakeRequests iterates the map and emits one
+                                        adapters.RequestData per key. Each batch may
+                                        carry its own endpoint URL when the grouping
+                                        key feeds into the endpoint template macro
+                                        (composes with F-new-2 template-macro: the
+                                        per-key branch's resolveEndpoint takes the
+                                        parsed ExtImp pointer directly, NOT request.Imp[0]
+                                        — matches upstream buildEndpointURL).
+                                        Constraint: the rendered `openrtb_ext.ExtImp{X}`
+                                        struct MUST be Go-comparable (no slice/map/func
+                                        fields), else `map[ExtImp{X}]...` is a Go
+                                        compile error. Renderer does NOT enforce this;
+                                        operator vouches at ctx-assembly time. Affects
+                                        ~1-3% of corpus (adkernelAdn confirmed; 2-3
+                                        bidders corpus-wide per F-new-7 EXT-A canary
+                                        7 trace).
   ctx.endpoint_resolution_kind: str  — "static" | "single-token-substitution" |
                                         "query-parameter-augmentation" | "dev-prod-toggle"
                                         | "template-macro" | "multi-token-substitution"
@@ -313,10 +351,13 @@ Inputs (mirror of bidder.java.j2 ctx):
    the parseImpExt helper. Compute once so call sites + helper definition
    stay in sync. F-new-2: when macros-resolution is active the parseImpExt
    helper is required regardless (resolveEndpoint re-parses imp[0].ext to
-   read macro source fields), so force-enable it. #}
+   read macro source fields), so force-enable it. F-new-7 EXT-A: per-key
+   batching's dispatchImpressions helper calls parseImpExt on every imp to
+   build the grouping map, so force-enable when batching_kind=="per-key". #}
 {%- set _emit_parse_imp_ext = (
     ctx.imp_ext_unmarshal_kind != "none"
     or _endpoint_needs_macros_resolution
+    or ctx.batching_kind == "per-key"
 ) -%}
 {# F-new-1 partner: when neither currency-conversion nor parseImpExt has any
    per-imp work to do, the single-batched / max-imps inner loops collapse to
@@ -358,6 +399,19 @@ Inputs (mirror of bidder.java.j2 ctx):
 {%- set _forms = ctx.naming_form_resolution or {} -%}
 {%- set _go_package_name = _forms.get('go_package_name') or ctx.package_name -%}
 {%- set _imp_ext_class_root = ctx.imp_ext_class_root or _forms.get('go_constant_root') -%}
+{# F-new-7 EXT-A: per-key batching. Compute once so helper-name + helper-emit
+   + MakeRequests body + composition-with-F-new-2 stay in sync. The per-key
+   branch is structurally distinct from single-batched / per-imp / max-imps —
+   it iterates a map[ExtImp{X}][]Imp built by a dispatchImpressions-style
+   helper, emits one HTTP per map key, and composes with F-new-2's
+   template-macro endpoint resolution by passing the parsed ext-key struct
+   directly into a resolveEndpoint that takes `*ExtImp{X}` (mirrors upstream
+   adkernelAdn.go::buildEndpointURL — operates on the params struct, not
+   request.Imp[0]). #}
+{%- set _per_key = ctx.batching_per_key or {} -%}
+{%- set _per_key_helper_name = _per_key.get('helper_name') or "dispatchImpressions" -%}
+{%- set _per_key_field = _per_key.get('key_field') or "" -%}
+{%- set _is_per_key = ctx.batching_kind == "per-key" -%}
 package {{ _go_package_name }}
 
 import (
@@ -575,6 +629,53 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 {% endif %}
 	}
 	return requests, errors
+{% elif _is_per_key %}
+{# F-new-7 EXT-A: per-key batching. Group imps by the parsed ExtImp{X} value,
+   then emit one adapters.RequestData per group. Composes with F-new-2:
+   when endpoint_resolution_kind=="template-macro", the per-batch endpoint
+   is resolved against the GROUPING-KEY struct (not request.Imp[0]) —
+   matches upstream adkernelAdn.go::buildEndpointURL. Pattern cribbed from
+   upstream adkernelAdn.go::dispatchImpressions + MakeRequests loop. #}
+	groups, dispErrs := {{ _per_key_helper_name }}(request.Imp)
+	errors = append(errors, dispErrs...)
+	if len(groups) == 0 {
+		return nil, errors
+	}
+	requests := make([]*adapters.RequestData, 0, len(groups))
+	for key, batchImps := range groups {
+		batchKey := key
+		perGroup := *request
+		perGroup.Imp = batchImps
+		body, err := jsonutil.Marshal(&perGroup)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+{% if _endpoint_needs_macros_resolution %}
+		uri, err := a.resolveEndpoint(&batchKey)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perGroup.Imp),
+		})
+{% else %}
+		_ = batchKey
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     a.endpoint,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perGroup.Imp),
+		})
+{% endif %}
+	}
+	return requests, errors
 {% else %}
 	// TODO[port-java2go]: batching_kind={{ ctx.batching_kind }} not yet
 	// template-mapped. Operator hand-fills MakeRequests body. See
@@ -707,7 +808,41 @@ func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ _imp_ext_class_root }
    operator gets the full wiring (struct field, Builder Parse, imports)
    without macro values, and a TODO comment points them at the
    ctx.endpoint_macros schema. Useful for the spec-emit pre-pass before
-   the operator has populated macros_used. #}
+   the operator has populated macros_used.
+
+   F-new-7 EXT-A composition: when batching_kind == "per-key", the function
+   signature flips from `(*openrtb2.BidRequest)` to `(*openrtb_ext.ExtImp{X})`
+   — the per-batch endpoint is resolved against the parsed grouping-key
+   struct (one per map bucket), matching upstream adkernelAdn.go::buildEndpointURL.
+   The body skips the request.Imp[0] re-parse since the caller already
+   has the parsed ext in hand. #}
+{% if _is_per_key %}
+func (a *adapter) resolveEndpoint(impExt *openrtb_ext.ExtImp{{ _imp_ext_class_root }}) (string, error) {
+{% if _endpoint_macros_list | length > 0 %}
+	endpointParams := macros.EndpointTemplateParams{
+{% for m in _endpoint_macros_list %}
+{% if m.convert == "itoa" %}
+		{{ m.macro }}: strconv.Itoa(impExt.{{ m.ext_field }}),
+{% elif m.convert == "format-int64" %}
+		{{ m.macro }}: strconv.FormatInt(impExt.{{ m.ext_field }}, 10),
+{% elif m.convert %}
+		{{ m.macro }}: {{ m.convert }},
+{% else %}
+		{{ m.macro }}: impExt.{{ m.ext_field }},
+{% endif %}
+{% endfor %}
+	}
+{% else %}
+	// TODO[port-java2go]: ctx.endpoint_macros is empty — operator populates
+	// the per-macro mapping per endpoint_resolution.macros_used /
+	// macro_field_set from the source spec. Each entry maps a
+	// macros.EndpointTemplateParams field to a Go expression on impExt.
+	_ = impExt
+	endpointParams := macros.EndpointTemplateParams{}
+{% endif %}
+	return macros.ResolveMacros(a.EndpointTemplate, endpointParams)
+}
+{% else %}
 func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) (string, error) {
 	if len(request.Imp) == 0 {
 		return "", fmt.Errorf("no imp to resolve endpoint")
@@ -740,6 +875,13 @@ func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) (string, error) 
 {% endif %}
 	return macros.ResolveMacros(a.EndpointTemplate, endpointParams)
 }
+{% endif %}
+{% elif _is_per_key %}
+{# F-new-7 EXT-A: per-key + non-template-macro endpoint kinds bypass the
+   resolveEndpoint helper entirely — the per-key batching loop reads
+   `a.endpoint` directly. Emitting an unused resolveEndpoint helper here
+   would trigger Go unused-function warnings (and gofmt-clean does not
+   catch it, but `go vet` would). #}
 {% else %}
 func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 {% if ctx.endpoint_resolution_kind == "static" %}
@@ -955,6 +1097,33 @@ func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) e
 		imp.BidFloorCur = supportedCurrency
 	}
 	return nil
+}
+{% endif %}
+{% if _is_per_key %}
+
+// {{ _per_key_helper_name }} groups imps by their parsed openrtb_ext.ExtImp{{ _imp_ext_class_root }}
+// value (e.g. by `{{ _per_key_field or "<key_field>" }}`), returning one map bucket per unique
+// grouping-key struct. Pattern cribbed from upstream
+// adapters/adkernelAdn/adkernelAdn.go::dispatchImpressions. Each bucket
+// becomes one outbound HTTP request in MakeRequests. Imps whose ext fails
+// to parse are dropped from the returned map and an error is appended to
+// the returned slice — caller may surface them via the per-request errors
+// channel.
+//
+// Constraint: ExtImp{{ _imp_ext_class_root }} MUST be Go-comparable (no slice/map/func
+// fields) for the map[ExtImp{{ _imp_ext_class_root }}] usage to compile.
+func {{ _per_key_helper_name }}(imps []openrtb2.Imp) (map[openrtb_ext.ExtImp{{ _imp_ext_class_root }}][]openrtb2.Imp, []error) {
+	groups := make(map[openrtb_ext.ExtImp{{ _imp_ext_class_root }}][]openrtb2.Imp)
+	errs := make([]error, 0)
+	for i := range imps {
+		impExt, err := parseImpExt(&imps[i])
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		groups[*impExt] = append(groups[*impExt], imps[i])
+	}
+	return groups, errs
 }
 {% endif %}
 {% if ctx.batching_kind == "max-imps-per-request" %}

@@ -1008,6 +1008,303 @@ class TestEndpointResolutionMacros(unittest.TestCase):
         self.assertIn("Host: strings.ToLower(impExt.Host),", rendered)
 
 
+class TestPerKeyBatching(unittest.TestCase):
+    """F-new-7 EXT-A — `batching_kind == "per-key"` template branch.
+
+    Per-key batching groups imps by their parsed `openrtb_ext.ExtImp{X}`
+    value (the whole struct), then emits one outbound HTTP per group.
+    Pattern cribbed from upstream `adapters/adkernelAdn/adkernelAdn.go::
+    dispatchImpressions` + the MakeRequests per-batch loop.
+
+    Composition with F-new-2 template-macro: when both fire, the per-batch
+    endpoint is resolved against the parsed grouping-key struct (passed
+    by pointer into `resolveEndpoint(*openrtb_ext.ExtImp{X})`), NOT against
+    `request.Imp[0]` — mirrors upstream `buildEndpointURL(params)`.
+
+    ctx schema additions (F-new-7 EXT-A):
+      - ctx.batching_kind = "per-key"
+      - ctx.batching_per_key = {
+            "helper_name": str|None,   # default "dispatchImpressions"
+            "key_field": str,          # informational (e.g., "PublisherID")
+        }
+    """
+
+    def _base_ctx(self) -> Dict[str, Any]:
+        """adkernelAdn-shape ctx baseline. Subclasses override
+        `endpoint_resolution_kind` + `endpoint_macros` for the composition
+        cases."""
+        return {
+            "package_name": "adkernelAdn",
+            "bidder_class_root": "AdkernelAdn",
+            "uses_currency_conversion": False,
+            "imp_ext_class_root": "AdkernelAdn",
+            "imp_ext_unmarshal_kind": "standard-two-phase",
+            "batching_kind": "per-key",
+            "batching_max_imps": None,
+            "batching_per_key": {
+                "helper_name": "dispatchImpressions",
+                "key_field": "PublisherID",
+            },
+            "endpoint_resolution_kind": "template-macro",
+            "endpoint_macros": [
+                {"macro": "PublisherID", "ext_field": "PublisherID",
+                 "convert": "itoa"},
+            ],
+            "http_status_kind": "canonical-helpers",
+            "bid_type_resolution": "imp-mediatype-introspection",
+            "has_extra_info": False,
+            "module_version": GO_MODULE_VERSION,
+            "imports_extra": ["strconv"],
+            "javadoc_summary": None,
+        }
+
+    # ------------------------- helper emission --------------------------
+
+    def test_dispatchImpressions_helper_emits(self):
+        """F-new-7 EXT-A baseline: per-key emits a `dispatchImpressions`
+        helper that returns `map[ExtImp{X}][]openrtb2.Imp + []error`."""
+        rendered = _render("bidder.go.j2", self._base_ctx())
+        self.assertIn(
+            "func dispatchImpressions(imps []openrtb2.Imp) "
+            "(map[openrtb_ext.ExtImpAdkernelAdn][]openrtb2.Imp, []error)",
+            rendered,
+        )
+        # Iterates imps, parses ext, groups by the struct value.
+        self.assertIn("for i := range imps", rendered)
+        self.assertIn("impExt, err := parseImpExt(&imps[i])", rendered)
+        self.assertIn("groups[*impExt] = append(groups[*impExt], imps[i])", rendered)
+
+    def test_helper_name_customizable(self):
+        """F-new-7 EXT-A: operator can override `helper_name` for bidders
+        with a non-canonical grouping-helper name."""
+        ctx = self._base_ctx()
+        ctx["batching_per_key"] = {
+            "helper_name": "groupImpsByPublisher",
+            "key_field": "PublisherID",
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        # The custom name appears in BOTH the func declaration AND the
+        # MakeRequests callsite.
+        self.assertIn("func groupImpsByPublisher(imps []openrtb2.Imp)", rendered)
+        self.assertIn(
+            "groups, dispErrs := groupImpsByPublisher(request.Imp)",
+            rendered,
+        )
+        # Canonical name does NOT leak.
+        self.assertNotIn("func dispatchImpressions(", rendered)
+
+    def test_helper_name_defaults_to_dispatchImpressions_when_omitted(self):
+        """F-new-7 EXT-A back-compat: when `helper_name` is omitted (or
+        ctx.batching_per_key is the empty dict), the canonical upstream
+        name `dispatchImpressions` is used."""
+        ctx = self._base_ctx()
+        ctx["batching_per_key"] = {"key_field": "PublisherID"}
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("func dispatchImpressions(", rendered)
+        self.assertIn(
+            "groups, dispErrs := dispatchImpressions(request.Imp)",
+            rendered,
+        )
+
+    # ----------------- MakeRequests per-batch loop ----------------------
+
+    def test_makerequests_emits_per_batch_loop(self):
+        """F-new-7 EXT-A: MakeRequests body iterates `groups` and emits
+        one adapters.RequestData per map bucket. ImpIDs are computed
+        from the bucket's imps (NOT request.Imp)."""
+        rendered = _render("bidder.go.j2", self._base_ctx())
+        # Map iteration with key + value.
+        self.assertIn("for key, batchImps := range groups", rendered)
+        # Per-batch BidRequest shallow-copied.
+        self.assertIn("perGroup := *request", rendered)
+        self.assertIn("perGroup.Imp = batchImps", rendered)
+        # ImpIDs derived from the bucket's imps.
+        self.assertIn("ImpIDs:  openrtb_ext.GetImpIDs(perGroup.Imp)", rendered)
+        # Empty-map short-circuit (matches upstream adkernelAdn shape).
+        self.assertIn("if len(groups) == 0", rendered)
+
+    # ------------------- composition with F-new-2 -----------------------
+
+    def test_composition_template_macro_resolveEndpoint_takes_ext_pointer(self):
+        """F-new-7 EXT-A + F-new-2: when per-key composes with
+        template-macro endpoint resolution, the resolveEndpoint signature
+        flips from `(*openrtb2.BidRequest) (string, error)` to
+        `(*openrtb_ext.ExtImp{X}) (string, error)` — the per-batch
+        endpoint is computed against the GROUPING-KEY struct (matches
+        upstream adkernelAdn.go::buildEndpointURL)."""
+        rendered = _render("bidder.go.j2", self._base_ctx())
+        # Per-key + template-macro signature.
+        self.assertIn(
+            "func (a *adapter) resolveEndpoint(impExt *openrtb_ext.ExtImpAdkernelAdn) (string, error)",
+            rendered,
+        )
+        # NOT the *openrtb2.BidRequest signature.
+        self.assertNotIn(
+            "func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest)",
+            rendered,
+        )
+        # Body builds EndpointTemplateParams from the impExt pointer
+        # directly (no parseImpExt re-parse).
+        self.assertIn(
+            "endpointParams := macros.EndpointTemplateParams{",
+            rendered,
+        )
+        self.assertIn(
+            "PublisherID: strconv.Itoa(impExt.PublisherID),",
+            rendered,
+        )
+        self.assertIn(
+            "return macros.ResolveMacros(a.EndpointTemplate, endpointParams)",
+            rendered,
+        )
+        # MakeRequests per-batch loop passes the &batchKey pointer.
+        self.assertIn("uri, err := a.resolveEndpoint(&batchKey)", rendered)
+
+    def test_composition_template_macro_no_imp0_reparse(self):
+        """F-new-7 EXT-A + F-new-2: composition MUST NOT re-parse
+        request.Imp[0].Ext inside resolveEndpoint — the grouping-key
+        struct already carries the macro source fields. The
+        `len(request.Imp) == 0` guard from the F-new-2 baseline body is
+        absent in the per-key variant."""
+        rendered = _render("bidder.go.j2", self._base_ctx())
+        # Carve out the resolveEndpoint body.
+        resolve_idx = rendered.index("func (a *adapter) resolveEndpoint")
+        # Slice to next func or end.
+        next_func = rendered.find("func ", resolve_idx + 5)
+        body = rendered[resolve_idx:next_func]
+        self.assertNotIn("parseImpExt(&request.Imp[0])", body)
+        self.assertNotIn("len(request.Imp) == 0", body)
+
+    # ------------------- non-template-macro variant ---------------------
+
+    def test_per_key_with_static_endpoint_uses_a_endpoint(self):
+        """F-new-7 EXT-A: per-key + non-template-macro endpoint reads
+        `a.endpoint` directly inside the per-batch loop (no helper call).
+        The `resolveEndpoint(*openrtb2.BidRequest)` helper is SUPPRESSED
+        to avoid emitting an unused-function vet warning."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "static"
+        ctx["endpoint_macros"] = None
+        ctx["imports_extra"] = []
+        rendered = _render("bidder.go.j2", ctx)
+        # Direct read of `a.endpoint` inside the per-batch loop.
+        self.assertIn("Uri:     a.endpoint,", rendered)
+        # macros wiring absent.
+        self.assertNotIn("text/template", rendered)
+        self.assertNotIn("macros.ResolveMacros", rendered)
+        # resolveEndpoint helper NOT emitted (else go vet would flag it
+        # as unused).
+        self.assertNotIn("func (a *adapter) resolveEndpoint", rendered)
+
+    # --------------- forces parseImpExt helper to emit ------------------
+
+    def test_per_key_forces_parseImpExt_helper(self):
+        """F-new-7 EXT-A: dispatchImpressions calls parseImpExt per imp,
+        so the parseImpExt helper MUST be emitted even when
+        imp_ext_unmarshal_kind would otherwise suppress it. Without
+        this force-enable the rendered Go would fail compilation with
+        an undefined-symbol error."""
+        ctx = self._base_ctx()
+        # endpoint_resolution=static so F-new-2 doesn't also force-emit.
+        ctx["endpoint_resolution_kind"] = "static"
+        ctx["endpoint_macros"] = None
+        ctx["imports_extra"] = []
+        # imp_ext_unmarshal_kind="none" would normally suppress parseImpExt.
+        ctx["imp_ext_unmarshal_kind"] = "none"
+        rendered = _render("bidder.go.j2", ctx)
+        # Helper present despite imp_ext_unmarshal_kind == "none".
+        self.assertIn(
+            "func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImpAdkernelAdn, error)",
+            rendered,
+        )
+        # dispatchImpressions calls it.
+        self.assertIn("impExt, err := parseImpExt(&imps[i])", rendered)
+
+    # ----------------- backward-compat with other branches --------------
+
+    def test_other_batching_kinds_unaffected_by_per_key_ctx(self):
+        """F-new-7 EXT-A isolation: when batching_kind != "per-key" the
+        per-key branch MUST NOT fire — existing single-batched / per-imp /
+        max-imps-per-request branches render unchanged regardless of
+        whether `ctx.batching_per_key` is populated (operator may leave
+        it set as a no-op for non-per-key bidders)."""
+        for kind in ("single-batched", "per-imp", "max-imps-per-request"):
+            with self.subTest(kind=kind):
+                ctx = self._base_ctx()
+                ctx["batching_kind"] = kind
+                if kind == "max-imps-per-request":
+                    ctx["batching_max_imps"] = 5
+                # Leave batching_per_key populated as a no-op.
+                rendered = _render("bidder.go.j2", ctx)
+                # dispatchImpressions absent.
+                self.assertNotIn("func dispatchImpressions", rendered, kind)
+                self.assertNotIn("map[openrtb_ext.ExtImpAdkernelAdn][]openrtb2.Imp",
+                                 rendered, kind)
+                # resolveEndpoint keeps its `*openrtb2.BidRequest` signature.
+                self.assertIn(
+                    "func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest)",
+                    rendered, kind,
+                )
+
+    def test_missing_batching_per_key_falls_through_safely(self):
+        """F-new-7 EXT-A defensive: when batching_kind="per-key" but
+        ctx.batching_per_key is None / absent, the renderer still emits
+        a usable shape (helper_name defaults to "dispatchImpressions").
+        Operator may set per_key=None during a partial spec assembly and
+        the template should not crash."""
+        ctx = self._base_ctx()
+        ctx["batching_per_key"] = None
+        rendered = _render("bidder.go.j2", ctx)
+        # Default helper name used.
+        self.assertIn("func dispatchImpressions(", rendered)
+
+    # ----------------- compilation gate ---------------------------------
+
+    def test_per_key_template_macro_gofmt_clean(self):
+        """F-new-7 EXT-A + F-new-2: full adkernelAdn composition must be
+        gofmt-clean. Pinned to catch regressions in the multi-feature
+        render path."""
+        if shutil.which("gofmt") is None:
+            self.skipTest("gofmt not on PATH")
+        rendered = _render("bidder.go.j2", self._base_ctx())
+        result = subprocess.run(
+            ["gofmt", "-e"],
+            input=rendered.encode(),
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            f"gofmt rejected per-key + template-macro render:\n"
+            f"stderr={result.stderr.decode()}\n"
+            f"rendered={rendered}",
+        )
+
+    def test_per_key_static_endpoint_gofmt_clean(self):
+        """F-new-7 EXT-A standalone (no F-new-2 composition): per-key
+        with a static endpoint must also gofmt-clean. Verifies the
+        resolveEndpoint suppression doesn't leave a dangling brace."""
+        if shutil.which("gofmt") is None:
+            self.skipTest("gofmt not on PATH")
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "static"
+        ctx["endpoint_macros"] = None
+        ctx["imports_extra"] = []
+        rendered = _render("bidder.go.j2", ctx)
+        result = subprocess.run(
+            ["gofmt", "-e"],
+            input=rendered.encode(),
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            f"gofmt rejected per-key + static render:\n"
+            f"stderr={result.stderr.decode()}\n"
+            f"rendered={rendered}",
+        )
+
+
 class TestBidTypeResolutionBranches(unittest.TestCase):
     """D3.8 F8 fix — bidder.go.j2 getBidType covers 4 corpus patterns:
 
