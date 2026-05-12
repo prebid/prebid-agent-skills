@@ -45,7 +45,61 @@ Inputs (mirror of bidder.java.j2 ctx):
   ctx.batching_max_imps       : int|null
   ctx.endpoint_resolution_kind: str  — "static" | "single-token-substitution" |
                                         "query-parameter-augmentation" | "dev-prod-toggle"
-                                        | "multi-token-substitution"
+                                        | "template-macro" | "multi-token-substitution"
+  ctx.endpoint_macros         : list[{macro: str, ext_field: str, convert: str|None}] |
+                                        None — REQUIRED when
+                                        endpoint_resolution_kind ∈
+                                        {"template-macro", "multi-token-substitution"}.
+                                        Each entry maps one Go `macros.EndpointTemplateParams`
+                                        field to a Go expression read off the parsed ImpExt
+                                        struct. Keys:
+                                          - macro: str — canonical `EndpointTemplateParams`
+                                              field name (e.g. "PublisherID", "SupplyId",
+                                              "AdUnit", "TokenID"). See
+                                              prebid-server/macros/macros.go for the full
+                                              accepted set; unrecognized values still emit
+                                              but produce a Go compile error caught by the
+                                              `gofmt`/`go vet` post-process gate.
+                                          - ext_field: str — exact PascalCase field name on
+                                              the rendered `openrtb_ext.ExtImp{X}` struct
+                                              (e.g. "PublisherID", "Auth", "AdUnitId").
+                                              Template references this via `impExt.{ext_field}`.
+                                          - convert: str|None — value-conversion wrapper.
+                                              None / omitted → emit raw `impExt.{ext_field}`
+                                              (assumes string type). "itoa" → wrap with
+                                              `strconv.Itoa(impExt.{ext_field})` (int → string;
+                                              caller MUST add `"strconv"` to imports_extra).
+                                              "format-int64" → `strconv.FormatInt(impExt.{ext_field}, 10)`.
+                                              Other values pass through literally as the
+                                              full Go expression (escape hatch for unusual
+                                              conversions; operator vouches it compiles).
+                                        When endpoint_resolution_kind is
+                                        "template-macro" or "multi-token-substitution",
+                                        the template:
+                                          (a) adds the `EndpointTemplate *template.Template`
+                                              field to the adapter struct;
+                                          (b) parses `cfg.Endpoint` via `text/template`
+                                              at Builder time, returning fmt.Errorf on
+                                              parse failure;
+                                          (c) imports `"text/template"` +
+                                              `"github.com/prebid/prebid-server/{v}/macros"`;
+                                          (d) emits a resolveEndpoint that returns
+                                              `(string, error)`, parses the first imp's
+                                              ext, builds an `EndpointTemplateParams`
+                                              from `endpoint_macros`, and calls
+                                              `macros.ResolveMacros(...)` (mirrors upstream
+                                              adkernelAdn.go::buildEndpointURL +
+                                              adverxo.go::buildEndpointURL);
+                                          (e) updates all 3 MakeRequests callsites to
+                                              handle the error from resolveEndpoint
+                                              (single-batched / per-imp / max-imps).
+                                        When the list is empty or None, an empty
+                                        `EndpointTemplateParams{}` struct emits and the
+                                        template body short-circuits with a TODO comment
+                                        — useful for operator pre-emit (just the wiring,
+                                        no macro values yet).
+                                        Affects ~19% of corpus (adkernelAdn, adverxo,
+                                        thetradedesk + others under analysis).
   ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw" |
                                         "legacy-raw-go". The "legacy-raw-go"
                                         variant emits the same baseline 204+200
@@ -188,10 +242,26 @@ Inputs (mirror of bidder.java.j2 ctx):
 {%- else -%}
 {%- set _ok_suffix = "" -%}
 {%- endif -%}
+{# F-new-2 / F-new-27: endpoint_resolution_kind ∈ {template-macro,
+   multi-token-substitution} triggers the macros.ResolveMacros emission
+   branch. Adapter struct gains EndpointTemplate, Builder parses the
+   template once, resolveEndpoint flips to a (string, error) return and
+   3 callsites bind err → errors. Single predicate computed up-front so
+   import block / struct emit / signature emit / callsites stay in sync. #}
+{%- set _endpoint_needs_macros_resolution = (
+    ctx.endpoint_resolution_kind == "template-macro"
+    or ctx.endpoint_resolution_kind == "multi-token-substitution"
+) -%}
+{%- set _endpoint_macros_list = ctx.endpoint_macros or [] -%}
 {# F-new-1: imp_ext_unmarshal_kind=="none" skips both the per-imp call AND
    the parseImpExt helper. Compute once so call sites + helper definition
-   stay in sync. #}
-{%- set _emit_parse_imp_ext = ctx.imp_ext_unmarshal_kind != "none" -%}
+   stay in sync. F-new-2: when macros-resolution is active the parseImpExt
+   helper is required regardless (resolveEndpoint re-parses imp[0].ext to
+   read macro source fields), so force-enable it. #}
+{%- set _emit_parse_imp_ext = (
+    ctx.imp_ext_unmarshal_kind != "none"
+    or _endpoint_needs_macros_resolution
+) -%}
 {# F-new-1 partner: when neither currency-conversion nor parseImpExt has any
    per-imp work to do, the single-batched / max-imps inner loops collapse to
    an empty body. Drop the loop entirely (Go lints empty loops; upstream
@@ -233,12 +303,18 @@ import (
 {% if ctx.uses_currency_conversion %}
 	"strings"
 {% endif %}
+{% if _endpoint_needs_macros_resolution %}
+	"text/template"
+{% endif %}
 
 	"github.com/prebid/openrtb/v20/openrtb2"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/config"
 {% if _legacy_raw_go_with_handlers %}
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/errortypes"
+{% endif %}
+{% if _endpoint_needs_macros_resolution %}
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/macros"
 {% endif %}
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/util/jsonutil"
@@ -252,6 +328,9 @@ import (
 {% endif %}
 type adapter struct {
 	endpoint string
+{% if _endpoint_needs_macros_resolution %}
+	EndpointTemplate *template.Template
+{% endif %}
 {% if ctx.has_extra_info %}
 	extraInfo extraInfo
 {% endif %}
@@ -267,6 +346,13 @@ type extraInfo struct {
 {% endif %}
 func Builder(_ openrtb_ext.BidderName, cfg config.Adapter, _ config.Server) (adapters.Bidder, error) {
 	a := &adapter{endpoint: cfg.Endpoint}
+{% if _endpoint_needs_macros_resolution %}
+	tpl, err := template.New("{{ ctx.package_name }}EndpointTemplate").Parse(cfg.Endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse endpoint url template: %v", err)
+	}
+	a.EndpointTemplate = tpl
+{% endif %}
 {% if ctx.has_extra_info %}
 	if cfg.ExtraAdapterInfo != "" {
 		if err := json.Unmarshal([]byte(cfg.ExtraAdapterInfo), &a.extraInfo); err != nil {
@@ -301,6 +387,21 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 		return nil, append(errors, err)
 	}
 
+{% if _endpoint_needs_macros_resolution %}
+	uri, err := a.resolveEndpoint(request)
+	if err != nil {
+		return nil, append(errors, err)
+	}
+	return []*adapters.RequestData{
+		{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(request.Imp),
+		},
+	}, errors
+{% else %}
 	return []*adapters.RequestData{
 		{
 			Method:  http.MethodPost,
@@ -310,6 +411,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			ImpIDs:  openrtb_ext.GetImpIDs(request.Imp),
 		},
 	}, errors
+{% endif %}
 {% elif ctx.batching_kind == "per-imp" %}
 	requests := make([]*adapters.RequestData, 0, len(request.Imp))
 	for i := range request.Imp {
@@ -332,6 +434,20 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			errors = append(errors, err)
 			continue
 		}
+{% if _endpoint_needs_macros_resolution %}
+		uri, err := a.resolveEndpoint(&perImp)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perImp.Imp),
+		})
+{% else %}
 		requests = append(requests, &adapters.RequestData{
 			Method:  http.MethodPost,
 			Uri:     a.resolveEndpoint(&perImp),
@@ -339,6 +455,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			Headers: standardHeaders(),
 			ImpIDs:  openrtb_ext.GetImpIDs(perImp.Imp),
 		})
+{% endif %}
 	}
 	return requests, errors
 {% elif ctx.batching_kind == "max-imps-per-request" %}
@@ -368,6 +485,20 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			errors = append(errors, err)
 			continue
 		}
+{% if _endpoint_needs_macros_resolution %}
+		uri, err := a.resolveEndpoint(&chunkRequest)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp),
+		})
+{% else %}
 		requests = append(requests, &adapters.RequestData{
 			Method:  http.MethodPost,
 			Uri:     a.resolveEndpoint(&chunkRequest),
@@ -375,6 +506,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			Headers: standardHeaders(),
 			ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp),
 		})
+{% endif %}
 	}
 	return requests, errors
 {% else %}
@@ -489,6 +621,60 @@ func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_roo
 }
 {% endif %}
 
+{% if _endpoint_needs_macros_resolution %}
+{# F-new-2 / F-new-27: template-macro + multi-token-substitution real bodies.
+   Adapter parses cfg.Endpoint as a text/template at Builder time; here we
+   re-parse the first imp's ext (the per-imp ext is needed for the macro
+   values), build an EndpointTemplateParams from ctx.endpoint_macros, and
+   call macros.ResolveMacros. Pattern cribbed from upstream
+   adapters/adkernelAdn/adkernelAdn.go::buildEndpointURL (single macro,
+   single canary) + adapters/adverxo/adverxo.go::buildEndpointURL
+   (multi-token, two macros) + adapters/thetradedesk/thetradedesk.go::
+   buildEndpointURL (single macro string-typed).
+
+   The function flips to a (string, error) return — Builder's template.Parse
+   already guarantees the template compiles, but ResolveMacros can still
+   error on template evaluation (e.g. missing-field reference); operator
+   handling is to bubble the error up to MakeRequests' errors slice.
+
+   When ctx.endpoint_macros is empty / None, the params struct is empty —
+   operator gets the full wiring (struct field, Builder Parse, imports)
+   without macro values, and a TODO comment points them at the
+   ctx.endpoint_macros schema. Useful for the spec-emit pre-pass before
+   the operator has populated macros_used. #}
+func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) (string, error) {
+	if len(request.Imp) == 0 {
+		return "", fmt.Errorf("no imp to resolve endpoint")
+	}
+{% if _endpoint_macros_list | length > 0 %}
+	impExt, err := parseImpExt(&request.Imp[0])
+	if err != nil {
+		return "", fmt.Errorf("imp %s: failed reading imp.ext for endpoint macros: %w", request.Imp[0].ID, err)
+	}
+	endpointParams := macros.EndpointTemplateParams{
+{% for m in _endpoint_macros_list %}
+{% if m.convert == "itoa" %}
+		{{ m.macro }}: strconv.Itoa(impExt.{{ m.ext_field }}),
+{% elif m.convert == "format-int64" %}
+		{{ m.macro }}: strconv.FormatInt(impExt.{{ m.ext_field }}, 10),
+{% elif m.convert %}
+		{{ m.macro }}: {{ m.convert }},
+{% else %}
+		{{ m.macro }}: impExt.{{ m.ext_field }},
+{% endif %}
+{% endfor %}
+	}
+{% else %}
+	// TODO[port-java2go]: ctx.endpoint_macros is empty — operator populates
+	// the per-macro mapping per endpoint_resolution.macros_used /
+	// macro_field_set from the source spec. Each entry maps a
+	// macros.EndpointTemplateParams field to a Go expression on impExt
+	// (parsed via parseImpExt(&request.Imp[0]) when ctx populated).
+	endpointParams := macros.EndpointTemplateParams{}
+{% endif %}
+	return macros.ResolveMacros(a.EndpointTemplate, endpointParams)
+}
+{% else %}
 func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 {% if ctx.endpoint_resolution_kind == "static" %}
 	return a.endpoint
@@ -502,6 +688,7 @@ func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 	return a.endpoint
 {% endif %}
 }
+{% endif %}
 
 {% if _bid_type_returns_error %}
 func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) (openrtb_ext.BidType, error) {

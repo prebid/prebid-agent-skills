@@ -667,6 +667,347 @@ class TestBidderGoJ2(unittest.TestCase):
         )
 
 
+class TestEndpointResolutionMacros(unittest.TestCase):
+    """F-new-2 / F-new-27 — bidder.go.j2 resolveEndpoint covers the
+    `template-macro` and `multi-token-substitution` kinds, replacing the
+    previous TODO-stub fall-through with the canonical Go
+    `macros.ResolveMacros` pattern.
+
+    The two kinds are mechanically identical in the emit (both use
+    `text/template` + `macros.EndpointTemplateParams` + `ResolveMacros`);
+    they differ only in the *number* of macros (`template-macro` ≈ 1,
+    `multi-token-substitution` ≈ N>=2). The template branch keys off the
+    union of both kinds via `_endpoint_needs_macros_resolution`.
+
+    Upstream canonical references:
+      - adapters/adkernelAdn/adkernelAdn.go::buildEndpointURL (1 macro)
+      - adapters/thetradedesk/thetradedesk.go::buildEndpointURL (1 macro)
+      - adapters/adverxo/adverxo.go::buildEndpointURL (2 macros, mixed
+        int+string conversions)
+    """
+
+    def _base_ctx(self) -> Dict[str, Any]:
+        """Shared ctx baseline mirroring the adkernelAdn-shape that all 3
+        canaries (adkernelAdn, thetradedesk, adverxo) lean on. Subclasses
+        override `endpoint_resolution_kind`, `endpoint_macros`,
+        `imports_extra` per shape."""
+        return {
+            "package_name": "demobidder",
+            "bidder_class_root": "Demobidder",
+            "uses_currency_conversion": False,
+            "imp_ext_class_root": "Demobidder",
+            "imp_ext_unmarshal_kind": "standard-two-phase",
+            "batching_kind": "single-batched",
+            "batching_max_imps": None,
+            "endpoint_resolution_kind": "template-macro",
+            "http_status_kind": "canonical-helpers",
+            "bid_type_resolution": "imp-mediatype-introspection",
+            "has_extra_info": False,
+            "module_version": GO_MODULE_VERSION,
+            "imports_extra": [],
+            "javadoc_summary": None,
+            "endpoint_macros": [],
+        }
+
+    # ----------------------- imports + struct wiring ---------------------
+
+    def test_template_macro_imports_text_template_and_macros(self):
+        """F-new-2: template-macro must add `"text/template"` and
+        `"github.com/prebid/prebid-server/{v}/macros"` to the import block."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "PublisherID", "ext_field": "PublisherID",
+             "convert": "itoa"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn('"text/template"', rendered)
+        self.assertIn('"github.com/prebid/prebid-server/v4/macros"', rendered)
+
+    def test_multi_token_imports_text_template_and_macros(self):
+        """F-new-27: same import set for multi-token-substitution."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "multi-token-substitution"
+        ctx["endpoint_macros"] = [
+            {"macro": "AdUnit", "ext_field": "AdUnitId", "convert": "itoa"},
+            {"macro": "TokenID", "ext_field": "Auth", "convert": None},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn('"text/template"', rendered)
+        self.assertIn('"github.com/prebid/prebid-server/v4/macros"', rendered)
+
+    def test_adapter_struct_gains_endpoint_template_field(self):
+        """F-new-2: adapter struct gains `EndpointTemplate *template.Template`
+        field when macros-resolution active. Field name PascalCase per
+        upstream adkernelAdn shape (deliberate — exported, though Go-private
+        use; mirrors upstream choice)."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "PublisherID", "ext_field": "PublisherID",
+             "convert": "itoa"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("EndpointTemplate *template.Template", rendered)
+
+    # ----------------------- Builder template parse ----------------------
+
+    def test_builder_parses_endpoint_template(self):
+        """F-new-2: Builder must call `template.New(...).Parse(cfg.Endpoint)`
+        and return fmt.Errorf on parse failure. Matches upstream
+        adkernelAdn.go::Builder shape."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "PublisherID", "ext_field": "PublisherID",
+             "convert": "itoa"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn(
+            'template.New("demobidderEndpointTemplate").Parse(cfg.Endpoint)',
+            rendered,
+        )
+        self.assertIn(
+            'fmt.Errorf("unable to parse endpoint url template: %v", err)',
+            rendered,
+        )
+        # Field is wired onto the adapter.
+        self.assertIn("a.EndpointTemplate = tpl", rendered)
+
+    # ----------------------- resolveEndpoint body ------------------------
+
+    def test_template_macro_single_macro_emits_macros_resolve(self):
+        """F-new-2 baseline (adkernelAdn shape): template-macro with a single
+        macro (`PublisherID`) emits the canonical macros.ResolveMacros
+        body — parse imp.ext, build EndpointTemplateParams, call
+        ResolveMacros. The signature flips to `(string, error)`."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "PublisherID", "ext_field": "PublisherID",
+             "convert": "itoa"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        rendered = _render("bidder.go.j2", ctx)
+        # Signature flipped to (string, error).
+        self.assertIn(
+            "func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) (string, error)",
+            rendered,
+        )
+        # Old no-error signature absent.
+        self.assertNotIn(
+            "func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string",
+            rendered,
+        )
+        # impExt parse + macros struct populated + ResolveMacros call.
+        self.assertIn("impExt, err := parseImpExt(&request.Imp[0])", rendered)
+        self.assertIn("endpointParams := macros.EndpointTemplateParams{", rendered)
+        self.assertIn("PublisherID: strconv.Itoa(impExt.PublisherID),", rendered)
+        self.assertIn(
+            "return macros.ResolveMacros(a.EndpointTemplate, endpointParams)",
+            rendered,
+        )
+
+    def test_multi_token_two_macros_emit_in_declared_order(self):
+        """F-new-27 baseline (adverxo shape): multi-token-substitution with
+        two macros (`AdUnit` int + `TokenID` string) emits both fields in
+        declared order. Mixed-conversion case — first macro uses itoa,
+        second is raw string."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "multi-token-substitution"
+        ctx["endpoint_macros"] = [
+            {"macro": "AdUnit", "ext_field": "AdUnitId", "convert": "itoa"},
+            {"macro": "TokenID", "ext_field": "Auth", "convert": None},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        rendered = _render("bidder.go.j2", ctx)
+        # Both macros emit with correct conversions.
+        self.assertIn("AdUnit: strconv.Itoa(impExt.AdUnitId),", rendered)
+        self.assertIn("TokenID: impExt.Auth,", rendered)
+        # Declared order: AdUnit before TokenID.
+        ad_unit_idx = rendered.index("AdUnit: strconv.Itoa")
+        token_id_idx = rendered.index("TokenID: impExt.Auth")
+        self.assertLess(ad_unit_idx, token_id_idx)
+        # ResolveMacros call present.
+        self.assertIn(
+            "return macros.ResolveMacros(a.EndpointTemplate, endpointParams)",
+            rendered,
+        )
+
+    def test_template_macro_string_macro_no_convert(self):
+        """F-new-2 (thetradedesk shape): template-macro with a single
+        string-typed macro (`SupplyId` from a string ext field). When
+        `convert` is None/omitted, the value emits as raw `impExt.<field>`
+        with no wrapping. Mirrors upstream thetradedesk.go::buildEndpointURL."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "SupplyId", "ext_field": "PublisherId", "convert": None},
+        ]
+        # No strconv needed — ext_field is string-typed.
+        ctx["imports_extra"] = []
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("SupplyId: impExt.PublisherId,", rendered)
+        # No strconv import or call.
+        self.assertNotIn("strconv.Itoa", rendered)
+
+    # ------------------------ callsite error-handling --------------------
+
+    def test_callsite_single_batched_handles_error(self):
+        """F-new-2: single-batched MakeRequests callsite binds the error
+        from resolveEndpoint and appends to the errors slice."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "PublisherID", "ext_field": "PublisherID",
+             "convert": "itoa"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        ctx["batching_kind"] = "single-batched"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("uri, err := a.resolveEndpoint(request)", rendered)
+        self.assertIn("return nil, append(errors, err)", rendered)
+        # Uri field uses bound variable, not direct call.
+        self.assertRegex(rendered, r"Uri:\s+uri,")
+
+    def test_callsite_per_imp_handles_error(self):
+        """F-new-2: per-imp batching MakeRequests callsite binds the
+        resolveEndpoint error per-imp; on error, `continue` skips that
+        imp's RequestData."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "multi-token-substitution"
+        ctx["endpoint_macros"] = [
+            {"macro": "AdUnit", "ext_field": "AdUnitId", "convert": "itoa"},
+            {"macro": "TokenID", "ext_field": "Auth", "convert": None},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        ctx["batching_kind"] = "per-imp"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("uri, err := a.resolveEndpoint(&perImp)", rendered)
+        # Per-imp loop body has `continue` on resolveEndpoint error.
+        self.assertIn("errors = append(errors, err)", rendered)
+        # Uri field uses the bound variable (spacing is gofmt-controlled —
+        # match the bare `Uri:` + `uri,` pair, not exact whitespace).
+        self.assertRegex(rendered, r"Uri:\s+uri,")
+
+    # ------------------------ empty-macros TODO ------------------------
+
+    def test_empty_endpoint_macros_emits_todo_with_wiring(self):
+        """F-new-2 staged emit: when ctx.endpoint_macros is empty / None,
+        the wiring (struct field, Builder Parse, imports, ResolveMacros
+        call) still emits but the EndpointTemplateParams struct is empty
+        and a TODO comment cues the operator. Useful for pre-pass emit
+        before the operator has populated macros_used."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = []
+        rendered = _render("bidder.go.j2", ctx)
+        # Wiring present.
+        self.assertIn("EndpointTemplate *template.Template", rendered)
+        self.assertIn('"text/template"', rendered)
+        # Empty struct.
+        self.assertIn("endpointParams := macros.EndpointTemplateParams{}", rendered)
+        # TODO comment cues the operator at the right schema field.
+        self.assertIn(
+            "TODO[port-java2go]: ctx.endpoint_macros is empty",
+            rendered,
+        )
+        # ResolveMacros still invoked.
+        self.assertIn(
+            "macros.ResolveMacros(a.EndpointTemplate, endpointParams)",
+            rendered,
+        )
+
+    def test_empty_endpoint_macros_skips_imp_parse(self):
+        """F-new-2: empty endpoint_macros means we have no impExt fields to
+        read — skip the parseImpExt call inside resolveEndpoint to avoid
+        an unused-variable Go compile error. The per-imp parseImpExt is
+        still in the per-imp loop (the bidder may need it for validation),
+        but resolveEndpoint's local parse is gated on macros being
+        present."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = []
+        rendered = _render("bidder.go.j2", ctx)
+        # Inside resolveEndpoint, no local impExt parse.
+        resolve_idx = rendered.index("func (a *adapter) resolveEndpoint")
+        # Body ends at next func (we'll just look at next 500 chars).
+        body = rendered[resolve_idx:resolve_idx + 600]
+        self.assertNotIn("impExt, err := parseImpExt", body)
+
+    # ------------------------ kind isolation -----------------------------
+
+    def test_other_endpoint_kinds_unaffected(self):
+        """F-new-2 isolation: when endpoint_resolution_kind is `static` /
+        `dev-prod-toggle` / `query-parameter-augmentation` /
+        `single-token-substitution`, the macros-resolution wiring MUST
+        NOT emit — old behavior preserved."""
+        for kind in (
+            "static",
+            "dev-prod-toggle",
+            "query-parameter-augmentation",
+            "single-token-substitution",
+        ):
+            with self.subTest(kind=kind):
+                ctx = self._base_ctx()
+                ctx["endpoint_resolution_kind"] = kind
+                rendered = _render("bidder.go.j2", ctx)
+                # Macros-resolution artifacts absent.
+                self.assertNotIn('"text/template"', rendered, kind)
+                self.assertNotIn(
+                    '"github.com/prebid/prebid-server/v4/macros"',
+                    rendered,
+                    kind,
+                )
+                self.assertNotIn("EndpointTemplate", rendered, kind)
+                self.assertNotIn("macros.ResolveMacros", rendered, kind)
+                # resolveEndpoint keeps the no-error signature.
+                self.assertIn(
+                    "func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string",
+                    rendered,
+                    kind,
+                )
+
+    # ----------------------- conversion variants -------------------------
+
+    def test_convert_format_int64_emits_strconv_formatint(self):
+        """F-new-2 conversion variant: `convert: "format-int64"` emits the
+        `strconv.FormatInt(impExt.X, 10)` wrapper. Useful when the ExtImp
+        field is `int64` rather than plain `int` (Go strconv.Itoa rejects
+        int64)."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "AccountID", "ext_field": "AccountId",
+             "convert": "format-int64"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn(
+            "AccountID: strconv.FormatInt(impExt.AccountId, 10),",
+            rendered,
+        )
+
+    def test_convert_escape_hatch_passthrough(self):
+        """F-new-2 escape hatch: when `convert` is set to a non-recognized
+        value, the template treats it as a full Go expression and passes
+        it through verbatim. Operator-vouched compile; useful for unusual
+        type conversions outside the {None, itoa, format-int64} set."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "Host", "ext_field": "Host",
+             "convert": 'strings.ToLower(impExt.Host)'},
+        ]
+        ctx["imports_extra"] = ["strings"]
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("Host: strings.ToLower(impExt.Host),", rendered)
+
+
 class TestBidTypeResolutionBranches(unittest.TestCase):
     """D3.8 F8 fix — bidder.go.j2 getBidType covers 4 corpus patterns:
 

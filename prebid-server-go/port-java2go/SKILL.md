@@ -10,7 +10,7 @@ version: 0.5.0
 >
 > **Production-ready for canary porting** with 1-2 hour operator hand-fill per pair (workarounds documented in each canary trace under `docs/runs/d3.8-*-canary-*.md`). NOT YET v1.0.0. Promotion to v1.0.0 needs:
 >
-> 1. Template-macro / multi-token-substitution real bodies (F-new-2, F-new-27 — confirmed in 2/5 canaries; currently TODO stubs)
+> 1. ~~Template-macro / multi-token-substitution real bodies (F-new-2, F-new-27 — confirmed in 2/5 canaries; currently TODO stubs)~~ **LANDED** — `feat/f2-port-java2go-v1.0.0` (resolveEndpoint flips to `(string, error)`; emits `text/template` + `macros.ResolveMacros` per upstream adkernelAdn/adverxo/thetradedesk; new `ctx.endpoint_macros` schema documented in template header + Step 4 prose below).
 > 2. Per-key batching template branch (F-new-7 EXT-A — adkernelAdn)
 > 3. imp-id-correlation template branch (F-new-7 EXT-B — adkernelAdn)
 > 4. `naming_form_resolution` ctx schema (F-new-34 Rule 46 master-sample)
@@ -150,6 +150,23 @@ The remaining 36 rules are handled prose-driven (the SKILL walks the rule's pros
 - Java `ImpUtil.parseImpExt(imp, mapper, ExtImpFoo.class)` → Go explicit `var bidderExt openrtb_ext.ExtBidder; if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil { ... }; var fooExt openrtb_ext.ExtImpFoo; if err := jsonutil.Unmarshal(bidderExt.Bidder, &fooExt); err != nil { ... }`.
 
 These expansions are documented in `references/porting-guide.md` (the inverse porting guide) and emitted in the Go-side templates.
+
+**Endpoint-macros resolution (Rule 11/12 — F-new-2 / F-new-27).** When `source_spec.code.make_requests.endpoint_resolution.kind` ∈ `{template-macro, multi-token-substitution}`, the template emits the canonical Go `text/template` + `macros.ResolveMacros` pattern instead of the previous TODO-stub `return a.endpoint` catchall. Concretely the destination spec carries two new ctx fields the renderer wires through to `bidder.go.j2`:
+
+- `ctx.endpoint_resolution_kind`: pass through `template-macro` or `multi-token-substitution` (no transformation needed; the source-side enum maps 1:1).
+- `ctx.endpoint_macros: list[{macro, ext_field, convert}]`: one entry per macro the Go endpoint URL references. `macro` is the canonical `macros.EndpointTemplateParams` field name (PublisherID, SupplyId, AdUnit, TokenID, AccountID, …); `ext_field` is the exact PascalCase field on the rendered `openrtb_ext.ExtImp{X}` struct; `convert` is one of `null` (raw string passthrough), `"itoa"` (int → string via `strconv.Itoa`), `"format-int64"` (int64 → string via `strconv.FormatInt(..., 10)`), or a literal Go expression (escape hatch when the conversion isn't itoa/format-int64). When `convert` is `itoa` or `format-int64` the renderer MUST add `"strconv"` to `ctx.imports_extra` (the template assumes the symbol is in-scope).
+
+When this branch fires, the template emits five paired changes (all gated on the same predicate):
+
+1. **Imports**: adds `"text/template"` and `"github.com/prebid/prebid-server/{v}/macros"` to the import block.
+2. **Adapter struct**: adds an `EndpointTemplate *template.Template` field (PascalCase per upstream adkernelAdn shape — exported convention preserved even though the field's Go-private use).
+3. **Builder**: calls `template.New("{package}EndpointTemplate").Parse(cfg.Endpoint)`, returning `fmt.Errorf("unable to parse endpoint url template: %v", err)` on failure (verbatim upstream error string).
+4. **resolveEndpoint** signature flips from `string` to `(string, error)`; the body parses `request.Imp[0]`'s ext via the existing `parseImpExt` helper, builds an `EndpointTemplateParams` literal from `ctx.endpoint_macros`, and returns `macros.ResolveMacros(a.EndpointTemplate, endpointParams)`. The `parseImpExt` local re-parse is the same shape upstream uses in `thetradedesk.go::getExtensionInfo` (walk imps until the macro fields are populated; we shortcut to imp[0] since the per-imp loop in MakeRequests has already validated each).
+5. **MakeRequests callsites** (all three batching branches: single-batched, per-imp, max-imps-per-request) bind the error and either return-append-errors (single-batched) or `continue` to the next imp/chunk (per-imp, max-imps).
+
+The previous TODO-stub catchall is retained for the third non-trivial endpoint kind, `query-parameter-augmentation` (separate audit ticket F-new-X), and for any operator-introduced novel kinds. Other kinds (`static`, `dev-prod-toggle`, `single-token-substitution`) are unchanged.
+
+Canonical reference adapters: `adapters/adkernelAdn/adkernelAdn.go::buildEndpointURL` (1 macro, int → itoa); `adapters/thetradedesk/thetradedesk.go::buildEndpointURL` (1 macro, string passthrough); `adapters/adverxo/adverxo.go::buildEndpointURL` (2 macros, mixed int+string).
 
 **Cross-language metadata.** Same as D2 §Step 4 with directions reversed:
 
