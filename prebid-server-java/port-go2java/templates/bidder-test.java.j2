@@ -28,6 +28,9 @@ sized for the canonical bidder shape; bidders with extra logic (Rule 35
 typed-config branches, custom URL resolution) need additional scenario
 methods to reach 90%.
 #}
+{%- macro to_camel(s) -%}
+{%- set parts = s.split('_') -%}{{ parts[0] }}{%- for p in parts[1:] -%}{%- if p -%}{{ p[0]|upper }}{{ p[1:] }}{%- endif -%}{%- endfor -%}
+{%- endmacro -%}
 package org.prebid.server.bidder.{{ ctx.bidder_name }};
 
 import com.iab.openrtb.request.BidRequest;
@@ -140,19 +143,22 @@ public class {{ ctx.bidder_class_root }}BidderTest extends VertxTest {
 
 {% for scenario in ctx.scenario_methods %}
     @Test
-    public void {{ scenario.method_name }}() {
+    public void {{ to_camel(scenario.method_name) }}() {
         // {{ scenario.summary }}
         // TODO[port-go2java]: operator fills body from source spec's
         // tests.fixture_inventory.exemplary[] entry. The fixture has the
         // expected request shape, mock response, and expected bid output.
-        org.junit.jupiter.api.Assertions.fail("scenario {{ scenario.method_name }} not yet implemented");
+        org.junit.jupiter.api.Assertions.fail(
+                "scenario {{ to_camel(scenario.method_name) }} not yet implemented");
     }
 
 {% endfor %}
     private static BidRequest givenBidRequest(UnaryOperator<Imp.ImpBuilder> impCustomizer) {
         return BidRequest.builder()
-                .imp(List.of(impCustomizer.apply(Imp.builder().id("imp-1").ext(jacksonMapper.mapper().valueToTree(
-                        ExtPrebid.of(null, ExtImp{{ ctx.imp_ext_class_root }}.of({{ ctx.imp_ext_field_pairs | map(attribute='default_value') | join(', ') }}))))).build()))
+                .imp(List.of(impCustomizer.apply(Imp.builder().id("imp-1")
+                        .ext(jacksonMapper.mapper().valueToTree(
+                                ExtPrebid.of(null, ExtImp{{ ctx.imp_ext_class_root }}.of(
+                                        {{ ctx.imp_ext_field_pairs | map(attribute='default_value') | join(', ') }}))))).build()))
                 .build();
     }
 

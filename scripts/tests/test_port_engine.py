@@ -1992,5 +1992,123 @@ class TestExemplaryFixtureAssembleJavaToGo(unittest.TestCase):
             )
 
 
+class TestExtractEntityStrategies(unittest.TestCase):
+    """Tests for port_engine.extract_entity_strategies — F-new-78 helper.
+
+    Reads source_spec.code.make_requests.mutation.entity_strategies and returns
+    the {Entity: strategy_kind} dict for use as ctx.entity_strategies in
+    bidder.java.j2's makeHttpRequests scaffold (Rule 5). Fails soft (returns
+    None) for any malformed-intermediate-dict path so the template's
+    `{% if ctx.entity_strategies %}` guard can fall back to passthrough.
+    """
+
+    def test_happy_path_returns_dict(self):
+        """Kobler-shape source spec: nested at code.make_requests.mutation
+        .entity_strategies returns the dict verbatim."""
+        from scripts.lib.port_engine import extract_entity_strategies
+
+        spec = {
+            "code": {
+                "make_requests": {
+                    "mutation": {
+                        "entity_strategies": {
+                            "Imp": "in-place",
+                            "Device": "in-place",
+                            "User": "in-place",
+                            "Cur": "append-if-missing",
+                        }
+                    }
+                }
+            }
+        }
+        result = extract_entity_strategies(spec)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["Imp"], "in-place")
+        self.assertEqual(result["Cur"], "append-if-missing")
+        self.assertEqual(len(result), 4)
+
+    def test_vungle_shape_returns_synthesis_kinds(self):
+        """Vungle-shape source spec: F3 Site/App synthesis kinds preserved."""
+        from scripts.lib.port_engine import extract_entity_strategies
+
+        spec = {
+            "code": {
+                "make_requests": {
+                    "mutation": {
+                        "entity_strategies": {
+                            "Imp": "in-place",
+                            "Site": "replace-with-app-synthesis",
+                            "App": "synthesize-app-replacement",
+                            "Cur": "none",
+                            "Device": "none",
+                        }
+                    }
+                }
+            }
+        }
+        result = extract_entity_strategies(spec)
+        self.assertEqual(result["Site"], "replace-with-app-synthesis")
+        self.assertEqual(result["App"], "synthesize-app-replacement")
+        # `none` kinds are preserved verbatim — the template's `not in
+        # ("passthrough", "none")` guard handles suppression at render time.
+        self.assertEqual(result["Cur"], "none")
+
+    def test_missing_intermediate_dict_returns_none(self):
+        """When code.make_requests is absent, return None (the template's
+        {% if ctx.entity_strategies %} guard falls back to passthrough)."""
+        from scripts.lib.port_engine import extract_entity_strategies
+
+        self.assertIsNone(extract_entity_strategies({}))
+        self.assertIsNone(extract_entity_strategies({"code": {}}))
+        self.assertIsNone(extract_entity_strategies({"code": {"make_requests": {}}}))
+        self.assertIsNone(
+            extract_entity_strategies({"code": {"make_requests": {"mutation": {}}}})
+        )
+
+    def test_non_dict_at_each_level_returns_none(self):
+        """Defensive: when any intermediate path holds a non-dict (list,
+        scalar, None), return None rather than raising AttributeError."""
+        from scripts.lib.port_engine import extract_entity_strategies
+
+        self.assertIsNone(extract_entity_strategies(None))
+        self.assertIsNone(extract_entity_strategies("not-a-dict"))
+        self.assertIsNone(extract_entity_strategies([]))
+        self.assertIsNone(extract_entity_strategies({"code": "scalar"}))
+        self.assertIsNone(extract_entity_strategies({"code": {"make_requests": []}}))
+        self.assertIsNone(
+            extract_entity_strategies({"code": {"make_requests": {"mutation": "scalar"}}})
+        )
+        # entity_strategies must itself be a dict; lists/scalars return None
+        self.assertIsNone(
+            extract_entity_strategies(
+                {"code": {"make_requests": {"mutation": {"entity_strategies": []}}}}
+            )
+        )
+        self.assertIsNone(
+            extract_entity_strategies(
+                {"code": {"make_requests": {"mutation": {"entity_strategies": "x"}}}}
+            )
+        )
+
+    def test_key_preservation_invariant(self):
+        """The helper does NOT mutate, filter, or normalize the dict — it
+        returns the source dict verbatim. Caller can rely on this for the
+        template's per-entity TODO emission to mirror what the spec carries."""
+        from scripts.lib.port_engine import extract_entity_strategies
+
+        original = {
+            "Imp": "in-place",
+            "UNKNOWN_ENTITY": "future-strategy-kind",  # forward-compat
+            "Cur": "append-if-missing",
+        }
+        spec = {
+            "code": {"make_requests": {"mutation": {"entity_strategies": original}}}
+        }
+        result = extract_entity_strategies(spec)
+        self.assertEqual(result, original)
+        # Identity preserved (caller can compare by key/value).
+        self.assertIn("UNKNOWN_ENTITY", result)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

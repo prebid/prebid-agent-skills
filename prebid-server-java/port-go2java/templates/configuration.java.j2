@@ -25,15 +25,16 @@ form vs Kobler "Configuration" form): both forms are accepted by upstream; this 
 emits the "Configuration" form as default. Operator flag --bidder-configuration-form
 (future) can switch to the BidderConfiguration form.
 
-ImportOrder strict 3-group: java.*, javax.* (none here), then com.* + jakarta.* +
-org.* alphabetical. EmptyLineSeparator between imports groups + members.
+ImportOrder per upstream checkstyle.xml `groups="*,/^java|^jakarta/"`,
+`separated=true`: the catch-all `*` group (org.*, com.*, lombok.*) comes FIRST,
+then a blank line, then `java.*` + `jakarta.*` at the BOTTOM. This is inverted
+from typical Java conventions.
 
 The PropertySource @value path is hardcoded to classpath:/bidder-config/{bidder}.yaml
 (the upstream convention; matches the bidder-config.yaml.j2 emission).
 #}
 package org.prebid.server.spring.config.bidder;
 
-import jakarta.validation.constraints.NotBlank;
 import org.prebid.server.bidder.BidderDeps;
 import org.prebid.server.bidder.{{ ctx.bidder_name }}.{{ ctx.bidder_class_root }}Bidder;
 {% if ctx.uses_currency_conversion %}
@@ -44,7 +45,6 @@ import org.prebid.server.json.JacksonMapper;
 import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;
 {% endif %}
 import org.prebid.server.spring.config.bidder.util.BidderDepsAssembler;
-import org.prebid.server.spring.config.bidder.util.BidderInfoCreator;
 import org.prebid.server.spring.config.bidder.util.UsersyncerCreator;
 import org.prebid.server.spring.env.YamlPropertySourceFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,6 +56,9 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.validation.annotation.Validated;
 {% endif %}
 
+import jakarta.validation.constraints.NotBlank;
+
+{% set config_class = ctx.config_class_name if ctx.config_class_name else (ctx.bidder_class_root ~ 'Configuration') %}
 {% if ctx.javadoc_summary %}
 /**
  * {{ ctx.javadoc_summary }}
@@ -63,7 +66,7 @@ import org.springframework.validation.annotation.Validated;
 {% endif %}
 @Configuration
 @PropertySource(value = "classpath:/bidder-config/{{ ctx.bidder_name }}.yaml", factory = YamlPropertySourceFactory.class)
-public class {{ ctx.bidder_class_root }}Configuration {
+public class {{ config_class }} {
 
     private static final String BIDDER_NAME = "{{ ctx.bidder_name }}";
 
@@ -101,7 +104,6 @@ public class {{ ctx.bidder_class_root }}Configuration {
         return BidderDepsAssembler.forBidder(BIDDER_NAME)
                 .withConfig({{ ctx.bidder_name }}ConfigurationProperties)
                 .usersyncerCreator(UsersyncerCreator.create(externalUrl))
-                .bidderInfo(BidderInfoCreator.create(mapper)::create)
                 .bidderCreator(config -> new {{ ctx.bidder_class_root }}Bidder(config.getEndpoint(){% if ctx.uses_currency_conversion %}, currencyConversionService{% endif %}{% if ctx.bidder_creator_extra_args %}, {{ ctx.bidder_creator_extra_args }}{% endif %}, mapper))
                 .assemble();
     }

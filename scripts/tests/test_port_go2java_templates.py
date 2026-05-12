@@ -570,9 +570,20 @@ class TestBidderJ2(unittest.TestCase):
         )
 
     def test_canonical_helpers_emit_when_rule_30_applies(self):
+        """Rule 30 'canonical-helpers' maps to Java's framework-default behavior:
+        the HTTP layer handles 204 and non-200 before makeBids is invoked, so
+        the template emits NO explicit status-check code (matches upstream
+        KoblerBidder.makeBids; F-new-90 retired the non-existent
+        BidderUtil.isResponseStatusCodeNoContent / .checkResponseStatusCode
+        method calls our earlier template had emitted).
+        """
         rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
-        self.assertIn("BidderUtil.isResponseStatusCodeNoContent(response)", rendered)
-        self.assertIn("BidderUtil.checkResponseStatusCode(response);", rendered)
+        self.assertNotIn("BidderUtil.isResponseStatusCodeNoContent", rendered)
+        self.assertNotIn("BidderUtil.checkResponseStatusCode", rendered)
+        # Emit should explain WHY there's no explicit status check (review-readability).
+        self.assertIn("Rule 30 (canonical-helpers)", rendered)
+        # mapper.decodeValue must still wire through (the bid-response parsing path)
+        self.assertIn("mapper.decodeValue(httpCall.getResponse().getBody()", rendered)
 
     def test_legacy_raw_status_when_rule_30_inapplicable(self):
         ctx = _kobler_bidder_ctx()
@@ -583,11 +594,19 @@ class TestBidderJ2(unittest.TestCase):
         self.assertNotIn("isResponseStatusCodeNoContent", rendered)
 
     def test_per_imp_batching_loops_through_imps(self):
+        """Per-imp batching emits a per-imp loop with toBuilder rebuild.
+        F-new-78 introduced an indirection: the loop body builds a `modifiedImp`
+        local (which equals `imp` when ctx.entity_strategies is absent, or
+        gains a `.toBuilder()...build()` mutation chain when present), and the
+        per-imp request wraps `modifiedImp` rather than `imp` directly.
+        """
         ctx = _kobler_bidder_ctx()
         ctx["batching_kind"] = "per-imp"
         rendered = _render("bidder.java.j2", ctx)
         self.assertIn("for (Imp imp : bidRequest.getImp())", rendered)
-        self.assertIn(".imp(Collections.singletonList(imp))", rendered)
+        self.assertIn(".imp(Collections.singletonList(modifiedImp))", rendered)
+        # No entity_strategies in test ctx → modifiedImp falls back to imp
+        self.assertIn("final Imp modifiedImp = imp;", rendered)
 
     def test_max_imps_emits_chunker_helper(self):
         ctx = _kobler_bidder_ctx()
@@ -659,10 +678,16 @@ class TestBidderTestJ2(unittest.TestCase):
         self.assertIn("// TODO[port-go2java]: operator fills body", rendered)
 
     def test_givenbidrequest_helper_emits_imp_ext_fields(self):
+        """The single field "test" with default value "true" should appear
+        in ExtImpKobler.of(...). F-new-61 LineLength wrap may split the
+        constructor's args onto the next line — assert call + arg are
+        proximate (within 100 chars), not strict same-line equality.
+        """
         rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
-        # The single field "test" with default value "true" should appear
-        # in ExtImpKobler.of(true).
-        self.assertIn("ExtImpKobler.of(true)", rendered)
+        idx = rendered.find("ExtImpKobler.of(")
+        self.assertGreater(idx, 0, "ExtImpKobler.of( call must be emitted")
+        # The default value should be within the call's arg span (~100 char window)
+        self.assertIn("true", rendered[idx:idx + 100])
 
 
 class TestItTestJ2(unittest.TestCase):
@@ -691,13 +716,16 @@ class TestItTestJ2(unittest.TestCase):
         self.assertIn("Endpoint.openrtb2_auction", rendered)
 
     def test_scenario_method_emits_with_wiremock_stub(self):
+        """F-new-61 LineLength wrap split jsonFrom("<long-path>") across two
+        lines (the fixture-path string literal goes on the next line at
+        24-char indent). Assert the call + the fixture path are present;
+        don't require them on the same line.
+        """
         rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
         self.assertIn("public void openrtb2AuctionShouldRespondWithBidsFromKoblerBidder()", rendered)
         self.assertIn('post(urlPathEqualTo("/kobler-exchange"))', rendered)
-        self.assertIn(
-            'jsonFrom("openrtb2/kobler/test-kobler-bid-request.json")',
-            rendered,
-        )
+        self.assertIn("jsonFrom(", rendered)
+        self.assertIn('"openrtb2/kobler/test-kobler-bid-request.json"', rendered)
 
     def test_single_seat_uses_singletonlist(self):
         rendered = _render("it-test.java.j2", _kobler_it_test_ctx())
