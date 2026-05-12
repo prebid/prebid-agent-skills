@@ -1,7 +1,7 @@
 ---
 name: bidder-info-pr-review
 description: Reviews changes to bidder-info YAML files at static/bidder-info/*.yaml. USE WHEN a PR adds/modifies/removes any of these files. Verifies endpoint reachability, alias parent existence and inheritance, GVL vendor lookups, user-sync URL macros, white-label policy compliance, capability declarations, and SSL certificate validity. Do NOT use for static/bidder-params/*.json, openrtb_ext/imp_*.go, or adapter Go code.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Bidder Info PR Review
@@ -76,6 +76,27 @@ curl -sS "https://raw.githubusercontent.com/{owner}/{repo}/master/static/bidder-
 - For `added` files: full content is already in the patch (all `+` lines) — do NOT re-fetch
 - For `modified` files: only fetch if the verification workflow requires context beyond the diff hunks
 - Cache fetched content — do not re-fetch the same file multiple times
+
+**1f. Cross-language port-fidelity check (port PRs only).**
+
+If the triage manifest contains a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port (typically Java → Go via the Teal flow). Each entry is a port-fidelity flag tagged with `info`/`warn`/`fail` severity per [pr-triage/SKILL.md `prior_source_spec` severity policy](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec):
+
+- `info` — port asymmetries legitimate per the R5-shared field set (`bidder_info.capabilities`, `bidder_info.gvl_vendor_id`, `bidder_info.geoscope`, `bidder_info.maintainer`, `bidder_info.modifying_vast_xml_allowed`, `bidder_info.endpoint_compression`) or per Rules 5 / 9 / 38 (e.g., Java's kebab-case YAML keys vs Go's camelCase keys for the same field; the SKILL handles the conversion).
+- `warn` — divergence touches an R5-strict cross-language equivalence (the 6 shared fields above MUST byte-equal across Go/Java after camelCase↔kebab-case normalization) or a known-master-sample pattern (e.g., F3 Site→App synthesis fidelity, F4 macros).
+- `fail` — a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail`.
+
+For each flagged finding:
+- Use the source-spec context to inform Step 4 verification. **Bidder-info-specific worked examples**:
+  - Source spec carries `bidder_info.geoscope=["EEA"]` → verify the Go YAML emits `geoscope: ["EEA"]` (R5-strict; case must match exactly; Java emits the same array shape).
+  - Source spec carries `bidder_info.capabilities.{site,app}.mediaTypes` → verify the Go YAML emits the SAME mediatype set on the SAME platform branches (capabilities is R5-strict; mismatch is a `warn`).
+  - Source spec carries `bidder_info.gvl_vendor_id` → verify the Go YAML emits `gvl-vendor-id` (kebab-case) with the SAME integer; mismatch is a `warn`.
+  - Source spec carries `bidder_info.endpoint_compression=gzip` → verify the Go YAML emits `endpoint-compression: gzip`; this is byte-equivalent after key-case normalization.
+  - Source spec carries an `ortb.version` / `multiformat-supported` / `gpp-supported` (per F-new-44) → verify the Go YAML emits the equivalent block.
+- Surface `warn`/`fail` flags in the Step 5 summary with the severity tag preserved.
+- Suppress `info` flags from the summary UNLESS the Go-side YAML change diverges in a way that elevates the severity (e.g., a documented camelCase↔kebab-case asymmetry becomes a `warn` when the Go-side change DROPS a shared field entirely).
+- For findings YOU surface that match an existing `--- PRIOR SOURCE SPEC COMPARISON ---` entry: dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional.`
+
+If the block is absent or reads `prior_source_spec not present — section omitted`, skip this substep — the PR is not a cross-language port.
 
 ### Step 2: Extract Field-Level Changes From the Diff
 

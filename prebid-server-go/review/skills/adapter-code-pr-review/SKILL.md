@@ -1,7 +1,7 @@
 ---
 name: adapter-code-pr-review
 description: Reviews changes to adapter Go code, adapter tests, JSON test fixtures (exemplary/supplemental/amp/video/videosupplemental), and bidder registration entries. USE WHEN a PR touches adapters/{bidder}/*.go (excluding params_test.go), any {bidder}test/**/*.json, exchange/adapter_builders.go, or openrtb_ext/bidders.go. Do NOT use for static/bidder-info/*.yaml, static/bidder-params/*.json, openrtb_ext/imp_*.go, or params_test.go — those are owned by sibling skills.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Adapter Code PR Review
@@ -104,6 +104,26 @@ If the triage manifest indicates PR type is `infrastructure` and this skill's fi
   - Verify the same change was applied consistently across all affected bidders
   - Flag any bidders that deviate from the pattern (outliers)
   - Focus detailed review only on net-new adapter code that is NOT part of the bulk pattern
+
+**1g. Cross-language port-fidelity check (port PRs only).**
+
+If the triage manifest contains a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port (typically Java → Go via the Teal flow). Each entry in the block is a port-fidelity flag tagged with `info`/`warn`/`fail` severity per [pr-triage/SKILL.md `prior_source_spec` severity policy](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec):
+
+- `info` — port asymmetries legitimate per Rules 5 / 9 / 11 / 35 / 38 / 39 (e.g., Go's `text/template` vs Java's `String.replace` for endpoint construction; Go canonical helpers `IsResponseStatusCodeNoContent` vs Java framework-default).
+- `warn` — divergence touches a Rule 38 byte-fidelity assertion, R5-strict cross-language equivalence, or a known-master-sample pattern.
+- `fail` — a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail`.
+
+For each flagged finding:
+- Use the source-spec context to inform Step 4 verification. **Adapter-code-specific worked examples**:
+  - Source spec carries `code.make_requests.endpoint_resolution.kind=template-macro` → verify the Go-side emit uses `text/template` resolution (not `String.replace` or `String.format`-style substitution).
+  - Source spec carries `code.make_requests.mutation.entity_strategies.Imp=in-place` → verify the Go-side `makeRequests` mutates imp value-fields without reassigning pointers (Go's value-mutation is canonical; Java's `toBuilder()` rebuild is the inverse — Rule 5).
+  - Source spec carries `code.make_bids.http_status_handling.kind=canonical-go-helpers` → verify the Go-side emit calls `adapters.IsResponseStatusCodeNoContent` + `adapters.CheckResponseStatusCodeForErrors` (Rule 30 — Java framework-default maps here).
+  - Source spec lists a `bid-post-processing-macro` quirk (ADR-007 F4, thetradedesk master sample) → verify the Go-side `makeBids` substitutes `${AUCTION_PRICE}` into `bid.NURL`/`bid.AdM`/`bid.BURL` before bid extraction.
+- Surface `warn`/`fail` flags in the Step 5 summary with the severity tag preserved.
+- Suppress `info` flags from the summary UNLESS the Go-side change diverges in a way that elevates the severity (e.g., a documented `info` under Rule 5 becomes a `warn` when the Go-side mutation strategy switches kinds without an explanatory commit note).
+- For findings YOU surface that match an existing `--- PRIOR SOURCE SPEC COMPARISON ---` entry: dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional.` (mirrors the existing `Previously flagged by prior agent` dedup at substep 1d).
+
+If the block is absent or reads `prior_source_spec not present — section omitted`, skip this substep — the PR is not a cross-language port.
 
 ### Step 2: Extract Changes From the Diff
 

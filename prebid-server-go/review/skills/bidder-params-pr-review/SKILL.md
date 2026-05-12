@@ -1,7 +1,7 @@
 ---
 name: bidder-params-pr-review
 description: Reviews changes to bidder parameter schemas (static/bidder-params/*.json), impression extension Go structs (openrtb_ext/imp_*.go), and parameter validation tests (adapters/*/params_test.go). USE WHEN any of those files are added/modified/removed. Verifies JSON Schema draft-04 correctness, Go struct alignment, reserved-OpenRTB-field exclusions, jsonutil.StringInt usage for flexible types, and test coverage. Do NOT use for adapters/{bidder}/{bidder}.go (adapter implementation), static/bidder-info/*.yaml, or non-imp_*.go files in openrtb_ext/.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Bidder Params PR Review
@@ -82,6 +82,26 @@ curl -sS "https://raw.githubusercontent.com/{owner}/{repo}/{head_sha}/static/bid
 **1f. Handle shared file: openrtb_ext/bidders.go.**
 
 If the triage manifest includes `openrtb_ext/bidders.go` in this skill's file list (because the diff touched `NewBidderParamsValidator` or schema validation logic), include it in scope. Otherwise, ignore this file even if it appears in the PR.
+
+**1g. Cross-language port-fidelity check (port PRs only).**
+
+If the triage manifest contains a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port (typically Java → Go via the Teal flow). Each entry is a port-fidelity flag tagged with `info`/`warn`/`fail` severity per [pr-triage/SKILL.md `prior_source_spec` severity policy](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec):
+
+- `info` — port asymmetries legitimate per Rules 9 / 38 / 39 (e.g., schema-interpretation strategy divergences where both Go and Java reach the same validation outcome via different mechanisms; ext-struct shape transformations).
+- `warn` — divergence touches a **Rule 38 byte-fidelity assertion** (the entire `static/bidder-params/{bidder}.json` MUST be byte-identical across Go and Java after the port; any byte-level divergence on the schema file is a `warn` minimum), an R5-strict cross-language equivalence, or a known-master-sample pattern.
+- `fail` — a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail`. **The canonical example is aax**: `cross-language-pairs/aax.dual-spec-assertions.yaml` flags Java's omission of `minLength: 1` on `cid` and `crid` as `severity: fail` because the Go source enforces the constraint but the Java side omits it — a real cross-language validation gap surfaced by R5.
+
+For each flagged finding:
+- Use the source-spec context to inform Step 4 verification. **Bidder-params-specific worked examples**:
+  - Source spec carries `bidder_params_sha256: <hash>` AND the Go-side JSON `bidder_params_sha256` matches → no fidelity issue (Rule 38 byte-copy held); the schema is byte-identical to the source. Suppress `info` entries about the schema.
+  - Source spec's `bidder_params_sha256` MISMATCHES the Go-side JSON SHA → flag the byte-divergence as `warn` and identify which property diverges (`required` set, additional `properties`, `minLength`/`maximum`/`pattern` constraints). The PR description should explain why Rule 38 was violated.
+  - Source spec carries `params.schema_interpretation.flexible_types=true` AND the Go-side JSON adds an `anyOf`/`oneOf`/`type: [...]` flexible-type construct → verify the Java side (or whatever the source language is) carries the same flexibility (`info` if cross-language symmetric; `warn` if the new flexibility lands on Go only).
+  - Source spec lists a `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` entry with `severity: fail` (aax-style) → cross-reference the Go-side JSON change against the assertion; if the PR changes the diverging field, the change ELEVATES from `fail` to `urgent` (the dual-spec gap is now load-bearing for this PR).
+- Surface `warn`/`fail` flags in the Step 5 summary with the severity tag preserved.
+- Suppress `info` flags from the summary UNLESS the Go-side schema change diverges in a way that elevates the severity.
+- For findings YOU surface that match an existing `--- PRIOR SOURCE SPEC COMPARISON ---` entry: dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional.`
+
+If the block is absent or reads `prior_source_spec not present — section omitted`, skip this substep — the PR is not a cross-language port.
 
 ### Step 2: Extract Changes From the Diff
 
