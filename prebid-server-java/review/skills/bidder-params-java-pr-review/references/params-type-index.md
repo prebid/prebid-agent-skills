@@ -12,7 +12,7 @@ Mapping of JSON Schema draft-04 types to Lombok-annotated POJO conventions for t
 
 For framework-wide concerns (Lombok annotation semantics, JacksonMapper conventions, checkstyle `ImportOrder` traps, IT-class WireMock binding patterns), see [../../shared/framework-utilities-java.md](../../shared/framework-utilities-java.md) — especially §2 (Lombok annotations) and §6 (mvn-checkstyle). This file references those sections rather than duplicating them.
 
-**Companion Go-side index:** [`../../../../prebid-server-go/review/skills/bidder-params-pr-review/references/params-type-index.md`](../../../../prebid-server-go/review/skills/bidder-params-pr-review/references/params-type-index.md). Cross-reference for byte-fidelity (Rule 38) and flexible-type (Rule 9) asymmetries.
+**Companion Go-side index:** [`../../../../../prebid-server-go/review/skills/bidder-params-pr-review/references/params-type-index.md`](../../../../../prebid-server-go/review/skills/bidder-params-pr-review/references/params-type-index.md). Cross-reference for byte-fidelity (Rule 38) and flexible-type (Rule 9) asymmetries.
 
 ---
 

@@ -156,9 +156,11 @@ The `port-go2java` D2.8 template emitted bugs where the `bidderCreator` lambda r
 
 Only emits on Rule-35-applying canaries (kobler, thetradedesk in D2.8). Owning skill: `bidder-config-pr-review`.
 
-### 1.5 F-new-57 secondary anti-pattern: spurious `.bidderInfo(...)` line
+### 1.5 F-new-57b: spurious `.bidderInfo(...)` line — HIGH BLOCKING (compile error)
 
-A related template defect adds an unnecessary line: `.bidderInfo(BidderInfoCreator.create(mapper)::create)`. This line is NOT canonical — `BidderDepsAssembler` auto-creates the `BidderInfo` from the `@PropertySource`'d YAML. Adding the line is harmless but indicates a copy-paste from non-canonical reference material. Reviewers should ASK to remove (NOT block merge) when seen on `{X}Configuration.java` PRs.
+A related template defect adds an unnecessary line such as `.bidderInfo(BidderInfoCreator.create(mapper)::create)` to the `BidderDepsAssembler` chain. **Verified at SHA `a1fe64e123d6`: `BidderDepsAssembler` has NO public `.bidderInfo(...)` method.** The public builder surface is `forBidder`, `withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`. Adding `.bidderInfo(...)` will NOT COMPILE. The framework auto-creates the `BidderInfo` internally inside `BidderDepsAssembler.coreDeps()` from the `@ConfigurationProperties`'d YAML. Reviewers MUST block merge — flag as **FAIL / HIGH BLOCKING** when seen on `{X}Configuration.java` PRs.
+
+Provenance: NEW finding from the F4 review-skill-suite framework-doc audit (not in the D2.8 cross-canary catalog; the grep-verified absence of the method on `BidderDepsAssembler` is what elevated this from "ASK to remove" to "block merge").
 
 ### 1.6 F-new-79 anti-pattern: `OuterTypeFilename` mismatch
 
@@ -263,6 +265,24 @@ public class ExtImp{X} {
 }
 ```
 
+### 2.9 `@Value(staticConstructor = "of")` — static factory companion
+
+A variant of `@Value` that generates a static factory method `{Class}.of(arg1, arg2, ...)` in addition to the canonical all-args constructor. Common on `ExtImp{X}` POJOs (canonical: Kobler `ExtImpKobler.of(true)`, Adverxo `ExtImpAdverxo.of(adUnitId, auth)`, Ix `ExtImpIx.of(...)`, TheTradeDesk `ExtImpTheTradeDesk.of(publisherId, supplySourceId)`). Accepted variant of `@Value`; reviewers do NOT flag the choice. The `bidder-params-java-pr-review` skill's [params-type-index.md](../bidder-params-java-pr-review/references/params-type-index.md) Part B.1 documents this in the canonical Lombok matrix.
+
+### 2.10 `@JsonAlias` — accept multiple JSON keys for one field
+
+```java
+@JsonAlias({"siteid", "siteID"})
+@JsonProperty("siteId")
+String siteId;
+```
+
+Maps multiple JSON keys (`siteid`, `siteID`, plus the canonical `siteId` from `@JsonProperty`) onto the SAME Java field — the Java-side answer to schema-level `oneOf` over alternate spellings (canonical: Ix's 3-spelling alias support; Appnexus's `placementId`/`placement_id`). Distinct from `@JsonProperty` (single key rename). Reviewers MUST verify the alias list matches the schema's deprecated-name entries on `bidder-params/{x}.json`.
+
+### 2.11 `@JsonDeserialize(using = {X}Deserializer.class)` — custom deserializer hook
+
+Wires Jackson to use a custom `StdDeserializer<T>` subclass (located in the same package) for the annotated field or class. Reviewers verify the referenced deserializer class exists and `extends StdDeserializer<{T}>` (or implements `JsonDeserializer<{T}>`). Anti-pattern: `@JsonDeserialize` referencing a non-existent class is **FAIL** (compile error). Common when the field's accepted shapes exceed `@JsonAlias` capability. The `bidder-params-java-pr-review` skill's params-type-index Part B.5 documents the flexible-type idiom matrix this annotation belongs to.
+
 ---
 
 ## 3. Vert.x HTTP layer
@@ -271,7 +291,16 @@ public class ExtImp{X} {
 
 ### 3.1 HTTP status handling — framework default (Rule 30)
 
-**The Java framework's most important convention for adapter authors:** Java's HTTP layer auto-handles 204 No Content + non-2xx status codes BEFORE `makeBids` is invoked. The exchange framework (`HttpBidderRequester`) calls `validateResponse(...)` which short-circuits on 204 and surfaces 4xx/5xx as `BidderError.badServerResponse` — `makeBids` is never invoked with those status codes.
+**The Java framework's most important convention for adapter authors:** Java's HTTP layer auto-handles 204 No Content + non-2xx status codes BEFORE `bidder.makeBidderResponse(...)` (the adapter's `makeBids`) is invoked. Verified mechanism in `HttpBidderRequester.java` at SHA `a1fe64e123d6`:
+
+1. After the HTTP call completes, `HttpBidderRequester.processResponse(...)` calls the package-private static helper `errorOrNull(int statusCode)` (line 279) to attach a `BidderError` to the `BidderCall` when status ≠ 200 AND ≠ 204 (`HttpBidderRequester.java:280`).
+2. The private `makeBids(...)` dispatcher (line 302) then:
+   - Returns `null` if `httpCall.getError() != null` (the badInput/badServerResponse error was attached above).
+   - Returns `CompositeBidderResponse.empty()` directly when `statusCode == HttpResponseStatus.NO_CONTENT.code()` (line 311) — the adapter's `makeBids` is NEVER called for 204.
+   - Returns `null` when `statusCode != HttpResponseStatus.OK.code()` (line 314) — the adapter's `makeBids` is NEVER called for 4xx/5xx.
+   - Only on `statusCode == OK` does the adapter's `bidder.makeBidderResponse(...)` (i.e., the `makeBids` method we review) execute (line 318).
+
+The factual core stands: **zero status-check code is canonical in adapter `makeBids` implementations**. The 204/4xx/5xx triage is the private static `errorOrNull` + the dispatcher's switches above — there is NO method called `validateResponse` on `HttpBidderRequester`.
 
 **Translation rule (Rule 30, `http_status_handling.kind`):**
 - Go: `canonical-go-helpers` — adapter explicitly checks `adapters.IsResponseStatusCodeNoContent` and `adapters.CheckResponseStatusCodeForErrors` in `MakeBids`.
@@ -656,7 +685,7 @@ Brief tabular reference linking each F-new finding from D2.8 cross-canary to the
 | F-new-52 | Rule 35 typed-config subclass (`{X}BidderConfigurationProperties.java`) has 0% Jacoco coverage when test class doesn't instantiate it | `bidder-config-pr-review` | WARN |
 | F-new-56 | Unreachable `JsonProcessingException` in `makeBids` multi-catch on `mapper.decodeValue()` (Jackson's `decodeValue` doesn't throw the checked exception) | `bidder-class-pr-review` | HIGH BLOCKING |
 | F-new-57 | Spring DI factory passes `mapper` where `BidderConfigurationProperties` expected in `.withConfig(...)` | `bidder-config-pr-review` | HIGH BLOCKING |
-| F-new-57b | Spurious `.bidderInfo(BidderInfoCreator.create(mapper)::create)` line — auto-created by `BidderDepsAssembler`; not canonical | `bidder-config-pr-review` | MEDIUM |
+| F-new-57b | Spurious `.bidderInfo(...)` line on `BidderDepsAssembler` — verified at SHA `a1fe64e123d6`: NO public `.bidderInfo(...)` method exists on the assembler (public surface is `forBidder`, `withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`). Provenance: NEW finding from the F4 review-skill-suite framework-doc audit (not in the D2.8 cross-canary catalog). | `bidder-config-pr-review` | HIGH BLOCKING |
 | F-new-58 | `BidderDeps` (or other project-import) out of canonical 3-group order — non-java/jakarta imports at top, java/jakarta at bottom with blank separator | `bidder-config-pr-review` | MEDIUM |
 | F-new-59 | `lombok.Data` import out of order in `{X}BidderConfigurationProperties.java` (or in `{X}Configuration.java` when subclass is nested) | `bidder-config-pr-review` | MEDIUM |
 | F-new-60 | Test method names use `scenarioFor_app_simple_banner` snake_case — Java convention is camelCase per `MethodName` checkstyle | `bidder-class-pr-review` | MEDIUM |
@@ -675,6 +704,19 @@ Brief tabular reference linking each F-new finding from D2.8 cross-canary to the
 | F-new-100 | ADR-007 F4 bid-post-processing macros (`${AUCTION_PRICE}`) not preserved — `extractBids` is generic stream, never substitutes macros into nurl/adm/burl | `bidder-class-pr-review` | HIGH BLOCKING |
 
 Reviewers cross-reference findings against this table when surfacing per-PR concerns. The cross-canary catalog at `docs/runs/d2.8-cross-canary-summary.md` holds the authoritative per-canary breakdown.
+
+### 8.1 Severity glossary — FAIL ↔ HIGH BLOCKING alignment
+
+The skills use two interlocking severity vocabularies. They map 1:1:
+
+| Skill-finding severity (per-PR review) | F-new-trap catalog severity (this table) | Meaning |
+|---|---|---|
+| **FAIL** | **HIGH BLOCKING** | Build / compile / CI-blocking defect. Examples: F-new-79 (OuterTypeFilename), F-new-57 (`.withConfig(mapper)`), F-new-57b (`.bidderInfo(...)` non-existent method), F-new-90 (non-existent `BidderUtil.*` method), F-new-56 (unreachable checked exception), F-new-78 / F-new-86 / F-new-91 / F-new-92 / F-new-100 (missing canonical emit paths — will not pass IT). |
+| **FAIL** | **HIGH** | Correctness bug surface, but not necessarily build-blocking. Examples: F-new-64 (`resolveBidType` drops alternative chains — silently mis-types bids). When a HIGH F-new trap surfaces in a per-PR review, emit at **FAIL** severity unless the reviewer can confirm the affected code path is not exercised by tests. |
+| **WARN** | **MEDIUM** | Checkstyle / style violation that breaks CI's checkstyle job but doesn't break compile/test. Examples: F-new-58 / F-new-59 (import order), F-new-60 (snake_case test names), F-new-61 (LineLength), F-new-66 (YAML flow-style usersync), F-new-93 (custom header), F-new-96 (UnusedImports). |
+| **WARN** / **INFO** | **WARN** / **LOW** | Process/informational. F-new-52 (Jacoco coverage on Rule 35 subclass), F-new-67/69/72 (cosmetic YAML). |
+
+This alignment is what each reviewer skill's "Severity" notation references when a finding cites a specific F-new trap. The skills emit **FAIL** for everything tagged HIGH BLOCKING and most HIGH; emit **WARN** for MEDIUM; emit **INFO** for LOW.
 
 ---
 

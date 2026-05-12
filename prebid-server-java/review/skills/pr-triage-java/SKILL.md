@@ -58,7 +58,7 @@ Fetch all PR data that downstream skills will need. This step replaces Step 1a i
   2. **Submission template completeness**: For `new-adapter` or `alias-only` PRs, check if the description includes the standard adapter submission template fields (contact email, test parameters, feature explanation). Record as: `template: complete | partial | missing | n/a`
   3. **Feature rationale**: Extract a 1-2 sentence summary of what the PR does and why, for context that downstream skills can reference when assessing design decisions.
   4. **Null/empty body**: If `body` is null or empty, record: `description: null — no PR description provided`
-  5. **`agent review` label**: If the PR's `labels` array includes one named `agent review` (or `agent-review` / `agent_review` / `Agent Review`), record `agent_review: yes` in the manifest AND extract any prior agent comments. Detection: PR comments authored by GitHub usernames matching `*[bot]`, or accounts with names containing "agent" — these are likely the prior agent's findings.
+  5. **`agent review` label**: If the PR's `labels` array includes one named `agent review` (or `agent-review` / `agent_review` / `Agent Review`), record `agent_review: yes` in the manifest AND extract any prior agent comments. Detection: PR comments authored by GitHub usernames matching `*[bot]`, `ChrisHuie`, or accounts with names containing "agent" — these are likely the prior agent's findings. (Username list kept in parity with the Go-side `pr-triage` heuristic.)
      - Record extracted prior-agent comments in the manifest under `--- PRIOR AGENT FINDINGS ---` block (file:line + finding text + severity if stated).
      - Activation rules unchanged regardless of label — our skills still run their full workflow. But downstream skills MUST cross-reference each of their findings against the `--- PRIOR AGENT FINDINGS ---` list and SUPPRESS exact duplicates (same file, same rule, same severity). Net-new findings are emitted normally; matches are emitted as `Previously flagged by prior agent` (analogous to the existing `Previously flagged by {reviewer}` pattern in Step 1d).
 
@@ -131,7 +131,7 @@ Fetch the upstream reference files that downstream skills use for drift detectio
 Fetch all in parallel:
 
 1. **bidder-config schema drift**: `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/src/main/java/org/prebid/server/spring/config/bidder/model/BidderConfigurationProperties.java"`
-   - Compare against the local field index at `bidder-config-pr-review/references/properties-schema.md` (deferred — stubbed in this F4 session).
+   - Compare against the local field index at [`../bidder-config-pr-review/references/field-index.md`](../bidder-config-pr-review/references/field-index.md) Part A.2 (the base-class field table — 13 YAML-bindable fields).
    - If the live `BidderConfigurationProperties` base class has fields not in our index, record: `DRIFT: bidder-config field index — new field(s): {field_names}`
    - This drives Rule 35 typed-subclass review — if the base class gained fields, subclasses may inherit them silently and the reviewer needs to know.
 
@@ -152,9 +152,9 @@ Fetch all in parallel:
 4. **Spring DI framework drift**: parallel fetch:
    - `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/src/main/java/org/prebid/server/bidder/BidderCatalog.java"`
    - `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/src/main/java/org/prebid/server/spring/config/bidder/util/BidderDepsAssembler.java"`
-   - Compare against snapshots cached in `bidder-config-pr-review/references/spring-di-snapshot.md` (deferred — stubbed in this F4 session)
+   - Compare against the API-surface snapshot embedded in [`../bidder-config-pr-review/references/field-index.md`](../bidder-config-pr-review/references/field-index.md) Part B.2.3 (`BidderDepsAssembler` fluent chain) and [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) §1 (canonical wiring examples)
    - If `BidderCatalog`'s public API (`bidders()`, `bidderInfoByName(...)`, `nameByAlias(...)`) changed, record: `DRIFT: framework-spring-di — BidderCatalog API surface changed`
-   - If `BidderDepsAssembler.forBidder(...)` or the builder methods (`withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`) changed, record: `DRIFT: framework-spring-di — BidderDepsAssembler API changed`
+   - If `BidderDepsAssembler.<T>forBidder(...)` or the builder methods (`withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`) changed, record: `DRIFT: framework-spring-di — BidderDepsAssembler API changed`
    - This is the Java analog of Go's `openrtb_ext/bidders.go` drift check. Java has no single BidderName enum (per design-doc §8 Q5); the framework drift check is more diffuse.
 
 5. **test-application.properties drift**: `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/src/test/resources/org/prebid/server/it/test-application.properties"`
@@ -179,7 +179,7 @@ Any drift warnings are included in the routing manifest for the relevant downstr
 
 ### Step 3: Categorize Every File by Skill Ownership
 
-For every file in the PR, determine which skill (if any) owns it. The full routing table is at [references/routing-rules.md](references/routing-rules.md) (TODO: deferred to future F4 session; this SKILL embeds the active subset below).
+For every file in the PR, determine which skill (if any) owns it. The full routing table lives at [references/routing-rules.md](references/routing-rules.md); this SKILL embeds the active subset below, byte-aligned with the reference per the routing-rules.md sync policy.
 
 **Categorization output** — assign each file to exactly one of these buckets:
 
@@ -278,16 +278,19 @@ Based on the categorized files, determine the PR type. A PR may have a primary t
 1. **Infrastructure / Bulk Change**
    - Trigger: 5+ distinct bidder directories affected in any single skill's files, OR framework files constitute >50% of total changed files, OR total files >50 with >80% matching a single repeated pattern
    - Label: `infrastructure`
-   - Sub-label `framework-debt` (additional, on top of `infrastructure`): if `checkstyle.xml`, `BidderCatalog.java`, `BidderDepsAssembler.java`, or `BidderConfigurationProperties.java` (the base class) is modified — this triggers cascading-impact assessment because all bidders inherit from these
+   - Sub-label `framework-debt` (additional, on top of `infrastructure`): if `checkstyle.xml`, `BidderCatalog.java`, `BidderDepsAssembler.java`, `BidderConfigurationProperties.java` (the base class), or `src/test/java/org/prebid/server/it/IntegrationTest.java` is modified — this triggers cascading-impact assessment because all bidders inherit from these (Step 5h enforces the same 5-file list)
    - Effect: Downstream skills activate in "bulk mode" — verify pattern consistency across affected bidders, not per-bidder detailed review. Focus detailed review only on net-new code that is NOT part of the bulk pattern.
    - **Multi-adapter alias bundle exception**: A PR may contain N aliases for the SAME parent without triggering bulk mode IF: all changes are `aliases:`-block additions inside one `bidder-config/{parent}.yaml`, the IT classes added are all `{Alias}Test.java` for those aliases, the test-application.properties additions are all `adapters.{parent}.aliases.{alias}.*`, and no `{X}Bidder.java` / `ExtImp{X}.java` / `bidder-params/{x}.json` is touched. In this case PR type is `alias-only` (not `infrastructure`). Canonical Java case: Adverxo with `adport`, `bidsmind`, `mobupps` per-alias IT classes shipped in `bidder-config/adverxo.yaml`'s `aliases:` block.
 
 2. **New Adapter**
-   - Trigger: `src/main/java/org/prebid/server/bidder/{x}/{X}Bidder.java` has status `added`, AND at least ONE of:
-     - `src/main/resources/bidder-config/{x}.yaml` has status `added`, OR
+   - Trigger: ALL FOUR of the following hold for at least one bidder (strict form — byte-aligned with [references/routing-rules.md](references/routing-rules.md) §"New Adapter"):
+     - `src/main/java/org/prebid/server/bidder/{x}/{X}Bidder.java` has status `added`, AND
+     - `src/main/resources/bidder-config/{x}.yaml` has status `added`, AND
+     - `src/main/resources/static/bidder-params/{x}.json` has status `added`, AND
      - `src/test/resources/org/prebid/server/it/test-application.properties` diff contains a new top-level `adapters.{x}.enabled=true` line (not under an existing parent's `aliases:`)
    - Label: `new-adapter`
    - Effect: All 3 reviewer skills activate. Registration completeness is checked (Step 5e).
+   - Rationale (per design-doc §8 Q3 — Locked in this PR): the strict form eliminates false-positive new-adapter classifications when partial subsets land (e.g., a `{X}Bidder.java` added without the corresponding params/YAML is more likely an adapter-modification refactor than a new-adapter PR).
 
 3. **Alias-Only**
    - Trigger: ALL of:
@@ -391,21 +394,22 @@ If `test-application.properties` has `adapters.{x}.enabled=true` added but no `b
 
 **5e. New Adapter Completeness Check**
 
-If PR type is `new-adapter`, verify the complete expected file set is present for each new bidder. A complete new-adapter PR should include:
-- `src/main/resources/bidder-config/{x}.yaml` — unified config
-- `src/main/resources/static/bidder-params/{x}.json` — parameter JSON schema
-- `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/ExtImp{X}.java` — imp-ext POJO
-- `src/main/java/org/prebid/server/bidder/{x}/{X}Bidder.java` — adapter implementation
-- `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` (or `{X}BidderConfiguration.java`) — Spring DI factory
-- `src/test/java/org/prebid/server/bidder/{x}/{X}BidderTest.java` — unit tests
-- `src/test/java/org/prebid/server/it/{X}Test.java` — IT test class
-- `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-{name}-bid-request.json` — IT fixture (at least one scenario; full Rule 36 4-file set)
-- `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-{name}-bid-response.json`
-- `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-{name}-auction-request.json`
-- `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-{name}-auction-response.json`
-- `src/test/resources/org/prebid/server/it/test-application.properties` — appended `adapters.{x}.enabled=true` + `adapters.{x}.endpoint=...` lines
+If PR type is `new-adapter`, verify the complete expected file set is present for each new bidder. A complete new-adapter PR includes **12 files** (13 when Rule 35 applies as a SEPARATE-file typed subclass):
 
-When Rule 35 applies (typed-config subclass), an additional file is required:
+1. `src/main/resources/bidder-config/{x}.yaml` — unified config
+2. `src/main/resources/static/bidder-params/{x}.json` — parameter JSON schema
+3. `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/ExtImp{X}.java` — imp-ext POJO
+4. `src/main/java/org/prebid/server/bidder/{x}/{X}Bidder.java` — adapter implementation
+5. `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` (or `{X}BidderConfiguration.java`) — Spring DI factory
+6. `src/test/java/org/prebid/server/bidder/{x}/{X}BidderTest.java` — unit tests
+7. `src/test/java/org/prebid/server/it/{X}Test.java` — IT test class
+8. `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-auction-{x}-request.json` — IT fixture (inbound publisher auction request; one scenario; full Rule 36 4-file set)
+9. `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-auction-{x}-response.json` — IT fixture (expected outbound PBS auction response)
+10. `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-{x}-bid-request.json` — IT fixture (outbound bid request sent to bidder)
+11. `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-{x}-bid-response.json` — IT fixture (mock bidder response)
+12. `src/test/resources/org/prebid/server/it/test-application.properties` — appended `adapters.{x}.enabled=true` + `adapters.{x}.endpoint=...` lines
+
+When Rule 35 applies AND the typed-config subclass is shipped as a separate file (the design-permitted form; in current upstream practice all Rule 35 subclasses are inner `private static class` declarations inside `{X}Configuration.java`), file 13 is required:
 - `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java`
 
 For each missing file, record: `COMPLETENESS: New adapter {x} missing {file_type}. Incomplete PR.`
@@ -687,7 +691,7 @@ Regressions detected ({N}):
 
 The `--- PRIOR SPEC COMPARISON ---` block is consumed by downstream reviewer skills exactly like the existing `--- PRIOR AGENT FINDINGS ---` block: skills cross-reference findings against the prior-spec flags and surface only NET-NEW concerns from the PR diff. Matches dedup as "Previously captured in prior_spec — confirm with reviewer if intentional."
 
-For more on the read/ → review/ composition contract, the spec lifecycle, and worked detection examples, see [`../../../read/skills/shared/cross-skill-integration.md`](../../../read/skills/shared/cross-skill-integration.md) §5 (Read ↔ Review opt-in hook). The Java-side cross-skill-integration doc lives at the Java tree's read/shared/ directory (deferred to a future session); the Go-side doc covers the cross-language contract.
+For more on the read/ → review/ composition contract, the spec lifecycle, and worked detection examples, see [`../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md`](../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md) §5 (Read ↔ Review opt-in hook). The Java-side cross-skill-integration doc is not yet shipped; the Go-side doc covers the cross-language contract symmetrically and applies to both trees.
 
 ### Cross-language ports: `prior_source_spec`
 
@@ -704,7 +708,7 @@ When `prior_source_spec` is present, pr-triage-java emits a complementary `--- P
 - `warn` when the divergence touches a Rule 38 byte-fidelity assertion (bidder-params JSON formatting), an R5-strict cross-language equivalence (capabilities, gvl_vendor_id, maintainer), or a known-master-sample pattern.
 - `fail` when a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail` (the canonical example is aax: Java omits `minLength: 1` on `cid` / `crid` — the dual-spec marks this `severity: fail`, so the Java PR review would flag it `fail` even though the canonical Java bidder-params.json is "correct" from Java's standpoint).
 
-**Downstream consumption is DEFERRED** to audit item 25 (separate session). pr-triage-java AUTHORS the `--- PRIOR SOURCE SPEC COMPARISON ---` block in this F4 session; the three reviewer skills' consumption (read the block, dedup their findings against it, surface port-fidelity findings) lands later. This is symmetric with the Go side: as of audit time, the Go-side `prior_source_spec` block also has zero downstream consumers (`docs/runs/post-d3.8-remaining-work.md:36`).
+**Downstream consumption LANDED in this PR** (audit item 25 resolved): pr-triage-java AUTHORS the `--- PRIOR SOURCE SPEC COMPARISON ---` block AND the three reviewer skills CONSUME it via their own Step 1g (each downstream `SKILL.md` reads the block, deduplicates its own findings against it, and surfaces port-fidelity findings at `info` / `warn` / `fail` severity). The Go-side symmetric downstream consumption is still pending as of audit time (`docs/runs/post-d3.8-remaining-work.md:36`); Java has landed it first.
 
 ### One-shot specs (Teal flow): `.tmp/full-loop/{run-id}/{lang}/{bidder}.yaml`
 
@@ -734,24 +738,24 @@ If none resolve, both blocks are silently omitted (the comparison is opt-in; pr-
 
 This skill reads files from downstream skills for drift comparison and context:
 
-- `bidder-config-pr-review/references/properties-schema.md` — to compare against live `BidderConfigurationProperties` base class (deferred — stubbed in this F4 session)
-- `bidder-config-pr-review/references/spring-di-snapshot.md` — for context on `BidderCatalog` / `BidderDepsAssembler` API surface (deferred — stubbed in this F4 session)
-- `bidder-params-java-pr-review/references/schema-index.md` — for context on JSON schema parser / draft-04 contract (deferred — stubbed in this F4 session)
-- `bidder-class-pr-review/references/bidder-class-index.md` — for context on adapter implementation patterns (deferred — stubbed in this F4 session)
-- `../../../read/skills/shared/framework-utilities-java.md` — Java framework utilities (read-side companion). Reviewers use this for endpoint-template-macro lists, error-type taxonomy, anti-patterns, JacksonMapper conventions.
-- `../../../read/skills/shared/cross-skill-integration.md` — Go-tree-side doc covers the cross-language read ↔ review opt-in hook; loaded only when the user has the read/ skill suite installed and `read/specs/{bidder}/latest.yaml` exists locally.
+- [`../bidder-config-pr-review/references/field-index.md`](../bidder-config-pr-review/references/field-index.md) — Part A.2 (base-class field index) drives the `bidder-config` drift check; Part B.2.3 (`BidderDepsAssembler` chain) drives the `framework-spring-di` drift check.
+- [`../bidder-params-java-pr-review/references/params-type-index.md`](../bidder-params-java-pr-review/references/params-type-index.md) — JSON-schema draft-04 surface + `BidderParamValidator` runtime mechanism context.
+- [`../bidder-class-pr-review/references/bidder-class-index.md`](../bidder-class-pr-review/references/bidder-class-index.md) — adapter implementation patterns + IT-test conventions.
+- [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) — review-side Java framework utilities (Lombok semantics, Spring DI conventions, JacksonMapper rules, checkstyle ruleset, Vert.x ban-list, F-new trap catalog, JUnit5 + AssertJ conventions).
+- [`../../../read/skills/shared/framework-utilities-java.md`](../../../read/skills/shared/framework-utilities-java.md) — read-side companion. Endpoint-template-macro lists, error-type taxonomy, anti-patterns.
+- [`../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md`](../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md) — Go-tree-side doc covers the cross-language read ↔ review opt-in hook; loaded only when the user has the read/ skill suite installed and `read/specs/{bidder}/latest.yaml` exists locally.
 
 ---
 
 ## Reference Documentation
 
-The full routing table, framework-impact file list, PR-type detection heuristics, and bidder-name extraction rules will live at [references/routing-rules.md](references/routing-rules.md). This file is **TODO — deferred to a future F4 session per audit item 19** (the bidder-class / bidder-config / bidder-params-java reviewer skill prose lands in those sessions and brings the references/ deep-dives with it). The active subset is embedded in this SKILL.md (Step 3 routing table); when the full reference doc lands, the embedded subset moves out.
+The full routing table, framework-impact file list, PR-type detection heuristics, and bidder-name extraction rules live at [references/routing-rules.md](references/routing-rules.md) (LANDED in this PR, step 3, commit `c618fde`). The active subset embedded above (Step 3 routing table) is kept byte-aligned with the reference per the sync policy in routing-rules.md.
 
 ---
 
 ## Shared Framework Reference
 
-For framework-wide concerns (Lombok annotation conventions, Spring DI patterns, JacksonMapper conventions, checkstyle ruleset, Jacoco coverage gates, Vert.x ban-list, JUnit5 + AssertJ conventions, naming conventions, alias inversion semantics, IT test harness contract), the four review skills share a future `../shared/framework-utilities-java.md` (review-side). Until it ships (deferred to a later F4 session), reviewers reference the read-side companion at `../../../read/skills/shared/framework-utilities-java.md` plus the design doc at `../../../../docs/methodology/java-review-skill-design.md`.
+For framework-wide concerns (Lombok annotation conventions, Spring DI patterns, JacksonMapper conventions, checkstyle ruleset, Jacoco coverage gates, Vert.x ban-list, JUnit5 + AssertJ conventions, naming conventions, alias inversion semantics, IT test harness contract), the four review skills share [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) (review-side, LANDED in this PR, step 2, commit `63be93d`), which adds reviewer-specific anti-patterns + verbatim policy quotes on top of the read-side companion at [`../../../read/skills/shared/framework-utilities-java.md`](../../../read/skills/shared/framework-utilities-java.md). Design rationale lives at [`../../../../docs/methodology/java-review-skill-design.md`](../../../../docs/methodology/java-review-skill-design.md).
 
 ---
 

@@ -172,7 +172,7 @@ When the endpoint URL contains MULTIPLE `{{TOKEN}}` macros with non-trivial subs
 
 ## 3. `makeHttpRequests` dispatching modes
 
-`makeHttpRequests` is one of five canonical shapes, each with a distinct code skeleton. The read-side `read-bidder-class` skill emits `code.make_requests.dispatch_strategy.kind` for each adapter — reviewers should expect the Java emit to match.
+`makeHttpRequests` is one of nine canonical shapes per the cross-language behavior taxonomy at [`../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.yaml`](../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.yaml) (`code.make_requests.batching.rules[]`): `single-batched`, `per-imp`, `max-imps-per-request`, `format-split`, `deals-split`, `pod-grouping`, `imp-flatten-aggregate`, `filtered-subset`, `grouped-by-key`. The read-side `read-bidder-class` skill emits `code.make_requests.batching.rules[]` for each adapter — reviewers should expect the Java emit to match. The five most-common shapes have detailed code skeletons below (§3.1–§3.5); the remaining four (`deals-split`, `pod-grouping`, `imp-flatten-aggregate`, `filtered-subset`) are documented terse in §3.6.
 
 ### 3.1 `single-batched` — one request per `BidRequest`
 
@@ -216,7 +216,18 @@ Loop accumulating `Result.of(requests, errors)` where each iteration's `bidReque
 
 `bidRequest.getImp().stream().filter(imp -> imp.getBanner() != null).toList()` for each format, dispatched to a distinct format-specific endpoint (class-level constant OR separate constructor arg).
 
-### 3.6 Cross-cutting reviewer rules for all modes
+### 3.6 Remaining canonical modes — terse
+
+The four remaining batching rules per the canonical 9-mode taxonomy. Reviewers recognize the shape; full skeletons are not duplicated here when the read-side spec emits them.
+
+- **`deals-split`** — separate request batches for deal-imps vs non-deal-imps (`imp.pmp.private_auction == 1`). Canonical: Rubicon's deal-split pattern. Used composably with `format-split` (Rubicon emits `[format-split, deals-split]`).
+- **`pod-grouping`** — long-form video / OTT imps grouped by `imp.video.podid`. Canonical: Appnexus (composed with `max-imps-per-request: 10` → `[max-imps-per-request: 10, pod-grouping]`).
+- **`imp-flatten-aggregate`** — multi-imp request flattened into a single request body where each imp's params are aggregated into top-level keys. Rare; specific to bidders whose upstream API does not accept OpenRTB-2.x imp arrays directly.
+- **`filtered-subset`** — only a subset of imps (matching adapter-side eligibility criteria — currency, format, capability) are dispatched; the rest are dropped with `BidderError.badInput(...)` per imp.
+
+Each of these has the same cross-cutting rules as §3.1–§3.5 (`toBuilder()` mutation, Vert.x JSON ban, `Result.of(...)`, headers via `HttpUtil.headers()`, payload, endpoint resolution, no redundant PBS-core filtering). When `read-bidder-class` emits any of these in `batching.rules[]`, reviewers verify the dispatch logic matches the rule's semantics.
+
+### 3.7 Cross-cutting reviewer rules for all modes
 
 - **Mutation via `toBuilder()`**: `BidRequest`, `Imp`, `Device`, `User`, `Site`, `App` mutations use the Lombok-generated `toBuilder()...build()` chain (Rule 5). Direct setters don't compile on `@Value` POJOs — see `framework-utilities-java.md` §2.2.
 - **No `io.vertx.core.json.Json` usage**: Banned by checkstyle `BanVertxJsonImport` (F-new-56). Use `mapper.encodeToBytes(...)`.
@@ -234,7 +245,7 @@ Loop accumulating `Result.of(requests, errors)` where each iteration's `bidReque
 
 ### 4.1 `framework-default` (the default — Rule 30)
 
-The Java framework (`HttpBidderRequester.validateResponse`) handles 204 / 4xx / 5xx BEFORE invoking `makeBids`. The adapter's `makeBids` is invoked only for successful responses. **No explicit status checks in adapter code.** This is the Java analog of Go's `canonical-go-helpers` (`adapters.IsResponseStatusCodeNoContent` / `adapters.CheckResponseStatusCodeForErrors`).
+The Java framework's `HttpBidderRequester` handles 204 / 4xx / 5xx BEFORE invoking the adapter's `makeBids`. The actual upstream mechanism (verified at SHA `a1fe64e123d6`): `errorOrNull(int statusCode)` (line 279) attaches a `BidderError` when status ≠ 200 ∧ ≠ 204, and the private static `makeBids(...)` dispatcher (line 302) short-circuits on 204 → `CompositeBidderResponse.empty()`, returns null on 4xx/5xx, and only on 200 invokes the adapter's `bidder.makeBidderResponse(...)`. There is no method named `validateResponse` on `HttpBidderRequester`. The adapter's `makeBids` is invoked only for successful responses. **No explicit status checks in adapter code.** This is the Java analog of Go's `canonical-go-helpers` (`adapters.IsResponseStatusCodeNoContent` / `adapters.CheckResponseStatusCodeForErrors`).
 
 Canonical Kobler pattern (`KoblerBidder.java:149-157`):
 
@@ -320,13 +331,13 @@ Where `applyBidPostProcessingMacros(Bid)` rebuilds the bid via `bid.toBuilder().
 
 ## 5. Bid type resolution kinds
 
-The bid-type resolution chain in `getBidType(Bid)` / `resolveBidType(Bid, BidRequest)` is one of seven canonical patterns. Reviewers cross-reference against `bidder-config/{x}.yaml` `meta-info.{app,site,dooh}-media-types` — every declared media type MUST have a Java return path.
+The bid-type resolution chain in `getBidType(Bid)` / `resolveBidType(Bid, BidRequest)` follows the canonical cross-language taxonomy at [`../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.yaml`](../../../../../prebid-server-go/read/skills/shared/behavior-taxonomy.yaml) (`code.make_bids.bid_type_resolution.method_chain[].method`): `by-imp-mediatype`, `by-bid-mtype`, `by-bid-ext-typed-field`, `by-imp-id-suffix`, `imp-prefix-lookup`, `by-response-payload-shape`, `hardcoded`, `custom`. Reviewers cross-reference against `bidder-config/{x}.yaml` `meta-info.{app,site,dooh}-media-types` — every declared media type MUST have a Java return path.
 
-### 5.1 `constant` / `constant-banner` — single-type adapter
+### 5.1 `hardcoded` — single-type adapter
 
-`return BidType.banner;` when YAML declares only `banner`. Also serves as the canonical fallback in deeper resolution chains (`.orElse(BidType.banner)`). Hardcoding a type NOT in YAML capabilities is dead branch — **WARN**.
+`return BidType.banner;` when YAML declares only `banner`. Also serves as the canonical fallback in deeper resolution chains (`.orElse(BidType.banner)`). The method-chain step has `method: hardcoded`, `hardcoded_value: <BidType>`, `fallback_action: return-default`. Hardcoding a type NOT in YAML capabilities is dead branch — **WARN**.
 
-### 5.2 `imp-mediatype-introspection` — match `bid.impid` → `imp.{banner,video,native,audio}`
+### 5.2 `by-imp-mediatype` — match `bid.impid` → `imp.{banner,video,native,audio}`
 
 Loop over `bidRequest.getImp()`, find the imp where `imp.getId().equals(bid.getImpid())`, return whichever media-type field is non-null (priority: banner, video, native, audio).
 
@@ -334,13 +345,13 @@ Available as a framework helper: `BidderUtil.getBidType(bid, impIdToImpMap)` (`B
 
 ### 5.3 `by-bid-mtype` — OpenRTB 2.6 markup-type switch
 
-`switch (bid.getMtype()) { case 1 -> banner; case 2 -> video; case 3 -> audio; case 4 -> xNative; default -> throw new PreBidException("Unknown mtype " + ... + " for impID " + bid.getImpid()); }`. Preferred for OpenRTB 2.6 — adapters whose upstream populates `bid.mtype`. Fallback to `imp` introspection (§5.2) when `mtype` is missing.
+`switch (bid.getMtype()) { case 1 -> banner; case 2 -> video; case 3 -> audio; case 4 -> xNative; default -> throw new PreBidException("Unknown mtype " + ... + " for impID " + bid.getImpid()); }`. Preferred for OpenRTB 2.6 — adapters whose upstream populates `bid.mtype`. Fallback to `by-imp-mediatype` introspection (§5.2) when `mtype` is missing.
 
 ### 5.4 `by-bid-ext-typed-field` — `bid.ext.{vendor-specific-field}`
 
-`mapper.mapper().convertValue(bid.getExt(), {X}BidExt.class)` → switch on a custom field. `{X}BidExt` is a co-located DTO. Used when the bidder embeds the type in their own ext namespace (aax's `bid.ext.adCodeType`, etc.). **F-new-64 trap** when this path is missed in favor of a generic `bid.ext.prebid.type` chain.
+`mapper.mapper().convertValue(bid.getExt(), {X}BidExt.class)` → switch on a custom field. `{X}BidExt` is a co-located DTO. Used when the bidder embeds the type in their own ext namespace (aax's `bid.ext.adCodeType`, etc.). The method-chain step's `field` is the path within `bid.ext` (e.g., `"bid.ext.adCodeType"`, `"bid.ext.prebid.type"`). **F-new-64 trap** when this path is missed in favor of a generic `bid.ext.prebid.type` chain.
 
-### 5.5 `ext-prebid-video-placement` — canonical Kobler / `bid.ext.prebid.type`
+### 5.5 `by-bid-ext-typed-field` with `field: bid.ext.prebid.type` — canonical Kobler chain
 
 The canonical Kobler pattern (`KoblerBidder.java:177-194`):
 
@@ -361,7 +372,7 @@ Walks `bid.ext → "prebid" → ObjectNode → ExtBidPrebid.type`, falling back 
 
 **Cross-language asymmetry note**: When `prior_source_spec` declares the Go side uses `bid.ext.prebid.type`, the Java emit MUST walk the same chain. Different resolution chains for the same bidder is a `warn` cross-language finding.
 
-### 5.6 `imp-id-correlation` (F-new-7 EXT-B LANDED)
+### 5.6 `by-imp-id-suffix` / `imp-prefix-lookup` — side-channel correlation
 
 Variant where `bid.impid` correlates to a side-channel map built during `makeHttpRequests`. **FAIL** if implemented via class fields (`private final Map<...>` / `ThreadLocal`) — adapter is a singleton. The correct pattern packs the map into a custom request type (§2.5) and reads it back via `httpCall.getRequest().getPayload()`.
 
@@ -598,8 +609,8 @@ This skill activates for ANY `*.java` file under `src/main/java/org/prebid/serve
 - [`../../bidder-config-pr-review/SKILL.md`](../../bidder-config-pr-review/SKILL.md) — sibling skill; cross-skill concerns: constructor↔lambda (§9.1), YAML capabilities (§9.4), alias declarations (§9.5)
 - [`../../bidder-params-java-pr-review/SKILL.md`](../../bidder-params-java-pr-review/SKILL.md) — sibling skill; cross-skill concerns: ExtImp{X} POJO (§9.2), IT fixtures (§9.3)
 - [`../../../../read/skills/read-bidder-class/SKILL.md`](../../../../read/skills/read-bidder-class/SKILL.md) — read-side companion; emits `bidder_class.*`, `code.make_requests.*`, `code.make_bids.*` fields this skill verifies
-- [`../../../../prebid-server-go/review/skills/adapter-code-pr-review/references/adapter-code-index.md`](../../../../prebid-server-go/review/skills/adapter-code-pr-review/references/adapter-code-index.md) — Go-side analog
-- [`../../../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`](../../../../prebid-server-go/read/skills/shared/port-translation-rules.yaml) — Rules 5, 9, 19, 22, 30, 35, 36
+- [`../../../../../prebid-server-go/review/skills/adapter-code-pr-review/references/adapter-code-index.md`](../../../../../prebid-server-go/review/skills/adapter-code-pr-review/references/adapter-code-index.md) — Go-side analog
+- [`../../../../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`](../../../../../prebid-server-go/read/skills/shared/port-translation-rules.yaml) — Rules 5, 9, 19, 22, 30, 35, 36
 - D2.8 cross-canary findings: `docs/runs/d2.8-cross-canary-summary.md`
 - F4 design doc: `docs/methodology/java-review-skill-design.md`
 

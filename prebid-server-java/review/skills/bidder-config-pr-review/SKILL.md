@@ -137,7 +137,10 @@ When the triage manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block 
   - Go `modifyingVastXmlAllowed: bool` ↔ Java `modifying-vast-xml-allowed: bool` (camelCase ↔ kebab-case)
   - Go `endpointCompression: GZIP` ↔ Java `endpoint-compression: gzip` (Java lowercase; resolves to `CompressionType.GZIP` enum via Spring relaxed-binding)
   - Divergence on any of these is **fail** severity per the cross-language R5-strict rule
-- **Source spec carries `ortb.version` / `multiformat-supported` / `gpp-supported` (per F-new-44 family)** → verify Java YAML mirrors. Go `openrtb.version: "2.6"` ↔ Java `ortb.version: "2.6"` (note: Java's key is `ortb` not `openrtb`; Go is `openrtb`; both accept the string `"2.6"` per Java edge case #29 quoting rule). Multiformat/gpp similarly map across.
+- **Source spec carries openrtb version / multiformat / gpp signals (per F-new-44 family)** → verify Java YAML mirrors **with the correct keys**:
+  - Go `openrtb.version: "2.6"` ↔ Java `adapters.{x}.ortb-version: "2.6"` (top-level field on base `BidderConfigurationProperties`, NOT under an `ortb:` block; the key is `ortb-version`, not `ortb.version`). Both accept the string `"2.6"` per Java edge case #29 quoting rule.
+  - Go `openrtb.multiformat-supported: true` ↔ Java `adapters.{x}.ortb.multiformat-supported: true` (this IS under the `ortb:` block — it's the only field on the Java `Ortb` POJO).
+  - Go `openrtb.gpp-supported: true` ↔ Java HAS NO `gpp-supported` boolean. GPP capability is signaled implicitly via the presence of `{{gpp}}` / `{{gpp_sid}}` macros in `usersync.iframe.url` / `usersync.redirect.url`. When source-spec declares `gpp-supported: true`, verify the Java YAML's usersync URLs include the GPP macros.
 - **Source spec carries `code.make_bids.http_status_handling.kind=canonical-go-helpers`** → cross-reference: Java framework defaults handle 204/non-200 status codes BEFORE `makeBids` is invoked (Rule 30 framework-default no-op). The Java `{X}Configuration.java` should NOT include explicit status-check wiring. If the Configuration file includes a custom HTTP status handler bean or registers a non-default response filter, flag as **warn** — divergence from the canonical Go semantics is suspicious for a port.
 - **F-new-67/69/72 (empty `geoscope:` bare-line)** — pre-flagged by pr-triage-java Step 5k. If the YAML contains a bare `geoscope:` line with no list value, this resolves to YAML null which Spring then maps to an empty list — but the line is unused (the canonical pattern is to omit the field entirely). Flag as **info** with note: "Empty `geoscope:` bare-line — omit the field entirely or supply a list."
 - **F-new-44 (ortb fields missing on Java port)** — when source spec declares `openrtb.version: "2.6"` but Java YAML omits the `ortb` block, the adapter will send `X-OpenRTB-Version: 2.5` headers despite the Go side declaring 2.6. Flag as **fail**.
@@ -149,7 +152,7 @@ Severity policy (symmetric with Go side):
 - `warn` when divergence touches a Rule 38 byte-fidelity assertion or R5-strict cross-language equivalence
 - `fail` when the divergence is a documented `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` `severity: fail` entry
 
-**Note**: as of audit time, the `prior_source_spec` downstream consumption is DEFERRED to audit item 25. This skill's port-fidelity check is the Java-side first implementation; the Go-side symmetric consumer also has zero implementation as of audit time (per `docs/runs/post-d3.8-remaining-work.md:36`). pr-triage-java emits the block today; downstream skills consume it as the audit-item-25 work lands.
+**Note**: this skill's port-fidelity check is the Java-side first downstream consumer of `prior_source_spec` (audit item 25 LANDED in this F4 PR). pr-triage-java emits the block; this skill, `bidder-class-pr-review`, and `bidder-params-java-pr-review` each consume it via their Step 1g. The Go-side symmetric consumer is still pending as of audit time (per `docs/runs/post-d3.8-remaining-work.md:36`).
 
 ### Step 2: Extract Changes From the Diff
 
@@ -201,7 +204,7 @@ YAML side (within `adapters.{x}`):
 7. `geoscope` — use [Geoscope Changed](#workflow-geoscope-changed)
 8. `endpoint-compression` — use [Endpoint Compression Changed](#workflow-endpoint-compression-changed)
 9. `modifying-vast-xml-allowed` — use [Modifying VAST XML Changed](#workflow-modifying-vast-xml-changed)
-10. `ortb.version` / `ortb.multiformat-supported` / `ortb.gpp-supported` — use [ORTB Block Changed](#workflow-ortb-block-changed)
+10. `ortb-version` (top-level, on base class) or `ortb.multiformat-supported` (under the `ortb:` block — the only field in Java's `Ortb` POJO) — use [ORTB Block Changed](#workflow-ortb-block-changed). Note: Java has NO `ortb.version` (top-level `ortb-version` instead) and NO `ortb.gpp-supported` key — GPP capability is implicit via usersync macros.
 11. `enabled: false` at adapter top-level — use [Bidder Disabled](#workflow-bidder-disabled)
 
 Java side (within `{X}Configuration.java`):
@@ -209,7 +212,7 @@ Java side (within `{X}Configuration.java`):
 2. `@Bean("{x}ConfigurationProperties") @ConfigurationProperties("adapters.{x}")` quartet — use [Bean Quartet](#workflow-bean-quartet)
 3. `BidderDepsAssembler.<T>forBidder(BIDDER_NAME)` — use [BidderDepsAssembler Generic](#workflow-bidderdepsassembler-generic)
 4. `.withConfig(...)` — use [withConfig Binding](#workflow-withconfig-binding)
-5. `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` — use [UsersyncerCreator URL](#workflow-usersynccreator-url)
+5. `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` — use [UsersyncerCreator URL](#workflow-usersyncercreator-url)
 6. `.bidderCreator(cfg -> new {X}Bidder(...))` lambda — use [bidderCreator Lambda](#workflow-biddercreator-lambda) (HIGH PRIORITY — F-new-57 trap)
 7. `resolveEndpoint(...)` helper method — use [resolveEndpoint Helper](#workflow-resolveendpoint-helper)
 8. Inner `BidderConfigurationProperties` subclass — use [Typed-Config Subclass](#workflow-typed-config-subclass)
@@ -317,7 +320,7 @@ For each added or modified alias entry:
    - `{{gdpr}}`, `{{gdpr_consent}}` for GDPR compliance (note: Java uses lowercase + underscore; Go uses `{{.GDPR}}` / `{{.GDPRConsent}}` — Port Translation Rule 12)
    - `{{us_privacy}}` for US privacy
    - `{{redirect_url}}` for the callback
-   - `{{gpp}}` / `{{gpp_sid}}` if GPP is supported (cross-reference with `ortb.gpp-supported: true`)
+   - `{{gpp}}` / `{{gpp_sid}}` if GPP is supported (note: Java has NO `ortb.gpp-supported` boolean; the presence of these macros in usersync URLs IS the GPP-support signal — see Workflow: ORTB Block Changed)
 4. **userMacro consistency**: If `uid-macro` is declared, verify it follows the bidder's expected format (e.g., `$UID`, `<vsid>`, `[USER_ID]`).
 5. **Domain ownership**: Sync URL domain SHOULD belong to the bidder organization. Flag mismatch as **WARN**.
 6. **Both types declared**: If the bidder declares both iframe AND redirect, verify both URLs are functional. Flag unreachable declared type as **FAIL**.
@@ -361,18 +364,20 @@ For each added or modified alias entry:
 
 **Triggers when:** `geoscope` (at adapter top-level OR under an alias) is added or modified.
 
+**Operator-warning context (verified at SHA `a1fe64e123d6`)**: the `geoscope` key is **currently UNBOUND in upstream Java** — `BidderConfigurationProperties` has no `geoscope` field and `BidderInfoCreator` has no `getGeoscope()` reference. Spring relaxed-binding silently discards the value. Reviewer guidance: still apply the value-validity checks below (so YAML stays correct when upstream binds the field), but mark the finding INFO with note: "geoscope is currently silently dropped by Spring relaxed-binding — operator should treat as documentation until upstream wires it." Operators upgrading or hand-mirroring the Go-side geoscope should not expect runtime enforcement on the Java side today.
+
 1. **Valid values**: 3-letter ISO 3166-1 alpha-3 country codes (e.g., `USA`, `CAN`, `GBR`, `NOR`, `SWE`, `DNK`). Special values: `GLOBAL`, `EEA`. Negation prefix `!` (e.g., `!EEA`).
-2. **Uppercase required**: All values MUST be uppercase. Lowercase is **FAIL**.
-3. **Bare-line empty (F-new-67/69/72 trap)**: If the diff adds a bare `geoscope:` line with no list value, this resolves to YAML null which Spring maps to an empty list — the line is functionally unused. Flag as **INFO** with recommendation to omit the field entirely. pr-triage-java's Step 5k may also pre-flag this.
-4. **Geographic claims plausibility**: Verify the country list aligns with the bidder's organizational geography (Kobler declares `NOR/SWE/DNK` — Scandinavian; matches `bidding-support@kobler.no`). Flag implausible claims as **WARN**.
-5. **Alias inheritance**: When parent declares geoscope and an alias does NOT, the alias inherits. When an alias explicitly declares geoscope, the alias value overrides. Flag redundant alias geoscope matching parent as **WARN** (cleaner YAML).
+2. **Uppercase required**: All values MUST be uppercase. Lowercase is **FAIL** (when upstream binds the field; today only style).
+3. **Bare-line empty (F-new-67/69/72 trap)**: If the diff adds a bare `geoscope:` line with no list value, this resolves to YAML null which Spring would map to an empty list — but the field is currently unbound regardless. Flag as **INFO** with recommendation to omit the field entirely. pr-triage-java's Step 5k may also pre-flag this.
+4. **Geographic claims plausibility**: Verify the country list aligns with the bidder's organizational geography (Kobler declares `NOR/SWE/DNK` — Scandinavian; matches `bidding-support@kobler.no`). Flag implausible claims as **WARN** (documentation hygiene).
+5. **Alias inheritance**: When parent declares geoscope and an alias does NOT, the alias would inherit (when bound). When an alias explicitly declares geoscope, the alias value would override. Flag redundant alias geoscope matching parent as **WARN** (cleaner YAML).
 
 ### Workflow: Endpoint Compression Changed
 
 **Triggers when:** `endpoint-compression` is added or modified.
 
 1. **Valid value**: `gzip` (lowercase per Java's `CompressionType` enum + Spring relaxed-binding). Some upstream YAMLs use `GZIP` (uppercase) — both bind to `CompressionType.GZIP` via Spring. Reviewer-preferred form is `gzip` (lowercase) per canonical examples (kobler.yaml, adverxo.yaml). Flag uppercase as **INFO** (functional but non-canonical).
-2. **CamelCase typo (Java edge case #34, F-new-86)**: If the diff uses `endpointCompression` (camelCase) at the YAML key level, this is **FAIL** — Java's relaxed-binding does NOT handle the camelCase form for this key; it is silently ignored and compression is NOT applied. Canonical regression: Ogury PR #3788. Read-side companion's edge-case taxonomy taxonomizes this as `endpoint-compression-typo`.
+2. **CamelCase typo (Java edge case #34, `endpoint-compression-typo` family)**: If the diff uses `endpointCompression` (camelCase) at the YAML key level, this is **FAIL** — Java's relaxed-binding does NOT handle the camelCase form for this key; it is silently ignored and compression is NOT applied. Canonical regression: Ogury PR #3788. Read-side companion's edge-case taxonomy taxonomizes this as `endpoint-compression-typo`. (Distinct from F-new-86, which is the ADR-007 F3 Site→App synthesis trap owned by `bidder-class-pr-review`.)
 3. **Server support verification**: Confirm the bidder's endpoint actually accepts `Content-Encoding: gzip`. (Cannot test directly without a real bid request; flag as **INFO** asking the contributor to confirm.)
 
 ### Workflow: Modifying VAST XML Changed
@@ -382,17 +387,21 @@ For each added or modified alias entry:
 1. **Valid value**: Boolean (`true` or `false`).
 2. **Default behavior**: Default is `true` framework-wide. Setting `false` opts out of video impression tracking.
 3. **Video media-type prerequisite**: Setting `modifying-vast-xml-allowed: false` only makes sense if the bidder declares video in `meta-info.{app,site}-media-types`. If `false` is set but no video capability, flag as **WARN**.
-4. **CamelCase typo (Java edge case #31, F-new-86 family)**: If the diff uses `modifyingVastXmlAllowed` (camelCase) at the YAML key level, this is **FAIL** — silently defaults to true. Canonical Java key is `modifying-vast-xml-allowed`.
+4. **CamelCase typo (Java edge case #31)**: If the diff uses `modifyingVastXmlAllowed` (camelCase) at the YAML key level, this is **FAIL** — silently defaults to true. Canonical Java key is `modifying-vast-xml-allowed`. (Distinct from F-new-86, which is the ADR-007 F3 Site→App synthesis trap owned by `bidder-class-pr-review`.)
 5. **R5-strict cross-language equivalence**: When `prior_source_spec` declares `modifying_vast_xml_allowed`, the Java value MUST match.
 
 ### Workflow: ORTB Block Changed
 
-**Triggers when:** `ortb.version`, `ortb.multiformat-supported`, or `ortb.gpp-supported` is added or modified.
+**Triggers when:** `ortb-version` (top-level, on base class) or `ortb.multiformat-supported` (under the `ortb:` block) is added or modified.
 
-1. **`ortb.version: "2.6"` quoting (Java edge case #29)**: Must be a QUOTED string. `ortb.version: 2.6` (unquoted) parses as YAML float `2.6` — Spring's binding to `OrtbVersion` enum then fails silently (or maps to wrong enum). Flag unquoted as **FAIL**. Canonical examples (kobler.yaml does NOT declare ortb at all — defaults apply; declared examples must quote).
+**Important — what does NOT exist in Java's POJO surface:**
+- `ortb.version` (nested) is NOT a Java key. The version field is `ortb-version` at adapter top-level, binding to `BidderConfigurationProperties.ortbVersion`.
+- `ortb.gpp-supported` is NOT a Java key. GPP capability is signaled implicitly via `{{gpp}}` / `{{gpp_sid}}` macros in `usersync.*.url`. The Java `Ortb` POJO contains ONLY `multiFormatSupported` (kebab-case `multiformat-supported`).
+
+1. **`ortb-version: "2.6"` quoting (Java edge case #29)**: Must be a QUOTED string. `ortb-version: 2.6` (unquoted) parses as YAML float `2.6` — Spring's binding to `OrtbVersion` enum then fails silently (or maps to wrong enum). Flag unquoted as **FAIL**. Canonical examples: kobler.yaml does NOT declare the field at all (defaults apply); declared examples must quote.
 2. **`ortb.multiformat-supported: bool`**: Boolean. Controls whether adapter handles multi-format imps in a single request. Verify adapter code's `makeHttpRequests(...)` actually splits or merges multi-format correctly.
-3. **`ortb.gpp-supported: bool`**: Boolean. When `true`, the adapter is expected to process GPP signals AND the usersync URLs should include `{{gpp}}` / `{{gpp_sid}}` macros — flag mismatch as **WARN**.
-4. **F-new-44 family**: When `prior_source_spec` declares `openrtb.version: "2.6"` but Java YAML omits the `ortb` block entirely, the adapter sends 2.5 requests. Flag as **fail** — port is incomplete.
+3. **Pseudo-`gpp-supported`**: When source-spec carries `gpp-supported: true` (Go side), verify Java's usersync URLs include `{{gpp}}` / `{{gpp_sid}}` macros — flag mismatch as **WARN**. There is no `ortb.gpp-supported` boolean to set on the Java side.
+4. **F-new-44 family**: When `prior_source_spec` declares `openrtb.version: "2.6"` but Java YAML omits the top-level `ortb-version` field, the adapter sends 2.5 requests. Flag as **fail** — port is incomplete.
 
 ### Workflow: Bidder Disabled
 
@@ -411,7 +420,7 @@ For each added or modified alias entry:
 - A new YAML's `endpoint:` matches an existing adapter's endpoint domain
 
 1. **Prebid policy quote (verbatim)**: "If an adapter is a white label, the aliasing feature should be used instead of copying an adapter."
-2. **`whiteLabelOnly: true` semantics**: Marks parent as available only as white-label target (aliases reference it). Does NOT preclude `{X}Bidder.java` Java code on the parent — canonical white-label parents (TeqBlaze, SmartHub) have full Java code AND `whiteLabelOnly: true`. **INFO** if the flag is set on a new file.
+2. **`white-label-only: true` semantics (Java kebab-case key; Go side uses camelCase `whiteLabelOnly`)**: Marks parent as available only as white-label target (aliases reference it). Does NOT preclude `{X}Bidder.java` Java code on the parent — canonical white-label parents (TeqBlaze, SmartHub) have full Java code AND `white-label-only: true`. **INFO** if the flag is set on a new file.
 3. **Full adapter that looks like a copy**: If a new full Java adapter is being added but the diff structure resembles an existing adapter (heuristic: identical endpoint domain, comparable parameter schema, copy-paste-style Configuration class), flag as **WARN** with the suggestion: "this may be a white-label scenario — consider adding the new bidder as an alias under an existing parent's `aliases:` block instead of duplicating Java code."
 4. **Alias-only directionality**: `aliases:` entries are typically added (not deleted from full). Reverse migration (alias → full) is rare and requires reviewer judgment.
 5. **Cross-skill de-duplication**: If pr-triage-java's CROSS-SKILL CONCERNS already records the 5g resemblance signal OR the `whitelabel-redirect-mid-review` sub-label was set, do NOT re-flag — note `Previously flagged by triage` and surface only net-new findings (e.g., parent-choice verification: when the redirect-resolution chose a different parent than the reviewer originally suspected).
@@ -485,7 +494,7 @@ This is the **highest-priority** workflow in the Spring DI side because it bridg
    - Any helper service (`PriceFloorResolver`, `PrebidVersionProvider`, `UUIDIdGenerator`, etc.) requires the matching constructor parameter type. Cross-reference [../../../read/skills/shared/framework-utilities-java.md](../../../read/skills/shared/framework-utilities-java.md) for the canonical service list.
 4. **Argument order match**: The lambda's arguments MUST appear in the same ORDER as the constructor expects. Mismatch is **FAIL** (compile error OR — worse — silent runtime misbinding when types coincidentally line up).
 5. **`resolveEndpoint(...)` indirection (when present)**: When the Configuration class declares a `private String resolveEndpoint(String, String)` helper (canonical: AaxConfiguration line 44), the lambda should pass `resolveEndpoint(config.getEndpoint(), externalUrl)` rather than `config.getEndpoint()` directly. This indirection substitutes the `{{PREBID_SERVER_ENDPOINT}}` macro at startup. If the helper is declared but the lambda calls `config.getEndpoint()` directly, the macro will leak into runtime URLs — **FAIL**.
-6. **No `BidderInfoCreator` usage (F-new-57 sub-trap)**: The line `BidderInfoCreator.create(BIDDER_NAME, ...)` is canonically OMITTED post-F2 — the framework default handles bidder-info creation from the YAML. If the PR re-introduces this line, flag as **FAIL** with note: "BidderInfoCreator was removed in F2 cleanup; framework default supersedes."
+6. **No `.bidderInfo(...)` call on `BidderDepsAssembler` (F-new-57b — HIGH BLOCKING FAIL)**: `BidderDepsAssembler` exposes only `forBidder`, `withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble` as its public builder methods. There is NO public `.bidderInfo(...)` method. A `.bidderInfo(BidderInfoCreator.create(mapper)::create)` line is a COMPILE ERROR — verified against `BidderDepsAssembler.java` at SHA `a1fe64e123d6`. The framework auto-creates `BidderInfo` internally inside `BidderDepsAssembler.coreDeps()` from the `@ConfigurationProperties`'d YAML; per-bidder Configuration files MUST NOT call `BidderInfoCreator.create(...)` directly nor chain `.bidderInfo(...)` on the assembler. Flag any such call as **FAIL** (port-go2java emit trap; will not compile).
 7. **No `BidderUtil.*` non-existent method calls (F-new-90)**: The Rule 30 framework-default mapping for HTTP status handling, error wrapping, and bidresponse parsing means the Configuration class should NOT include `BidderUtil.handleStatusCode(...)` / `BidderUtil.wrapError(...)` / similar method calls — these do not exist in the framework. Calls to `BidderUtil.*` non-existent methods are **FAIL** (compile error; CI catches but pre-flag).
 
 ### Workflow: resolveEndpoint Helper
@@ -571,9 +580,9 @@ After reviewing individual fields, verify these cross-field constraints. Apply O
 7. **Rule 35 subclass field `@NotBlank` ↔ YAML field present + non-empty**: Spring validation will fail at startup if the YAML field is missing.
 8. **YAML capabilities ↔ `{X}Bidder.java`'s handled media types**: Cross-skill READ; this skill records the YAML side, bidder-class-pr-review owns the code-side check.
 9. **YAML aliases ↔ `test-application.properties` registry entries**: Cross-skill READ; pr-triage-java owns the registry check, this skill records the YAML side.
-10. **YAML usersync GPP macros ↔ `ortb.gpp-supported: true`**: When `{{gpp}}` / `{{gpp_sid}}` appear in usersync URLs, the `ortb.gpp-supported` flag SHOULD be `true`. Mismatch: **WARN**.
+10. **YAML usersync GPP macros (implicit GPP-support signal)**: When `{{gpp}}` / `{{gpp_sid}}` appear in usersync URLs, the bidder is implicitly claiming GPP support — verify against source-spec's `gpp-supported` claim (Go side). There is NO Java `ortb.gpp-supported` boolean to flip. Macros-without-source-spec-claim: **INFO**; source-spec-claim-without-macros: **WARN**.
 11. **Alias endpoint macros ↔ parent's `resolveEndpoint` capability**: Every `{{TOKEN}}` in an alias's overridden endpoint MUST be a token the parent's `resolveEndpoint` resolves OR a per-bidder template token the parent's `{X}Bidder` consumes. Otherwise the literal leaks. (Cross-skill concern 5a from pr-triage-java.)
-12. **`whiteLabelOnly: true` + alias presence**: When parent declares `whiteLabelOnly: true`, an `aliases:` block MUST be present (it's the whole point). Empty `aliases:` block on a whitelabel parent: **WARN**.
+12. **`white-label-only: true` + alias presence**: When parent declares `white-label-only: true` (Java kebab-case key), an `aliases:` block MUST be present (it's the whole point). Empty `aliases:` block on a whitelabel parent: **WARN**.
 
 ---
 
@@ -637,6 +646,6 @@ The reciprocal direction (other skills reading THIS skill's files) is documented
 - [`pr-triage-java/SKILL.md`](../pr-triage-java/SKILL.md) — orchestrator emitting the routing manifest this skill consumes
 - [`bidder-class-pr-review/SKILL.md`](../bidder-class-pr-review/SKILL.md) — adapter class + IT class + unit-test review
 - [`bidder-params-java-pr-review/SKILL.md`](../bidder-params-java-pr-review/SKILL.md) — JSON Schema + ExtImp{X} POJO + IT-fixture review
-- [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) — review-side framework utilities (deferred; references the read-side at [`../../../read/skills/shared/framework-utilities-java.md`](../../../read/skills/shared/framework-utilities-java.md) until shipped)
+- [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) — review-side framework utilities (LANDED in this PR, step 2, commit `63be93d`); read-side companion at [`../../../read/skills/shared/framework-utilities-java.md`](../../../read/skills/shared/framework-utilities-java.md)
 - [`../../../read/skills/read-bidder-config/SKILL.md`](../../../read/skills/read-bidder-config/SKILL.md) — read-side companion that EXTRACTS the same YAML surface this skill REVIEWS (round-trip: read populates `bidder_info` block; review verifies PR diff against that block when persisted)
 - [`../../../../docs/methodology/java-review-skill-design.md`](../../../../docs/methodology/java-review-skill-design.md) — design contract (§5 Java framework conventions, §8 open questions; this skill locks down Q2 typed-subclass ownership as "owned by bidder-config-pr-review per inner-class-or-separate-file convention" and Q4 alias-only detection heuristic as "alias hunk inside parent YAML's `aliases:` block")

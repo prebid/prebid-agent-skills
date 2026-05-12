@@ -38,7 +38,7 @@ For framework-wide concerns (Lombok annotation conventions, Spring DI quartet, J
 | `src/main/resources/bidder-config/{x}.yaml` | `bidder-config/aax.yaml` | UNIFIED bidder-info + endpoint + aliases + usersync. Aliases live INSIDE the parent (`aliases: { adport: ~ }`), inverted from Go's per-alias `aliasOf:` (port-translation Rule 33) |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` | `…/config/bidder/AaxConfiguration.java` | Spring `@Configuration` factory: `@Bean` declaring `BidderConfigurationProperties` + `BidderDeps` via `BidderDepsAssembler` |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfiguration.java` | `…/config/bidder/AdverxoBidderConfiguration.java` | Filename naming is BIMODAL upstream — both `{X}Configuration.java` and `{X}BidderConfiguration.java` are accepted. Reviewers do NOT flag the choice; the `OuterTypeFilename` checkstyle rule enforces internal class name matches filename root |
-| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | `…/config/bidder/KoblerBidderConfigurationProperties.java` | The Rule 35 typed-config subclass. Present ONLY when the bidder needs extra YAML fields beyond the framework default (e.g., `dev-endpoint`, `pixel-url`, `region-prefix`). Lombok `@Data`, extends `BidderConfigurationProperties` |
+| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | (design-permitted; no upstream example at SHA `a1fe64e123d6`) | The Rule 35 typed-config subclass when shipped as a separate file. Present ONLY when the bidder needs extra YAML fields beyond the framework default (e.g., `dev-endpoint`, `pixel-url`, `region-prefix`). Lombok `@Data`, extends `BidderConfigurationProperties`. In current upstream practice this subclass is always an inner `private static class` declared inside `{X}Configuration.java` (canonical: Kobler, TheTradeDesk, Adnuntius). The separate-file form is reviewer-accepted but unused upstream |
 
 ### bidder-params-java-pr-review
 
@@ -82,25 +82,25 @@ Some bidders ship multiple scenarios (e.g., `simple-banner`, `simple-video`); ea
 
 ### `src/test/resources/org/prebid/server/it/test-application.properties`
 
-This file is multi-bidder. Every new-adapter PR and every new-alias PR adds a 2-line pair (or 2-line pair per alias). pr-triage-java owns the FILE but routes each 2-line block per-bidder to the relevant downstream skill list.
+This file is multi-bidder. Every new-adapter PR and every new-alias PR adds a 2-line pair (or 2-line pair per alias). **pr-triage-java OWNS the file** for routing purposes (categorization bucket `shared:test-application-properties`) and performs the IT-Registry cross-skill check (Step 5i) that validates each added line against a corresponding YAML change. Downstream reviewer skills do NOT create review tasks for lines in this file.
 
-**Per-line resolution:**
+**Per-line context** (informational — pr-triage-java performs the verification; downstream skills consume the IT-Registry findings):
 
-| Diff Content | Owner / Action |
-|-------------|----------------|
-| `adapters.{x}.enabled=true` (new top-level adapter) | `bidder-class-pr-review` (cross-skill: also touches `bidder-config-pr-review`) |
-| `adapters.{x}.endpoint=http://localhost:8090/{x}-exchange` | Same as above |
-| `adapters.{parent}.aliases.{alias}.enabled=true` | `bidder-class-pr-review` (per-alias IT class likely added too) |
+| Diff Content | Associated bidder context |
+|-------------|--------------------------|
+| `adapters.{x}.enabled=true` (new top-level adapter) | Pairs with `bidder-config/{x}.yaml` addition |
+| `adapters.{x}.endpoint=http://localhost:8090/{x}-exchange` | Pairs with adapter implementation; pr-triage verifies the WireMock localhost convention |
+| `adapters.{parent}.aliases.{alias}.enabled=true` | Pairs with a parent YAML's `aliases:` block addition and (typically) a new `it/{Alias}Test.java` |
 | `adapters.{parent}.aliases.{alias}.endpoint=...` | Same as above |
 
-The Java reviewers' convention treats `test-application.properties` additions as **test-property bindings**, so all 3 downstream skills generally agree they fall under `bidder-class-pr-review`'s purview. pr-triage's IT-Registry cross-skill check (5i) verifies each line aligns with a corresponding YAML change.
+Mismatches surface as `IT-REGISTRY:` findings in the manifest's cross-skill concerns block. Per-alias IT class additions remain in `bidder-class-pr-review`'s scope (the Java class file is in the bidder-class bucket); the `test-application.properties` line itself is verified by pr-triage-java.
 
 ### Framework files (BidderCatalog, BidderDepsAssembler, base BidderConfigurationProperties)
 
 | Diff Content | Owner |
 |-------------|-------|
 | Changes to `BidderCatalog.java` public API (`bidders()`, `bidderInfoByName(...)`, `nameByAlias(...)`) | `unowned:framework`; pr-triage drift `framework-spring-di` |
-| Changes to `BidderDepsAssembler.forBidder(...)` or its builder methods | `unowned:framework`; pr-triage drift `framework-spring-di` |
+| Changes to `BidderDepsAssembler.<T>forBidder(...)` (typed form) or its builder methods (`withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`) | `unowned:framework`; pr-triage drift `framework-spring-di` |
 | Changes to `BidderConfigurationProperties` base class fields | `unowned:framework`; pr-triage drift `bidder-config`; **TRIGGERS schema-migration sub-label** |
 
 Drift output is consumed by downstream skills, NOT routed as a file.
@@ -189,13 +189,15 @@ Any file not matching any of the above categories.
 
 ### New Adapter
 
-A PR is classified as `new-adapter` if ALL of the following are true for at least one bidder:
+A PR is classified as `new-adapter` if ALL FOUR of the following are true for at least one bidder (strict form — byte-aligned with `pr-triage-java/SKILL.md` Step 4 rule 2):
 1. `src/main/java/org/prebid/server/bidder/{x}/{X}Bidder.java` has status `added`
 2. `src/main/resources/bidder-config/{x}.yaml` has status `added`
 3. `src/main/resources/static/bidder-params/{x}.json` has status `added`
 4. `src/test/resources/org/prebid/server/it/test-application.properties` diff contains new top-level `adapters.{x}.enabled=true` and `adapters.{x}.endpoint=...` lines (NOT under an existing parent's `aliases:`)
 
-Completeness check (Step 5e) enumerates all 10–11 expected files per new adapter; missing ones are reported as `COMPLETENESS: New adapter {x} missing {file_type}`.
+Rationale (per design-doc §8 Q3 — Locked in this PR): the strict form eliminates false-positive new-adapter classifications when partial subsets land.
+
+Completeness check (Step 5e) enumerates all **12 expected files** per new adapter (13 when Rule 35 typed-subclass ships as a separate file — the design-permitted but upstream-unused form); missing ones are reported as `COMPLETENESS: New adapter {x} missing {file_type}`.
 
 ### Alias-Only
 
@@ -219,7 +221,7 @@ When `infrastructure` is detected:
 - Downstream skills activate in "bulk mode" — pattern consistency check, not per-bidder detailed review
 
 **Sub-labels** (applied on top of `infrastructure`):
-- `framework-debt`: triggered by changes to `checkstyle.xml`, `BidderCatalog.java`, `BidderDepsAssembler.java`, or `BidderConfigurationProperties.java` (base class) — expect cascading impact on every existing adapter
+- `framework-debt`: triggered by changes to any of the 5 cascading-impact files: `checkstyle.xml`, `BidderCatalog.java`, `BidderDepsAssembler.java`, `BidderConfigurationProperties.java` (base class), or `src/test/java/org/prebid/server/it/IntegrationTest.java` (the IT-base class). Byte-aligned with `pr-triage-java/SKILL.md` Step 4 rule 1 + Step 5h.
 - `schema-migration`: triggered when `BidderConfigurationProperties` or sibling base classes under `spring/config/bidder/model/` are modified — all adapters inherit silently; migration coverage check is required
 
 ### Adapter Modification
@@ -331,7 +333,7 @@ For NEW PRs: when a full adapter is being added that resembles an existing adapt
 
 Severity: **WARN** with note suggesting alias-only conversion. The white-label workflow lives in `bidder-config-pr-review` skill; this is the cross-skill detection trigger.
 
-For verbatim reviewer quotes and the canonical white-label workflow, see [../../shared/framework-utilities-java.md](../../shared/framework-utilities-java.md) (Aliasing section) and the eventual `bidder-config-pr-review/SKILL.md` Workflow: White-Label Policy Compliance.
+For verbatim reviewer quotes and the canonical white-label workflow, see [`../../shared/framework-utilities-java.md`](../../shared/framework-utilities-java.md) §1 (Spring DI conventions, which covers the alias-inversion and white-label inner-class-or-separate-file form), [`../../../../../docs/methodology/java-review-skill-design.md`](../../../../../docs/methodology/java-review-skill-design.md) §3.2 #6 (alias inversion via Rule 33), and [`../../bidder-config-pr-review/SKILL.md`](../../bidder-config-pr-review/SKILL.md) Workflow: White-Label Policy.
 
 ---
 

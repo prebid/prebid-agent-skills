@@ -32,7 +32,7 @@ The `adapters` root is the Spring property prefix for the `BidderCatalog`. The `
 
 ### A.2 Top-level adapter fields (under `adapters.{x}`)
 
-These bind to `BidderConfigurationProperties` (the base class — 14 fields) via Spring relaxed-binding.
+These bind to `BidderConfigurationProperties` (the base class — **13 YAML-bindable fields** verified at SHA `a1fe64e123d6`) via Spring relaxed-binding. The base class also declares 2 non-binding internal fields (`defaultProperties` autowired, `selfClass` runtime-class reference) that are not part of the YAML surface.
 
 | YAML Path | Java Field (base class) | Type | Required | Validation / Constraint | Reviewer Concerns |
 |-----------|-------------------------|------|----------|-------------------------|-------------------|
@@ -49,7 +49,7 @@ These bind to `BidderConfigurationProperties` (the base class — 14 fields) via
 | `endpoint-compression` | `endpointCompression` | `CompressionType` (enum) | No | — | Enum values: `NONE`, `GZIP`. Spring relaxed-binding accepts lowercase `gzip` (Java edge case: this is the camelCase↔kebab-case enum match, distinct from Go's case-sensitive `"GZIP"`-only comparison). See SKILL.md "Workflow: Endpoint Compression Changed". |
 | `ortb` | `ortb` | `Ortb` (POJO) | No | see A.4 below | F-new-44 zone. Java's key is `ortb` (Go's is `openrtb`). |
 | `tmax-deduction-ms` | `tmaxDeductionMs` | `long` | No | — | Per-bidder timeout buffer subtracted from tmax. Operator-controlled. |
-| `geoscope` | `geoscope` | (custom property — not in base class; consumed by `BidderInfoCreator`) | No | — | List of ISO 3166-1 alpha-3 country codes, `GLOBAL`, `EEA`, or `!`-prefix exclusions. Defaults to `["global"]`. Bare empty `geoscope:` line is the F-new-67/69/72 trap — INFO; omit the field entirely. See SKILL.md "Workflow: Geoscope Changed". |
+| `geoscope` | `geoscope` | (NOT bound in current upstream — silently dropped by Spring relaxed-binding) | No | — | List of ISO 3166-1 alpha-3 country codes, `GLOBAL`, `EEA`, or `!`-prefix exclusions. **Verified at SHA `a1fe64e123d6`: `BidderConfigurationProperties` has NO `geoscope` field and `BidderInfoCreator` has NO `getGeoscope()` reference** — the key parses as YAML but Spring relaxed-binding finds no target setter, so it is silently discarded. Operators should treat the field as documentation-only until upstream binds it. The bare empty `geoscope:` line is the F-new-67/69/72 trap — **INFO**; omit the field entirely or supply a list. Reviewers flagging "geoscope changes" should note that the field is currently unbound. See SKILL.md "Workflow: Geoscope Changed". |
 | `white-label-only` | (custom property — consumed downstream) | `Boolean` | No | — | Marks the bidder as available only as a white-label parent (aliases reference it). Does NOT preclude Java adapter code on the parent. See SKILL.md "Workflow: White-Label Policy" + framework-utilities-java.md §1. |
 | `extra-info` | (custom property) | `String` (JSON) | No | Must be valid JSON if present | Rarely used in Java; legacy of Go-side `extra_info`. |
 | custom keys, e.g. `dev-endpoint` | (declared on Rule 35 typed-subclass) | varies | No | typed-subclass `@NotBlank` etc. | Rule 35 typed-config — operator-defined fields that extend `BidderConfigurationProperties`. Canonical: Kobler's `dev-endpoint: ...` → `private String devEndpoint` in `KoblerConfigurationProperties extends BidderConfigurationProperties`. See SKILL.md "Workflow: Typed-Config Subclass" + Part C.5 below. |
@@ -238,7 +238,7 @@ BidderDeps {x}BidderDeps({X}ConfigurationProperties config,
 | `.withConfig(config)` | **Yes** | Binds the `@ConfigurationProperties` instance into the assembler. SKILL.md "Workflow: withConfig Binding". |
 | `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` | When usersync declared | If YAML declares `usersync:` block, this line MUST appear; otherwise omit. Inconsistency: **FAIL**. SKILL.md "Workflow: UsersyncerCreator URL". |
 | `.bidderCreator(cfg -> new {X}Bidder(...))` | **Yes** | The lambda constructs the bidder. **HIGH PRIORITY F-new-57 trap zone**: each constructor arg must match `{X}Bidder.java`'s declared constructor signature (arg count, order, type). Cross-skill READ verifies against `{X}Bidder.java`. SKILL.md "Workflow: bidderCreator Lambda". |
-| `.bidderInfo(...)` | **NEVER** | **F-new-57b trap**: spurious `.bidderInfo(...)` call inserted by port-go2java template. The assembler auto-creates `BidderInfo` from the `@ConfigurationProperties`. Manual `.bidderInfo(...)` is dead-code OR overrides framework auto-creation incorrectly. **FAIL** when present. See framework-utilities-java.md §1.5. |
+| `.bidderInfo(...)` | **NEVER** | **F-new-57b trap (HIGH BLOCKING FAIL — compile error)**: spurious `.bidderInfo(...)` call inserted by port-go2java template. Verified against `BidderDepsAssembler.java` at SHA `a1fe64e123d6`: there is NO public `.bidderInfo(...)` method on the assembler — the public surface is `forBidder`, `withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`. The assembler auto-creates `BidderInfo` internally inside `coreDeps()` from the `@ConfigurationProperties`'d YAML. Any `.bidderInfo(...)` call will NOT COMPILE. **FAIL** when present. Provenance: NEW finding from the F4 review-skill-suite framework-doc audit (not in the D2.8 cross-canary catalog; surfaced when grep-verifying upstream confirmed the method is absent). See framework-utilities-java.md §1.5. |
 | `.assemble()` | **Yes** | Terminal call returning `BidderDeps`. Missing is a compile error. |
 
 #### B.2.4 The `resolveEndpoint(...)` helper (when present)
@@ -274,7 +274,7 @@ Located at the bottom of `{X}Configuration.java`. Canonical: Kobler, Rubicon, Ap
 
 #### B.3.2 Separate-file form
 
-Same class shape but lives at `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java`. Canonical: Adverxo (legacy pattern). Either form is upstream-accepted.
+Same class shape but lives at `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java`. **No upstream example exists at SHA `a1fe64e123d6`** — all currently-shipped Rule 35 subclasses are inner classes (Kobler, TheTradeDesk, Adnuntius). The separate-file form remains design-permitted and reviewer-accepted (the activation table in SKILL.md routes it to this skill), but reviewers should NOT cite a non-existent upstream example. When a PR introduces the separate-file form, the typed-subclass workflow applies verbatim.
 
 #### B.3.3 Required annotations (subclass)
 
@@ -282,7 +282,7 @@ Same class shape but lives at `src/main/java/org/prebid/server/spring/config/bid
 |------------|----------|---------|-------------------|
 | `@Validated` | **Yes** | Triggers jakarta validation on the subclass fields | Without it, `@NotBlank`/`@NotNull` are inert. See framework-utilities-java.md §1.7 + §2.5. |
 | `@Data` | **Yes** | Lombok-generates getters + setters + toString + equals + hashCode | Required because Spring relaxed-binding uses setters. |
-| `@EqualsAndHashCode(callSuper = true)` | **Yes** | Lombok delegates to base class's equals/hashCode | **F-new-59 trap**: `callSuper = true` is mandatory; without it, two instances with different parent-field values compare equal. See framework-utilities-java.md §2.5. |
+| `@EqualsAndHashCode(callSuper = true)` | **Yes** | Lombok delegates to base class's equals/hashCode | `callSuper = true` is mandatory; without it, two instances with different parent-field values compare equal. See framework-utilities-java.md §2.5. (F-new-59 is specifically the `lombok.Data` *import-ordering* trap — see §B.4 / framework-utilities-java.md §6.3 — not this annotation's `callSuper` parameter.) |
 | `@NoArgsConstructor` | **Yes** | Lombok-generates no-arg constructor | Spring requires no-arg constructor for `@ConfigurationProperties` instantiation. |
 | `extends BidderConfigurationProperties` | **Yes** | Subclass inherits all 14 base fields | NOT `extends Object` or other base — those would lose endpoint binding etc. |
 
@@ -361,7 +361,7 @@ Apply ONLY when both sides are touched in the same PR OR when one side is being 
 | C.11 | YAML `aliases.{alias}.cookie-family-name` (when full-block) ↔ alias name | YAML internal | **FAIL** |
 | C.12 | YAML `aliases:` non-empty ↔ `white-label-only: true` (when claimed) | YAML internal | **WARN** on empty aliases for whitelabel parent |
 | C.13 | `bidderCreator` lambda arg list (count + order + types) ↔ `{X}Bidder.java` constructor signature | Java ↔ cross-skill | **FAIL** — the F-new-57 trap |
-| C.14 | Java-side `.bidderInfo(...)` call presence | Java internal | **FAIL** — F-new-57b spurious-line trap |
+| C.14 | Java-side `.bidderInfo(...)` call presence on `BidderDepsAssembler` | Java internal | **FAIL — HIGH BLOCKING** (F-new-57b: method does not exist on the assembler at SHA `a1fe64e123d6`; will not compile) |
 | C.15 | Imports in canonical 3-group order | Java internal | **FAIL** — F-new-58/59 + CI annotation |
 | C.16 | `public class {Name}` matches filename root | Java internal | **FAIL** — F-new-79 OuterTypeFilename |
 | C.17 | YAML alias added ↔ `test-application.properties` registry entry (cross-skill 5i) | YAML ↔ cross-skill | **FAIL** when registry entry absent |
@@ -419,4 +419,4 @@ Skip per-field tasks. Create exactly 2 tasks:
 
 - [`../SKILL.md`](../SKILL.md) — consumer skill; this file is referenced from Step 3 (build verification task list) for field→workflow mapping.
 - [`../../shared/framework-utilities-java.md`](../../shared/framework-utilities-java.md) — Spring DI conventions (§1), Lombok semantics (§2), mvn-checkstyle ruleset (§6), F-new trap catalog (§8). Do NOT duplicate here.
-- [`../../../../prebid-server-go/review/skills/bidder-info-pr-review/references/field-index.md`](../../../../prebid-server-go/review/skills/bidder-info-pr-review/references/field-index.md) — Go-side analog (YAML side only). Cross-language mapping table lives there + in SKILL.md Step 1g.
+- [`../../../../../prebid-server-go/review/skills/bidder-info-pr-review/references/field-index.md`](../../../../../prebid-server-go/review/skills/bidder-info-pr-review/references/field-index.md) — Go-side analog (YAML side only). Cross-language mapping table lives there + in SKILL.md Step 1g.

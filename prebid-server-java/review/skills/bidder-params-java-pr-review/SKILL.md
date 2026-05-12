@@ -25,7 +25,7 @@ This skill activates when `pr-triage-java`'s routing manifest routes ≥1 file i
 
 - `src/main/resources/static/bidder-params/{x}.json` — the draft-04 JSON Schema
 - `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/*.java` — Lombok `@Value @Builder` POJO `ExtImp{X}.java` plus helper protos co-located in the same package (e.g., `ExtImp{X}BidExt.java`, `ExtImp{X}Param.java`, `ExtImp{X}Banner.java`, `ExtImp{X}Deserializer.java`)
-- `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` — IT fixture set (the 4-file Rule 36 split: `test-{name}-{request,response,auction-request,auction-response}.json`; multi-scenario bidders ship N × 4 files)
+- `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` — IT fixture set (the 4-file Rule 36 split per scenario: `test-auction-{x}-request.json` + `test-auction-{x}-response.json` + `test-{x}-bid-request.json` + `test-{x}-bid-response.json`; multi-scenario bidders ship N × 4 files with the scenario name embedded — see references/params-type-index.md §C.1 for the canonical pattern verified at SHA `a1fe64e123d6`)
 
 It does NOT activate on its own — `pr-triage-java` runs first and routes files here. The activation cases:
 
@@ -381,22 +381,24 @@ Helper protos typically support:
 
 **Triggers when:** A file under `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/` is added or modified.
 
-The 4-file Rule 36 fixture set per scenario (filenames are STRICT — the IT class' `@Test` methods reference them by exact path):
+The 4-file Rule 36 fixture set per scenario (filenames are STRICT — the IT class' `@Test` methods reference them by exact path). Verified at SHA `a1fe64e123d6` against `src/test/resources/org/prebid/server/it/openrtb2/kobler/`:
 
 | File | Role |
 |---|---|
-| `test-{bidder}-bid-request.json` | The mock bidder's expected incoming request (what the adapter would send to the bidder's endpoint). Drives WireMock's `stubFor(post(...).withRequestBody(equalToJson(...)))`. |
-| `test-{bidder}-bid-response.json` | The mock bidder's response (what the bidder would return). Drives WireMock's `willReturn(aResponse().withBody(...))`. |
-| `test-auction-{bidder}-request.json` | The publisher's OpenRTB auction request entering prebid-server (what the test client posts to `/openrtb2/auction`). |
-| `test-auction-{bidder}-response.json` | The expected OpenRTB auction response from prebid-server (what the test verifies against). |
+| `test-{x}-bid-request.json` | The mock bidder's expected incoming request (what the adapter would send to the bidder's endpoint). Drives WireMock's `stubFor(post(...).withRequestBody(equalToJson(...)))`. |
+| `test-{x}-bid-response.json` | The mock bidder's response (what the bidder would return). Drives WireMock's `willReturn(aResponse().withBody(...))`. |
+| `test-auction-{x}-request.json` | The publisher's OpenRTB auction request entering prebid-server (what the test client posts to `/openrtb2/auction`). |
+| `test-auction-{x}-response.json` | The expected OpenRTB auction response from prebid-server (what the test verifies against). |
 
-Multi-scenario bidders (e.g., Appnexus video) ship N × 4 files with scenario name embedded (`test-video-appnexus-bid-request-1.json`, etc.).
+Multi-scenario bidders (e.g., Appnexus video) ship N × 4 files with scenario name embedded (`test-{scenario}-{x}-bid-request.json` + `test-auction-{scenario}-{x}-request.json` style — verified pattern in upstream `it/openrtb2/`).
 
-1. **Filename pattern**: must match `test-{bidder|scenario}-{request,response,auction-request,auction-response}.json` exactly. The IT class `{X}Test.java` (owned by `bidder-class-pr-review`) loads these by filename — a typo breaks the IT silently. Severity: **FAIL** on filename mismatch.
+1. **Filename pattern**: must match the canonical Rule 36 pattern exactly — `test-auction-{x}-request.json` + `test-auction-{x}-response.json` (publisher auction request/response) + `test-{x}-bid-request.json` + `test-{x}-bid-response.json` (adapter↔bidder bid request/response). The IT class `{X}Test.java` (owned by `bidder-class-pr-review`) loads these by filename — a typo breaks the IT silently. Severity: **FAIL** on filename mismatch.
 2. **Bidder-id consistency**: the request's `imp[].ext.{bidder|prebid.bidder.{bidder}}` key MUST match the bidder name (lowercased, no hyphens). For the auction request: `imp.ext.bidder` is sometimes used as the alias for the configured bidder; verify the field name matches the IT class's `@Bidder` annotation (cross-skill: read `{X}Test.java`).
 3. **Currency convention**: most fixtures implicitly use USD via `cur: ["USD"]` in the auction request. If the PR adds a fixture with a non-USD currency, verify the adapter code (`{X}Bidder.java`) handles currency conversion — surface to `bidder-class-pr-review` as: `CROSS-SKILL: IT fixture {file} uses non-USD currency. Verify {X}Bidder constructor receives CurrencyConversionService.`
 4. **`impid` linkage**: each `seatbid[].bid[].impid` in the bid-response MUST match the corresponding `imp[].id` in the bid-request. Severity: **FAIL** on mismatch (the IT will fail at assertion time).
 5. **F-new-49 trailing whitespace**: Lombok-template-emitted JSON sometimes has stray whitespace before `]` array closers. Pre-flag with: `IT fixture {file}:{line} has trailing whitespace before ']'. Lombok-template emit defect (F-new-49). Reviewers prefer clean JSON.` Severity: **INFO** (not CI-blocking).
+
+5b. **F-new-60 multi-scenario fixture-filename ↔ test-method-name parity**: When a multi-scenario fixture is added (`test-{scenario}-{x}-bid-request.json` etc.), the corresponding IT `@Test` method must use camelCase per the F-new-60 trap (`scenarioForAppSimpleBanner`, NOT `scenario_for_app_simple_banner`). The IT class is owned by `bidder-class-pr-review`, so this skill cannot directly verify the method name — but it MUST cross-skill nudge: `CROSS-SKILL: New multi-scenario fixture {file} added — verify {X}Test.java's @Test method uses camelCase (F-new-60 trap: snake_case fails checkstyle MethodName).` Severity: **INFO**; the fixture filename itself is the structural cross-reference target.
 6. **F-new-52 pre-flag** (Rule 35 typed-config interaction): when the bidder has `{X}BidderConfigurationProperties.java` (Rule 35 typed-config subclass) AND the PR adds new IT fixtures, verify the IT test class's `setUp()` injects the typed subclass. Cross-skill: surface to `bidder-class-pr-review` as: `CROSS-SKILL: New IT fixtures added for {x} (Rule 35 typed-config bidder). Verify {X}Test.java setUp instantiates {X}BidderConfigurationProperties.` Severity: **INFO**.
 7. **JSON formatting**: fixtures should use 2-space indentation (the dominant pattern in `it/openrtb2/`). Tabs or 4-space indentation are non-canonical. Severity: **INFO**.
 8. **Scenario completeness**: when adding a new scenario, all 4 files (`bid-request`, `bid-response`, `auction-request`, `auction-response`) MUST be added together (Rule 36). Severity: **FAIL** when a scenario is partial (e.g., only `bid-request` added without `auction-request`).
@@ -450,15 +452,11 @@ Cross-skill concerns surfaced TO sibling skills (severity: WARN unless escalated
 
 ## Reference Documentation
 
-This skill's references/ deep-dives are deferred to a future F4 session per audit item 19:
+This skill ships a single consolidated references/ deep-dive in this PR (step 3, commit `c618fde`):
 
-- `references/schema-type-matrix.md` (TODO) — JSON Schema type → Java POJO type mapping, full table including flexible-types and helper-proto patterns
-- `references/draft-04-rules.md` (TODO) — JSON Schema draft-04 rules and common Java-side mistakes (the `com.networknt.schema` library's draft-04 quirks)
-- `references/reserved-openrtb-fields.md` (TODO) — fields that must not be bidder params
-- `references/lombok-jackson-matrix.md` (TODO) — Lombok @Value/@Builder/@Data + Jackson @JsonProperty/@JsonAlias/@JsonDeserialize annotation matrix
-- `references/it-fixture-rule36-template.md` (TODO) — Rule 36 4-file fixture template and naming conventions
+- [`references/params-type-index.md`](references/params-type-index.md) — covers JSON Schema type → Java POJO type mapping (Part B.4), JSON Schema draft-04 rules + `com.networknt.schema` library quirks (Part A), reserved OpenRTB fields that must NOT be bidder params (Part E), Lombok `@Value`/`@Builder`/`@Data` + Jackson `@JsonProperty`/`@JsonAlias`/`@JsonDeserialize` annotation matrix (Part B.1/B.2), Rule 36 4-file IT fixture template (Part C), Rule 9 flexible-type idiom matrix (Part B.5), and Rule 38 cross-language byte-fidelity rules (Part D).
 
-When these reference files land, the embedded subset of their content in this SKILL.md moves out.
+The previously-planned topic-split files (`schema-type-matrix.md`, `draft-04-rules.md`, `reserved-openrtb-fields.md`, `lombok-jackson-matrix.md`, `it-fixture-rule36-template.md`) are consolidated into the one params-type-index.md to keep cross-reference and review surfaces compact. The embedded subset of content in this SKILL.md (the activation table, workflow ordering) stays compact and points to params-type-index.md for the deep-dive lookup.
 
 ---
 
@@ -467,9 +465,9 @@ When these reference files land, the embedded subset of their content in this SK
 For framework-wide concerns (Lombok annotation conventions, JacksonMapper deserialization patterns, `com.networknt.schema` draft-04 validator behavior, the runtime `BidderParamValidator` mechanism, Java vs Go flexible-type idioms per port-translation Rule 9, byte-fidelity Rule 38, helper-proto co-location conventions, IT fixture Rule 36), this skill references:
 
 - `../../../read/skills/shared/framework-utilities-java.md` — read-side companion for Java framework conventions
-- `../shared/framework-utilities-java.md` (DEFERRED — sibling F4 author concurrently writing this) — review-side companion adding reviewer-specific anti-patterns + verbatim policy quotes
+- [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) — review-side companion adding reviewer-specific anti-patterns + verbatim policy quotes (LANDED in this PR, step 2, commit `63be93d`)
 - `../../../../docs/methodology/java-review-skill-design.md` — design contract (file ownership map, cross-language hook symmetry, open questions)
 - `../pr-triage-java/SKILL.md` — orchestrator that emits the routing manifest this skill consumes
 - `../../../../prebid-server-go/review/skills/bidder-params-pr-review/SKILL.md` — Go-side analog; cross-language symmetry reference
-- `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md` — Rules 9 (flexible-type idiom mismatch), 36 (4-file IT fixture set), 38 (bidder-params byte-fidelity)
+- `../../../../prebid-server-go/read/skills/shared/port-translation-rules.yaml` — Rules 9 (flexible-type idiom mismatch), 36 (4-file IT fixture set), 38 (bidder-params byte-fidelity)
 - `../../../../cross-language-pairs/{bidder}.dual-spec-assertions.yaml` — when present, canonical port-fidelity assertions with severity (the **aax** entry is the reference case for `severity: fail`)

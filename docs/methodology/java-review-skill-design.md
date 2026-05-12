@@ -2,23 +2,23 @@
 
 Design for the four `prebid-server-java/review/skills/*` SKILLs and their shared framework reference. Phase F4 ships the suite that brings the Go-side review surface (3 reviewer skills + 1 orchestrator + 1 shared framework doc) over to the Java tree, mirroring the read/ suite's earlier Go ↔ Java symmetry effort.
 
-Status: **proposed design, partial implementation.** This session lands the design doc plus `pr-triage-java/SKILL.md` v1.0.0 (the orchestrator) plus three stub SKILL.md files for the downstream skills. The three reviewer skills' full prose, their `references/*.md` deep-dives, and the shared framework doc land in later F4 sessions per the audit at [`../runs/post-d3.8-remaining-work.md`](../runs/post-d3.8-remaining-work.md) §F4.
+Status: **complete, full F4 suite shipped.** This PR lands the design doc plus all four SKILL.md files at v1.0.0, all four `references/*.md` deep-dives, and the review-side `shared/framework-utilities-java.md` — the entire Phase F4 surface in one PR (3 sequential commits per the audit at [`../runs/post-d3.8-remaining-work.md`](../runs/post-d3.8-remaining-work.md) §F4).
 
-This file is the contract that lets reviewers reason about Java-side PR triage and routing before the three downstream reviewer skills are fleshed out.
+This file is the design contract anchoring the four shipped skills.
 
 ---
 
 ## 1. Scope
 
-### In scope (this phase, F4)
+### In scope (this phase, F4 — all shipped at v1.0.0)
 
 | Skill | Owns | Status this session |
 |---|---|---|
-| `pr-triage-java` | Routing, drift checks, CI status, PR-type detection, manifest emission | v1.0.0 (full prose, this session) |
-| `bidder-class-pr-review` | `bidder/{x}/*.java` + `bidder/{x}/*Test.java` + the `it/{X}Test.java` IT class | stub (full prose later) |
-| `bidder-config-pr-review` | `bidder-config/{x}.yaml` + `{X}Configuration.java` + `{X}BidderConfigurationProperties.java` | stub (full prose later) |
-| `bidder-params-java-pr-review` | `bidder-params/{x}.json` + `ExtImp{X}.java` + `it/openrtb2/{x}/*.json` IT fixtures | stub (full prose later) |
-| `shared/framework-utilities-java.md` (review-side) | Cross-cutting Java conventions reviewers must know | DEFERRED — read-side analog exists at `prebid-server-java/read/skills/shared/framework-utilities-java.md`; review-side adds reviewer-specific anti-patterns + verbatim policy quotes |
+| `pr-triage-java` | Routing, drift checks, CI status, PR-type detection, manifest emission | v1.0.0 (commit `6f53c11`; references/routing-rules.md commit `c618fde`) |
+| `bidder-class-pr-review` | `bidder/{x}/*.java` + `bidder/{x}/*Test.java` + the `it/{X}Test.java` IT class | v1.0.0 (commit `63be93d`; references/bidder-class-index.md commit `c618fde`) |
+| `bidder-config-pr-review` | `bidder-config/{x}.yaml` + `{X}Configuration.java` + the Rule 35 typed-config subclass (in current upstream practice an inner `private static class` inside `{X}Configuration.java`; separate-file `{X}BidderConfigurationProperties.java` is design-permitted but absent from upstream master at SHA `a1fe64e123d6`) | v1.0.0 (commit `63be93d`; references/field-index.md commit `c618fde`) |
+| `bidder-params-java-pr-review` | `bidder-params/{x}.json` + `ExtImp{X}.java` + `it/openrtb2/{x}/*.json` IT fixtures | v1.0.0 (commit `63be93d`; references/params-type-index.md commit `c618fde`) |
+| `shared/framework-utilities-java.md` (review-side) | Cross-cutting Java conventions reviewers must know | v1.0.0 (commit `63be93d`) — adds reviewer-specific anti-patterns + verbatim policy quotes on top of the read-side analog at `prebid-server-java/read/skills/shared/framework-utilities-java.md` |
 
 ### Out of scope (NOT this phase)
 
@@ -49,7 +49,7 @@ Mirror of the Go-side routing rules at `prebid-server-go/review/skills/pr-triage
 | `src/main/resources/bidder-config/{x}.yaml` | `bidder-config/aax.yaml` | UNIFIED bidder-info + endpoint + aliases + usersync. Note: Java's YAML is one file per parent; aliases are nested under the parent (`aliases: { adport: ~ }`), inverted from Go's per-alias `aliasOf:` pattern (port-translation Rule 33) |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` | `…/config/bidder/AaxConfiguration.java` | Spring `@Configuration` factory: `@Bean` declaring `BidderConfigurationProperties` + `BidderDeps` via `BidderDepsAssembler` |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfiguration.java` | `…/config/bidder/AdverxoBidderConfiguration.java` | Same role as above; upstream uses BOTH `{X}Configuration.java` AND `{X}BidderConfiguration.java` naming forms (see §5 conventions; the bidder-config skill must accept either) |
-| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | `…/config/bidder/KoblerBidderConfigurationProperties.java` | The Rule 35 typed-config subclass — present ONLY when the bidder needs extra config fields beyond the framework default (e.g., `dev-endpoint`, `pixel-url`, `region-prefix`). Subclasses `BidderConfigurationProperties`. Lombok `@Data` |
+| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | (design-permitted; no upstream example at SHA `a1fe64e123d6`) | The Rule 35 typed-config subclass when shipped as a SEPARATE file — present ONLY when the bidder needs extra config fields beyond the framework default (e.g., `dev-endpoint`, `pixel-url`, `region-prefix`). Subclasses `BidderConfigurationProperties`. Lombok `@Data`. In current upstream practice ALL Rule 35 subclasses are inner `private static class` declarations inside `{X}Configuration.java` (canonical: Kobler, TheTradeDesk, Adnuntius). The separate-file form is reviewer-accepted but unused upstream — when a PR ships it, this skill's activation table covers it |
 
 ### bidder-params-java-pr-review
 
@@ -57,7 +57,7 @@ Mirror of the Go-side routing rules at `prebid-server-go/review/skills/pr-triage
 |---|---|---|
 | `src/main/resources/static/bidder-params/{x}.json` | `…/static/bidder-params/aax.json` | The draft-04 JSON Schema for the bidder's imp.ext params. **Byte-identical to the Go-side `static/bidder-params/{x}.json`** for paired bidders per Rule 38 — divergence (e.g., missing `minLength: 1`) is a `cross-language-pairs/*.dual-spec-assertions.yaml` finding |
 | `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/ExtImp{X}.java` | `…/ext/request/aax/ExtImpAax.java` | The Lombok `@Value @Builder` POJO matching the JSON schema. May have helper protos in the same package (e.g., `ExtImpAaxBidExt.java`, `ExtImpAaxParams.java`) when the schema has nested objects |
-| `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` | `…/it/openrtb2/aax/test-aax-bid-request.json` | The 4-file split fixture set per port-translation Rule 36: `test-{name}-{request,response,auction-request,auction-response}.json`. Some bidders ship multiple scenarios; each scenario is 4 files. The IT class' `@Test` methods reference these by filename pattern |
+| `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` | `…/it/openrtb2/aax/test-aax-bid-request.json` | The 4-file split fixture set per port-translation Rule 36 per scenario: `test-auction-{x}-{request,response}.json` (inbound publisher request + expected PBS response) + `test-{x}-bid-{request,response}.json` (outbound to bidder + mock bidder response). Some bidders ship multiple scenarios; each scenario is 4 files. The IT class' `@Test` methods reference these by filename pattern |
 
 ### pr-triage-java (shared / multi-bidder files)
 
@@ -123,7 +123,7 @@ The following Java framework features have **no Go analog** and demand reviewer 
    - **Unit tests**: `src/test/java/org/prebid/server/bidder/{x}/{X}BidderTest.java` — hand-written `@Test` methods (10–50 typically), AssertJ assertions, Mockito for `JacksonMapper`/`CurrencyConversionService`. Owned by `bidder-class-pr-review`.
    - **Integration tests**: `src/test/java/org/prebid/server/it/{X}Test.java` — extends `IntegrationTest`, uses WireMock stubs, drives the FULL Vert.x server. Each scenario references a 4-file fixture set under `src/test/resources/org/prebid/server/it/openrtb2/{x}/`. The IT class is owned by `bidder-class-pr-review` (it's a Java class with test logic); the 4-file fixtures are owned by `bidder-params-java-pr-review` (they're the schema-exercising payloads). This split forces a **cross-skill concern** when one moves without the other (§7 cross-skill references below).
 
-5. **Rule 35 typed-config subclass.** When a Java bidder needs extra config fields beyond the framework default (the canonical example is Kobler's `dev-endpoint`), upstream creates `{X}BidderConfigurationProperties extends BidderConfigurationProperties`. Go has no equivalent — Go adapters access extras via the `cfg config.Adapter` map directly or a per-adapter extra struct. Reviewers must check:
+5. **Rule 35 typed-config subclass.** When a Java bidder needs extra config fields beyond the framework default (the canonical example is Kobler's `dev-endpoint`), upstream creates a subclass `extends BidderConfigurationProperties`. In current upstream practice (SHA `a1fe64e123d6`) the subclass is always an inner `private static class` inside `{X}Configuration.java` (Kobler, TheTradeDesk, Adnuntius); the separate-file `{X}BidderConfigurationProperties.java` form is reviewer-accepted but not used. Go has no equivalent — Go adapters access extras via the `cfg config.Adapter` map directly or a per-adapter extra struct. Reviewers must check:
    - The subclass extends `BidderConfigurationProperties` (not `Object`)
    - Lombok `@Data` (not `@Value`) — Spring needs setters
    - Field names match the YAML's snake-case → Spring relaxed-binding (e.g., YAML `dev-endpoint` ↔ Java `devEndpoint`)
@@ -164,13 +164,13 @@ Manifest block: `--- PRIOR SOURCE SPEC COMPARISON ---` (emitted only when the so
 - `warn` when the divergence touches a Rule 38 byte-fidelity assertion (e.g., bidder-params JSON formatting) or an R5-strict cross-language equivalence
 - `fail` when a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail` (the canonical case is aax: Java's bidder-params.json omits `minLength: 1` on `cid`/`crid`)
 
-**Important:** `pr-triage-java` AUTHORS the `--- PRIOR SOURCE SPEC COMPARISON ---` manifest block in this F4 session. The DOWNSTREAM CONSUMPTION (the three reviewer skills reading this block, dedup'ing against it, and surfacing port-fidelity findings) is a separate session — audit item 25. The Go-side downstream consumption is also pending (zero downstream consumers exist as of audit time, per `docs/runs/post-d3.8-remaining-work.md:36`). Java-side will land symmetrically when the Go side does.
+**Important:** `pr-triage-java` AUTHORS the `--- PRIOR SOURCE SPEC COMPARISON ---` manifest block AND the three downstream reviewer skills CONSUME it in this F4 PR (audit item 25 LANDED — see Step 1g in each downstream SKILL.md). Each skill cross-references prior_source_spec findings against its own PR-derived findings and surfaces port-fidelity divergences at `info` / `warn` / `fail` severity per the shared policy. The Go-side downstream consumption is still pending as of audit time (zero downstream consumers exist per `docs/runs/post-d3.8-remaining-work.md:36`); Java has landed it first via this F4 PR, with the Go side scheduled to follow symmetrically.
 
 ---
 
 ## 5. Java framework conventions reviewer skills must know
 
-This section enumerates the conventions reviewers need to recognize. The shared `review/skills/shared/framework-utilities-java.md` (deferred to a later session) will hold the verbatim canonical references; this section is the design-level summary.
+This section enumerates the conventions reviewers need to recognize. The shared `review/skills/shared/framework-utilities-java.md` (LANDED in this PR, step 2, commit `63be93d`) holds the verbatim canonical references; this section is the design-level summary.
 
 ### 5.1 Lombok
 
@@ -318,9 +318,9 @@ When a reviewer skill needs context from a file owned by ANOTHER skill, it READS
 
 ---
 
-## 8. Open design questions
+## 8. Design questions — resolutions
 
-The following design choices are deferred to future F4 sessions and should be picked up cleanly by the downstream-skill authors:
+The following design choices were OPEN at design-doc author time and are RESOLVED in this F4 PR by the shipping SKILL prose:
 
 ### Q1: Per-alias IT class ownership when a PR adds an alias
 
@@ -328,15 +328,15 @@ When a new alias lands, the PR typically modifies the parent's `bidder-config/{x
 
 ### Q2: Rule 35 typed-config subclass — which skill owns it?
 
-`{X}BidderConfigurationProperties.java` is a Spring `@ConfigurationProperties`-bound class living in the same package as `{X}Configuration.java`. It's NOT in the bidder package (`bidder/{x}/`), and it IS in the Spring config package (`spring/config/bidder/`). Tentative assignment: **`bidder-config-pr-review`**, because the file's purpose is Spring DI binding, not adapter logic. The bidder-class skill should READ it (cross-skill reference) to verify the `{X}Bidder.java` constructor accepts the typed-subclass fields. Confirm in the bidder-config session.
+`{X}BidderConfigurationProperties.java` is a Spring `@ConfigurationProperties`-bound class living in the same package as `{X}Configuration.java`. It's NOT in the bidder package (`bidder/{x}/`), and it IS in the Spring config package (`spring/config/bidder/`). **Locked in this PR**: assigned to **`bidder-config-pr-review`**, because the file's purpose is Spring DI binding, not adapter logic. The bidder-class skill READS it (cross-skill reference) to verify the `{X}Bidder.java` constructor accepts the typed-subclass fields. In current upstream practice (SHA `a1fe64e123d6`) all Rule 35 subclasses are inner `private static class` declarations inside `{X}Configuration.java`; the separate-file form is design-permitted but absent from master.
 
 ### Q3: How does pr-triage-java detect "new-adapter" PRs?
 
-In Go, the trigger is `adapters/{bidder}/{bidder}.go` status=added. In Java, the analog is `bidder/{x}/{X}Bidder.java` status=added. But Java has multiple "completeness" signals: the unified YAML being added, the Spring `@Configuration` being added, the ExtImp{X}.java being added, the IT class being added, the 4-file fixture set being added, and the `test-application.properties` having a new `adapters.{x}.enabled=true` line. The recommendation in the pr-triage-java SKILL (this session) is to trigger on `{X}Bidder.java` status=added AND at least one of `bidder-config/{x}.yaml` status=added OR `test-application.properties` having a new top-level `adapters.{x}.` entry. The completeness check (analogous to Go's Step 5e) enumerates ALL 10 expected files; missing ones are reported as `COMPLETENESS: New adapter {x} missing {file_type}`. Confirm the trigger heuristic in a later canary.
+In Go, the trigger is `adapters/{bidder}/{bidder}.go` status=added. In Java, the analog is `bidder/{x}/{X}Bidder.java` status=added. Java has multiple "completeness" signals: the unified YAML being added, the Spring `@Configuration` being added, the ExtImp{X}.java being added, the IT class being added, the 4-file fixture set being added, and the `test-application.properties` having a new `adapters.{x}.enabled=true` line. **Locked in this PR** — the strict-form trigger requires ALL FOUR of: `{X}Bidder.java` status=added AND `bidder-config/{x}.yaml` status=added AND `bidder-params/{x}.json` status=added AND `test-application.properties` having a new top-level `adapters.{x}.` entry. This eliminates false-positive new-adapter classifications when an incomplete subset lands. The completeness check (Step 5e) enumerates all 12 expected files (13 when Rule 35 typed-subclass applies); missing ones are reported as `COMPLETENESS: New adapter {x} missing {file_type}`. Confirmed via shipping heuristics in `pr-triage-java/SKILL.md` Step 4 + `references/routing-rules.md` §"New Adapter"; future canary validation may refine.
 
 ### Q4: How does pr-triage-java detect "alias-only" PRs?
 
-Go: only `static/bidder-info/{name}.yaml` file(s) changed, AND every changed file's diff contains `aliasOf` on an added (`+`) line. Java: the analog is harder because aliases live INSIDE the parent YAML, so the diff is a hunk addition under `aliases:` inside an existing file. Tentative heuristic: an "alias-only" PR is one where every changed file is either (a) a `bidder-config/{x}.yaml` whose diff is restricted to an `aliases:`-rooted hunk, (b) `test-application.properties` with only new `adapters.{parent}.aliases.{alias}.*` lines, or (c) a new `it/{Alias}Test.java`. Negative tests: any change in `{X}Bidder.java`, `ExtImp{X}.java`, or the parent's non-alias YAML fields disqualifies the PR from alias-only. Confirm in canary.
+Go: only `static/bidder-info/{name}.yaml` file(s) changed, AND every changed file's diff contains `aliasOf` on an added (`+`) line. Java: the analog is harder because aliases live INSIDE the parent YAML, so the diff is a hunk addition under `aliases:` inside an existing file. **Locked in this PR** — an "alias-only" PR is one where every changed file is either (a) a `bidder-config/{x}.yaml` whose diff is restricted to an `aliases:`-rooted hunk, (b) `test-application.properties` with only new `adapters.{parent}.aliases.{alias}.*` lines, or (c) a new `it/{Alias}Test.java`. Negative tests: any change in `{X}Bidder.java`, `ExtImp{X}.java`, or the parent's non-alias YAML fields disqualifies the PR from alias-only. Confirmed via shipping heuristics in `pr-triage-java/SKILL.md` Step 4 + `references/routing-rules.md` §"Alias-Only"; future canary validation may refine.
 
 ### Q5: Drift checks for the BidderName-equivalent registry
 
