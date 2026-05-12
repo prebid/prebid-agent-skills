@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import functools
 import hashlib
 import json
 import re
@@ -693,15 +694,28 @@ def _load_bidder_table_raw(
     The richer return value (vs ``_load_bidder_table``) is used by the
     F-new-34 ``lookup_forms`` helper which needs to inspect each bidder
     entry's value (simple string OR mapping with ``forms:`` sub-map).
+
+    Cached by resolved-path key (``maxsize=4``) so repeat lookups across
+    a single ``port_engine`` invocation don't re-parse the 271-entry YAML.
+    Call ``_load_bidder_table_raw.cache_clear()`` if the table is edited
+    mid-process (test suites already isolate via fresh ``table_data=``).
     """
     if yaml is None:
         return None
     fp = Path(table_path) if table_path else _DEFAULT_BIDDER_TABLE
-    if not fp.exists():
+    return _load_bidder_table_raw_cached(fp.resolve())
+
+
+@functools.lru_cache(maxsize=4)
+def _load_bidder_table_raw_cached(
+    resolved_path: Path,
+) -> Optional[Dict[str, Any]]:
+    """Inner cached loader keyed by ``resolved_path`` (hashable, comparable)."""
+    if not resolved_path.exists():
         return None
     try:
-        with open(fp, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
+        with open(resolved_path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}  # type: ignore[union-attr]
     except (OSError, yaml.YAMLError):  # type: ignore[union-attr]
         return None
     return data if isinstance(data, dict) else None

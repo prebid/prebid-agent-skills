@@ -1158,7 +1158,9 @@ func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) e
 {% if _is_per_key %}
 
 // {{ _per_key_helper_name }} groups imps by their parsed openrtb_ext.ExtImp{{ _imp_ext_class_root }}
-// value (e.g. by `{{ _per_key_field or "<key_field>" }}`), returning one map bucket per unique
+{% if _per_key_field %}// value (e.g. by `{{ _per_key_field }}`), returning one map bucket per unique
+{% else %}// value, returning one map bucket per unique
+{% endif %}
 // grouping-key struct. Pattern cribbed from upstream
 // adapters/adkernelAdn/adkernelAdn.go::dispatchImpressions. Each bucket
 // becomes one outbound HTTP request in MakeRequests. Imps whose ext fails

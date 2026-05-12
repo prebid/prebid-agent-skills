@@ -894,6 +894,28 @@ class TestEndpointResolutionMacros(unittest.TestCase):
         # match the bare `Uri:` + `uri,` pair, not exact whitespace).
         self.assertRegex(rendered, r"Uri:\s+uri,")
 
+    def test_callsite_max_imps_handles_error(self):
+        """F-new-2: max-imps-per-request batching MakeRequests callsite
+        binds the resolveEndpoint error per-chunk; on error, `continue`
+        skips that chunk's RequestData. Regression guard for the audit
+        review's MINOR-flagged missing max-imps coverage."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "PublisherID", "ext_field": "PublisherID", "convert": "itoa"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        ctx["batching_kind"] = "max-imps-per-request"
+        ctx["batching_max_imps"] = 5
+        rendered = _render("bidder.go.j2", ctx)
+        # max-imps branch resolves endpoint per-chunk; error binding required.
+        self.assertIn("uri, err := a.resolveEndpoint(", rendered)
+        self.assertIn("errors = append(errors, err)", rendered)
+        # Uri field uses the bound variable.
+        self.assertRegex(rendered, r"Uri:\s+uri,")
+        # max-imps chunker helper still emits (backward-compat).
+        self.assertIn("func chunkImps(", rendered)
+
     # ------------------------ empty-macros TODO ------------------------
 
     def test_empty_endpoint_macros_emits_todo_with_wiring(self):
@@ -3095,13 +3117,20 @@ class TestNamingFormResolution(unittest.TestCase):
         # The forms-derived constant root must NOT win.
         self.assertNotIn("openrtb_ext.ExtImpKobler", rendered)
 
-    def test_forms_dict_wins_over_legacy_package_name(self):
+    def test_forms_go_package_name_wins_over_legacy_package_name(self):
         """When BOTH naming_form_resolution.go_package_name AND
-        ctx.package_name are set, the forms dict wins. Drives the
-        renderer toward the canonical form even when the operator
-        leaves stale legacy ctx keys."""
+        ctx.package_name are set, the forms dict's go_package_name wins
+        for the `package` directive. This test scopes to the
+        package-directive interaction; imp_ext_class_root is also set
+        to a stale value but NOT asserted here (escape-hatch behavior
+        — ctx.imp_ext_class_root explicit wins over forms — is covered
+        by test_explicit_imp_ext_class_root_overrides_forms below)."""
         ctx = self._base_ctx()
         ctx["package_name"] = "stale_legacy_value"
+        # imp_ext_class_root deliberately set; the escape-hatch contract is
+        # NOT tested here (the package directive is the assertion target).
+        # See test_explicit_imp_ext_class_root_overrides_forms for the
+        # complementary case that asserts ExtImp{X} survives.
         ctx["imp_ext_class_root"] = "StaleRoot"
         ctx["naming_form_resolution"] = {
             "go_yaml_name": "adkernelAdn",
