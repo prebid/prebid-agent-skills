@@ -1305,6 +1305,332 @@ class TestPerKeyBatching(unittest.TestCase):
         )
 
 
+class TestImpIdCorrelation(unittest.TestCase):
+    """F-new-7 EXT-B — `bid_type_resolution == "imp-id-correlation"` template
+    branch. v1.0.0 promotion blocker.
+
+    Imp-id-correlation classifies a bid by looking up the source imp via
+    `bid.ImpID`, inspecting which mediatype field is populated on that imp
+    (Banner / Video / Native / Audio), and returning the corresponding
+    `openrtb_ext.BidType`. When no matching imp is found OR none of the four
+    mediatype fields is populated, the function returns an
+    operator-vouched fallback driven by `ctx.bid_type_fallback_value`.
+
+    Master sample: `adapters/adkernelAdn/adkernelAdn.go::getMediaTypeForImpID`
+    (D3.8 canary 7 confirmed; upstream returns `BidTypeVideo` as the
+    hardcoded miss-fallback).
+
+    Distinction vs. `imp-mediatype-introspection`:
+      - imp-mediatype-introspection: terminal miss-fallback is HARDCODED to
+        BidTypeBanner.
+      - imp-id-correlation: terminal miss-fallback is DRIVEN BY
+        `ctx.bid_type_fallback_value` (one of banner / video / audio /
+        native). Defaults to "banner" for safe back-compat when omitted.
+
+    ctx schema additions (F-new-7 EXT-B):
+      - ctx.bid_type_resolution = "imp-id-correlation"  # new enum value
+      - ctx.bid_type_fallback_value: str  # one of {banner,video,audio,native}
+                                          # default "banner" when omitted
+    """
+
+    # --------------------------- basic emission ----------------------------
+
+    def test_basic_emits_imp_walk_with_video_fallback(self):
+        """F-new-7 EXT-B baseline (adkernelAdn shape): the imp-walk loop +
+        a terminal fallback driven by ctx.bid_type_fallback_value=video."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        ctx["bid_type_fallback_value"] = "video"
+        rendered = _render("bidder.go.j2", ctx)
+        # No-error signature (imp-id-correlation has no throw path).
+        self.assertIn(
+            "func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) "
+            "openrtb_ext.BidType {",
+            rendered,
+        )
+        # Imp-walk loop — correlate bid → imp by ID.
+        self.assertIn("for i := range imps {", rendered)
+        self.assertIn("if imps[i].ID == bid.ImpID {", rendered)
+        # All four mediatype fields inspected (template covers the canonical
+        # union — operator-vouched if their bidder only uses a subset).
+        self.assertIn("if imps[i].Banner != nil {", rendered)
+        self.assertIn("return openrtb_ext.BidTypeBanner", rendered)
+        self.assertIn("if imps[i].Video != nil {", rendered)
+        self.assertIn("if imps[i].Native != nil {", rendered)
+        self.assertIn("if imps[i].Audio != nil {", rendered)
+        # Terminal miss-fallback driven by ctx.bid_type_fallback_value.
+        # The walk-fallback `return openrtb_ext.BidTypeVideo` is the LAST
+        # return in getBidType.
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        getbidtype_body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(
+            getbidtype_body.rstrip().endswith("return openrtb_ext.BidTypeVideo"),
+            f"expected getBidType to end with `return openrtb_ext.BidTypeVideo` "
+            f"but got:\n{getbidtype_body}",
+        )
+
+    # --------------- each fallback variant emits correct return literal ---
+
+    def test_fallback_banner(self):
+        """Operator vouches `banner` as the miss-fallback (matches the
+        imp-mediatype-introspection hardcoded shape for backward compat)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        ctx["bid_type_fallback_value"] = "banner"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("if imps[i].Banner != nil {", rendered)
+        # Last return is the banner fallback.
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(body.rstrip().endswith("return openrtb_ext.BidTypeBanner"))
+
+    def test_fallback_video(self):
+        """adkernelAdn-canonical shape: Video miss-fallback."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        ctx["bid_type_fallback_value"] = "video"
+        rendered = _render("bidder.go.j2", ctx)
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(body.rstrip().endswith("return openrtb_ext.BidTypeVideo"))
+
+    def test_fallback_native(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        ctx["bid_type_fallback_value"] = "native"
+        rendered = _render("bidder.go.j2", ctx)
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(body.rstrip().endswith("return openrtb_ext.BidTypeNative"))
+
+    def test_fallback_audio(self):
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        ctx["bid_type_fallback_value"] = "audio"
+        rendered = _render("bidder.go.j2", ctx)
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(body.rstrip().endswith("return openrtb_ext.BidTypeAudio"))
+
+    # ---------------------- defensive / unknown value ----------------------
+
+    def test_missing_fallback_value_defaults_to_banner(self):
+        """F-new-7 EXT-B defensive: when ctx.bid_type_fallback_value is None
+        / absent, the template defaults to "banner" (preserves the
+        imp-mediatype-introspection terminal shape for backward compat).
+        Operator gets a usable render rather than a Jinja crash during
+        partial spec assembly."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        # bid_type_fallback_value intentionally omitted.
+        rendered = _render("bidder.go.j2", ctx)
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(body.rstrip().endswith("return openrtb_ext.BidTypeBanner"))
+
+    def test_unknown_fallback_value_fails_loudly(self):
+        """Operator passes a fallback that doesn't exist on the Go side —
+        render MUST fail (not silently emit broken Go) so the audit
+        notices. Mirrors the constant-type fail-loud pattern."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        ctx["bid_type_fallback_value"] = "other"  # not in
+        # {banner,video,audio,native}
+        with self.assertRaises(Exception):
+            _render("bidder.go.j2", ctx)
+
+    # ------------- composition with full F2 stack -------------------------
+
+    def test_full_f2_composition_adkernelAdn_shape(self):
+        """F-new-7 EXT-B composes with F-new-2 (template-macro endpoint),
+        F-new-7 EXT-A (per-key batching), AND F-new-34 (naming-form
+        resolution) in the canonical adkernelAdn full-feature shape.
+        All four features must coexist cleanly in a single render."""
+        ctx = {
+            "package_name": "adkernelAdn",
+            "bidder_class_root": "AdkernelAdn",
+            "uses_currency_conversion": False,
+            "imp_ext_class_root": "AdkernelAdn",
+            "imp_ext_unmarshal_kind": "standard-two-phase",
+            # F-new-7 EXT-A: per-key batching
+            "batching_kind": "per-key",
+            "batching_max_imps": None,
+            "batching_per_key": {
+                "helper_name": "dispatchImpressions",
+                "key_field": "PublisherID",
+            },
+            # F-new-2: endpoint-template-macro
+            "endpoint_resolution_kind": "template-macro",
+            "endpoint_macros": [
+                {"macro": "PublisherID", "ext_field": "PublisherID",
+                 "convert": "itoa"},
+            ],
+            "http_status_kind": "canonical-helpers",
+            # F-new-7 EXT-B: imp-id-correlation
+            "bid_type_resolution": "imp-id-correlation",
+            "bid_type_fallback_value": "video",
+            "has_extra_info": False,
+            "module_version": GO_MODULE_VERSION,
+            "imports_extra": ["strconv"],
+            "javadoc_summary": None,
+            # F-new-34: naming-form-resolution (mechanical case where forms
+            # don't override the legacy keys — purely a composition check).
+            "naming_form_resolution": {
+                "go_package_name": "adkernelAdn",
+                "go_constant_root": "AdkernelAdn",
+            },
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        # F-new-2: macros wiring present.
+        self.assertIn("text/template", rendered)
+        self.assertIn("macros.ResolveMacros", rendered)
+        # F-new-7 EXT-A: dispatchImpressions helper + per-batch loop.
+        self.assertIn("func dispatchImpressions(", rendered)
+        self.assertIn("for key, batchImps := range groups", rendered)
+        # F-new-2 + F-new-7 EXT-A composition: resolveEndpoint takes
+        # *ExtImp{X}.
+        self.assertIn(
+            "func (a *adapter) resolveEndpoint(impExt "
+            "*openrtb_ext.ExtImpAdkernelAdn) (string, error)",
+            rendered,
+        )
+        # F-new-7 EXT-B: imp-id-correlation getBidType emits.
+        self.assertIn("if imps[i].Banner != nil {", rendered)
+        self.assertIn("if imps[i].Video != nil {", rendered)
+        # Video miss-fallback (operator-vouched per adkernelAdn spec).
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(body.rstrip().endswith("return openrtb_ext.BidTypeVideo"))
+        # No-error signature on getBidType (imp-id-correlation has no
+        # throw path).
+        self.assertIn(
+            "func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) "
+            "openrtb_ext.BidType {",
+            rendered,
+        )
+
+    # ------------- backward-compat with other bid_type branches -----------
+
+    def test_imp_mediatype_introspection_unchanged(self):
+        """F-new-7 EXT-B isolation: the existing
+        imp-mediatype-introspection branch MUST render identically to
+        pre-EXT-B (terminal fallback HARDCODED to BidTypeBanner; NOT
+        driven by ctx.bid_type_fallback_value)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-mediatype-introspection"
+        # Provide bid_type_fallback_value=video — this should be IGNORED
+        # by the imp-mediatype-introspection branch (it has a hardcoded
+        # banner terminal). Verifies the two branches are truly distinct.
+        ctx["bid_type_fallback_value"] = "video"
+        rendered = _render("bidder.go.j2", ctx)
+        # Existing imp-mediatype-introspection shape: walks Video / Native
+        # / Audio BEFORE the inner banner default (so banner imps inside
+        # a matching imp-ID fall through to that default).
+        self.assertIn("if imps[i].ID == bid.ImpID {", rendered)
+        # Banner field check NOT present (imp-mediatype-introspection
+        # uses inner default-banner, not an explicit Banner field check).
+        # The new imp-id-correlation branch IS the only one that emits
+        # `if imps[i].Banner != nil`.
+        self.assertNotIn("if imps[i].Banner != nil", rendered)
+        # Terminal fallback is hardcoded banner (NOT video, despite
+        # bid_type_fallback_value=video).
+        getbidtype_start = rendered.index("func getBidType")
+        getbidtype_end = rendered.index("\n}\n", getbidtype_start)
+        body = rendered[getbidtype_start:getbidtype_end]
+        self.assertTrue(body.rstrip().endswith("return openrtb_ext.BidTypeBanner"))
+
+    def test_other_bid_type_branches_unaffected_by_fallback_value(self):
+        """F-new-7 EXT-B isolation: when bid_type_resolution is one of the
+        non-EXT-B values, the imp-id-correlation imp-walk shape MUST NOT
+        leak in (no `if imps[i].Banner != nil` in those renders)."""
+        for kind in ("constant-banner", "imp-mediatype-introspection"):
+            with self.subTest(kind=kind):
+                ctx = _kobler_bidder_go_ctx()
+                ctx["bid_type_resolution"] = kind
+                rendered = _render("bidder.go.j2", ctx)
+                # The Banner-field check is unique to imp-id-correlation.
+                self.assertNotIn(
+                    "if imps[i].Banner != nil", rendered,
+                    f"imp-id-correlation walk leaked into {kind} render",
+                )
+
+    # ------------------------- compilation gate ----------------------------
+
+    def test_imp_id_correlation_gofmt_clean(self):
+        """F-new-7 EXT-B: the imp-id-correlation render must be
+        gofmt-clean. Pinned to catch regressions in the new branch."""
+        if shutil.which("gofmt") is None:
+            self.skipTest("gofmt not on PATH")
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-id-correlation"
+        ctx["bid_type_fallback_value"] = "video"
+        rendered = _render("bidder.go.j2", ctx)
+        result = subprocess.run(
+            ["gofmt", "-e"],
+            input=rendered.encode(),
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            f"gofmt rejected imp-id-correlation render:\n"
+            f"stderr={result.stderr.decode()}\n"
+            f"rendered={rendered}",
+        )
+
+    def test_imp_id_correlation_full_f2_composition_gofmt_clean(self):
+        """F-new-7 EXT-B + F-new-7 EXT-A + F-new-2 full composition must
+        also be gofmt-clean. Mirrors the per-key composition gate."""
+        if shutil.which("gofmt") is None:
+            self.skipTest("gofmt not on PATH")
+        ctx = {
+            "package_name": "adkernelAdn",
+            "bidder_class_root": "AdkernelAdn",
+            "uses_currency_conversion": False,
+            "imp_ext_class_root": "AdkernelAdn",
+            "imp_ext_unmarshal_kind": "standard-two-phase",
+            "batching_kind": "per-key",
+            "batching_max_imps": None,
+            "batching_per_key": {
+                "helper_name": "dispatchImpressions",
+                "key_field": "PublisherID",
+            },
+            "endpoint_resolution_kind": "template-macro",
+            "endpoint_macros": [
+                {"macro": "PublisherID", "ext_field": "PublisherID",
+                 "convert": "itoa"},
+            ],
+            "http_status_kind": "canonical-helpers",
+            "bid_type_resolution": "imp-id-correlation",
+            "bid_type_fallback_value": "video",
+            "has_extra_info": False,
+            "module_version": GO_MODULE_VERSION,
+            "imports_extra": ["strconv"],
+            "javadoc_summary": None,
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        result = subprocess.run(
+            ["gofmt", "-e"],
+            input=rendered.encode(),
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            f"gofmt rejected imp-id-correlation + per-key + "
+            f"template-macro render:\n"
+            f"stderr={result.stderr.decode()}\n"
+            f"rendered={rendered}",
+        )
+
+
 class TestBidTypeResolutionBranches(unittest.TestCase):
     """D3.8 F8 fix — bidder.go.j2 getBidType covers 4 corpus patterns:
 

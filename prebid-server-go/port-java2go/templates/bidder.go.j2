@@ -223,6 +223,7 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         codes fall back to integer literals.
   ctx.bid_type_resolution     : str  — discriminator. One of:
                                           "imp-mediatype-introspection",
+                                          "imp-id-correlation",
                                           "constant" (or legacy alias "constant-banner"),
                                           "method-chain-fallback",
                                           "by-bid-mtype",
@@ -234,6 +235,20 @@ Inputs (mirror of bidder.java.j2 ctx):
                                           enum value back together with a
                                           template branch when a real bidder
                                           surfaces this pattern.)
+                                          F-new-7 EXT-B (v1.0.0) added
+                                          "imp-id-correlation" — same imp-walk
+                                          shape as imp-mediatype-introspection
+                                          BUT the terminal fallback (no matching
+                                          imp / none of the four mediatype
+                                          fields populated) is driven by
+                                          ctx.bid_type_fallback_value
+                                          (operator-vouched), NOT hardcoded to
+                                          banner. Pattern cribbed from upstream
+                                          adapters/adkernelAdn/adkernelAdn.go
+                                          ::getMediaTypeForImpID (returns Video
+                                          as the hardcoded miss-fallback).
+                                          Affects 1-2/16 (~6-12%) of corpus per
+                                          d3.8 canary 7 trace.
   ctx.bid_type_constant       : str|None — "banner"|"video"|"audio"|"native". REQUIRED
                                             when bid_type_resolution=="constant". For
                                             backwards compat, legacy "constant-banner"
@@ -274,6 +289,15 @@ Inputs (mirror of bidder.java.j2 ctx):
                                             "return-default" or "throw".
   ctx.bid_type_fallback_value : str|None — when fallback_action=="return-default",
                                             "banner"|"video"|"audio"|"native".
+                                            F-new-7 EXT-B: ALSO consumed by
+                                            bid_type_resolution=="imp-id-correlation"
+                                            as the terminal miss-fallback (no
+                                            matching imp / none of the four
+                                            mediatype fields populated).
+                                            REQUIRED for that branch; defaults
+                                            to "banner" when omitted (matches
+                                            the imp-mediatype-introspection
+                                            hardcoded fallback for back-compat).
   ctx.has_extra_info          : bool — true when source has ExtraAdapterInfo (Rule 35
                                         inverse demoted Java typed config to Go opaque
                                         JSON string); imports + struct fields adjust.
@@ -935,6 +959,38 @@ func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
 		}
 	}
 	return openrtb_ext.BidTypeBanner
+{% elif ctx.bid_type_resolution == "imp-id-correlation" %}
+{# F-new-7 EXT-B (v1.0.0) — imp-id-correlation. Same imp-walk shape as
+   imp-mediatype-introspection, but the terminal miss-fallback (no matching
+   imp / none of the four mediatype fields populated on the matching imp) is
+   driven by ctx.bid_type_fallback_value (operator-vouched) instead of being
+   hardcoded to banner. Pattern cribbed from upstream
+   adapters/adkernelAdn/adkernelAdn.go::getMediaTypeForImpID. Defaults to
+   "banner" when ctx.bid_type_fallback_value is omitted (preserves the
+   imp-mediatype-introspection shape for safe back-compat). #}
+{% set _imp_id_fallback = ctx.bid_type_fallback_value or "banner" %}
+{% if _imp_id_fallback not in _bid_type_short_to_go %}
+{# Trigger an UndefinedError loud enough to surface the bad input. #}
+{{ _bid_type_short_to_go.unknown_bid_type_fallback_value_passed_to_template.fail }}
+{% endif %}
+	for i := range imps {
+		if imps[i].ID == bid.ImpID {
+			if imps[i].Banner != nil {
+				return openrtb_ext.BidTypeBanner
+			}
+			if imps[i].Video != nil {
+				return openrtb_ext.BidTypeVideo
+			}
+			if imps[i].Native != nil {
+				return openrtb_ext.BidTypeNative
+			}
+			if imps[i].Audio != nil {
+				return openrtb_ext.BidTypeAudio
+			}
+			break
+		}
+	}
+	return openrtb_ext.{{ _bid_type_short_to_go[_imp_id_fallback] }}
 {% elif ctx.bid_type_resolution == "by-bid-mtype" %}
 {# Rule 23 — switch on openrtb2.Bid.MType (1=Banner, 2=Video, 3=Audio, 4=Native).
    Pattern cribbed from upstream adapters/adverxo/adverxo.go and
