@@ -24,6 +24,7 @@ Public API
 - ``port_report_emit(report_dict, path, *, schema_path=None) -> None``
 - ``alphabetical_insert(file_path, marker_pattern, insert_line, *, language='go') -> None``
 - ``prefix_uniqueness_check(target_lang, bidder_name, *, existing_names=None) -> Tuple[bool, List[str]]``
+- ``lookup_forms(yaml_name, *, table_path=None, table_data=None) -> Dict[str, str]``
 - ``gofmt_post_process(file_paths) -> Tuple[bool, str]``
 - ``mvn_checkstyle_dry_run(target_clone, *, pom_file='extra/pom.xml', runner=None) -> Tuple[bool, List[Dict]]``
 - ``imp_ext_shape_transform_java_to_go(fixture_dict, java_bidder_name) -> Dict[str, Any]``
@@ -40,6 +41,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import functools
 import hashlib
 import json
 import re
@@ -671,23 +673,176 @@ def prefix_uniqueness_check(
 
 def _load_bidder_table(table_path: Optional[Union[str, Path]]) -> Optional[List[str]]:
     """Load the bidder-constant-table.yaml (D1.3 deliverable). Returns None if absent."""
-    if yaml is None:
+    raw = _load_bidder_table_raw(table_path)
+    if raw is None:
         return None
-    fp = Path(table_path) if table_path else _DEFAULT_BIDDER_TABLE
-    if not fp.exists():
-        return None
-    try:
-        with open(fp, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-    except (OSError, yaml.YAMLError):  # type: ignore[union-attr]
-        return None
-    # Convention: top-level `bidders:` key is the canonical list of names.
-    bidders = data.get("bidders") if isinstance(data, dict) else None
+    bidders = raw.get("bidders")
     if isinstance(bidders, list):
         return [str(b) for b in bidders]
     if isinstance(bidders, dict):
         return list(bidders.keys())
     return None
+
+
+def _load_bidder_table_raw(
+    table_path: Optional[Union[str, Path]],
+) -> Optional[Dict[str, Any]]:
+    """Load the full bidder-constant-table.yaml dict (with `bidders:` mapping).
+
+    Returns the parsed top-level dict on success, or ``None`` when the
+    file is absent, PyYAML is not installed, or the file fails to parse.
+    The richer return value (vs ``_load_bidder_table``) is used by the
+    F-new-34 ``lookup_forms`` helper which needs to inspect each bidder
+    entry's value (simple string OR mapping with ``forms:`` sub-map).
+
+    Cached by resolved-path key (``maxsize=4``) so repeat lookups across
+    a single ``port_engine`` invocation don't re-parse the 271-entry YAML.
+    Call ``_load_bidder_table_raw.cache_clear()`` if the table is edited
+    mid-process (test suites already isolate via fresh ``table_data=``).
+    ``cache_clear`` is exposed as a passthrough to the inner cached loader.
+    """
+    if yaml is None:
+        return None
+    fp = Path(table_path) if table_path else _DEFAULT_BIDDER_TABLE
+    return _load_bidder_table_raw_cached(fp.resolve())
+
+
+@functools.lru_cache(maxsize=4)
+def _load_bidder_table_raw_cached(
+    resolved_path: Path,
+) -> Optional[Dict[str, Any]]:
+    """Inner cached loader keyed by ``resolved_path`` (hashable, comparable)."""
+    if not resolved_path.exists():
+        return None
+    try:
+        with open(resolved_path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}  # type: ignore[union-attr]
+    except (OSError, yaml.YAMLError):  # type: ignore[union-attr]
+        return None
+    return data if isinstance(data, dict) else None
+
+
+# Expose ``cache_clear`` on the public passthrough so the docstring's
+# advice ``_load_bidder_table_raw.cache_clear()`` actually works (without
+# this assignment the LRU lives only on the inner ``_load_bidder_table_raw_cached``
+# function and the public-name call would raise AttributeError).
+_load_bidder_table_raw.cache_clear = _load_bidder_table_raw_cached.cache_clear  # type: ignore[attr-defined]
+_load_bidder_table_raw.cache_info = _load_bidder_table_raw_cached.cache_info  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# Helper 8b — lookup_forms (Rule 46 / F-new-34)
+# ---------------------------------------------------------------------------
+
+
+# Form-keys carried by `ctx.naming_form_resolution` (passed to bidder.go.j2
+# and consumed by the multi-form-aware naming sites). Ordering matters
+# only for diagnostic / canonical-dict-equality purposes; the renderer
+# reads by key.
+NAMING_FORM_KEYS: Tuple[str, ...] = (
+    "go_yaml_name",
+    "go_package_name",
+    "go_constant_root",
+    "java_yaml_name",
+    "java_class_root",
+    "java_package",
+)
+
+
+def _mechanical_forms(yaml_name: str, go_constant_root: str) -> Dict[str, str]:
+    """Default mechanical-derivation formula for the six naming forms.
+
+    Used when a bidder's `bidder-constant-table.yaml` entry is the
+    simple-string form (no explicit `forms:` sub-map). The Rule 46
+    formula (`lowercase + drop non-[a-z0-9]`) supplies the Java-side
+    lowercase yaml/package; Go-side defaults pass `yaml_name` through;
+    the Java class root defaults to the Go constant root (mechanical
+    PascalCase pairs).
+    """
+    java_form = re.sub(r"[^a-z0-9]", "", (yaml_name or "").lower())
+    return {
+        "go_yaml_name": yaml_name,
+        "go_package_name": yaml_name,
+        "go_constant_root": go_constant_root,
+        "java_yaml_name": java_form,
+        "java_class_root": go_constant_root,
+        "java_package": java_form,
+    }
+
+
+def lookup_forms(
+    yaml_name: str,
+    *,
+    table_path: Optional[Union[str, Path]] = None,
+    table_data: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
+    """Resolve the per-aspect naming forms for ``yaml_name`` (F-new-34).
+
+    Returns a dict with the six naming-form keys per :data:`NAMING_FORM_KEYS`
+    suitable for assignment into ``ctx.naming_form_resolution`` consumed
+    by ``bidder.go.j2``. The helper is the canonical entry point for the
+    port-java2go renderer's Rule 46 multi-form-aware naming sites.
+
+    Resolution order:
+
+    1. If ``table_data`` is provided, inspect its ``bidders`` sub-map for
+       ``yaml_name``. Otherwise load
+       ``prebid-server-go/read/skills/shared/bidder-constant-table.yaml``
+       (or ``table_path`` override).
+    2. If the entry's value is a mapping with a ``forms:`` sub-map, the
+       sub-map IS the result — missing keys default to the mechanical
+       formula so partial sub-maps remain valid.
+    3. If the entry's value is a simple string (mechanical case), or the
+       entry is absent altogether, derive all six forms mechanically:
+       ``yaml_name`` passes through for Go forms; ``go_constant_root``
+       takes the simple-string value (or a PascalCase first-letter-upper
+       of ``yaml_name`` if the entry is absent); Java forms apply the
+       Rule 46 lowercase formula.
+
+    The helper is dependency-injection-friendly: ``table_data`` short-circuits
+    the YAML load entirely (used by tests + by callers that already hold the
+    parsed dict). The return is always a fresh dict; mutations by callers
+    do not affect subsequent calls.
+    """
+    data = table_data if table_data is not None else _load_bidder_table_raw(table_path)
+    bidders = (data or {}).get("bidders") if isinstance(data, dict) else None
+
+    entry: Any = None
+    if isinstance(bidders, dict):
+        entry = bidders.get(yaml_name)
+
+    # Determine the Go constant root + any explicit forms sub-map.
+    explicit_forms: Dict[str, str] = {}
+    if isinstance(entry, dict):
+        # Mapping-form entry: look for `go_constant_root` + `forms:`.
+        go_constant_root = str(entry.get("go_constant_root") or "")
+        raw_forms = entry.get("forms")
+        if isinstance(raw_forms, dict):
+            for k in NAMING_FORM_KEYS:
+                v = raw_forms.get(k)
+                if isinstance(v, str) and v:
+                    explicit_forms[k] = v
+        # If go_constant_root only lives in `forms:` sub-map, recover it.
+        if not go_constant_root:
+            go_constant_root = explicit_forms.get("go_constant_root", "")
+    elif isinstance(entry, str) and entry:
+        go_constant_root = entry
+    else:
+        # Entry absent (or non-string / non-dict): derive PascalCase from
+        # yaml_name's first letter. This is the historical naive formula
+        # (`Bidder` + yaml_name[0].upper() + yaml_name[1:]) per the table
+        # header comment; it's good enough for unknown-bidder fallback.
+        go_constant_root = (yaml_name[:1].upper() + yaml_name[1:]) if yaml_name else ""
+
+    base = _mechanical_forms(yaml_name, go_constant_root)
+    base.update(explicit_forms)
+    # `go_constant_root` always reflects the authoritative value (either
+    # from the explicit forms sub-map, the simple-string entry, or the
+    # mechanical fallback). Same applies when the mapping-form entry
+    # carries `go_constant_root` at the top level but not inside `forms:`.
+    if "go_constant_root" not in explicit_forms and go_constant_root:
+        base["go_constant_root"] = go_constant_root
+    return base
 
 
 # ---------------------------------------------------------------------------

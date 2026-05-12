@@ -14,8 +14,52 @@ The post-emit `gofmt -s -w` step canonicalizes formatting; this
 template emits code that's already gofmt-clean for the canonical case.
 
 Inputs (mirror of bidder.java.j2 ctx):
-  ctx.package_name            : str  — Go package name (e.g., "kobler", "adkernelAdn")
-  ctx.bidder_class_root       : str  — PascalCase root used in Builder + helpers
+  ctx.package_name            : str  — Go package name (e.g., "kobler", "adkernelAdn").
+                                        DEPRECATED-but-supported in favour of
+                                        ctx.naming_form_resolution.go_package_name
+                                        (F-new-34). When both are present, the
+                                        naming_form_resolution form wins; when only
+                                        package_name is present (backward-compat),
+                                        it is used directly. Tests pass either.
+  ctx.bidder_class_root       : str  — PascalCase root used in Builder + helpers.
+                                        Same DEPRECATED/preferred-from-
+                                        naming_form_resolution.go_constant_root
+                                        semantics as ctx.package_name (F-new-34).
+  ctx.naming_form_resolution  : dict|null — F-new-34 per-aspect naming-form table
+                                        (Rule 46 multi-form-aware naming sites).
+                                        Populated by
+                                        `scripts.lib.port_engine.lookup_forms(yaml_name)`
+                                        at Step 4 ctx-assembly time; the renderer
+                                        prefers these forms over ctx.package_name /
+                                        ctx.bidder_class_root / ctx.imp_ext_class_root
+                                        whenever the dict is provided. Keys (all str):
+                                          - go_yaml_name     — `static/bidder-info/{x}.yaml`
+                                              + adapter directory (rarely diverges from
+                                              go_package_name; cadent_aperture_mx is the
+                                              one MVP-corpus example).
+                                          - go_package_name  — `package X` directive
+                                              and the EndpointTemplate name prefix.
+                                              This template references THIS form
+                                              everywhere ctx.package_name is used today.
+                                          - go_constant_root — `openrtb_ext.Bidder{X}`
+                                              constant suffix. Used by sibling templates
+                                              (params_test.go.j2, bidder-test.go.j2) —
+                                              this template does not emit it directly.
+                                          - java_yaml_name   — Java-side `bidder-config/{x}.yaml`
+                                              name. Used by go2java sibling templates;
+                                              not consumed by this Go-side template.
+                                          - java_class_root  — Java-side `{X}Bidder` class
+                                              root. Not consumed by this template.
+                                          - java_package     — Java-side
+                                              `org.prebid.server.bidder.{x}` package.
+                                              Not consumed by this template.
+                                        When the dict is absent, the template falls
+                                        back to ctx.package_name / ctx.imp_ext_class_root
+                                        (backward-compat with pre-F-new-34 ctx shape).
+                                        Affects 6 corpus pairs (adkernelAdn, thetradedesk,
+                                        audienceNetwork, cadent_aperture_mx, stroeerCore,
+                                        sspBC) where the Go yaml/package and Java yaml
+                                        diverge non-mechanically.
   ctx.uses_currency_conversion: bool — currency_conversion.used (Rule 28).
                                         When true, emits (a) a `convertImpCurrency`
                                         helper at end of file (modeled on upstream
@@ -31,7 +75,19 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         can flip if they want kobler-strict semantics.
                                         Affects ~31% of corpus (adverxo, beachfront,
                                         kobler, limelightDigital, vungle).
-  ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref
+  ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref.
+                                        DEPRECATED-but-supported in favour of
+                                        ctx.naming_form_resolution.go_constant_root
+                                        (F-new-34). The Go convention is that
+                                        ExtImp{X}'s X matches the bidder constant
+                                        root (e.g. `ExtImpAdkernelAdn` paired with
+                                        `BidderAdkernelAdn`); when
+                                        naming_form_resolution is provided, the
+                                        go_constant_root form is used unless
+                                        ctx.imp_ext_class_root is ALSO explicitly
+                                        set (the explicit override wins for the
+                                        rare bidder whose ExtImp class diverges
+                                        from its constant root).
   ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct" | "none".
                                         "none" (~12% corpus: aax, optidigital)
                                         skips both the per-imp parseImpExt() call
@@ -41,11 +97,103 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         required fields and the adapter forwards
                                         the request without imp.ext inspection.
   ctx.batching_kind           : str  — "single-batched" | "per-imp" | "max-imps-per-request"
-                                        | "format-split" | "pod-grouping"
+                                        | "per-key" | "format-split" | "pod-grouping"
   ctx.batching_max_imps       : int|null
+  ctx.batching_per_key        : dict|None — F-new-7 EXT-A per-key batching schema.
+                                        REQUIRED when ctx.batching_kind == "per-key";
+                                        None / absent for the other batching kinds
+                                        (back-compat preserved). Keys (all str):
+                                          - helper_name: str|None — Go func name for the
+                                              imp-grouping helper. Defaults to
+                                              "dispatchImpressions" (matches upstream
+                                              adkernelAdn.go). Operator overrides for
+                                              bidders that prefer a different name.
+                                          - key_field: str — documents the ExtImp field
+                                              that drives the grouping (e.g., "PublisherID"
+                                              for adkernelAdn). Informational — used in
+                                              the emitted helper's doc comment + the
+                                              port-report rendering, not in the Go body
+                                              (the map key is the WHOLE ExtImp struct,
+                                              not just this field — matches upstream
+                                              shape). REQUIRED for documentation but the
+                                              renderer will still emit when omitted.
+                                        Pattern cribbed from upstream
+                                        adapters/adkernelAdn/adkernelAdn.go (canonical
+                                        canary): `dispatchImpressions(imps, impExts)`
+                                        returns `map[ExtImpAdkernelAdn][]openrtb2.Imp`;
+                                        MakeRequests iterates the map and emits one
+                                        adapters.RequestData per key. Each batch may
+                                        carry its own endpoint URL when the grouping
+                                        key feeds into the endpoint template macro
+                                        (composes with F-new-2 template-macro: the
+                                        per-key branch's resolveEndpoint takes the
+                                        parsed ExtImp pointer directly, NOT request.Imp[0]
+                                        — matches upstream buildEndpointURL).
+                                        Constraint: the rendered `openrtb_ext.ExtImp{X}`
+                                        struct MUST be Go-comparable (no slice/map/func
+                                        fields), else `map[ExtImp{X}]...` is a Go
+                                        compile error. Renderer does NOT enforce this;
+                                        operator vouches at ctx-assembly time. Affects
+                                        ~1-3% of corpus (adkernelAdn confirmed; 2-3
+                                        bidders corpus-wide per F-new-7 EXT-A canary
+                                        7 trace).
   ctx.endpoint_resolution_kind: str  — "static" | "single-token-substitution" |
                                         "query-parameter-augmentation" | "dev-prod-toggle"
-                                        | "multi-token-substitution"
+                                        | "template-macro" | "multi-token-substitution"
+  ctx.endpoint_macros         : list[{macro: str, ext_field: str, convert: str|None}] |
+                                        None — REQUIRED when
+                                        endpoint_resolution_kind ∈
+                                        {"template-macro", "multi-token-substitution"}.
+                                        Each entry maps one Go `macros.EndpointTemplateParams`
+                                        field to a Go expression read off the parsed ImpExt
+                                        struct. Keys:
+                                          - macro: str — canonical `EndpointTemplateParams`
+                                              field name (e.g. "PublisherID", "SupplyId",
+                                              "AdUnit", "TokenID"). See
+                                              prebid-server/macros/macros.go for the full
+                                              accepted set; unrecognized values still emit
+                                              but produce a Go compile error caught by the
+                                              `gofmt`/`go vet` post-process gate.
+                                          - ext_field: str — exact PascalCase field name on
+                                              the rendered `openrtb_ext.ExtImp{X}` struct
+                                              (e.g. "PublisherID", "Auth", "AdUnitId").
+                                              Template references this via `impExt.{ext_field}`.
+                                          - convert: str|None — value-conversion wrapper.
+                                              None / omitted → emit raw `impExt.{ext_field}`
+                                              (assumes string type). "itoa" → wrap with
+                                              `strconv.Itoa(impExt.{ext_field})` (int → string;
+                                              caller MUST add `"strconv"` to imports_extra).
+                                              "format-int64" → `strconv.FormatInt(impExt.{ext_field}, 10)`.
+                                              Other values pass through literally as the
+                                              full Go expression (escape hatch for unusual
+                                              conversions; operator vouches it compiles).
+                                        When endpoint_resolution_kind is
+                                        "template-macro" or "multi-token-substitution",
+                                        the template:
+                                          (a) adds the `EndpointTemplate *template.Template`
+                                              field to the adapter struct;
+                                          (b) parses `cfg.Endpoint` via `text/template`
+                                              at Builder time, returning fmt.Errorf on
+                                              parse failure;
+                                          (c) imports `"text/template"` +
+                                              `"github.com/prebid/prebid-server/{v}/macros"`;
+                                          (d) emits a resolveEndpoint that returns
+                                              `(string, error)`, parses the first imp's
+                                              ext, builds an `EndpointTemplateParams`
+                                              from `endpoint_macros`, and calls
+                                              `macros.ResolveMacros(...)` (mirrors upstream
+                                              adkernelAdn.go::buildEndpointURL +
+                                              adverxo.go::buildEndpointURL);
+                                          (e) updates all 3 MakeRequests callsites to
+                                              handle the error from resolveEndpoint
+                                              (single-batched / per-imp / max-imps).
+                                        When the list is empty or None, an empty
+                                        `EndpointTemplateParams{}` struct emits and the
+                                        template body short-circuits with a TODO comment
+                                        — useful for operator pre-emit (just the wiring,
+                                        no macro values yet).
+                                        Affects ~19% of corpus (adkernelAdn, adverxo,
+                                        thetradedesk + others under analysis).
   ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw" |
                                         "legacy-raw-go". The "legacy-raw-go"
                                         variant emits the same baseline 204+200
@@ -75,6 +223,7 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         codes fall back to integer literals.
   ctx.bid_type_resolution     : str  — discriminator. One of:
                                           "imp-mediatype-introspection",
+                                          "imp-id-correlation",
                                           "constant" (or legacy alias "constant-banner"),
                                           "method-chain-fallback",
                                           "by-bid-mtype",
@@ -86,6 +235,20 @@ Inputs (mirror of bidder.java.j2 ctx):
                                           enum value back together with a
                                           template branch when a real bidder
                                           surfaces this pattern.)
+                                          F-new-7 EXT-B (v1.0.0) added
+                                          "imp-id-correlation" — same imp-walk
+                                          shape as imp-mediatype-introspection
+                                          BUT the terminal fallback (no matching
+                                          imp / none of the four mediatype
+                                          fields populated) is driven by
+                                          ctx.bid_type_fallback_value
+                                          (operator-vouched), NOT hardcoded to
+                                          banner. Pattern cribbed from upstream
+                                          adapters/adkernelAdn/adkernelAdn.go
+                                          ::getMediaTypeForImpID (returns Video
+                                          as the hardcoded miss-fallback).
+                                          Affects 1-2/16 (~6-12%) of corpus per
+                                          d3.8 canary 7 trace.
   ctx.bid_type_constant       : str|None — "banner"|"video"|"audio"|"native". REQUIRED
                                             when bid_type_resolution=="constant". For
                                             backwards compat, legacy "constant-banner"
@@ -126,6 +289,15 @@ Inputs (mirror of bidder.java.j2 ctx):
                                             "return-default" or "throw".
   ctx.bid_type_fallback_value : str|None — when fallback_action=="return-default",
                                             "banner"|"video"|"audio"|"native".
+                                            F-new-7 EXT-B: ALSO consumed by
+                                            bid_type_resolution=="imp-id-correlation"
+                                            as the terminal miss-fallback (no
+                                            matching imp / none of the four
+                                            mediatype fields populated).
+                                            REQUIRED for that branch; defaults
+                                            to "banner" when omitted (matches
+                                            the imp-mediatype-introspection
+                                            hardcoded fallback for back-compat).
   ctx.has_extra_info          : bool — true when source has ExtraAdapterInfo (Rule 35
                                         inverse demoted Java typed config to Go opaque
                                         JSON string); imports + struct fields adjust.
@@ -188,10 +360,29 @@ Inputs (mirror of bidder.java.j2 ctx):
 {%- else -%}
 {%- set _ok_suffix = "" -%}
 {%- endif -%}
+{# F-new-2 / F-new-27: endpoint_resolution_kind ∈ {template-macro,
+   multi-token-substitution} triggers the macros.ResolveMacros emission
+   branch. Adapter struct gains EndpointTemplate, Builder parses the
+   template once, resolveEndpoint flips to a (string, error) return and
+   3 callsites bind err → errors. Single predicate computed up-front so
+   import block / struct emit / signature emit / callsites stay in sync. #}
+{%- set _endpoint_needs_macros_resolution = (
+    ctx.endpoint_resolution_kind == "template-macro"
+    or ctx.endpoint_resolution_kind == "multi-token-substitution"
+) -%}
+{%- set _endpoint_macros_list = ctx.endpoint_macros or [] -%}
 {# F-new-1: imp_ext_unmarshal_kind=="none" skips both the per-imp call AND
    the parseImpExt helper. Compute once so call sites + helper definition
-   stay in sync. #}
-{%- set _emit_parse_imp_ext = ctx.imp_ext_unmarshal_kind != "none" -%}
+   stay in sync. F-new-2: when macros-resolution is active the parseImpExt
+   helper is required regardless (resolveEndpoint re-parses imp[0].ext to
+   read macro source fields), so force-enable it. F-new-7 EXT-A: per-key
+   batching's dispatchImpressions helper calls parseImpExt on every imp to
+   build the grouping map, so force-enable when batching_kind=="per-key". #}
+{%- set _emit_parse_imp_ext = (
+    ctx.imp_ext_unmarshal_kind != "none"
+    or _endpoint_needs_macros_resolution
+    or ctx.batching_kind == "per-key"
+) -%}
 {# F-new-1 partner: when neither currency-conversion nor parseImpExt has any
    per-imp work to do, the single-batched / max-imps inner loops collapse to
    an empty body. Drop the loop entirely (Go lints empty loops; upstream
@@ -222,7 +413,30 @@ Inputs (mirror of bidder.java.j2 ctx):
     503: "http.StatusServiceUnavailable",
     504: "http.StatusGatewayTimeout",
 } -%}
-package {{ ctx.package_name }}
+{# F-new-34: naming-form-resolution. When ctx.naming_form_resolution is
+   provided (Step 4 ctx-assembly calls
+   `scripts.lib.port_engine.lookup_forms(yaml_name)`), each form key
+   wins over the legacy single-form ctx keys (ctx.package_name,
+   ctx.imp_ext_class_root). Explicit ctx-key overrides still win when
+   set (the rare ExtImp-vs-constant divergence case). When the dict is
+   absent, legacy keys flow through unchanged (pre-F-new-34 ctx shape). #}
+{%- set _forms = ctx.naming_form_resolution or {} -%}
+{%- set _go_package_name = _forms.get('go_package_name') or ctx.package_name -%}
+{%- set _imp_ext_class_root = ctx.imp_ext_class_root or _forms.get('go_constant_root') -%}
+{# F-new-7 EXT-A: per-key batching. Compute once so helper-name + helper-emit
+   + MakeRequests body + composition-with-F-new-2 stay in sync. The per-key
+   branch is structurally distinct from single-batched / per-imp / max-imps —
+   it iterates a map[ExtImp{X}][]Imp built by a dispatchImpressions-style
+   helper, emits one HTTP per map key, and composes with F-new-2's
+   template-macro endpoint resolution by passing the parsed ext-key struct
+   directly into a resolveEndpoint that takes `*ExtImp{X}` (mirrors upstream
+   adkernelAdn.go::buildEndpointURL — operates on the params struct, not
+   request.Imp[0]). #}
+{%- set _per_key = ctx.batching_per_key or {} -%}
+{%- set _per_key_helper_name = _per_key.get('helper_name') or "dispatchImpressions" -%}
+{%- set _per_key_field = _per_key.get('key_field') or "" -%}
+{%- set _is_per_key = ctx.batching_kind == "per-key" -%}
+package {{ _go_package_name }}
 
 import (
 {% if ctx.has_extra_info %}
@@ -233,12 +447,18 @@ import (
 {% if ctx.uses_currency_conversion %}
 	"strings"
 {% endif %}
+{% if _endpoint_needs_macros_resolution %}
+	"text/template"
+{% endif %}
 
 	"github.com/prebid/openrtb/v20/openrtb2"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/adapters"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/config"
 {% if _legacy_raw_go_with_handlers %}
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/errortypes"
+{% endif %}
+{% if _endpoint_needs_macros_resolution %}
+	"github.com/prebid/prebid-server/{{ ctx.module_version }}/macros"
 {% endif %}
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/openrtb_ext"
 	"github.com/prebid/prebid-server/{{ ctx.module_version }}/util/jsonutil"
@@ -252,6 +472,9 @@ import (
 {% endif %}
 type adapter struct {
 	endpoint string
+{% if _endpoint_needs_macros_resolution %}
+	EndpointTemplate *template.Template
+{% endif %}
 {% if ctx.has_extra_info %}
 	extraInfo extraInfo
 {% endif %}
@@ -267,6 +490,13 @@ type extraInfo struct {
 {% endif %}
 func Builder(_ openrtb_ext.BidderName, cfg config.Adapter, _ config.Server) (adapters.Bidder, error) {
 	a := &adapter{endpoint: cfg.Endpoint}
+{% if _endpoint_needs_macros_resolution %}
+	tpl, err := template.New("{{ _go_package_name }}EndpointTemplate").Parse(cfg.Endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse endpoint url template: %v", err)
+	}
+	a.EndpointTemplate = tpl
+{% endif %}
 {% if ctx.has_extra_info %}
 	if cfg.ExtraAdapterInfo != "" {
 		if err := json.Unmarshal([]byte(cfg.ExtraAdapterInfo), &a.extraInfo); err != nil {
@@ -301,6 +531,21 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 		return nil, append(errors, err)
 	}
 
+{% if _endpoint_needs_macros_resolution %}
+	uri, err := a.resolveEndpoint(request)
+	if err != nil {
+		return nil, append(errors, err)
+	}
+	return []*adapters.RequestData{
+		{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(request.Imp),
+		},
+	}, errors
+{% else %}
 	return []*adapters.RequestData{
 		{
 			Method:  http.MethodPost,
@@ -310,6 +555,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			ImpIDs:  openrtb_ext.GetImpIDs(request.Imp),
 		},
 	}, errors
+{% endif %}
 {% elif ctx.batching_kind == "per-imp" %}
 	requests := make([]*adapters.RequestData, 0, len(request.Imp))
 	for i := range request.Imp {
@@ -332,6 +578,20 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			errors = append(errors, err)
 			continue
 		}
+{% if _endpoint_needs_macros_resolution %}
+		uri, err := a.resolveEndpoint(&perImp)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perImp.Imp),
+		})
+{% else %}
 		requests = append(requests, &adapters.RequestData{
 			Method:  http.MethodPost,
 			Uri:     a.resolveEndpoint(&perImp),
@@ -339,6 +599,7 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			Headers: standardHeaders(),
 			ImpIDs:  openrtb_ext.GetImpIDs(perImp.Imp),
 		})
+{% endif %}
 	}
 	return requests, errors
 {% elif ctx.batching_kind == "max-imps-per-request" %}
@@ -368,6 +629,20 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			errors = append(errors, err)
 			continue
 		}
+{% if _endpoint_needs_macros_resolution %}
+		uri, err := a.resolveEndpoint(&chunkRequest)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp),
+		})
+{% else %}
 		requests = append(requests, &adapters.RequestData{
 			Method:  http.MethodPost,
 			Uri:     a.resolveEndpoint(&chunkRequest),
@@ -375,6 +650,54 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 			Headers: standardHeaders(),
 			ImpIDs:  openrtb_ext.GetImpIDs(chunkRequest.Imp),
 		})
+{% endif %}
+	}
+	return requests, errors
+{% elif _is_per_key %}
+{# F-new-7 EXT-A: per-key batching. Group imps by the parsed ExtImp{X} value,
+   then emit one adapters.RequestData per group. Composes with F-new-2:
+   when endpoint_resolution_kind=="template-macro", the per-batch endpoint
+   is resolved against the GROUPING-KEY struct (not request.Imp[0]) —
+   matches upstream adkernelAdn.go::buildEndpointURL. Pattern cribbed from
+   upstream adkernelAdn.go::dispatchImpressions + MakeRequests loop. #}
+	groups, dispErrs := {{ _per_key_helper_name }}(request.Imp)
+	errors = append(errors, dispErrs...)
+	if len(groups) == 0 {
+		return nil, errors
+	}
+	requests := make([]*adapters.RequestData, 0, len(groups))
+	for key, batchImps := range groups {
+		batchKey := key
+		perGroup := *request
+		perGroup.Imp = batchImps
+		body, err := jsonutil.Marshal(&perGroup)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+{% if _endpoint_needs_macros_resolution %}
+		uri, err := a.resolveEndpoint(&batchKey)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     uri,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perGroup.Imp),
+		})
+{% else %}
+		_ = batchKey
+		requests = append(requests, &adapters.RequestData{
+			Method:  http.MethodPost,
+			Uri:     a.endpoint,
+			Body:    body,
+			Headers: standardHeaders(),
+			ImpIDs:  openrtb_ext.GetImpIDs(perGroup.Imp),
+		})
+{% endif %}
 	}
 	return requests, errors
 {% else %}
@@ -468,19 +791,19 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 }
 
 {% if _emit_parse_imp_ext %}
-func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}, error) {
+func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ _imp_ext_class_root }}, error) {
 {% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
 	var bidderExt adapters.ExtImpBidder
 	if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
 	}
-	var ext openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}
+	var ext openrtb_ext.ExtImp{{ _imp_ext_class_root }}
 	if err := jsonutil.Unmarshal(bidderExt.Bidder, &ext); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext.bidder: %w", imp.ID, err)
 	}
 	return &ext, nil
 {% else %}
-	var ext openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}
+	var ext openrtb_ext.ExtImp{{ _imp_ext_class_root }}
 	if err := jsonutil.Unmarshal(imp.Ext, &ext); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
 	}
@@ -489,6 +812,101 @@ func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_roo
 }
 {% endif %}
 
+{% if _endpoint_needs_macros_resolution %}
+{# F-new-2 / F-new-27: template-macro + multi-token-substitution real bodies.
+   Adapter parses cfg.Endpoint as a text/template at Builder time; here we
+   re-parse the first imp's ext (the per-imp ext is needed for the macro
+   values), build an EndpointTemplateParams from ctx.endpoint_macros, and
+   call macros.ResolveMacros. Pattern cribbed from upstream
+   adapters/adkernelAdn/adkernelAdn.go::buildEndpointURL (single macro,
+   single canary) + adapters/adverxo/adverxo.go::buildEndpointURL
+   (multi-token, two macros) + adapters/thetradedesk/thetradedesk.go::
+   buildEndpointURL (single macro string-typed).
+
+   The function flips to a (string, error) return — Builder's template.Parse
+   already guarantees the template compiles, but ResolveMacros can still
+   error on template evaluation (e.g. missing-field reference); operator
+   handling is to bubble the error up to MakeRequests' errors slice.
+
+   When ctx.endpoint_macros is empty / None, the params struct is empty —
+   operator gets the full wiring (struct field, Builder Parse, imports)
+   without macro values, and a TODO comment points them at the
+   ctx.endpoint_macros schema. Useful for the spec-emit pre-pass before
+   the operator has populated macros_used.
+
+   F-new-7 EXT-A composition: when batching_kind == "per-key", the function
+   signature flips from `(*openrtb2.BidRequest)` to `(*openrtb_ext.ExtImp{X})`
+   — the per-batch endpoint is resolved against the parsed grouping-key
+   struct (one per map bucket), matching upstream adkernelAdn.go::buildEndpointURL.
+   The body skips the request.Imp[0] re-parse since the caller already
+   has the parsed ext in hand. #}
+{% if _is_per_key %}
+func (a *adapter) resolveEndpoint(impExt *openrtb_ext.ExtImp{{ _imp_ext_class_root }}) (string, error) {
+{% if _endpoint_macros_list | length > 0 %}
+	endpointParams := macros.EndpointTemplateParams{
+{% for m in _endpoint_macros_list %}
+{% if m.convert == "itoa" %}
+		{{ m.macro }}: strconv.Itoa(impExt.{{ m.ext_field }}),
+{% elif m.convert == "format-int64" %}
+		{{ m.macro }}: strconv.FormatInt(impExt.{{ m.ext_field }}, 10),
+{% elif m.convert %}
+		{{ m.macro }}: {{ m.convert }},
+{% else %}
+		{{ m.macro }}: impExt.{{ m.ext_field }},
+{% endif %}
+{% endfor %}
+	}
+{% else %}
+	// TODO[port-java2go]: ctx.endpoint_macros is empty — operator populates
+	// the per-macro mapping per endpoint_resolution.macros_used /
+	// macro_field_set from the source spec. Each entry maps a
+	// macros.EndpointTemplateParams field to a Go expression on impExt.
+	_ = impExt
+	endpointParams := macros.EndpointTemplateParams{}
+{% endif %}
+	return macros.ResolveMacros(a.EndpointTemplate, endpointParams)
+}
+{% else %}
+func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) (string, error) {
+	if len(request.Imp) == 0 {
+		return "", fmt.Errorf("no imp to resolve endpoint")
+	}
+{% if _endpoint_macros_list | length > 0 %}
+	impExt, err := parseImpExt(&request.Imp[0])
+	if err != nil {
+		return "", fmt.Errorf("imp %s: failed reading imp.ext for endpoint macros: %w", request.Imp[0].ID, err)
+	}
+	endpointParams := macros.EndpointTemplateParams{
+{% for m in _endpoint_macros_list %}
+{% if m.convert == "itoa" %}
+		{{ m.macro }}: strconv.Itoa(impExt.{{ m.ext_field }}),
+{% elif m.convert == "format-int64" %}
+		{{ m.macro }}: strconv.FormatInt(impExt.{{ m.ext_field }}, 10),
+{% elif m.convert %}
+		{{ m.macro }}: {{ m.convert }},
+{% else %}
+		{{ m.macro }}: impExt.{{ m.ext_field }},
+{% endif %}
+{% endfor %}
+	}
+{% else %}
+	// TODO[port-java2go]: ctx.endpoint_macros is empty — operator populates
+	// the per-macro mapping per endpoint_resolution.macros_used /
+	// macro_field_set from the source spec. Each entry maps a
+	// macros.EndpointTemplateParams field to a Go expression on impExt
+	// (parsed via parseImpExt(&request.Imp[0]) when ctx populated).
+	endpointParams := macros.EndpointTemplateParams{}
+{% endif %}
+	return macros.ResolveMacros(a.EndpointTemplate, endpointParams)
+}
+{% endif %}
+{% elif _is_per_key %}
+{# F-new-7 EXT-A: per-key + non-template-macro endpoint kinds bypass the
+   resolveEndpoint helper entirely — the per-key batching loop reads
+   `a.endpoint` directly. Emitting an unused resolveEndpoint helper here
+   would trigger Go unused-function warnings (and gofmt-clean does not
+   catch it, but `go vet` would). #}
+{% else %}
 func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 {% if ctx.endpoint_resolution_kind == "static" %}
 	return a.endpoint
@@ -502,6 +920,7 @@ func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 	return a.endpoint
 {% endif %}
 }
+{% endif %}
 
 {% if _bid_type_returns_error %}
 func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) (openrtb_ext.BidType, error) {
@@ -540,6 +959,38 @@ func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
 		}
 	}
 	return openrtb_ext.BidTypeBanner
+{% elif ctx.bid_type_resolution == "imp-id-correlation" %}
+{# F-new-7 EXT-B (v1.0.0) — imp-id-correlation. Same imp-walk shape as
+   imp-mediatype-introspection, but the terminal miss-fallback (no matching
+   imp / none of the four mediatype fields populated on the matching imp) is
+   driven by ctx.bid_type_fallback_value (operator-vouched) instead of being
+   hardcoded to banner. Pattern cribbed from upstream
+   adapters/adkernelAdn/adkernelAdn.go::getMediaTypeForImpID. Defaults to
+   "banner" when ctx.bid_type_fallback_value is omitted (preserves the
+   imp-mediatype-introspection shape for safe back-compat). #}
+{% set _imp_id_fallback = ctx.bid_type_fallback_value or "banner" %}
+{% if _imp_id_fallback not in _bid_type_short_to_go %}
+{# Trigger an UndefinedError loud enough to surface the bad input. #}
+{{ _bid_type_short_to_go.unknown_bid_type_fallback_value_passed_to_template.fail }}
+{% endif %}
+	for i := range imps {
+		if imps[i].ID == bid.ImpID {
+			if imps[i].Banner != nil {
+				return openrtb_ext.BidTypeBanner
+			}
+			if imps[i].Video != nil {
+				return openrtb_ext.BidTypeVideo
+			}
+			if imps[i].Native != nil {
+				return openrtb_ext.BidTypeNative
+			}
+			if imps[i].Audio != nil {
+				return openrtb_ext.BidTypeAudio
+			}
+			break
+		}
+	}
+	return openrtb_ext.{{ _bid_type_short_to_go[_imp_id_fallback] }}
 {% elif ctx.bid_type_resolution == "by-bid-mtype" %}
 {# Rule 23 — switch on openrtb2.Bid.MType (1=Banner, 2=Video, 3=Audio, 4=Native).
    Pattern cribbed from upstream adapters/adverxo/adverxo.go and
@@ -702,6 +1153,35 @@ func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) e
 		imp.BidFloorCur = supportedCurrency
 	}
 	return nil
+}
+{% endif %}
+{% if _is_per_key %}
+
+// {{ _per_key_helper_name }} groups imps by their parsed openrtb_ext.ExtImp{{ _imp_ext_class_root }}
+{% if _per_key_field %}// value (e.g. by `{{ _per_key_field }}`), returning one map bucket per unique
+{% else %}// value, returning one map bucket per unique
+{% endif %}
+// grouping-key struct. Pattern cribbed from upstream
+// adapters/adkernelAdn/adkernelAdn.go::dispatchImpressions. Each bucket
+// becomes one outbound HTTP request in MakeRequests. Imps whose ext fails
+// to parse are dropped from the returned map and an error is appended to
+// the returned slice — caller may surface them via the per-request errors
+// channel.
+//
+// Constraint: ExtImp{{ _imp_ext_class_root }} MUST be Go-comparable (no slice/map/func
+// fields) for the map[ExtImp{{ _imp_ext_class_root }}] usage to compile.
+func {{ _per_key_helper_name }}(imps []openrtb2.Imp) (map[openrtb_ext.ExtImp{{ _imp_ext_class_root }}][]openrtb2.Imp, []error) {
+	groups := make(map[openrtb_ext.ExtImp{{ _imp_ext_class_root }}][]openrtb2.Imp)
+	errs := make([]error, 0)
+	for i := range imps {
+		impExt, err := parseImpExt(&imps[i])
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		groups[*impExt] = append(groups[*impExt], imps[i])
+	}
+	return groups, errs
 }
 {% endif %}
 {% if ctx.batching_kind == "max-imps-per-request" %}

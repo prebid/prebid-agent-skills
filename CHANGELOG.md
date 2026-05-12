@@ -17,6 +17,95 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-12 (F2: port-java2go SKILL 0.5.0 → 1.0.0 PRODUCTION PROMOTION)
+
+**port-java2go SKILL bumped 0.5.0 → 1.0.0**, the production-promotion
+milestone symmetric to D3.8's operator-validation work (port-go2java is
+at v0.5.0 per the 2026-05-11 D2.8 milestone below). F2 sprint landed the
+4 template-coverage v1.0.0 promotion blockers identified in
+[`docs/runs/post-d3.8-remaining-work.md`](docs/runs/post-d3.8-remaining-work.md)
+§ Phase F2; criterion 5 (non-MVP validation canary) was RETIRED earlier
+by D3.8 canary 8 (teal).
+
+### v1.0.0 promotion ledger — all cleared
+
+1. **F-new-2 / F-new-27 — template-macro / multi-token-substitution real
+   bodies (LANDED in commit `964d088`)**: replaces the TODO STUB at the
+   resolveEndpoint else-catchall with the canonical Go pattern (text/template
+   + macros.ResolveMacros, matching upstream adkernelAdn / adverxo /
+   thetradedesk). New ctx schema: `ctx.endpoint_macros: list[{macro,
+   ext_field, convert}]`. Adapter gains `EndpointTemplate *template.Template`
+   field; Builder parses once; resolveEndpoint signature flips to
+   `(string, error)`.
+
+2. **F-new-7 EXT-A — per-key batching template branch (LANDED in commit
+   `058ca15`)**: new `{% elif ctx.batching_kind == "per-key" %}` arm
+   emits a `dispatchImpressions`-style helper that groups imps by parsed
+   ExtImp into `map[ExtImp{X}][]Imp` + per-batch MakeRequests loop. New
+   ctx schema: `ctx.batching_per_key: {helper_name, key_field}`. Composes
+   with F-new-2 by flipping `resolveEndpoint` to take `*ExtImp{X}`,
+   matching `adkernelAdn.go::buildEndpointURL(params)`.
+
+3. **F-new-7 EXT-B — imp-id-correlation template branch (LANDED in commit
+   `de9256a`)**: new `{% elif ctx.bid_type_resolution == "imp-id-correlation" %}`
+   arm in getBidType emits an imp-walk loop that returns the matching imp's
+   mediatype (Banner / Video / Native / Audio — order matches the
+   imp-mediatype-introspection sibling branch and upstream adkernelAdn)
+   with an operator-vouched terminal via `ctx.bid_type_fallback_value`
+   when no match. Defaults to `"banner"` for back-compat.
+
+4. **F-new-34 — naming_form_resolution ctx schema (Rule 46) (LANDED in
+   commit `5cc1471`)**: per-aspect form table resolved from
+   `bidder-constant-table.yaml::bidders.{name}.forms` sub-map via new
+   `port_engine.lookup_forms(yaml_name)` helper. 6 non-mechanical pairs
+   populated (adkernelAdn, thetradedesk, audienceNetwork, cadent_aperture_mx,
+   stroeerCore, sspBC); 265 mechanical entries unchanged via the
+   backward-compat path. Emitted as `ctx.naming_form_resolution: dict`
+   to bidder.go.j2 which prefers form keys over legacy `ctx.package_name` /
+   `ctx.imp_ext_class_root`.
+
+5. **Criterion 5 RETIRED**: "non-MVP validation canary outside the 6-pair
+   MVP set succeeding with ≤1 retry" — D3.8 canary 8 (teal) cleared all 8
+   gates (per the 2026-05-05 entry below). Documented retirement persists
+   in the parent SKILL ledger.
+
+### Test coverage
+
+Suite grew from 493 (pre-F2) to **548 tests PASS** (+54 across the 4 F2
+commits + 1 review-driven test in the v1.0.0 review-fix commit;
++55 total), 0 regressions. New test classes:
+- `TestEndpointResolutionMacros` (14 tests) — F-new-2
+- `TestLookupForms` + `TestNamingFormResolution` (16 tests) — F-new-34
+- `TestPerKeyBatching` (12 tests) — F-new-7 EXT-A
+- `TestImpIdCorrelation` (12 tests) — F-new-7 EXT-B
+
+### Side effects
+
+- `prebid-server-go/port-java2go/SKILL.md` frontmatter `version: 0.5.0` →
+  `version: 1.0.0`. Status block rewritten to "v1.0.0 — production-promoted"
+  with the full ledger showing all 4 blockers LANDED + criterion 5
+  RETIRED.
+- `prebid-server-go/read/skills/shared/bidder-constant-table.yaml` schema
+  extension: `forms:` sub-map per non-mechanical bidder (6 entries
+  populated; 265 entries remain simple string values).
+- New `scripts/lib/port_engine.lookup_forms(yaml_name)` helper +
+  `NAMING_FORM_KEYS` constant + `_load_bidder_table_raw` loader.
+- ROADMAP § "Phase D — Operator validation status" updated: port-java2go
+  frontmatter line bumped 0.3.0 → 1.0.0 + v1.0.0 promotion-blocker bullet
+  retired (the criteria enumerated there have all moved to LANDED state
+  in this entry).
+
+### F2 commits on `feat/f2-port-java2go-v1.0.0`
+
+```
+de9256a F2 step 4 — F-new-7 EXT-B imp-id-correlation + v1.0.0 promotion
+058ca15 F2 step 3 — F-new-7 EXT-A per-key batching
+5cc1471 F2 step 2 — F-new-34 naming_form_resolution + bidder-constant-table forms
+964d088 F2 step 1 — F-new-2/27 multi-token endpoint resolution
+```
+
+---
+
 ## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-11 (D2.8 operator validation complete; port-go2java 0.3.0 → 0.5.0)
 
 D2.8 — operator validation of `port-go2java` SKILL against the 6 MVP pairs
@@ -212,8 +301,11 @@ FuzzMergeBidsPBSFlag / FuzzModifyImp; zero new panic classes.
   gates. (5 polish iterations layered on top, but the underlying
   canary required only 1 hand-fix pass to reach 7/8 gates and 1 more
   to reach 8/8.)
-- ⏳ Criteria 1-4 remain (template-macro / multi-token, per-key
-  batching, imp-id-correlation, naming_form_resolution).
+- ✅ **Criteria 1-4 RETIRED 2026-05-12** by the F2 sprint (see
+  top-of-file 2026-05-12 entry): F-new-2/27 multi-token endpoint
+  resolution (`964d088`), F-new-7 EXT-A per-key batching (`058ca15`),
+  F-new-7 EXT-B imp-id-correlation (`de9256a`), F-new-34
+  naming_form_resolution (`5cc1471`). SKILL bumped 0.5.0 → 1.0.0.
 
 ---
 

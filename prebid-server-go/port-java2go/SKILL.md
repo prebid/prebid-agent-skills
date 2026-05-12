@@ -1,22 +1,24 @@
 ---
 name: port-java2go
 description: Translates a Java-source Adapter Spec (prebid-server-java/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/java/{bidder}.yaml) into Go artifacts under prebid-server-go/adapters/{bidder}/ plus paired YAML, bidder-params, exemplary fixtures, and registry entries. USE WHEN porting a new (or existing) Java bid adapter to the Go codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
-version: 0.5.0
+version: 1.0.0
 ---
 
 # port-java2go (Java → Go)
 
-> **Status: D3.8 operator validation complete.** All 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) demonstrably portable end-to-end via 7 canaries; trajectory `5 clean / 2 after-fix / 2 FAIL` → 3 consecutive `10 clean / 0 / 0`; final canary cleared D3.3 gate 3's 80% coverage threshold. Pipeline prose authored (D3.1); 7 Go-side templates shipped (D3.2 + D3.8 supplemental-fixture); 2 port_engine helpers added (`exemplary_fixture_assemble_java_to_go`, `simulate_makerequests_mutations`); 8 template-body extensions landed (B1 unified `getBidType` / B2 currency-conversion / B3 custom-headers / F-new-1 imp_ext=none / F-new-14 legacy-raw-go status branching / F-new-12 impIDs / F-new-22 inject_empty_user / F-new-23 supplemental gating).
+> **Status: v1.0.0 — production-promoted.** All four post-D3.8 template-coverage blockers (F-new-2 / F-new-7 EXT-A / F-new-34 / F-new-7 EXT-B) landed on `feat/f2-port-java2go-v1.0.0`; the fifth criterion (non-MVP validation canary) was RETIRED by D3.8 canary 8 (teal) per `docs/runs/post-d3.8-remaining-work.md` § Phase F2 row 5. The skill now covers every bid-type-resolution / batching / endpoint-resolution / naming-form pattern surfaced by the 16-pair audit corpus without operator hand-fill workarounds.
 >
-> **Production-ready for canary porting** with 1-2 hour operator hand-fill per pair (workarounds documented in each canary trace under `docs/runs/d3.8-*-canary-*.md`). NOT YET v1.0.0. Promotion to v1.0.0 needs:
+> **D3.8 trajectory recap.** All 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) demonstrably portable end-to-end via 7 canaries plus the canary 8 (teal) green-field non-MVP validation; trajectory `5 clean / 2 after-fix / 2 FAIL` → 3 consecutive `10 clean / 0 / 0` → canary 8 `8/8 gates green`; canary 7 cleared D3.3 gate 3's 80% coverage threshold. Pipeline prose authored (D3.1); 7 Go-side templates shipped (D3.2 + D3.8 supplemental-fixture); 2 port_engine helpers added (`exemplary_fixture_assemble_java_to_go`, `simulate_makerequests_mutations`); 8 template-body extensions landed pre-F2 (B1 unified `getBidType` / B2 currency-conversion / B3 custom-headers / F-new-1 imp_ext=none / F-new-14 legacy-raw-go status branching / F-new-12 impIDs / F-new-22 inject_empty_user / F-new-23 supplemental gating); 4 more landed in Phase F2 (F-new-2 endpoint-macros, F-new-7 EXT-A per-key batching, F-new-34 naming-form resolution, F-new-7 EXT-B imp-id-correlation).
 >
-> 1. Template-macro / multi-token-substitution real bodies (F-new-2, F-new-27 — confirmed in 2/5 canaries; currently TODO stubs)
-> 2. Per-key batching template branch (F-new-7 EXT-A — adkernelAdn)
-> 3. imp-id-correlation template branch (F-new-7 EXT-B — adkernelAdn)
-> 4. `naming_form_resolution` ctx schema (F-new-34 Rule 46 master-sample)
-> 5. A non-MVP validation canary (fresh adapter outside the 6-pair MVP set) succeeding with ≤1 retry
+> **v1.0.0 promotion ledger (all blockers cleared):**
 >
-> Audit + spike: `docs/runs/d3.8-template-coverage-audit.md`, `docs/runs/d3.8-mvp-pairs-spike-2026-05-05.md`. 7 canary traces under `docs/runs/d3.8-*-canary-*.md`. ~33 distinct findings across the series (full enumeration in canary 7 trace).
+> 1. ~~Template-macro / multi-token-substitution real bodies (F-new-2, F-new-27 — confirmed in 2/5 canaries; currently TODO stubs)~~ **LANDED** — `feat/f2-port-java2go-v1.0.0` (resolveEndpoint flips to `(string, error)`; emits `text/template` + `macros.ResolveMacros` per upstream adkernelAdn/adverxo/thetradedesk; new `ctx.endpoint_macros` schema documented in template header + Step 4 prose below).
+> 2. ~~Per-key batching template branch (F-new-7 EXT-A — adkernelAdn)~~ **LANDED** — `feat/f2-port-java2go-v1.0.0` (new `{% elif ctx.batching_kind == "per-key" %}` branch emits a `dispatchImpressions`-style helper that groups imps by parsed `ExtImp{X}` value into `map[ExtImp{X}][]Imp`, plus a MakeRequests per-batch loop emitting one `adapters.RequestData` per group; composes with F-new-2 by flipping `resolveEndpoint` to `func (*ExtImp{X}) (string, error)` matching upstream adkernelAdn.go::buildEndpointURL; new `ctx.batching_per_key: {helper_name, key_field}` schema documented in template header + Step 4 prose below).
+> 3. ~~imp-id-correlation template branch (F-new-7 EXT-B — adkernelAdn)~~ **LANDED** — `feat/f2-port-java2go-v1.0.0` (new `{% elif ctx.bid_type_resolution == "imp-id-correlation" %}` branch in `getBidType` emits an imp-walk loop that returns the matching imp's mediatype field by inspection — Banner / Video / Native / Audio — and falls back to an operator-vouched terminal via `ctx.bid_type_fallback_value` when no matching imp / none of the four mediatype fields populated; mirrors upstream `adapters/adkernelAdn/adkernelAdn.go::getMediaTypeForImpID` shape; defaults to `"banner"` when omitted for back-compat with the imp-mediatype-introspection sibling branch; schema doc in template header + Step 4 prose below).
+> 4. ~~`naming_form_resolution` ctx schema (F-new-34 Rule 46 master-sample)~~ **LANDED** — `feat/f2-port-java2go-v1.0.0` (per-aspect form table now resolved from `bidder-constant-table.yaml::bidders.{name}.forms` sub-map via new `scripts.lib.port_engine.lookup_forms(yaml_name)` helper; emitted as `ctx.naming_form_resolution: dict` to `bidder.go.j2` which prefers form keys over legacy `ctx.package_name` / `ctx.imp_ext_class_root`; 6 non-mechanical pairs populated: adkernelAdn, thetradedesk, audienceNetwork, cadent_aperture_mx, stroeerCore, sspBC — backward-compat preserved for the other 265 mechanical entries; schema doc in Step 4 prose below).
+> 5. ~~A non-MVP validation canary (fresh adapter outside the 6-pair MVP set) succeeding with ≤1 retry~~ **RETIRED** — D3.8 canary 8 (teal) was the non-MVP validation canary; `8/8 gates green` first-emit with zero retries (`docs/runs/d3.8-teal-canary-*.md`). Per `docs/runs/post-d3.8-remaining-work.md` § Phase F2 row 5, criterion 5 retired by canary 8.
+>
+> Audit + spike: `docs/runs/d3.8-template-coverage-audit.md`, `docs/runs/d3.8-mvp-pairs-spike-2026-05-05.md`. 8 canary traces under `docs/runs/d3.8-*-canary-*.md` (7 MVP + 1 teal). ~33 distinct findings across the series (full enumeration in canary 7 trace + canary 8 reflection).
 
 ## What this skill does
 
@@ -150,6 +152,66 @@ The remaining 36 rules are handled prose-driven (the SKILL walks the rule's pros
 - Java `ImpUtil.parseImpExt(imp, mapper, ExtImpFoo.class)` → Go explicit `var bidderExt openrtb_ext.ExtBidder; if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil { ... }; var fooExt openrtb_ext.ExtImpFoo; if err := jsonutil.Unmarshal(bidderExt.Bidder, &fooExt); err != nil { ... }`.
 
 These expansions are documented in `references/porting-guide.md` (the inverse porting guide) and emitted in the Go-side templates.
+
+**Endpoint-macros resolution (Rule 11/12 — F-new-2 / F-new-27).** When `source_spec.code.make_requests.endpoint_resolution.kind` ∈ `{template-macro, multi-token-substitution}`, the template emits the canonical Go `text/template` + `macros.ResolveMacros` pattern instead of the previous TODO-stub `return a.endpoint` catchall. Concretely the destination spec carries two new ctx fields the renderer wires through to `bidder.go.j2`:
+
+- `ctx.endpoint_resolution_kind`: pass through `template-macro` or `multi-token-substitution` (no transformation needed; the source-side enum maps 1:1).
+- `ctx.endpoint_macros: list[{macro, ext_field, convert}]`: one entry per macro the Go endpoint URL references. `macro` is the canonical `macros.EndpointTemplateParams` field name (PublisherID, SupplyId, AdUnit, TokenID, AccountID, …); `ext_field` is the exact PascalCase field on the rendered `openrtb_ext.ExtImp{X}` struct; `convert` is one of `null` (raw string passthrough), `"itoa"` (int → string via `strconv.Itoa`), `"format-int64"` (int64 → string via `strconv.FormatInt(..., 10)`), or a literal Go expression (escape hatch when the conversion isn't itoa/format-int64). When `convert` is `itoa` or `format-int64` the renderer MUST add `"strconv"` to `ctx.imports_extra` (the template assumes the symbol is in-scope).
+
+When this branch fires, the template emits five paired changes (all gated on the same predicate):
+
+1. **Imports**: adds `"text/template"` and `"github.com/prebid/prebid-server/{v}/macros"` to the import block.
+2. **Adapter struct**: adds an `EndpointTemplate *template.Template` field (PascalCase per upstream adkernelAdn shape — exported convention preserved even though the field's Go-private use).
+3. **Builder**: calls `template.New("{package}EndpointTemplate").Parse(cfg.Endpoint)`, returning `fmt.Errorf("unable to parse endpoint url template: %v", err)` on failure (verbatim upstream error string).
+4. **resolveEndpoint** signature flips from `string` to `(string, error)`; the body parses `request.Imp[0]`'s ext via the existing `parseImpExt` helper, builds an `EndpointTemplateParams` literal from `ctx.endpoint_macros`, and returns `macros.ResolveMacros(a.EndpointTemplate, endpointParams)`. The `parseImpExt` local re-parse is the same shape upstream uses in `thetradedesk.go::getExtensionInfo` (walk imps until the macro fields are populated; we shortcut to imp[0] since the per-imp loop in MakeRequests has already validated each).
+5. **MakeRequests callsites** (all three batching branches: single-batched, per-imp, max-imps-per-request) bind the error and either return-append-errors (single-batched) or `continue` to the next imp/chunk (per-imp, max-imps).
+
+The previous TODO-stub catchall is retained for the third non-trivial endpoint kind, `query-parameter-augmentation` (deferred for a follow-up template extension; not in F2 v1.0.0 scope), and for any operator-introduced novel kinds. Other kinds (`static`, `dev-prod-toggle`, `single-token-substitution`) are unchanged.
+
+Canonical reference adapters: `adapters/adkernelAdn/adkernelAdn.go::buildEndpointURL` (1 macro, int → itoa); `adapters/thetradedesk/thetradedesk.go::buildEndpointURL` (1 macro, string passthrough); `adapters/adverxo/adverxo.go::buildEndpointURL` (2 macros, mixed int+string).
+
+**Naming-form resolution (Rule 46 — F-new-34).** Most upstream bidders have a single naming form: the lowercase yaml_name passes through unchanged for the Go package + directory + static yaml filename + Java package; PascalCase(yaml_name) gives the Go constant root + Java class root. The 6 corpus bidders where these forms diverge non-mechanically (Go camelCase vs Java lowercase, brand-acronym preservation, rebrands, intra-Go package-vs-directory mismatch) consult `prebid-server-go/read/skills/shared/bidder-constant-table.yaml::bidders.{yaml_name}.forms` — a sub-map of the six per-aspect forms — via the `scripts.lib.port_engine.lookup_forms(yaml_name)` helper.
+
+The helper returns a dict with six string keys (sourced from the table when populated; mechanically derived when absent):
+
+- `go_yaml_name` — `static/bidder-info/{x}.yaml` and adapter directory (the F-new-34 master sample `cadent_aperture_mx` is the one MVP-corpus example where this diverges from `go_package_name`).
+- `go_package_name` — the `package X` directive in `adapters/{bidder}/{bidder}.go` and the `template.New("{X}EndpointTemplate")` name prefix.
+- `go_constant_root` — `openrtb_ext.Bidder{X}` constant suffix. Used by sibling templates (`params_test.go.j2`, `bidder-test.go.j2`).
+- `java_yaml_name` — Java-side `bidder-config/{x}.yaml` filename + Spring property keys. Consumed by `port-go2java` sibling templates; included on the Go-side dict for round-trip / lineage tracking.
+- `java_class_root` — Java-side `{X}Bidder` class root (also `{X}Configuration`, `ExtImp{X}`, `{X}Test` roots). Same — sibling-side metadata.
+- `java_package` — Java-side `org.prebid.server.bidder.{x}` package.
+
+The dict is passed to `bidder.go.j2` as `ctx.naming_form_resolution` at Step 4 ctx-assembly time. The template prefers these forms over the legacy `ctx.package_name` / `ctx.imp_ext_class_root` keys whenever the dict is provided; when absent, the legacy keys flow through unchanged (backward-compatible with pre-F-new-34 ctx shapes). The legacy `ctx.imp_ext_class_root` continues to win over `naming_form_resolution.go_constant_root` when explicitly set (the rare bidder whose `ExtImp{X}` class root diverges from its bidder-constant root).
+
+The `forms:` sub-map authoring convention (in `bidder-constant-table.yaml`): only populate when at least ONE of the six forms deviates from the mechanical formula (`yaml_name` for Go forms; `re.sub(r"[^a-z0-9]", "", yaml_name.lower())` for Java forms; constant root from the simple-string value). Mechanical bidders retain the historical compact `bidder_name: PascalCaseRoot` shape. Currently 6 entries populate `forms:` (`adkernelAdn`, `thetradedesk`, `audienceNetwork`, `cadent_aperture_mx`, `stroeerCore`, `sspBC`) — the v1.0.0 F-new-34 set. The remaining 265 entries pass through `lookup_forms` mechanically.
+
+**Per-key batching (Rule 11/F-new-7 EXT-A).** When `source_spec.code.make_requests.batching.rules[0].kind == "per-key"` (imps grouped by an `imp.ext.bidder.{field}` value; one outbound HTTP per unique group), the renderer maps to `ctx.batching_kind == "per-key"` and populates a new `ctx.batching_per_key` schema:
+
+- `ctx.batching_per_key.helper_name: str|None` — Go func name for the grouping helper. Defaults to `"dispatchImpressions"` (mirrors upstream `adapters/adkernelAdn/adkernelAdn.go::dispatchImpressions`). Operator overrides for bidders that prefer a different name.
+- `ctx.batching_per_key.key_field: str` — documents the `ExtImp{X}` field that drives the grouping (e.g., `"PublisherID"` for adkernelAdn). Informational — used in the emitted helper's doc comment + the port-report rendering. The Go map key is the WHOLE `ExtImp{X}` struct (`map[ExtImp{X}][]openrtb2.Imp`), not just this field, matching upstream's shape; the spec's `batching.rules[0].group_key` value (e.g., `"imp.ext.bidder.pubId"`) reduces to the PascalCase field name on the rendered `openrtb_ext.ExtImp{X}` struct.
+
+When this branch fires, the template emits four paired changes (all gated on `ctx.batching_kind == "per-key"`):
+
+1. **MakeRequests body**: replaces the single-batched / per-imp / max-imps switch arm with a per-batch loop that calls `{helper_name}(request.Imp)` → `map[ExtImp{X}][]openrtb2.Imp + []error`, iterates the map, and emits one `adapters.RequestData` per bucket (each carrying `openrtb_ext.GetImpIDs(perGroup.Imp)`).
+2. **parseImpExt helper force-emit**: the grouping helper calls `parseImpExt(&imp)` per imp, so the helper is emitted regardless of `ctx.imp_ext_unmarshal_kind` (parallel to F-new-2's force-emit).
+3. **Helper function**: a `{helper_name}(imps []openrtb2.Imp) (map[ExtImp{X}][]openrtb2.Imp, []error)` declaration at the end of the file, parallel to `chunkImps` for `max-imps-per-request`.
+4. **resolveEndpoint signature flip (composition with F-new-2)**: when `endpoint_resolution_kind ∈ {template-macro, multi-token-substitution}`, `resolveEndpoint` flips from `(*openrtb2.BidRequest) (string, error)` to `(*openrtb_ext.ExtImp{X}) (string, error)`. The per-batch endpoint is resolved against the parsed grouping-key struct passed by pointer (`a.resolveEndpoint(&batchKey)`), NOT against `request.Imp[0]`. This mirrors upstream `adkernelAdn.go::buildEndpointURL(params)` exactly. When `endpoint_resolution_kind` is `static` / `dev-prod-toggle` / other non-macro kind, the per-batch loop reads `a.endpoint` directly and the `resolveEndpoint` helper is SUPPRESSED (would otherwise be unused — `go vet` would flag it).
+
+Constraint: the rendered `openrtb_ext.ExtImp{X}` struct MUST be Go-comparable (no slice/map/func fields) for the `map[ExtImp{X}]…` usage to compile. The renderer does NOT enforce this; operator vouches at ctx-assembly time. Per the canary 7 trace (`docs/runs/d3.8-adkernelAdn-canary-2026-05-05T1636Z-7686.md`), adkernelAdn is the only confirmed corpus bidder using per-key today; the audit estimates 2-3 corpus-wide pairs.
+
+Canonical reference adapter: `adapters/adkernelAdn/adkernelAdn.go::dispatchImpressions` + `MakeRequests` loop + `buildEndpointURL(params)`.
+
+**Imp-id-correlation bid-type (Rule 23/F-new-7 EXT-B).** When `source_spec.code.make_bids.bid_type_resolution.method_chain[0].method == "imp-id-correlation"` (the spec encodes a `getMediaTypeForImpID`-style helper that correlates each bid back to its source imp via `bid.ImpID`, then inspects which mediatype field is populated on that imp, with an operator-vouched fallback when no matching imp / none of the four mediatype fields populated), the renderer maps to `ctx.bid_type_resolution == "imp-id-correlation"` and populates the existing `ctx.bid_type_fallback_value` schema with the spec's `default_value` (one of `"banner"` / `"video"` / `"audio"` / `"native"`).
+
+- `ctx.bid_type_fallback_value: str` — the terminal miss-fallback BidType. REQUIRED for this branch (defaults to `"banner"` when omitted, matching the imp-mediatype-introspection sibling-branch shape for back-compat); operator vouches the canonical value at ctx-assembly time from the source spec's `bid_type_resolution.default_value`. The adkernelAdn-canonical value is `"video"` (matching upstream `adkernelAdn.go::getMediaTypeForImpID` which returns `BidTypeVideo` as the hardcoded miss-fallback).
+
+The emitted Go is a no-error `getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType` function: it iterates `imps`, finds the imp whose `ID == bid.ImpID`, and returns the first populated mediatype field (checked in Banner → Video → Native → Audio order — matches the `imp-mediatype-introspection` sibling branch's order in this template and the upstream adkernelAdn shape; note this does NOT match openrtb2's `MarkupType` numeric ordering which is 1=Banner / 2=Video / 3=Audio / 4=Native). When no imp matches, OR a matching imp has none of the four mediatype fields populated, the function returns `openrtb_ext.{bid_type_fallback_value}`.
+
+Distinction vs. the sibling `imp-mediatype-introspection` branch: the latter has the terminal fallback HARDCODED to BidTypeBanner (no `ctx.bid_type_fallback_value` consultation), and does NOT emit an explicit `imps[i].Banner != nil` check (it uses an inner default-banner return). Use imp-id-correlation when the spec encodes an explicit fallback value; use imp-mediatype-introspection when the spec leaves the fallback shape to the template default.
+
+Per the canary 7 trace (`docs/runs/d3.8-adkernelAdn-canary-2026-05-05T1636Z-7686.md` § Finding F-new-7 EXTENSION sub-finding B), adkernelAdn is the only confirmed corpus bidder using imp-id-correlation today; the audit estimates 1-2 corpus-wide pairs.
+
+Canonical reference adapter: `adapters/adkernelAdn/adkernelAdn.go::getMediaTypeForImpID`.
 
 **Cross-language metadata.** Same as D2 §Step 4 with directions reversed:
 
