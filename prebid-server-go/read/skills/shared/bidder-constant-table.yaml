@@ -32,6 +32,46 @@
 #
 # Refresh cadence: regenerate when scripts/sync-from-upstream.py reports
 # a new bidder upstream OR when go.mod's module-version line changes.
+#
+# Phase F2 / F-new-34 extension — `forms` sub-map (v1.0.0 promotion blocker
+# #4). Most upstream bidders are MECHANICAL: their Go yaml_name lower-cases
+# cleanly to the Java yaml_name, and PascalCase(yaml_name) == Go constant
+# root == Java class root. These remain simple `name: ConstantRoot` string
+# entries (backward-compatible). A minority — currently 6 — diverge
+# non-mechanically across at least one of {Go yaml_name vs Java yaml_name,
+# Go constant root vs Java class root, package name vs directory name}.
+# For those, the entry value flips to a mapping with `go_constant_root`
+# plus a `forms:` sub-map carrying the six per-aspect naming forms:
+#
+#   forms:
+#     go_yaml_name:     str   # static/bidder-info/{x}.yaml + Go directory + Go package name (1:1 in 99% of pairs)
+#     go_package_name:  str   # `package X` directive; usually == go_yaml_name; differs for cadent_aperture_mx
+#     go_constant_root: str   # `openrtb_ext.Bidder{X}` constant suffix
+#     java_yaml_name:   str   # bidder-config/{x}.yaml + Spring property keys + IT-fixture-folder name
+#     java_class_root:  str   # `{X}Bidder` Java class root (also Configuration / ExtImp / Test class roots)
+#     java_package:     str   # `org.prebid.server.bidder.{x}` Java package; usually == java_yaml_name
+#
+# Consumed by `scripts.lib.port_engine.lookup_forms(yaml_name) -> dict`
+# (returns the populated sub-map when present, OR a mechanically-derived
+# default when the entry is the simple-string form). Renderer reads
+# `ctx.naming_form_resolution` (per-aspect form table) from this helper.
+#
+# Authoring guidance: only populate `forms:` when at least ONE form
+# deviates from the mechanical formula. Mechanical formula:
+#   go_yaml_name     = yaml_name            (the map key)
+#   go_package_name  = yaml_name
+#   go_constant_root = (the simple-string value)
+#   java_yaml_name   = re.sub(r"[^a-z0-9]", "", yaml_name.lower())
+#   java_class_root  = (the simple-string value)              # default; Rule 46 covers exceptions
+#   java_package     = re.sub(r"[^a-z0-9]", "", yaml_name.lower())
+#
+# Currently populated `forms:` entries (6, the v1.0.0 F-new-34 set):
+# - adkernelAdn       (Rule 46 lowercase; canary 7 master sample)
+# - thetradedesk      (Rule 46 lowercase; PascalCase Java class divergence)
+# - audienceNetwork   (Rule 46 lowercase; multi-form aspect coverage)
+# - cadent_aperture_mx (Rule 46 underscore-drop + Rule 43 rebrand; intra-Go tri-form)
+# - stroeerCore       (Rule 46 lowercase)
+# - sspBC             (Rule 46 lowercase; brand-acronym preservation)
 
 schema_version: "1.0.0"
 
@@ -56,7 +96,15 @@ bidders:
   adgeneration: Adgeneration
   adhese: Adhese
   adkernel: Adkernel
-  adkernelAdn: AdkernelAdn
+  adkernelAdn:
+    go_constant_root: AdkernelAdn
+    forms:
+      go_yaml_name: adkernelAdn        # adapters/adkernelAdn/, static/bidder-info/adkernelAdn.yaml
+      go_package_name: adkernelAdn     # `package adkernelAdn`
+      go_constant_root: AdkernelAdn    # openrtb_ext.BidderAdkernelAdn
+      java_yaml_name: adkerneladn      # bidder-config/adkerneladn.yaml + Spring keys
+      java_class_root: AdkernelAdn     # AdkernelAdnBidder
+      java_package: adkerneladn        # org.prebid.server.bidder.adkerneladn
   adman: Adman
   admatic: Admatic
   admixer: Admixer
@@ -90,7 +138,15 @@ bidders:
   appnexus: Appnexus
   appush: Appush
   aso: Aso
-  audienceNetwork: AudienceNetwork
+  audienceNetwork:
+    go_constant_root: AudienceNetwork
+    forms:
+      go_yaml_name: audienceNetwork    # adapters/audienceNetwork/
+      go_package_name: audienceNetwork
+      go_constant_root: AudienceNetwork  # openrtb_ext.BidderAudienceNetwork
+      java_yaml_name: audiencenetwork  # bidder-config/audiencenetwork.yaml
+      java_class_root: AudienceNetwork  # AudienceNetworkBidder
+      java_package: audiencenetwork    # org.prebid.server.bidder.audiencenetwork
   automatad: Automatad
   avocet: Avocet
   axis: Axis
@@ -118,7 +174,15 @@ bidders:
   boldwin_rapid: BoldwinRapid
   brave: Brave
   bwx: BWX
-  cadent_aperture_mx: CadentApertureMX
+  cadent_aperture_mx:
+    go_constant_root: CadentApertureMX
+    forms:
+      go_yaml_name: cadent_aperture_mx   # adapters/cadent_aperture_mx/ (dir keeps underscores)
+      go_package_name: cadentaperturemx  # `package cadentaperturemx` (drops underscores per Go convention)
+      go_constant_root: CadentApertureMX # openrtb_ext.BidderCadentApertureMX (also BidderEmxDigital — see Rule 43 rebrand quirk)
+      java_yaml_name: emxdigital         # Java collapses to rebranded form (Rule 43 lifecycle); cadent_aperture_mx is alias-of emxdigital on Java
+      java_class_root: EmxDigital        # EmxDigitalBidder
+      java_package: emxdigital           # org.prebid.server.bidder.emxdigital
   ccx: Ccx
   clydo: Clydo
   cointraffic: Cointraffic
@@ -275,16 +339,40 @@ bidders:
   sovrn: Sovrn
   sovrnXsp: SovrnXsp
   sparteo: Sparteo
-  sspBC: SspBC
+  sspBC:
+    go_constant_root: SspBC
+    forms:
+      go_yaml_name: sspBC              # adapters/sspBC/
+      go_package_name: sspBC
+      go_constant_root: SspBC          # openrtb_ext.BidderSspBC (brand-acronym preservation)
+      java_yaml_name: sspbc            # bidder-config/sspbc.yaml
+      java_class_root: SspBC           # SspBCBidder (PascalCase preserves BC)
+      java_package: sspbc              # org.prebid.server.bidder.sspbc
   startio: StartIO
-  stroeerCore: StroeerCore
+  stroeerCore:
+    go_constant_root: StroeerCore
+    forms:
+      go_yaml_name: stroeerCore        # adapters/stroeerCore/
+      go_package_name: stroeerCore
+      go_constant_root: StroeerCore    # openrtb_ext.BidderStroeerCore
+      java_yaml_name: stroeercore      # bidder-config/stroeercore.yaml
+      java_class_root: StroeerCore     # StroeerCoreBidder
+      java_package: stroeercore        # org.prebid.server.bidder.stroeercore
   taboola: Taboola
   tappx: Tappx
   teads: Teads
   telaria: Telaria
   teqblaze: TeqBlaze
   theadx: Theadx
-  thetradedesk: TheTradeDesk
+  thetradedesk:
+    go_constant_root: TheTradeDesk
+    forms:
+      go_yaml_name: thetradedesk       # adapters/thetradedesk/
+      go_package_name: thetradedesk
+      go_constant_root: TheTradeDesk   # openrtb_ext.BidderTheTradeDesk (PascalCase preserves brand)
+      java_yaml_name: thetradedesk     # bidder-config/thetradedesk.yaml
+      java_class_root: TheTradeDesk    # TheTradeDeskBidder (PascalCase preserves brand)
+      java_package: thetradedesk       # org.prebid.server.bidder.thetradedesk
   tid: ReservedTID
   tpmn: Tpmn
   tradplus: TradPlus

@@ -13,7 +13,7 @@ version: 0.5.0
 > 1. ~~Template-macro / multi-token-substitution real bodies (F-new-2, F-new-27 — confirmed in 2/5 canaries; currently TODO stubs)~~ **LANDED** — `feat/f2-port-java2go-v1.0.0` (resolveEndpoint flips to `(string, error)`; emits `text/template` + `macros.ResolveMacros` per upstream adkernelAdn/adverxo/thetradedesk; new `ctx.endpoint_macros` schema documented in template header + Step 4 prose below).
 > 2. Per-key batching template branch (F-new-7 EXT-A — adkernelAdn)
 > 3. imp-id-correlation template branch (F-new-7 EXT-B — adkernelAdn)
-> 4. `naming_form_resolution` ctx schema (F-new-34 Rule 46 master-sample)
+> 4. ~~`naming_form_resolution` ctx schema (F-new-34 Rule 46 master-sample)~~ **LANDED** — `feat/f2-port-java2go-v1.0.0` (per-aspect form table now resolved from `bidder-constant-table.yaml::bidders.{name}.forms` sub-map via new `scripts.lib.port_engine.lookup_forms(yaml_name)` helper; emitted as `ctx.naming_form_resolution: dict` to `bidder.go.j2` which prefers form keys over legacy `ctx.package_name` / `ctx.imp_ext_class_root`; 6 non-mechanical pairs populated: adkernelAdn, thetradedesk, audienceNetwork, cadent_aperture_mx, stroeerCore, sspBC — backward-compat preserved for the other 265 mechanical entries; schema doc in Step 4 prose below).
 > 5. A non-MVP validation canary (fresh adapter outside the 6-pair MVP set) succeeding with ≤1 retry
 >
 > Audit + spike: `docs/runs/d3.8-template-coverage-audit.md`, `docs/runs/d3.8-mvp-pairs-spike-2026-05-05.md`. 7 canary traces under `docs/runs/d3.8-*-canary-*.md`. ~33 distinct findings across the series (full enumeration in canary 7 trace).
@@ -167,6 +167,21 @@ When this branch fires, the template emits five paired changes (all gated on the
 The previous TODO-stub catchall is retained for the third non-trivial endpoint kind, `query-parameter-augmentation` (separate audit ticket F-new-X), and for any operator-introduced novel kinds. Other kinds (`static`, `dev-prod-toggle`, `single-token-substitution`) are unchanged.
 
 Canonical reference adapters: `adapters/adkernelAdn/adkernelAdn.go::buildEndpointURL` (1 macro, int → itoa); `adapters/thetradedesk/thetradedesk.go::buildEndpointURL` (1 macro, string passthrough); `adapters/adverxo/adverxo.go::buildEndpointURL` (2 macros, mixed int+string).
+
+**Naming-form resolution (Rule 46 — F-new-34).** Most upstream bidders have a single naming form: the lowercase yaml_name passes through unchanged for the Go package + directory + static yaml filename + Java package; PascalCase(yaml_name) gives the Go constant root + Java class root. The 6 corpus bidders where these forms diverge non-mechanically (Go camelCase vs Java lowercase, brand-acronym preservation, rebrands, intra-Go package-vs-directory mismatch) consult `prebid-server-go/read/skills/shared/bidder-constant-table.yaml::bidders.{yaml_name}.forms` — a sub-map of the six per-aspect forms — via the `scripts.lib.port_engine.lookup_forms(yaml_name)` helper.
+
+The helper returns a dict with six string keys (sourced from the table when populated; mechanically derived when absent):
+
+- `go_yaml_name` — `static/bidder-info/{x}.yaml` and adapter directory (the F-new-34 master sample `cadent_aperture_mx` is the one MVP-corpus example where this diverges from `go_package_name`).
+- `go_package_name` — the `package X` directive in `adapters/{bidder}/{bidder}.go` and the `template.New("{X}EndpointTemplate")` name prefix.
+- `go_constant_root` — `openrtb_ext.Bidder{X}` constant suffix. Used by sibling templates (`params_test.go.j2`, `bidder-test.go.j2`).
+- `java_yaml_name` — Java-side `bidder-config/{x}.yaml` filename + Spring property keys. Consumed by `port-go2java` sibling templates; included on the Go-side dict for round-trip / lineage tracking.
+- `java_class_root` — Java-side `{X}Bidder` class root (also `{X}Configuration`, `ExtImp{X}`, `{X}Test` roots). Same — sibling-side metadata.
+- `java_package` — Java-side `org.prebid.server.bidder.{x}` package.
+
+The dict is passed to `bidder.go.j2` as `ctx.naming_form_resolution` at Step 4 ctx-assembly time. The template prefers these forms over the legacy `ctx.package_name` / `ctx.imp_ext_class_root` keys whenever the dict is provided; when absent, the legacy keys flow through unchanged (backward-compatible with pre-F-new-34 ctx shapes). The legacy `ctx.imp_ext_class_root` continues to win over `naming_form_resolution.go_constant_root` when explicitly set (the rare bidder whose `ExtImp{X}` class root diverges from its bidder-constant root).
+
+The `forms:` sub-map authoring convention (in `bidder-constant-table.yaml`): only populate when at least ONE of the six forms deviates from the mechanical formula (`yaml_name` for Go forms; `re.sub(r"[^a-z0-9]", "", yaml_name.lower())` for Java forms; constant root from the simple-string value). Mechanical bidders retain the historical compact `bidder_name: PascalCaseRoot` shape. Currently 6 entries populate `forms:` (`adkernelAdn`, `thetradedesk`, `audienceNetwork`, `cadent_aperture_mx`, `stroeerCore`, `sspBC`) — the v1.0.0 F-new-34 set. The remaining 265 entries pass through `lookup_forms` mechanically.
 
 **Cross-language metadata.** Same as D2 §Step 4 with directions reversed:
 

@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Tuple
 
 from scripts.lib.port_engine import (
     DEFAULT_NAME_ALLOW_LIST,
+    NAMING_FORM_KEYS,
     TEST_ENDPOINT,
     alias_graph_invert,
     alphabetical_insert,
@@ -30,6 +31,7 @@ from scripts.lib.port_engine import (
     gofmt_post_process,
     iab_table_translate,
     imp_ext_shape_transform_java_to_go,
+    lookup_forms,
     normalize_bidder_name,
     port_report_emit,
     prefix_uniqueness_check,
@@ -617,6 +619,174 @@ class TestPrefixUniquenessCheck(unittest.TestCase):
             )
             self.assertTrue(ok)
             self.assertEqual(colliding, [])
+
+
+# ---------------------------------------------------------------------------
+# Helper 8b: lookup_forms (Rule 46 / F-new-34)
+# ---------------------------------------------------------------------------
+
+
+class TestLookupForms(unittest.TestCase):
+    """F-new-34 — `naming_form_resolution` ctx schema (Rule 46 master-sample).
+
+    The helper resolves the six per-aspect naming forms for a bidder; the
+    table sub-map wins when populated, mechanical formula fills missing
+    keys. Tests use `table_data=` to avoid YAML I/O.
+    """
+
+    SIMPLE_DATA = {
+        "bidders": {
+            "kobler": "Kobler",
+            "aax": "Aax",
+            "33across": "33Across",
+            "lm_kiviads": "LmKiviads",
+        }
+    }
+
+    RICH_DATA = {
+        "bidders": {
+            "adkernelAdn": {
+                "go_constant_root": "AdkernelAdn",
+                "forms": {
+                    "go_yaml_name": "adkernelAdn",
+                    "go_package_name": "adkernelAdn",
+                    "go_constant_root": "AdkernelAdn",
+                    "java_yaml_name": "adkerneladn",
+                    "java_class_root": "AdkernelAdn",
+                    "java_package": "adkerneladn",
+                },
+            },
+            "cadent_aperture_mx": {
+                "go_constant_root": "CadentApertureMX",
+                "forms": {
+                    "go_yaml_name": "cadent_aperture_mx",
+                    "go_package_name": "cadentaperturemx",
+                    "go_constant_root": "CadentApertureMX",
+                    "java_yaml_name": "emxdigital",
+                    "java_class_root": "EmxDigital",
+                    "java_package": "emxdigital",
+                },
+            },
+            # Partial forms: missing java_package falls back to mechanical formula.
+            "sspBC": {
+                "go_constant_root": "SspBC",
+                "forms": {
+                    "go_yaml_name": "sspBC",
+                    "go_package_name": "sspBC",
+                    "go_constant_root": "SspBC",
+                    "java_class_root": "SspBC",
+                    # java_yaml_name + java_package OMITTED → mechanical fill.
+                },
+            },
+        }
+    }
+
+    def test_simple_string_entry_derives_mechanically(self):
+        """Mechanical case: simple-string entry. yaml_name passes through Go
+        forms; Java forms get Rule-46 lowercase-+drop formula."""
+        forms = lookup_forms("kobler", table_data=self.SIMPLE_DATA)
+        self.assertEqual(forms["go_yaml_name"], "kobler")
+        self.assertEqual(forms["go_package_name"], "kobler")
+        self.assertEqual(forms["go_constant_root"], "Kobler")
+        self.assertEqual(forms["java_yaml_name"], "kobler")
+        self.assertEqual(forms["java_class_root"], "Kobler")
+        self.assertEqual(forms["java_package"], "kobler")
+        # All six keys populated.
+        for k in NAMING_FORM_KEYS:
+            self.assertIn(k, forms)
+
+    def test_rich_entry_adkernelAdn_uses_explicit_forms(self):
+        """Master-sample non-mechanical: adkernelAdn camelCase Go ↔ lowercase Java."""
+        forms = lookup_forms("adkernelAdn", table_data=self.RICH_DATA)
+        self.assertEqual(forms["go_yaml_name"], "adkernelAdn")
+        self.assertEqual(forms["go_package_name"], "adkernelAdn")
+        self.assertEqual(forms["go_constant_root"], "AdkernelAdn")
+        # Crucially: Java side lowercases.
+        self.assertEqual(forms["java_yaml_name"], "adkerneladn")
+        self.assertEqual(forms["java_class_root"], "AdkernelAdn")
+        self.assertEqual(forms["java_package"], "adkerneladn")
+
+    def test_cadent_aperture_mx_tri_form_intra_go(self):
+        """Tri-form Go side: directory keeps underscore, package drops it."""
+        forms = lookup_forms("cadent_aperture_mx", table_data=self.RICH_DATA)
+        # The directory + static-yaml form keeps underscores.
+        self.assertEqual(forms["go_yaml_name"], "cadent_aperture_mx")
+        # But `package X` directive drops them.
+        self.assertEqual(forms["go_package_name"], "cadentaperturemx")
+        # And the Java side flips to the rebrand entirely (Rule 43).
+        self.assertEqual(forms["java_yaml_name"], "emxdigital")
+        self.assertEqual(forms["java_class_root"], "EmxDigital")
+
+    def test_partial_forms_submap_fills_missing_keys_mechanically(self):
+        """When `forms:` populates only some keys, the rest derive mechanically."""
+        forms = lookup_forms("sspBC", table_data=self.RICH_DATA)
+        # Explicit keys win.
+        self.assertEqual(forms["go_yaml_name"], "sspBC")
+        self.assertEqual(forms["java_class_root"], "SspBC")
+        # Missing keys: java_yaml_name + java_package get mechanical fill
+        # (lowercase + drop non-[a-z0-9]).
+        self.assertEqual(forms["java_yaml_name"], "sspbc")
+        self.assertEqual(forms["java_package"], "sspbc")
+
+    def test_unknown_bidder_pure_mechanical_fallback(self):
+        """No entry at all: derive PascalCase from yaml_name[0] + rest."""
+        forms = lookup_forms("brandnewbidder", table_data=self.SIMPLE_DATA)
+        # Naive PascalCase: 'b' → 'B' + rest.
+        self.assertEqual(forms["go_constant_root"], "Brandnewbidder")
+        self.assertEqual(forms["java_yaml_name"], "brandnewbidder")
+        self.assertEqual(forms["go_yaml_name"], "brandnewbidder")
+
+    def test_underscore_drop_for_java_yaml_mechanical(self):
+        """Mechanical bidder with underscore-bearing name: Java form drops it."""
+        forms = lookup_forms("lm_kiviads", table_data=self.SIMPLE_DATA)
+        self.assertEqual(forms["go_yaml_name"], "lm_kiviads")
+        self.assertEqual(forms["java_yaml_name"], "lmkiviads")
+        self.assertEqual(forms["java_package"], "lmkiviads")
+
+    def test_digit_leading_passes_through(self):
+        """`33across`: digits pass through both Go and Java forms."""
+        forms = lookup_forms("33across", table_data=self.SIMPLE_DATA)
+        self.assertEqual(forms["java_yaml_name"], "33across")
+        self.assertEqual(forms["go_constant_root"], "33Across")
+
+    def test_returns_fresh_dict_each_call(self):
+        """Callers can mutate the result without affecting subsequent calls."""
+        a = lookup_forms("kobler", table_data=self.SIMPLE_DATA)
+        a["go_package_name"] = "MUTATED"
+        b = lookup_forms("kobler", table_data=self.SIMPLE_DATA)
+        self.assertEqual(b["go_package_name"], "kobler")
+
+    def test_loads_real_table_from_filesystem(self):
+        """End-to-end: load the actual bidder-constant-table.yaml and assert
+        the 6 F-new-34 entries resolve their forms correctly."""
+        # Use the helper without injection — exercises _load_bidder_table_raw.
+        forms = lookup_forms("adkernelAdn")
+        self.assertEqual(forms["java_yaml_name"], "adkerneladn")
+        self.assertEqual(forms["go_constant_root"], "AdkernelAdn")
+        forms = lookup_forms("thetradedesk")
+        self.assertEqual(forms["go_constant_root"], "TheTradeDesk")
+        self.assertEqual(forms["java_class_root"], "TheTradeDesk")
+        forms = lookup_forms("audienceNetwork")
+        self.assertEqual(forms["java_yaml_name"], "audiencenetwork")
+        self.assertEqual(forms["go_constant_root"], "AudienceNetwork")
+        forms = lookup_forms("cadent_aperture_mx")
+        self.assertEqual(forms["go_package_name"], "cadentaperturemx")
+        self.assertEqual(forms["java_yaml_name"], "emxdigital")
+        forms = lookup_forms("stroeerCore")
+        self.assertEqual(forms["java_yaml_name"], "stroeercore")
+        forms = lookup_forms("sspBC")
+        self.assertEqual(forms["java_yaml_name"], "sspbc")
+        self.assertEqual(forms["go_constant_root"], "SspBC")
+
+    def test_mechanical_entry_from_real_table_passes_through(self):
+        """Backward-compat smoke: a non-affected entry (kobler) loaded from
+        the real YAML still resolves mechanically."""
+        forms = lookup_forms("kobler")
+        self.assertEqual(forms["go_yaml_name"], "kobler")
+        self.assertEqual(forms["go_package_name"], "kobler")
+        self.assertEqual(forms["go_constant_root"], "Kobler")
+        self.assertEqual(forms["java_yaml_name"], "kobler")
+        self.assertEqual(forms["java_package"], "kobler")
 
 
 # ---------------------------------------------------------------------------

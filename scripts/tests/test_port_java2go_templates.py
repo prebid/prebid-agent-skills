@@ -2330,6 +2330,169 @@ class TestRenderedGoCompiles(unittest.TestCase):
         self._gofmt_check(rendered, "kobler imp-ext-pojo.go")
 
 
+class TestNamingFormResolution(unittest.TestCase):
+    """F-new-34 — `ctx.naming_form_resolution` Rule 46 multi-form ctx schema.
+
+    When ctx.naming_form_resolution is provided, the per-aspect forms win
+    over legacy ctx.package_name + ctx.imp_ext_class_root keys. When
+    absent, the legacy single-form keys flow through unchanged
+    (backward-compatible with pre-F-new-34 ctx shape).
+
+    The 6 affected pairs in the v1.0.0 set: adkernelAdn, thetradedesk,
+    audienceNetwork, cadent_aperture_mx, stroeerCore, sspBC. Tests verify
+    that the rendered Go output picks up the Go-side forms (yaml /
+    package / constant root) correctly for at least 2 representative
+    cases.
+    """
+
+    def _base_ctx(self) -> Dict[str, Any]:
+        return {
+            "package_name": "PLACEHOLDER_PKG",
+            "bidder_class_root": "PLACEHOLDER_ROOT",
+            "uses_currency_conversion": False,
+            "imp_ext_class_root": None,  # intentional: drive from forms dict.
+            "imp_ext_unmarshal_kind": "standard-two-phase",
+            "batching_kind": "single-batched",
+            "batching_max_imps": None,
+            "endpoint_resolution_kind": "static",
+            "http_status_kind": "canonical-helpers",
+            "bid_type_resolution": "imp-mediatype-introspection",
+            "has_extra_info": False,
+            "module_version": GO_MODULE_VERSION,
+            "imports_extra": [],
+            "javadoc_summary": None,
+        }
+
+    def test_adkerneladn_forms_emit_camelcase_package(self):
+        """adkernelAdn master sample: package + EndpointTemplate name +
+        ExtImp class all derive from the forms sub-map's camelCase /
+        PascalCase forms (NOT the lowercase legacy ctx.package_name)."""
+        ctx = self._base_ctx()
+        ctx["endpoint_resolution_kind"] = "template-macro"
+        ctx["endpoint_macros"] = [
+            {"macro": "PublisherID", "ext_field": "PublisherID", "convert": "itoa"},
+        ]
+        ctx["imports_extra"] = ["strconv"]
+        ctx["naming_form_resolution"] = {
+            "go_yaml_name": "adkernelAdn",
+            "go_package_name": "adkernelAdn",
+            "go_constant_root": "AdkernelAdn",
+            "java_yaml_name": "adkerneladn",
+            "java_class_root": "AdkernelAdn",
+            "java_package": "adkerneladn",
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        # Go package directive uses the camelCase form.
+        self.assertIn("package adkernelAdn", rendered)
+        self.assertNotIn("package PLACEHOLDER_PKG", rendered)
+        # EndpointTemplate name is prefixed with the camelCase form.
+        self.assertIn(
+            'template.New("adkernelAdnEndpointTemplate").Parse(cfg.Endpoint)',
+            rendered,
+        )
+        # ExtImp class derives from go_constant_root (PascalCase).
+        self.assertIn("openrtb_ext.ExtImpAdkernelAdn", rendered)
+        # The lowercase Java form does NOT leak into the Go output.
+        self.assertNotIn("openrtb_ext.ExtImpAdkerneladn", rendered)
+        self.assertNotIn("package adkerneladn", rendered)
+
+    def test_thetradedesk_forms_preserve_brand_capital(self):
+        """thetradedesk: package is lowercase `thetradedesk`, but the
+        constant root preserves the PascalCase brand `TheTradeDesk`. The
+        ExtImp class must use the constant-root form."""
+        ctx = self._base_ctx()
+        ctx["naming_form_resolution"] = {
+            "go_yaml_name": "thetradedesk",
+            "go_package_name": "thetradedesk",
+            "go_constant_root": "TheTradeDesk",
+            "java_yaml_name": "thetradedesk",
+            "java_class_root": "TheTradeDesk",
+            "java_package": "thetradedesk",
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("package thetradedesk", rendered)
+        # PascalCase brand preserved in the Go type ref.
+        self.assertIn("openrtb_ext.ExtImpTheTradeDesk", rendered)
+        # The naive-pascalcase form (`Thetradedesk`) does NOT appear.
+        self.assertNotIn("openrtb_ext.ExtImpThetradedesk", rendered)
+
+    def test_cadent_aperture_mx_package_drops_underscores(self):
+        """cadent_aperture_mx: directory keeps underscores
+        (`go_yaml_name`) but the `package X` directive drops them
+        (`go_package_name == cadentaperturemx`). Pin that the template
+        emits the underscore-stripped form for the package directive."""
+        ctx = self._base_ctx()
+        ctx["naming_form_resolution"] = {
+            "go_yaml_name": "cadent_aperture_mx",
+            "go_package_name": "cadentaperturemx",
+            "go_constant_root": "CadentApertureMX",
+            "java_yaml_name": "emxdigital",
+            "java_class_root": "EmxDigital",
+            "java_package": "emxdigital",
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        # Package directive is the underscore-stripped form.
+        self.assertIn("package cadentaperturemx", rendered)
+        # The directory form (with underscores) MUST NOT appear as the
+        # package directive (Go would reject it as an identifier).
+        self.assertNotIn("package cadent_aperture_mx", rendered)
+        # And the ExtImp class is the constant root, preserving the brand acronym.
+        self.assertIn("openrtb_ext.ExtImpCadentApertureMX", rendered)
+
+    def test_legacy_ctx_keys_pass_through_when_forms_absent(self):
+        """Backward-compat: when naming_form_resolution is absent or None,
+        the legacy ctx.package_name + ctx.imp_ext_class_root keys flow
+        through unchanged. This is the pre-F-new-34 ctx shape — the 265
+        mechanical bidders use this path."""
+        ctx = self._base_ctx()
+        ctx["package_name"] = "kobler"
+        ctx["imp_ext_class_root"] = "Kobler"
+        # naming_form_resolution explicitly absent.
+        self.assertNotIn("naming_form_resolution", ctx)
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("package kobler", rendered)
+        self.assertIn("openrtb_ext.ExtImpKobler", rendered)
+
+    def test_explicit_imp_ext_class_root_wins_over_forms(self):
+        """Escape hatch: when ctx.imp_ext_class_root is explicitly set,
+        it wins over the forms dict's go_constant_root. Covers the rare
+        bidder whose ExtImp class root diverges from its constant root."""
+        ctx = self._base_ctx()
+        ctx["imp_ext_class_root"] = "ExplicitOverride"
+        ctx["naming_form_resolution"] = {
+            "go_yaml_name": "kobler",
+            "go_package_name": "kobler",
+            "go_constant_root": "Kobler",
+            "java_yaml_name": "kobler",
+            "java_class_root": "Kobler",
+            "java_package": "kobler",
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("openrtb_ext.ExtImpExplicitOverride", rendered)
+        # The forms-derived constant root must NOT win.
+        self.assertNotIn("openrtb_ext.ExtImpKobler", rendered)
+
+    def test_forms_dict_wins_over_legacy_package_name(self):
+        """When BOTH naming_form_resolution.go_package_name AND
+        ctx.package_name are set, the forms dict wins. Drives the
+        renderer toward the canonical form even when the operator
+        leaves stale legacy ctx keys."""
+        ctx = self._base_ctx()
+        ctx["package_name"] = "stale_legacy_value"
+        ctx["imp_ext_class_root"] = "StaleRoot"
+        ctx["naming_form_resolution"] = {
+            "go_yaml_name": "adkernelAdn",
+            "go_package_name": "adkernelAdn",
+            "go_constant_root": "AdkernelAdn",
+            "java_yaml_name": "adkerneladn",
+            "java_class_root": "AdkernelAdn",
+            "java_package": "adkerneladn",
+        }
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("package adkernelAdn", rendered)
+        self.assertNotIn("package stale_legacy_value", rendered)
+
+
 class TestRequiredArtifacts(unittest.TestCase):
     """Sanity: every Go template referenced by SKILL.md Step 5 exists."""
 

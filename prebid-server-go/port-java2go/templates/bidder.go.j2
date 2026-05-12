@@ -14,8 +14,52 @@ The post-emit `gofmt -s -w` step canonicalizes formatting; this
 template emits code that's already gofmt-clean for the canonical case.
 
 Inputs (mirror of bidder.java.j2 ctx):
-  ctx.package_name            : str  — Go package name (e.g., "kobler", "adkernelAdn")
-  ctx.bidder_class_root       : str  — PascalCase root used in Builder + helpers
+  ctx.package_name            : str  — Go package name (e.g., "kobler", "adkernelAdn").
+                                        DEPRECATED-but-supported in favour of
+                                        ctx.naming_form_resolution.go_package_name
+                                        (F-new-34). When both are present, the
+                                        naming_form_resolution form wins; when only
+                                        package_name is present (backward-compat),
+                                        it is used directly. Tests pass either.
+  ctx.bidder_class_root       : str  — PascalCase root used in Builder + helpers.
+                                        Same DEPRECATED/preferred-from-
+                                        naming_form_resolution.go_constant_root
+                                        semantics as ctx.package_name (F-new-34).
+  ctx.naming_form_resolution  : dict|null — F-new-34 per-aspect naming-form table
+                                        (Rule 46 multi-form-aware naming sites).
+                                        Populated by
+                                        `scripts.lib.port_engine.lookup_forms(yaml_name)`
+                                        at Step 4 ctx-assembly time; the renderer
+                                        prefers these forms over ctx.package_name /
+                                        ctx.bidder_class_root / ctx.imp_ext_class_root
+                                        whenever the dict is provided. Keys (all str):
+                                          - go_yaml_name     — `static/bidder-info/{x}.yaml`
+                                              + adapter directory (rarely diverges from
+                                              go_package_name; cadent_aperture_mx is the
+                                              one MVP-corpus example).
+                                          - go_package_name  — `package X` directive
+                                              and the EndpointTemplate name prefix.
+                                              This template references THIS form
+                                              everywhere ctx.package_name is used today.
+                                          - go_constant_root — `openrtb_ext.Bidder{X}`
+                                              constant suffix. Used by sibling templates
+                                              (params_test.go.j2, bidder-test.go.j2) —
+                                              this template does not emit it directly.
+                                          - java_yaml_name   — Java-side `bidder-config/{x}.yaml`
+                                              name. Used by go2java sibling templates;
+                                              not consumed by this Go-side template.
+                                          - java_class_root  — Java-side `{X}Bidder` class
+                                              root. Not consumed by this template.
+                                          - java_package     — Java-side
+                                              `org.prebid.server.bidder.{x}` package.
+                                              Not consumed by this template.
+                                        When the dict is absent, the template falls
+                                        back to ctx.package_name / ctx.imp_ext_class_root
+                                        (backward-compat with pre-F-new-34 ctx shape).
+                                        Affects 6 corpus pairs (adkernelAdn, thetradedesk,
+                                        audienceNetwork, cadent_aperture_mx, stroeerCore,
+                                        sspBC) where the Go yaml/package and Java yaml
+                                        diverge non-mechanically.
   ctx.uses_currency_conversion: bool — currency_conversion.used (Rule 28).
                                         When true, emits (a) a `convertImpCurrency`
                                         helper at end of file (modeled on upstream
@@ -31,7 +75,19 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         can flip if they want kobler-strict semantics.
                                         Affects ~31% of corpus (adverxo, beachfront,
                                         kobler, limelightDigital, vungle).
-  ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref
+  ctx.imp_ext_class_root      : str  — for openrtb_ext.ExtImp{X} type ref.
+                                        DEPRECATED-but-supported in favour of
+                                        ctx.naming_form_resolution.go_constant_root
+                                        (F-new-34). The Go convention is that
+                                        ExtImp{X}'s X matches the bidder constant
+                                        root (e.g. `ExtImpAdkernelAdn` paired with
+                                        `BidderAdkernelAdn`); when
+                                        naming_form_resolution is provided, the
+                                        go_constant_root form is used unless
+                                        ctx.imp_ext_class_root is ALSO explicitly
+                                        set (the explicit override wins for the
+                                        rare bidder whose ExtImp class diverges
+                                        from its constant root).
   ctx.imp_ext_unmarshal_kind  : str  — "standard-two-phase" | "direct" | "none".
                                         "none" (~12% corpus: aax, optidigital)
                                         skips both the per-imp parseImpExt() call
@@ -292,7 +348,17 @@ Inputs (mirror of bidder.java.j2 ctx):
     503: "http.StatusServiceUnavailable",
     504: "http.StatusGatewayTimeout",
 } -%}
-package {{ ctx.package_name }}
+{# F-new-34: naming-form-resolution. When ctx.naming_form_resolution is
+   provided (Step 4 ctx-assembly calls
+   `scripts.lib.port_engine.lookup_forms(yaml_name)`), each form key
+   wins over the legacy single-form ctx keys (ctx.package_name,
+   ctx.imp_ext_class_root). Explicit ctx-key overrides still win when
+   set (the rare ExtImp-vs-constant divergence case). When the dict is
+   absent, legacy keys flow through unchanged (pre-F-new-34 ctx shape). #}
+{%- set _forms = ctx.naming_form_resolution or {} -%}
+{%- set _go_package_name = _forms.get('go_package_name') or ctx.package_name -%}
+{%- set _imp_ext_class_root = ctx.imp_ext_class_root or _forms.get('go_constant_root') -%}
+package {{ _go_package_name }}
 
 import (
 {% if ctx.has_extra_info %}
@@ -347,7 +413,7 @@ type extraInfo struct {
 func Builder(_ openrtb_ext.BidderName, cfg config.Adapter, _ config.Server) (adapters.Bidder, error) {
 	a := &adapter{endpoint: cfg.Endpoint}
 {% if _endpoint_needs_macros_resolution %}
-	tpl, err := template.New("{{ ctx.package_name }}EndpointTemplate").Parse(cfg.Endpoint)
+	tpl, err := template.New("{{ _go_package_name }}EndpointTemplate").Parse(cfg.Endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse endpoint url template: %v", err)
 	}
@@ -600,19 +666,19 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 }
 
 {% if _emit_parse_imp_ext %}
-func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}, error) {
+func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ _imp_ext_class_root }}, error) {
 {% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
 	var bidderExt adapters.ExtImpBidder
 	if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
 	}
-	var ext openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}
+	var ext openrtb_ext.ExtImp{{ _imp_ext_class_root }}
 	if err := jsonutil.Unmarshal(bidderExt.Bidder, &ext); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext.bidder: %w", imp.ID, err)
 	}
 	return &ext, nil
 {% else %}
-	var ext openrtb_ext.ExtImp{{ ctx.imp_ext_class_root }}
+	var ext openrtb_ext.ExtImp{{ _imp_ext_class_root }}
 	if err := jsonutil.Unmarshal(imp.Ext, &ext); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
 	}
