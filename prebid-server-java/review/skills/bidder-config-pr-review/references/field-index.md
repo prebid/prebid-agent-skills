@@ -159,7 +159,7 @@ Aliases do NOT have an alias-side `meta-info` override — capabilities, vendor-
 
 ### A.7 Custom properties — Rule 35 typed-config
 
-When a bidder requires operator-supplied configuration beyond the 14 base fields (canonical: Kobler's `dev-endpoint` for the dev-mode endpoint), the YAML declares the field at adapter top-level and the Configuration class extends `BidderConfigurationProperties` with a typed subclass declaring the matching field. See Part C.5 below and SKILL.md "Workflow: Typed-Config Subclass".
+When a bidder requires operator-supplied configuration beyond the 13 base fields (canonical: Kobler's `dev-endpoint` for the dev-mode endpoint), the YAML declares the field at adapter top-level and the Configuration class extends `BidderConfigurationProperties` with a typed subclass declaring the matching field. See Part C.5 below and SKILL.md "Workflow: Typed-Config Subclass".
 
 ```yaml
 adapters:
@@ -284,7 +284,7 @@ Same class shape but lives at `src/main/java/org/prebid/server/spring/config/bid
 | `@Data` | **Yes** | Lombok-generates getters + setters + toString + equals + hashCode | Required because Spring relaxed-binding uses setters. |
 | `@EqualsAndHashCode(callSuper = true)` | **Yes** | Lombok delegates to base class's equals/hashCode | `callSuper = true` is mandatory; without it, two instances with different parent-field values compare equal. See framework-utilities-java.md §2.5. (F-new-59 is specifically the `lombok.Data` *import-ordering* trap — see §B.4 / framework-utilities-java.md §6.3 — not this annotation's `callSuper` parameter.) |
 | `@NoArgsConstructor` | **Yes** | Lombok-generates no-arg constructor | Spring requires no-arg constructor for `@ConfigurationProperties` instantiation. |
-| `extends BidderConfigurationProperties` | **Yes** | Subclass inherits all 14 base fields | NOT `extends Object` or other base — those would lose endpoint binding etc. |
+| `extends BidderConfigurationProperties` | **Yes** | Subclass inherits all 13 base fields | NOT `extends Object` or other base — those would lose endpoint binding etc. |
 
 #### B.3.4 Per-field jakarta constraints (subclass)
 

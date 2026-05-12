@@ -24,7 +24,7 @@ This file is the design contract anchoring the four shipped skills.
 
 - **The Java upstream codebase itself** — F4 ships skills that REVIEW PRs against `prebid/prebid-server-java`. The upstream repo isn't modified.
 - **The Java `read/` skill suite** — already shipped (Phase C, all 4 skills at v1.0.0+).
-- **Cross-language review** — Java PRs that were ported from Go consume `prior_source_spec` (the SOURCE-language spec) via the SAME hook the Go side just shipped on `feat/f5-port-fidelity-hooks`. F4 authors the manifest BLOCK in `pr-triage-java`; downstream consumption by the three reviewer skills lands as audit item 25 (separate session).
+- **Cross-language review** — Java PRs that were ported from Go consume `prior_source_spec` (the SOURCE-language spec) via the SAME hook the Go side just shipped on `feat/f5-port-fidelity-hooks`. F4 authors the manifest BLOCK in `pr-triage-java` AND the three downstream reviewer skills CONSUME it in this same F4 PR (audit item 25 LANDED — see §4 below + Step 1g in each downstream SKILL.md).
 - **`write/` skills** — Phase G (not started).
 - **`diff-spec` skills** — design-only at audit time.
 
