@@ -71,9 +71,9 @@ by D3.8 canary 8 (teal).
 
 ### Test coverage
 
-Suite grew from 493 (pre-F2) to **547 tests PASS** (+54 across the 4 F2
-commits + this CHANGELOG/ROADMAP fix-up commit), 0 regressions. New test
-classes:
+Suite grew from 493 (pre-F2) to **548 tests PASS** (+54 across the 4 F2
+commits + 1 review-driven test in the v1.0.0 review-fix commit;
++55 total), 0 regressions. New test classes:
 - `TestEndpointResolutionMacros` (14 tests) — F-new-2
 - `TestLookupForms` + `TestNamingFormResolution` (16 tests) — F-new-34
 - `TestPerKeyBatching` (12 tests) — F-new-7 EXT-A

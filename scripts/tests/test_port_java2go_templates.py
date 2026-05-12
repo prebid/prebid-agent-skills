@@ -3124,12 +3124,12 @@ class TestNamingFormResolution(unittest.TestCase):
         package-directive interaction; imp_ext_class_root is also set
         to a stale value but NOT asserted here (escape-hatch behavior
         — ctx.imp_ext_class_root explicit wins over forms — is covered
-        by test_explicit_imp_ext_class_root_overrides_forms below)."""
+        by test_explicit_imp_ext_class_root_wins_over_forms below)."""
         ctx = self._base_ctx()
         ctx["package_name"] = "stale_legacy_value"
         # imp_ext_class_root deliberately set; the escape-hatch contract is
         # NOT tested here (the package directive is the assertion target).
-        # See test_explicit_imp_ext_class_root_overrides_forms for the
+        # See test_explicit_imp_ext_class_root_wins_over_forms for the
         # complementary case that asserts ExtImp{X} survives.
         ctx["imp_ext_class_root"] = "StaleRoot"
         ctx["naming_form_resolution"] = {

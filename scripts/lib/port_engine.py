@@ -699,6 +699,7 @@ def _load_bidder_table_raw(
     a single ``port_engine`` invocation don't re-parse the 271-entry YAML.
     Call ``_load_bidder_table_raw.cache_clear()`` if the table is edited
     mid-process (test suites already isolate via fresh ``table_data=``).
+    ``cache_clear`` is exposed as a passthrough to the inner cached loader.
     """
     if yaml is None:
         return None
@@ -719,6 +720,14 @@ def _load_bidder_table_raw_cached(
     except (OSError, yaml.YAMLError):  # type: ignore[union-attr]
         return None
     return data if isinstance(data, dict) else None
+
+
+# Expose ``cache_clear`` on the public passthrough so the docstring's
+# advice ``_load_bidder_table_raw.cache_clear()`` actually works (without
+# this assignment the LRU lives only on the inner ``_load_bidder_table_raw_cached``
+# function and the public-name call would raise AttributeError).
+_load_bidder_table_raw.cache_clear = _load_bidder_table_raw_cached.cache_clear  # type: ignore[attr-defined]
+_load_bidder_table_raw.cache_info = _load_bidder_table_raw_cached.cache_info  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
