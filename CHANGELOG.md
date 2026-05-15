@@ -17,6 +17,69 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-15 (F5: cross-language port-fidelity hooks — Go-side symmetric consumer landing)
+
+**F5 — Go-side downstream consumption of `--- PRIOR SOURCE SPEC COMPARISON ---`**, the symmetric mirror of F4 PR #10 (Java side). With F5 the Teal flow review surface is bidirection-complete: a Go reviewer reading a Java→Go ported PR gets cross-language port-fidelity findings as a Java reviewer would get for a Go→Java port. F7 (multi-adapter both-directions sprint — the stated end-goal) is unblocked.
+
+### Symmetric mirror of F4
+
+Where F4 added Step 1g to 3 Java downstream review skills, F5 adds Step 1g to the 3 Go downstream review skills:
+
+- `adapter-code-pr-review` ↔ Java `bidder-class-pr-review` — markdown table shape; 7 empirically-grounded rows
+- `bidder-info-pr-review` ↔ Java `bidder-config-pr-review` — bulleted prose shape; ~10 empirically-grounded items
+- `bidder-params-pr-review` ↔ Java `bidder-params-java-pr-review` — numbered cases with explicit emit blocks; 4 cases
+
+Each Step 1g row cites either a canary trace (`docs/runs/d{2,3}.8-*.md` — 15+ files from kobler / aax / adkernelAdn / adverxo / vungle / thetradedesk / teal) or a dual-spec assertion (`cross-language-pairs/*.dual-spec-assertions.yaml` — 16+ files; 3 `severity: fail` + 60 `severity: warn` rows). No invented patterns.
+
+### Canonical DRY reference
+
+A new section [`prebid-server-go/review/skills/shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](prebid-server-go/review/skills/shared/framework-utilities.md) becomes the single source of truth for:
+
+- **4-tier severity matrix** (`info` / `warn` / `fail` / `urgent`) — extended from F4's 3-tier; `urgent` promoted from `bidder-params-java-pr-review` as the canonical dual-spec-elevation tier
+- **Dedup phrase** `Previously flagged by prior_source_spec — confirm with reviewer if intentional`
+- **Step 5 emission template** `[severity] file:line — finding / Evidence / Recommendation` (the bidder-params-java pattern; now canonical across both languages)
+- **Severity-to-bucket map** (`urgent` → Step 5 top-bucket; `fail` → Step 5; `warn` → Step 5; `info` → suppress unless elevated)
+- **Reflection-loop routing** — findings flow into reflect Row 6 (Rule 38 byte-only), Row 7 (R5 semantic — the canonical aax `severity: fail` case), Row 1 (novel pattern → taxonomy), or Row 9 (read-skill under-extraction)
+
+All 6 consumer SKILLs (3 Go + 3 Java) reference this section instead of restating. This **closes F4's DRY violation** (severity policy was repeated 3x across the 3 Java SKILLs).
+
+### Producer-side enhancement
+
+`prebid-server-go/review/skills/pr-triage/SKILL.md` cross-language block promoted from narrative-only prose to a literal manifest template (between `--- PR-LEVEL CHECKS ---` and `--- SKILL ACTIVATION ---`), symmetric with Java pr-triage-java's lines 608-618. Finding prefix `PRIOR-SOURCE-SPEC:`; inline `[severity: info | warn | fail | urgent]` tag.
+
+### Empirical worked examples — partial enumeration
+
+**adapter-code-pr-review** Step 1g rows (Go emit expectations, cited):
+- `code.make_bids.bid_type_resolution.kind = imp-id-correlation` (F-new-7 EXT-B; F2-retired)
+- `code.make_requests.batching.kind = per-key` (F-new-7 EXT-A; F2-retired)
+- `code.make_requests.mutation.entity_strategies.{Site,App} = synthesize-replacement` (ADR-007 F3, vungle)
+- `code.make_bids.bid_post_processing.macros[]` (ADR-007 F4, thetradedesk; cross-language number-formatting divergence flagged at `cross-language-pairs/thetradedesk.dual-spec-assertions.yaml:148-212`)
+- `code.make_bids.status_handling.kind = legacy-raw-go` (F-new-14, aax)
+- `code.make_requests.modifyImp` nil-map panic on JSON `null` (F-new-45, teal; **`urgent` — fuzz-discovered**)
+- `headers_constructed.language_stamped = true` (ADR-007 F2)
+
+**bidder-info-pr-review** Step 1g items: endpoint macro syntax (adverxo, aax); `gvl_vendor_id` 0-emit convention (R5-strict); F-new-43 userSync rendering form; F-new-44 missing yaml ctx slots (`ortb.version` + `multiformat-supported` + `gpp-supported`); `endpoint_compression` gap (elementaltv); `capabilities` omission (mediasquare); `default_enabled` per-language idiom (optidigital, emxdigital); tilde-stub alias declarations (thetradedesk `ttd: ~`, vungle `liftoff: ~`).
+
+**bidder-params-pr-review** Step 1g cases: Rule 38 byte-fidelity (canonical Go-side check; indent / trailing-newline / tabs variants); dual-spec `severity: fail` elevation to `urgent` (canonical aax — `minLength: 1` on cid/crid); `schema_interpretation.combinators_used` asymmetry (appnexus @JsonAlias vs Go anyOf); `*string` for present-empty trichotomy (F-new-38 teal).
+
+### Side effects
+
+- `prebid-server-go/read/skills/shared/cross-skill-integration.md` §5 — fixed stale §5.3 "pr-triage is Go-only" line (Java side exists in F4); added new §5.5 "Cross-language port-fidelity consumption" documenting slot, block authoring, downstream consumer pattern, severity matrix reference, reflection-loop routing
+- 4 Java-side forward-references unwound ("Go-side pending" → "Both sides landed"): `pr-triage-java/SKILL.md:711`, `bidder-class-pr-review/SKILL.md:129`, `bidder-config-pr-review/SKILL.md:155`, `docs/methodology/java-review-skill-design.md:163-167`
+- Each Go review skill's `references/*-index.md` gained a "Cross-Language Port-Fidelity" subsection with 5 canary-cited bullet points pointing back to Step 1g + the shared subsection
+- Frontmatter bumps 1.0.0 → 1.1.0 on all 3 Go downstream review skills (additive substep; backward-compatible on non-port PRs; SemVer MINOR per the project's read-adapter-orchestrator precedent for the `--output=` flag addition)
+- All 3 Go SKILL Step 1a manifest-input lists updated to enumerate `PRIOR AGENT FINDINGS`, `PRIOR SPEC COMPARISON`, `PRIOR SOURCE SPEC COMPARISON` blocks symmetric with the Java side
+- ROADMAP § "Phase E": cross-language hook consumption moved from "Still future" to "Shipped in F5"; Java review-skill suite reflagged as F4-landed (no longer "currently absent")
+- `docs/runs/post-d3.8-remaining-work.md` §F5 items 22-24 marked LANDED with this PR reference
+
+No code changes — pure SKILL/methodology prose composition. No schema, no taxonomy, no rules, no port_engine helpers, no template changes; versioned-artifacts vector unchanged.
+
+### Test coverage
+
+493 unit tests PASS (unchanged from F2 + F4 baseline). F5 is prose-only; no new tests required.
+
+---
+
 ## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-12 (F2: port-java2go SKILL 0.5.0 → 1.0.0 PRODUCTION PROMOTION)
 
 **port-java2go SKILL bumped 0.5.0 → 1.0.0**, the production-promotion

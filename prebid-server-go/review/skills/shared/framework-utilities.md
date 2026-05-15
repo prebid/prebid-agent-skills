@@ -474,6 +474,79 @@ A 1-line alias (`aliasOf: parent` only) is acceptable when the alias inherits ev
 
 ---
 
+## Cross-Language Port-Fidelity Hook Contract
+
+Canonical reference for the `--- PRIOR SOURCE SPEC COMPARISON ---` manifest block authored by `pr-triage` whenever a PR is a cross-language port (typically a Java → Go port via `port-java2go`, populated through the Teal-flow path `.tmp/full-loop/{run-id}/java/{bidder}.yaml` or the user-persisted `prebid-server-java/read/specs/{bidder}/latest.yaml`). All 3 downstream review skills reference this section instead of restating the policy.
+
+**Symmetric counterpart**: [`prebid-server-java/review/skills/shared/framework-utilities-java.md`](../../../../prebid-server-java/review/skills/shared/framework-utilities-java.md) (F4 — Java pr-triage-java + 3 downstream review skills). The producer-side block authoring is documented at [`pr-triage/SKILL.md`](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec) and [`pr-triage-java/SKILL.md`](../../../../prebid-server-java/review/skills/pr-triage-java/SKILL.md#cross-language-ports-prior_source_spec) (literal manifest template).
+
+### Severity matrix (4-tier)
+
+| Severity | When to use |
+|---|---|
+| `info` | Default. Port asymmetry is legitimate per Rules 5 / 9 / 11 / 35 / 38 / etc. (e.g., Go's `text/template` vs Java's `String.replace` for endpoint construction). Suppressed in Step 5 unless the PR diff elevates severity. |
+| `warn` | Divergence touches a Rule 38 byte-fidelity assertion (bidder-params JSON formatting), an R5-strict cross-language equivalence (capabilities, gvl_vendor_id, maintainer, geoscope), or a known-master-sample pattern (e.g., F4 bid-post-processing macros for thetradedesk; F2 language-stamped headers). Surfaced in Step 5. |
+| `fail` | Dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail` (canonical example: aax — Java omits `minLength: 1` on `cid`/`crid`, so a Java-source spec compared against a Go PR that ADDS the constraint flags `fail`). Surfaced in Step 5. |
+| `urgent` | A `fail`-severity dual-spec finding whose corresponding field is touched in the PR diff. Top-bucket Step 5 emission; blocking unless reviewer explicitly approves. Promoted from the `bidder-params-java-pr-review` canonical pattern. |
+
+### Dedup contract
+
+Findings the downstream skill ALSO independently discovers from the PR diff dedupe with the exact phrase:
+
+> `Previously flagged by prior_source_spec — confirm with reviewer if intentional`
+
+This mirrors the existing `Previously flagged by {reviewer}` and `Previously flagged by prior agent` patterns used elsewhere in the review pipeline. Surface NET-NEW concerns only — do not re-report a finding already in the block.
+
+### Step 5 emission template
+
+When emitting cross-language port-fidelity findings in the Step 5 summary, downstream skills use the canonical template promoted from `bidder-params-java-pr-review/SKILL.md:225-237`:
+
+```
+[severity] file:line — finding
+  Evidence: <quote / SHA / dual-spec citation>
+  Recommendation: <action: align, accept, escalate, defer to upstream PR>
+```
+
+**Severity-to-bucket map**:
+- `urgent` → Step 5 top-bucket (blocking unless reviewer waiver)
+- `fail` → Step 5 (must address before merge)
+- `warn` → Step 5 (reviewer judgment)
+- `info` → suppress unless the PR diff elevates severity
+
+### Reflection-loop routing
+
+Findings emitted from this hook flow into [`reflection-loop.md`](../../../../docs/methodology/reflection-loop.md) matrix rows:
+
+| Severity / pattern | Typical reflect destination |
+|---|---|
+| `warn` Rule 38 byte-only divergence | Row 6 — `port-translation-rules.yaml` Rule 38 notes (refine canonical formatting) OR upstream PR |
+| `fail` / `urgent` dual-spec R5 semantic divergence | Row 7 — Upstream PR (NOT this repo); update `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` `severity: fail` if not already recorded |
+| `info` novel pattern not in current taxonomy | Row 1 — `behavior-taxonomy.yaml` `quirks_taxa[]` MINOR addition |
+| Any severity where source spec turns out to have under-extracted a field | Row 9 — Amend the relevant `read/skills/*/SKILL.md` extraction step |
+
+When in doubt, emit at `info` with a clear citation; the reflection loop will route during the next sweep.
+
+### Empirical anchor corpus
+
+Step 1g worked examples in the 3 downstream skills are grounded in the canary trace catalogue at `docs/runs/d{2,3}.8-*.md` (15+ trace files covering kobler / aax / adkernelAdn / adverxo / vungle / thetradedesk / teal) + the 16+ dual-spec assertion files at `cross-language-pairs/*.dual-spec-assertions.yaml`. Each row in each skill's Step 1g table cites either a canary trace section or a dual-spec line — no invented patterns.
+
+Notable canonical patterns:
+- **aax** (`cross-language-pairs/aax.dual-spec-assertions.yaml:9-41`) — the suite's only `severity: fail` semantic divergence (`minLength: 1` on `cid`/`crid`); the canonical `urgent` elevation case.
+- **adkernelAdn** (`docs/runs/d3.8-adkernelAdn-canary-2026-05-05T1636Z-7686.md:173-232`) — per-key batching + imp-id-correlation patterns (F-new-7 EXT-A/EXT-B, retired in F2).
+- **teal** F-new-45 (`docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:263-270`) — fuzz-discovered nil-map panic on JSON `null` input; HIGH severity but corpus-LOW (one bidder).
+- **thetradedesk** (`cross-language-pairs/thetradedesk.dual-spec-assertions.yaml:148-212`) — F4 master sample for `${AUCTION_PRICE}` bid post-processing macros + cross-language number-formatting divergence.
+
+### Cross-references
+
+- [`pr-triage/SKILL.md` §Cross-language ports: `prior_source_spec`](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec) — producer-side block authoring + slot definition
+- [`pr-triage-java/SKILL.md` §Cross-language ports](../../../../prebid-server-java/review/skills/pr-triage-java/SKILL.md#cross-language-ports-prior_source_spec) — Java symmetric producer
+- [`cross-skill-integration.md` §5.5 Cross-language port-fidelity consumption](../../../read/skills/shared/cross-skill-integration.md) — the read↔review composition contract
+- [`reflection-loop.md` §2 Triage matrix](../../../../docs/methodology/reflection-loop.md) — downstream consumer in the reflect step
+- Consumer SKILLs implementing Step 1g (Go): `adapter-code-pr-review`, `bidder-info-pr-review`, `bidder-params-pr-review`
+- Consumer SKILLs implementing Step 1g (Java, F4): `bidder-class-pr-review`, `bidder-config-pr-review`, `bidder-params-java-pr-review`
+
+---
+
 ## Sources
 
 - `prebid/prebid-server` master at @2fae16f31693452b62dd2a0924b78e71bbec43ec (2026-05-03)

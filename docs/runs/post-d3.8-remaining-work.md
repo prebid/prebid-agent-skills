@@ -384,14 +384,23 @@ The user's stated end-goal is "testing with more adapters from both sides and po
 
 **Recommended subagent dispatch**: item 17 — opus subagent for design synthesis. Items 18–21 — separate opus subagents per skill (proven pattern from Go-side review skills).
 
-### Phase F5 — Wire downstream `--- PRIOR SOURCE SPEC COMPARISON ---` consumption (3–5 engineering-days)
+### Phase F5 — Wire downstream `--- PRIOR SOURCE SPEC COMPARISON ---` consumption — **LANDED 2026-05-15**
 
-| # | Item | Type | Effort | Prereqs |
-|---|------|------|--------|---------|
-| 22 | Add "Step N: cross-language port-fidelity check" prose to `adapter-code-pr-review/SKILL.md` (consume the manifest block; emit port-fidelity findings per pr-triage's documented severity policy) | engineering | 1 day | none |
-| 23 | Same for `bidder-info-pr-review/SKILL.md` | engineering | 1 day | none |
-| 24 | Same for `bidder-params-pr-review/SKILL.md` | engineering | 1 day | none |
-| 25 | Mirror items 22–24 on the Java review side (post item 21) | engineering | 2 days | items 18+19+21 |
+| # | Item | Type | Effort | Prereqs | Status |
+|---|------|------|--------|---------|--------|
+| 22 | Add "Step 1g: cross-language port-fidelity check" prose to `adapter-code-pr-review/SKILL.md` | engineering | 1 day | none | **LANDED in F5** — empirically-grounded markdown table (7 rows: F-new-7 EXT-A/B, F3 Site/App synthesis, F4 macros, F-new-14 status, F-new-45 nil-map panic, F2 language-stamped headers) |
+| 23 | Same for `bidder-info-pr-review/SKILL.md` | engineering | 1 day | none | **LANDED in F5** — bulleted prose (~10 items: endpoint macros, R5-strict shared fields, F-new-43/44, alias asymmetries) |
+| 24 | Same for `bidder-params-pr-review/SKILL.md` | engineering | 1 day | none | **LANDED in F5** — 4 numbered cases with emit blocks (Rule 38 byte-fidelity, aax urgent elevation, @JsonAlias asymmetry, present-empty trichotomy) |
+| 25 | Mirror items 22–24 on the Java review side (post item 21) | engineering | 2 days | items 18+19+21 | **LANDED in F4 PR #10** (2026-05-15) |
+
+**Beyond items 22-25, F5 also landed**:
+- `shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract subsection — single source of truth for 4-tier severity matrix + dedup phrase + Step 5 emission template (closes F4's DRY violation)
+- Severity matrix extended 3-tier → 4-tier (added `urgent` for dual-spec elevation, promoted from `bidder-params-java-pr-review`)
+- Go pr-triage cross-language block promoted to literal manifest template (symmetric with Java pr-triage-java's lines 608-618)
+- `cross-skill-integration.md §5.5` — formalizes the cross-language read↔review contract symmetrically with §5 (same-language hook)
+- 4 Java-side forward-references unwound (`pr-triage-java:711`, `bidder-class:129`, `bidder-config:155`, `java-review-skill-design.md:163-167`)
+- references/*-index.md cross-language port-fidelity callouts in all 3 Go review skills
+- Frontmatter bumps 1.0.0 → 1.1.0 on all 3 Go downstream review skills
 
 ### Phase F6 — Reflection loop implementation (20–40 engineering-days; can be parallel to F2–F5)
 

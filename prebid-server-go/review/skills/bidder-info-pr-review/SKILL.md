@@ -46,6 +46,9 @@ The pr-triage skill provides:
 - PR comments (reviewer feedback, CI bot reports, author responses) — categorized and summarized
 - Duplicate PR search results
 - Bidder metadata (aliasOf status, capabilities if available from the PR)
+- `--- PRIOR AGENT FINDINGS ---` block (when a prior-agent review was recorded; consumed via the `Previously flagged by prior agent` dedup pattern)
+- `--- PRIOR SPEC COMPARISON ---` block (same-language regression detection; opt-in; consumed via dedup like `--- PRIOR AGENT FINDINGS ---`)
+- `--- PRIOR SOURCE SPEC COMPARISON ---` block (cross-language port-fidelity detection; opt-in; consumed in Step 1g)
 
 **1b. Handle drift warnings.**
 
@@ -77,26 +80,32 @@ curl -sS "https://raw.githubusercontent.com/{owner}/{repo}/master/static/bidder-
 - For `modified` files: only fetch if the verification workflow requires context beyond the diff hunks
 - Cache fetched content — do not re-fetch the same file multiple times
 
-**1f. Cross-language port-fidelity check (port PRs only).**
+**1g. Consume `--- PRIOR SOURCE SPEC COMPARISON ---` (cross-language ports).**
 
-If the triage manifest contains a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port (typically Java → Go via the Teal flow). Each entry is a port-fidelity flag tagged with `info`/`warn`/`fail` severity per [pr-triage/SKILL.md `prior_source_spec` severity policy](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec):
+When the manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port — typically a Java → Go port via `port-java2go`. Each entry is tagged `info` / `warn` / `fail` / `urgent` per the canonical 4-tier severity matrix at [`../shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). Use the source-spec context to inform Step 4 verification.
 
-- `info` — port asymmetries legitimate per the R5-shared field set (`bidder_info.capabilities`, `bidder_info.gvl_vendor_id`, `bidder_info.geoscope`, `bidder_info.maintainer`, `bidder_info.modifying_vast_xml_allowed`, `bidder_info.endpoint_compression`) or per Rules 5 / 9 / 38 (e.g., Java's kebab-case YAML keys vs Go's camelCase keys for the same field; the SKILL handles the conversion).
-- `warn` — divergence touches an R5-strict cross-language equivalence (the 6 shared fields above MUST byte-equal across Go/Java after camelCase↔kebab-case normalization) or a known-master-sample pattern (e.g., F3 Site→App synthesis fidelity, F4 macros).
-- `fail` — a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail`.
+**Bidder-info-specific worked examples** (each item is empirically grounded in a canary trace or dual-spec assertion; citations included):
 
-For each flagged finding:
-- Use the source-spec context to inform Step 4 verification. **Bidder-info-specific worked examples**:
-  - Source spec carries `bidder_info.geoscope=["EEA"]` → verify the Go YAML emits `geoscope: ["EEA"]` (R5-strict; case must match exactly; Java emits the same array shape).
-  - Source spec carries `bidder_info.capabilities.{site,app}.mediaTypes` → verify the Go YAML emits the SAME mediatype set on the SAME platform branches (capabilities is R5-strict; mismatch is a `warn`).
-  - Source spec carries `bidder_info.gvl_vendor_id` → verify the Go YAML emits `gvl-vendor-id` (kebab-case) with the SAME integer; mismatch is a `warn`.
-  - Source spec carries `bidder_info.endpoint_compression=gzip` → verify the Go YAML emits `endpoint-compression: gzip`; this is byte-equivalent after key-case normalization.
-  - Source spec carries an `ortb.version` / `multiformat-supported` / `gpp-supported` (per F-new-44) → verify the Go YAML emits the equivalent block.
-- Surface `warn`/`fail` flags in the Step 5 summary with the severity tag preserved.
-- Suppress `info` flags from the summary UNLESS the Go-side YAML change diverges in a way that elevates the severity (e.g., a documented camelCase↔kebab-case asymmetry becomes a `warn` when the Go-side change DROPS a shared field entirely).
-- For findings YOU surface that match an existing `--- PRIOR SOURCE SPEC COMPARISON ---` entry: dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional.`
+- **Endpoint macro syntax / token-name divergence** (`bidder_info.endpoint`): when the Java source spec carries a macro form like `?adUnitId={{adUnitId}}` (Java `String.replace`-style) the Go-side YAML often emits a different macro syntax AND a different query-param key (e.g., adverxo Go uses `?id={{.AdUnit}}&auth={{.TokenID}}` with Go-template `dot` syntax). Both forms are legitimate per Rule 11; reviewer must confirm the backend accepts BOTH keys. Severity `warn`. Cite: `cross-language-pairs/adverxo.dual-spec-assertions.yaml:56-73`.
+- **Endpoint query-param augmentation drop** (`bidder_info.endpoint`): Java often appends an attribution query param (e.g., aax appends `?src={{PREBID_SERVER_ENDPOINT}}`); Go may omit. Bid validity unaffected; attribution lost. Severity `warn`. Cite: `cross-language-pairs/aax.dual-spec-assertions.yaml:56-74`.
+- **`gvl_vendor_id` 0-emit convention** (R5-strict): Go convention OMITS the `gvlVendorID` key when value is 0; Java may emit `gvlVendorID: 0` explicitly. Severity `info` (per-language idiom) unless the source spec carries a nonzero value AND the Go PR omits it — then `warn` (drops a shared field). Cite: `docs/runs/d3.8-kobler-canary-2026-05-05T0426Z-9f2a.md:123-129`.
+- **`userSync` block rendering form** (F-new-43): the Go YAML convention is multi-line block YAML with literal `&`; certain rendering paths produce single-line JSON-flow with `&amp;` HTML-escapes. Same semantic content; different serialization. Severity `info` per-canary, `warn` corpus-wide if it spreads. Cite: `docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:245-252`.
+- **Missing YAML slots `ortb.version` + `multiformat-supported` + `gpp-supported`** (F-new-44): Java's `bidder-config.yaml` always carries these; Go-side `bidder-info.yaml` may omit them if the source spec lacks the ctx fields. Severity `warn` when the Java source declares these but Go-side YAML omits. Cite: `docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:254-261`.
+- **`endpoint_compression` upstream gap**: e.g., elementaltv Go declares `gzip`; Java omits (Java upstream gap — the rename PR #4326 didn't carry compression forward). Severity `warn`. Cite: `cross-language-pairs/elementaltv.dual-spec-assertions.yaml:75-76`.
+- **`capabilities` (site/app) omission**: mediasquare — Java omits a site/app capability Go declares. Severity `warn` because capabilities is R5-strict (canonical 6-field shared set). Cite: `cross-language-pairs/mediasquare.dual-spec-assertions.yaml:27-51`.
+- **`default_enabled` per-language idiom** (Rule 45): optidigital — Go `true` vs Java `false` is legitimate per-language convention for new bidders. Severity `warn` if a PR flips the value without an explanatory commit; `info` otherwise. Cite: `cross-language-pairs/optidigital.dual-spec-assertions.yaml:60`, `cross-language-pairs/emxdigital.dual-spec-assertions.yaml:75-77`.
+- **Tilde-stub alias declarations**: thetradedesk declares Java alias `ttd: ~` (tilde-stub); Go has no `static/bidder-info/ttd.yaml` equivalent → `bidders=ttd` succeeds on Java, fails on Go. vungle has the same pattern for `liftoff`. Severity `warn`. Cite: `cross-language-pairs/thetradedesk.dual-spec-assertions.yaml:90-112`, `cross-language-pairs/vungle.dual-spec-assertions.yaml:72-88`.
+- **Disabled-by-default alias inversion** (Rule 45, ADR-004): when Java declares a disabled alias (`aliasOf: parent, disabled: true` form or `aliases: { name: { enabled: false } }` map-form), the Go-side YAML should emit a 2-line stub `aliasOf: {parent}\ndisabled: true`. Severity `warn` if the alias is missing entirely; `info` if forms differ but semantics match.
+
+**Surface, suppress, dedupe**:
+
+- Surface `warn` / `fail` / `urgent` flags in the Step 5 summary using the canonical emission template at `../shared/framework-utilities.md` §Step 5 emission template
+- Suppress `info` unless the PR diff elevates severity (e.g., a documented camelCase↔kebab-case `info` becomes `warn` when the Go-side change DROPS an R5-strict shared field entirely)
+- Net-new findings whose pattern matches an entry in `--- PRIOR SOURCE SPEC COMPARISON ---` dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional`
 
 If the block is absent or reads `prior_source_spec not present — section omitted`, skip this substep — the PR is not a cross-language port.
+
+Symmetric counterpart: `prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md:128-155` (the Java→Go mirror of this hook, landed in F4 PR #10).
 
 ### Step 2: Extract Field-Level Changes From the Diff
 

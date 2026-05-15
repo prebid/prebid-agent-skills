@@ -228,15 +228,53 @@ The `read/specs/` directory is `.gitignore`'d by default. Users opt into checkin
 | PR changes `adapter` struct field from `endpoint string` to `endpointTemplate *template.Template` | `prior_spec.code.adapter_struct.fields` shows old shape; `prior_spec.code.builder.template_parsed_at_build: false` | "Builder now parses template at build time. `endpoint_resolution.mechanism_go` should change to `text/template`." |
 | PR adds `disabled: true` to `static/bidder-info/{xyz}.yaml` | `prior_spec.meta.disabled: false` | "Bidder being disabled. If a deploy-time token is being introduced (`#{REGION}#`-style), confirm with reviewer. Reference: PR #4502 appStockSSP." |
 
-### 5.3 What the hook does NOT do
+### 5.3 What the same-language hook does NOT do
 
 - The hook does NOT block PR review or change activation rules. Reviewer skills run their full workflows regardless of whether `prior_spec` is present.
 - The hook does NOT auto-update the spec after the PR merges — that's the user's responsibility (re-run the orchestrator on the post-merge commit).
-- The hook does NOT compare across languages — `pr-triage` is Go-only. A Java equivalent would live at `prebid-server-java/review/skills/pr-triage/` (not yet authored).
+- The hook does NOT compare across languages — that is the separate **cross-language port-fidelity hook** at §5.5 (uses a distinct `prior_source_spec` slot, a distinct manifest block, and lands in Step 1g of downstream review skills rather than the implicit dedup mechanic the same-language block uses).
 
 ### 5.4 Where the hook is documented
 
 The opt-in section is added to `pr-triage/SKILL.md` (separate file). See `## Optional: Prior-Spec Comparison (read/ integration)` in that file for the user-facing instructions and detection examples.
+
+### 5.5 Cross-language port-fidelity consumption (`prior_source_spec`)
+
+The same-language hook above (`prior_spec`) detects regressions within one language. The Teal flow (read → port → review → reflect) also needs a **cross-language** hook that detects port-fidelity divergences when reviewing a ported PR. `pr-triage` (Go) and `pr-triage-java` both expose a `prior_source_spec` slot for this purpose.
+
+**Slot definition.** When reviewing a Go PR that ports an adapter from Java, pr-triage loads the Java source spec as `prior_source_spec`. Discovery order (first match wins):
+
+1. `--prior-source-spec={path}` CLI override
+2. `${PRIOR_SOURCE_SPEC_PATH}` env var
+3. `.tmp/full-loop/{run-id}/{lang}/{bidder}.yaml` when `${FULL_LOOP_RUN_ID}` is set (the Teal-flow orchestrator path)
+4. `prebid-server-{lang}/read/specs/{bidder}/latest.yaml` (user-persisted via `read-{adapter,bidder}-orchestrator --persist`)
+
+If none resolve, the comparison is silently omitted — the hook is opt-in.
+
+**Block authoring.** Both pr-triage skills emit a literal `--- PRIOR SOURCE SPEC COMPARISON ---` manifest block when `prior_source_spec` resolves:
+
+- Producer (Go-side): [`pr-triage/SKILL.md` §Cross-language ports: `prior_source_spec`](../../../review/skills/pr-triage/SKILL.md#cross-language-ports-prior_source_spec) — block template added to manifest emit between `--- PR-LEVEL CHECKS ---` and `--- SKILL ACTIVATION ---`
+- Producer (Java-side, F4 PR #10): [`pr-triage-java/SKILL.md` §Cross-language ports](../../../../prebid-server-java/review/skills/pr-triage-java/SKILL.md#cross-language-ports-prior_source_spec) — block template at lines 608-618
+
+Each finding carries a `PRIOR-SOURCE-SPEC:` prefix and inline `[severity: info | warn | fail | urgent]` tag.
+
+**Downstream consumer pattern: Step 1g.** Unlike the same-language `--- PRIOR SPEC COMPARISON ---` block (consumed implicitly via the `Previously flagged by prior agent` dedup pattern), the cross-language block has dedicated Step 1g substeps in every downstream review skill. Each Step 1g uses skill-specific worked examples grounded in canary trace empirical data (`docs/runs/d{2,3}.8-*.md` + `cross-language-pairs/*.dual-spec-assertions.yaml`).
+
+Consumer SKILLs (Go side, F5):
+
+- [`prebid-server-go/review/skills/adapter-code-pr-review/SKILL.md` §Step 1g](../../../review/skills/adapter-code-pr-review/SKILL.md) — markdown table shape; 7 rows (template-macro endpoint, per-key batching, Site/App synthesis, bid-post-processing macros, status handling, nil-map panic, language-stamped headers)
+- [`prebid-server-go/review/skills/bidder-info-pr-review/SKILL.md` §Step 1g](../../../review/skills/bidder-info-pr-review/SKILL.md) — bulleted prose shape; ~10 items (endpoint macros, gvl_vendor_id, userSync rendering, missing ortb/gpp slots, capabilities, alias asymmetries)
+- [`prebid-server-go/review/skills/bidder-params-pr-review/SKILL.md` §Step 1g](../../../review/skills/bidder-params-pr-review/SKILL.md) — numbered cases with emit blocks; 4 cases (Rule 38 byte-fidelity, dual-spec urgent elevation, @JsonAlias asymmetry, present-empty trichotomy)
+
+Consumer SKILLs (Java side, F4 PR #10):
+
+- `prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md` §Step 1g — markdown table; 7 rows
+- `prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md` §Step 1g — bulleted prose; 7 items
+- `prebid-server-java/review/skills/bidder-params-java-pr-review/SKILL.md` §Step 1g — numbered cases; 4 cases
+
+**Single source of truth for severity / dedup / emission template.** The canonical 4-tier severity matrix, the `Previously flagged by prior_source_spec — confirm with reviewer if intentional` dedup phrase, and the `[severity] file:line — finding / Evidence / Recommendation` Step 5 emission template all live at [`prebid-server-go/review/skills/shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../../../review/skills/shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). All 6 consumer SKILLs reference this section rather than restating the policy.
+
+**Reflection-loop routing.** Findings emitted from this hook flow into the [reflection-loop matrix](../../../../docs/methodology/reflection-loop.md) — Row 6 (Rule 38 byte-only divergence), Row 7 (R5 semantic divergence; the canonical aax `severity: fail` case), Row 1 (novel pattern → taxonomy MINOR), or Row 9 (read-skill under-extracted a field). Severity tag determines the typical row. When in doubt, emit at `info` with a clear citation; the reflect step routes during the next sweep.
 
 ---
 

@@ -64,6 +64,9 @@ The pr-triage skill provides:
 - PR comments (reviewer feedback, CI bot reports, author responses) — categorized and summarized
 - Duplicate PR search results
 - Bidder metadata per bidder: `aliasOf` status and `capabilities` (extracted from PR or "not in PR — downstream must fetch from master")
+- `--- PRIOR AGENT FINDINGS ---` block (when a prior-agent review was recorded; consumed via the `Previously flagged by prior agent` dedup pattern)
+- `--- PRIOR SPEC COMPARISON ---` block (same-language regression detection; opt-in; consumed via dedup like `--- PRIOR AGENT FINDINGS ---`)
+- `--- PRIOR SOURCE SPEC COMPARISON ---` block (cross-language port-fidelity detection; opt-in; consumed in Step 1g)
 
 **1b. Handle drift warnings.**
 
@@ -105,25 +108,31 @@ If the triage manifest indicates PR type is `infrastructure` and this skill's fi
   - Flag any bidders that deviate from the pattern (outliers)
   - Focus detailed review only on net-new adapter code that is NOT part of the bulk pattern
 
-**1g. Cross-language port-fidelity check (port PRs only).**
+**1g. Consume `--- PRIOR SOURCE SPEC COMPARISON ---` (cross-language ports).**
 
-If the triage manifest contains a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port (typically Java → Go via the Teal flow). Each entry in the block is a port-fidelity flag tagged with `info`/`warn`/`fail` severity per [pr-triage/SKILL.md `prior_source_spec` severity policy](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec):
+When the manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port — typically a Java → Go port via `port-java2go` (the Teal flow's namesake direction). Each entry is tagged `info` / `warn` / `fail` / `urgent` per the canonical 4-tier severity matrix at [`../shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). Use the source-spec context to inform Step 4 verification.
 
-- `info` — port asymmetries legitimate per Rules 5 / 9 / 11 / 35 / 38 / 39 (e.g., Go's `text/template` vs Java's `String.replace` for endpoint construction; Go canonical helpers `IsResponseStatusCodeNoContent` vs Java framework-default).
-- `warn` — divergence touches a Rule 38 byte-fidelity assertion, R5-strict cross-language equivalence, or a known-master-sample pattern.
-- `fail` — a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail`.
+**Adapter-code-specific worked examples** (rows are empirically grounded in `docs/runs/d{2,3}.8-*.md` canary traces and `cross-language-pairs/*.dual-spec-assertions.yaml`):
 
-For each flagged finding:
-- Use the source-spec context to inform Step 4 verification. **Adapter-code-specific worked examples**:
-  - Source spec carries `code.make_requests.endpoint_resolution.kind=template-macro` → verify the Go-side emit uses `text/template` resolution (not `String.replace` or `String.format`-style substitution).
-  - Source spec carries `code.make_requests.mutation.entity_strategies.Imp=in-place` → verify the Go-side `makeRequests` mutates imp value-fields without reassigning pointers (Go's value-mutation is canonical; Java's `toBuilder()` rebuild is the inverse — Rule 5).
-  - Source spec carries `code.make_bids.http_status_handling.kind=canonical-go-helpers` → verify the Go-side emit calls `adapters.IsResponseStatusCodeNoContent` + `adapters.CheckResponseStatusCodeForErrors` (Rule 30 — Java framework-default maps here).
-  - Source spec lists a `bid-post-processing-macro` quirk (ADR-007 F4, thetradedesk master sample) → verify the Go-side `makeBids` substitutes `${AUCTION_PRICE}` into `bid.NURL`/`bid.AdM`/`bid.BURL` before bid extraction.
-- Surface `warn`/`fail` flags in the Step 5 summary with the severity tag preserved.
-- Suppress `info` flags from the summary UNLESS the Go-side change diverges in a way that elevates the severity (e.g., a documented `info` under Rule 5 becomes a `warn` when the Go-side mutation strategy switches kinds without an explanatory commit note).
-- For findings YOU surface that match an existing `--- PRIOR SOURCE SPEC COMPARISON ---` entry: dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional.` (mirrors the existing `Previously flagged by prior agent` dedup at substep 1d).
+| Source spec field | Go emit expectation | Severity if mismatched | Empirical citation |
+|---|---|---|---|
+| `code.make_bids.bid_type_resolution.kind = imp-id-correlation` | Go's `getMediaTypeForImpID` walks request imps, returns matching imp's mediatype (Banner / Video / Native / Audio) with operator-vouched terminal fallback (`ctx.bid_type_fallback_value`). NOT `by-bid-mtype` + `default-banner` collapse. | `fail` — wrong classification on multi-imp mixed-mediatype responses | `docs/runs/d3.8-adkernelAdn-canary-2026-05-05T1636Z-7686.md:209-232` (F-new-7 EXT-B, F2-retired commit `de9256a`) |
+| `code.make_requests.batching.kind = per-key` | Go's `dispatchImpressions` groups imps by parsed `ExtImp{X}` key field (e.g., `pubId`) into `map[ExtImp{X}][]Imp` + emits one HTTP request per batch. NOT `single-batched` collapse. | `fail` — multi-imp mixed-key inputs emit 1 HTTP not N | `docs/runs/d3.8-adkernelAdn-canary-2026-05-05T1636Z-7686.md:173-205` (F-new-7 EXT-A, F2-retired commit `058ca15`) |
+| `code.make_requests.mutation.entity_strategies.{Site,App} = synthesize-replacement` (ADR-007 F3) | Go's `makeRequests` synthesizes the missing entity from sibling data (e.g., `vungle` Site→App synthesis from `imp.ext.bidder.tagid` when `bidRequest.App` is nil). NOT stock passthrough. | `warn` — passthrough behavior on canary; runtime gap on real traffic | `docs/runs/d3.8-vungle-canary-2026-05-05T1529Z-b8a5.md:98-118` (F3 master) |
+| `code.make_bids.bid_post_processing.macros[]` (ADR-007 F4, thetradedesk master) | Go substitutes `${AUCTION_PRICE}` into `bid.NURL` / `bid.AdM` / `bid.BURL` BEFORE bid extraction (uses `strconv.FormatFloat 'f' -1 64` — drops trailing zeros; Java `BigDecimal.toPlainString()` preserves scale → high-precision prices serialize differently) | `warn` — dual-spec marks number-formatting divergence | `cross-language-pairs/thetradedesk.dual-spec-assertions.yaml:148-212` |
+| `code.make_bids.status_handling.kind = legacy-raw-go` (vs `canonical-go-helpers`) | Go emits explicit 3-branch switch (`204→nil`, `400→BadInput`, `other→BadServerResponse`) NOT calls to `adapters.IsResponseStatusCodeNoContent` / `CheckResponseStatusCodeForErrors`. Rule 30 — both are legitimate but the source spec should declare which. | `warn` when source declares one and Go emits the other without spec update | `docs/runs/d3.8-aax-canary-2026-05-05T1554Z-befe.md:135-168` (F-new-14) |
+| `code.make_requests.modifyImp` (per-imp `imp.ext` writes) on JSON-`null` input | Go MUST initialize a fresh empty map before assignment (`if m == nil { m = map[string]json.RawMessage{} }`); `jsonutil.Unmarshal(null, &m)` leaves `m` nil → `m["key"]=…` panics. Java `defaultIfNull(...)` makes this invisible. | `urgent` — fuzz-discovered runtime panic; suite-canonical HIGH | `docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:263-270` (F-new-45) |
+| `headers_constructed.language_stamped = true` (ADR-007 F2) | Go emits `prebid-go` for the language-stamp header value (e.g., `Componentid: prebid-go` on freewheelssp). NOT `prebid-java`. | `fail` when Go emits `prebid-java` or omits the header entirely | `cross-language-pairs/adkernelAdn.dual-spec-assertions.yaml:176-177`, `cross-language-pairs/freewheelssp.dual-spec-assertions.yaml` |
+
+**Surface, suppress, dedupe**:
+
+- Surface `warn` / `fail` / `urgent` flags in the Step 5 summary using the canonical emission template at `../shared/framework-utilities.md` §Step 5 emission template
+- Suppress `info` unless the PR diff elevates severity (e.g., a Rule 5 `info` becomes `warn` if the Go-side mutation strategy switches kinds without an explanatory commit note)
+- Net-new findings whose pattern matches an entry in `--- PRIOR SOURCE SPEC COMPARISON ---` dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional` (mirrors the `Previously flagged by prior agent` pattern at substep 1d)
 
 If the block is absent or reads `prior_source_spec not present — section omitted`, skip this substep — the PR is not a cross-language port.
+
+Symmetric counterpart: `prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md:109-129` (the Java→Go mirror of this hook, landed in F4 PR #10).
 
 ### Step 2: Extract Changes From the Diff
 

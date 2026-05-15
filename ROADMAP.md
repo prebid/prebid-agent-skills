@@ -65,15 +65,24 @@ Both consume the cross-language translation rules at `prebid-server-go/read/skil
 - `pr-triage` SKILL `prior_source_spec` slot — for cross-language port-fidelity comparisons (Go-PR-vs-Java-source). Documented at the SKILL's "Optional: Prior-Spec Comparison" section.
 - `.tmp/full-loop/{run-id}/{lang}/{bidder}.yaml` convention — transient run-scoped specs for the Teal flow orchestration.
 
-**Shipped post-D2.8**:
+**Shipped in F4 (PR #10, 2026-05-15)**:
 
-- `--- PRIOR SOURCE SPEC COMPARISON ---` downstream consumption — all 3 Go review skills (`adapter-code-pr-review`, `bidder-info-pr-review`, `bidder-params-pr-review`) gained Step 1g substeps consuming pr-triage's cross-language port-fidelity manifest block with the `info`/`warn`/`fail` severity policy + skill-specific worked examples (template-macro endpoint resolution in adapter-code; R5-strict geoscope/capabilities/gvl_vendor_id in bidder-info; Rule 38 byte-fidelity + aax dual-spec `severity: fail` in bidder-params). Port-fidelity findings now flow end-to-end from pr-triage → downstream Go review skills.
+- Java review-skill suite (`prebid-server-java/review/skills/`) — `pr-triage-java` + 3 downstream review skills (`bidder-class-pr-review`, `bidder-config-pr-review`, `bidder-params-java-pr-review`) + `shared/framework-utilities-java.md`. Mirrors the Go-side 4-skill split with Java-specific concerns (pom.xml drift, Spring config, checkstyle).
+- Java-side cross-language port-fidelity hook (Step 1g in each Java downstream skill consuming `--- PRIOR SOURCE SPEC COMPARISON ---`; pr-triage-java emits the literal manifest block).
+
+**Shipped in F5 (this PR)**:
+
+- Go-side downstream consumption of `--- PRIOR SOURCE SPEC COMPARISON ---` — all 3 Go review skills (`adapter-code-pr-review`, `bidder-info-pr-review`, `bidder-params-pr-review`) gained empirically-grounded Step 1g substeps consuming pr-triage's cross-language port-fidelity manifest block. Worked-example rows cite `docs/runs/d{2,3}.8-*.md` canary traces and `cross-language-pairs/*.dual-spec-assertions.yaml`.
+- Promoted Go `pr-triage` cross-language block from narrative-only to a literal manifest template (symmetric with Java pr-triage-java); extended the severity matrix from 3-tier to **4-tier** (`info` / `warn` / `fail` / `urgent` — `urgent` promoted from `bidder-params-java-pr-review` as the canonical dual-spec-elevation tier).
+- New canonical reference subsection [`shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](prebid-server-go/review/skills/shared/framework-utilities.md) — single source of truth for severity matrix, dedup phrase, Step 5 emission template; all 6 consumer SKILLs (3 Go + 3 Java) reference it, eliminating the F4 DRY violation (severity policy was repeated 3x on the Java side).
+- `cross-skill-integration.md §5.5` cross-language port-fidelity consumption — formalizes the read↔review composition contract symmetrically with §5 (same-language hook).
+- references/*-index.md cross-language port-fidelity callouts in all 3 Go review skills.
+- Java forward-references unwound (4 places previously said "Go-side pending"): pr-triage-java SKILL, bidder-class SKILL, bidder-config SKILL, java-review-skill-design.md.
+- Port-fidelity findings now flow end-to-end from pr-triage → downstream review skills → reflection-loop matrix (Rows 1/6/7/9) bidirectionally.
 
 **Still future**:
 
-- Java review-skill suite (`prebid-server-java/review/skills/`) — currently absent.
-- Implement `--- PRIOR SPEC COMPARISON ---` (same-language regression) and `--- PRIOR AGENT FINDINGS ---` (CodeRabbit/ChatGPT prior-PR feedback) consumption in the downstream Go review skills — pr-triage authors both manifest blocks but no downstream skill reads them yet (separate from the cross-language `--- PRIOR SOURCE SPEC COMPARISON ---` consumption shipped post-D2.8).
-- Java mirror of the cross-language port-fidelity hooks (post Java review-skill suite landing).
+- Implement `--- PRIOR SPEC COMPARISON ---` (same-language regression) and `--- PRIOR AGENT FINDINGS ---` (CodeRabbit/ChatGPT prior-PR feedback) explicit consumption in the downstream Go review skills — pr-triage authors both manifest blocks; same-language is currently consumed via the implicit `Previously flagged by prior agent` dedup mechanic per `pr-triage/SKILL.md:580` but no explicit Step exists. Separate from F5's cross-language work.
 - `write/` skills — generate adapters from a spec.
 - `diff-spec` skills — compare two specs across commits.
 

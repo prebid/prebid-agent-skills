@@ -566,3 +566,17 @@ Patterns extracted from periodic review of the 89 reference adapter PRs (`prebid
 ### Entries
 
 (Populated by current refresh — see SKILL.md for the active rule list.)
+
+---
+
+## Cross-Language Port-Fidelity (consumed in Step 1g)
+
+When the routing manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this skill consumes it in [SKILL.md §Step 1g](../SKILL.md). Empirically-grounded adapter-code port-fidelity patterns (canary-cited):
+
+- **F-new-7 EXT-B `imp-id-correlation`** — multi-imp bid-type resolution must walk imps + match by ImpID; cite `docs/runs/d3.8-adkernelAdn-canary-2026-05-05T1636Z-7686.md:209-232`
+- **F-new-7 EXT-A `per-key batching`** — multi-pubId inputs emit one HTTP per batch; cite same trace lines 173-205
+- **F3 Site↔App synthesis** (`code.make_requests.mutation.entity_strategies = synthesize-replacement`) — vungle canonical; cite `docs/runs/d3.8-vungle-canary-2026-05-05T1529Z-b8a5.md:98-118`
+- **F4 bid-post-processing macros** (`${AUCTION_PRICE}` substitution) — thetradedesk master sample; cite `cross-language-pairs/thetradedesk.dual-spec-assertions.yaml:148-212`
+- **F-new-45 nil-map panic on JSON `null`** — `urgent` severity, fuzz-discovered runtime bug; cite `docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:263-270`
+
+Canonical severity / dedup / emission template: [`../../shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). Symmetric Java counterpart: `prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md` §Step 1g.

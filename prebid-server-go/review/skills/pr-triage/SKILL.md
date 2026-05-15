@@ -506,6 +506,29 @@ Duplicate PRs:
 Completeness (new adapters only):
   - {missing file warnings or "all expected files present"}
 
+--- PRIOR SPEC COMPARISON ---
+{Only present when prior_spec resolves per the discovery order in §"Optional: Prior-Spec Comparison" below.}
+prior_spec: {path}
+prior_spec.resolved_commit: {sha}
+prior_spec.adapter_spec_version: {version}
+Regressions detected ({N}):
+  - PRIOR-SPEC: {flag text} (file:{path}:{line if applicable})
+  ...
+{Or: "No regressions detected" if N=0}
+{Or: "prior_spec not present — section omitted"}
+
+--- PRIOR SOURCE SPEC COMPARISON ---
+{Only present when prior_source_spec resolves per the discovery order in §"Cross-language ports: prior_source_spec" below.}
+prior_source_spec: {path}
+prior_source_spec.source_language: java
+prior_source_spec.resolved_commit: {sha}
+prior_source_spec.adapter_spec_version: {version}
+Port-fidelity findings ({N}):
+  - PRIOR-SOURCE-SPEC: {flag text} (file:{path}:{line if applicable}) [severity: info | warn | fail | urgent]
+  ...
+{Or: "No port-fidelity findings" if N=0}
+{Or: "prior_source_spec not present — section omitted"}
+
 --- SKILL ACTIVATION ---
 Activate bidder-info-pr-review: {yes/no} ({N} files, {reason})
 Activate bidder-params-pr-review: {yes/no} ({N} files, {reason})
@@ -590,11 +613,14 @@ For PRs that PORT an adapter from one language to the other (the canonical case 
 | `prior_spec` | Same-language regression detection (Go PR ↔ Go prior-spec) | `prebid-server-go/read/specs/{bidder}/latest.yaml` (gitignored; user-persisted via `read-adapter-orchestrator --persist`) |
 | `prior_source_spec` | Cross-language port-fidelity detection (Go PR ↔ Java SOURCE spec, or vice versa) | `prebid-server-java/read/specs/{bidder}/latest.yaml` when the SOURCE language is Java; mirror-image when reviewing a Java PR ported from Go |
 
-When `prior_source_spec` is present, pr-triage emits a complementary `--- PRIOR SOURCE SPEC COMPARISON ---` manifest block. Findings flagged here are port-fidelity divergences, NOT same-language regressions. Severity policy:
+When `prior_source_spec` is present, pr-triage emits a complementary `--- PRIOR SOURCE SPEC COMPARISON ---` manifest block (literal template above in §"Routing Manifest Format" between `--- PR-LEVEL CHECKS ---` and `--- SKILL ACTIVATION ---`). Findings flagged here are port-fidelity divergences, NOT same-language regressions. The canonical 4-tier severity policy (also documented in [`../shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract)):
 
 - `info` by default — port asymmetries are often legitimate per Rules 5 / 9 / 11 / 35 / 38 / etc. (e.g., Go's `text/template` vs Java's `String.replace` for endpoint construction).
-- `warn` when the divergence touches a Rule 38 byte-fidelity assertion, an R5-strict cross-language equivalence, or a known-master-sample pattern.
-- `fail` when a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail` (the canonical example is aax: Java omits `minLength: 1` on `cid` / `crid`).
+- `warn` when the divergence touches a Rule 38 byte-fidelity assertion (bidder-params JSON formatting), an R5-strict cross-language equivalence (capabilities, gvl_vendor_id, maintainer, geoscope), or a known-master-sample pattern.
+- `fail` when a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail` (canonical example: aax — Java omits `minLength: 1` on `cid` / `crid`).
+- `urgent` when a `fail`-severity dual-spec field is touched by the PR diff. Top-bucket Step 5 emission; blocking unless reviewer waiver. (Promoted from `bidder-params-java-pr-review` canonical pattern.)
+
+Downstream Go review skills consume this block via Step 1g (see `adapter-code-pr-review`, `bidder-info-pr-review`, `bidder-params-pr-review`); the symmetric Java consumers are documented at [`prebid-server-java/review/skills/pr-triage-java/SKILL.md:696-711`](../../../../prebid-server-java/review/skills/pr-triage-java/SKILL.md#cross-language-ports-prior_source_spec).
 
 ### One-shot specs (Teal flow): `.tmp/full-loop/{run-id}/{lang}/{bidder}.yaml`
 

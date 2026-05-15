@@ -342,3 +342,17 @@ Patterns extracted from periodic review of the 89 reference adapter PRs. Stable 
 ### Entries
 
 (Populated by current refresh — see SKILL.md for the active rule list.)
+
+---
+
+## Cross-Language Port-Fidelity (consumed in Step 1g)
+
+When the routing manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this skill consumes it in [SKILL.md §Step 1g](../SKILL.md). Empirically-grounded bidder-info YAML port-fidelity patterns (canary-cited):
+
+- **Endpoint macro syntax / token-name divergence** — adverxo `?id=` (Go-template) vs `?adUnitId=` (Java `String.replace`); cite `cross-language-pairs/adverxo.dual-spec-assertions.yaml:56-73`
+- **`gvl_vendor_id` 0-emit convention** (R5-strict) — Go omits when 0; cite `docs/runs/d3.8-kobler-canary-2026-05-05T0426Z-9f2a.md:123-129`
+- **F-new-44 missing yaml ctx slots** (`ortb.version` + `multiformat-supported` + `gpp-supported`); cite `docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:254-261`
+- **`default_enabled` per-language idiom** (Rule 45) — optidigital Go true vs Java false; cite `cross-language-pairs/optidigital.dual-spec-assertions.yaml:60`
+- **Tilde-stub alias** — thetradedesk `ttd: ~`, vungle `liftoff: ~`; cite both dual-spec files
+
+Canonical severity / dedup / emission template: [`../../shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). Symmetric Java counterpart: `prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md` §Step 1g.

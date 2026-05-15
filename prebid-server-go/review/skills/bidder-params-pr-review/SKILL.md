@@ -48,6 +48,9 @@ The pr-triage skill provides:
 - PR comments (reviewer feedback, CI bot reports, author responses) — categorized and summarized
 - Duplicate PR search results
 - Bidder metadata (aliasOf status, capabilities if available from the PR)
+- `--- PRIOR AGENT FINDINGS ---` block (when a prior-agent review was recorded; consumed via the `Previously flagged by prior agent` dedup pattern)
+- `--- PRIOR SPEC COMPARISON ---` block (same-language regression detection; opt-in; consumed via dedup like `--- PRIOR AGENT FINDINGS ---`)
+- `--- PRIOR SOURCE SPEC COMPARISON ---` block (cross-language port-fidelity detection; opt-in; consumed in Step 1g)
 
 **1b. Handle drift warnings.**
 
@@ -83,25 +86,58 @@ curl -sS "https://raw.githubusercontent.com/{owner}/{repo}/{head_sha}/static/bid
 
 If the triage manifest includes `openrtb_ext/bidders.go` in this skill's file list (because the diff touched `NewBidderParamsValidator` or schema validation logic), include it in scope. Otherwise, ignore this file even if it appears in the PR.
 
-**1g. Cross-language port-fidelity check (port PRs only).**
+**1g. Consume `--- PRIOR SOURCE SPEC COMPARISON ---` (cross-language ports).**
 
-If the triage manifest contains a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port (typically Java → Go via the Teal flow). Each entry is a port-fidelity flag tagged with `info`/`warn`/`fail` severity per [pr-triage/SKILL.md `prior_source_spec` severity policy](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec):
+When the manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this PR is a cross-language port — typically a Java → Go port via `port-java2go`. Each entry is tagged `info` / `warn` / `fail` / `urgent` per the canonical 4-tier severity matrix at [`../shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). Use the source-spec context to inform Step 4 verification.
 
-- `info` — port asymmetries legitimate per Rules 9 / 38 / 39 (e.g., schema-interpretation strategy divergences where both Go and Java reach the same validation outcome via different mechanisms; ext-struct shape transformations).
-- `warn` — divergence touches a **Rule 38 byte-fidelity assertion** (the entire `static/bidder-params/{bidder}.json` MUST be byte-identical across Go and Java after the port; any byte-level divergence on the schema file is a `warn` minimum), an R5-strict cross-language equivalence, or a known-master-sample pattern.
-- `fail` — a dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares the divergence as `severity: fail`. **The canonical example is aax**: `cross-language-pairs/aax.dual-spec-assertions.yaml` flags Java's omission of `minLength: 1` on `cid` and `crid` as `severity: fail` because the Go source enforces the constraint but the Java side omits it — a real cross-language validation gap surfaced by R5.
+**Bidder-params-specific worked cases** (each grounded in canary corpus + dual-spec assertions):
 
-For each flagged finding:
-- Use the source-spec context to inform Step 4 verification. **Bidder-params-specific worked examples**:
-  - Source spec carries `bidder_params_sha256: <hash>` AND the Go-side JSON `bidder_params_sha256` matches → no fidelity issue (Rule 38 byte-copy held); the schema is byte-identical to the source. Suppress `info` entries about the schema.
-  - Source spec's `bidder_params_sha256` MISMATCHES the Go-side JSON SHA → flag the byte-divergence as `warn` and identify which property diverges (`required` set, additional `properties`, `minLength`/`maximum`/`pattern` constraints). The PR description should explain why Rule 38 was violated.
-  - Source spec carries `params.schema_interpretation.flexible_types=true` AND the Go-side JSON adds an `anyOf`/`oneOf`/`type: [...]` flexible-type construct → verify the Java side (or whatever the source language is) carries the same flexibility (`info` if cross-language symmetric; `warn` if the new flexibility lands on Go only).
-  - Source spec lists a `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` entry with `severity: fail` (aax-style) → cross-reference the Go-side JSON change against the assertion; if the PR changes the diverging field, the change ELEVATES from `fail` to `urgent` (the dual-spec gap is now load-bearing for this PR).
-- Surface `warn`/`fail` flags in the Step 5 summary with the severity tag preserved.
-- Suppress `info` flags from the summary UNLESS the Go-side schema change diverges in a way that elevates the severity.
-- For findings YOU surface that match an existing `--- PRIOR SOURCE SPEC COMPARISON ---` entry: dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional.`
+1. **Rule 38 byte-fidelity (canonical Go-side check).** The dual-spec assertion file `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` declares byte-equivalence between Go and Java bidder-params JSON SHAs. The PR must preserve `bidder_params_sha256`.
+
+   Recognized byte-divergence patterns (each `warn` minimum unless dual-spec elevates to `fail`):
+   - **Indent variants**: 2-space (Java canonical) vs 4-space vs 6-space (Go variants); mixed indent at closing braces. Cite `cross-language-pairs/adverxo.dual-spec-assertions.yaml:9-22` (4-space mixed), `adkernelAdn.dual-spec-assertions.yaml:9-18` (Go 6-space + inline `required: ["pubId"]` vs Java 4-space multi-line array).
+   - **Tabs vs spaces**: thetradedesk uses tabs in Go but 2-space in Java; the typo `"type":"string"` (no space after colon) is preserved verbatim across both. Cite `thetradedesk.dual-spec-assertions.yaml:9-18`.
+   - **Trailing-newline asymmetry**: vungle Java has trailing `}\n`; Go does not. teqblaze same pattern. Cite `vungle.dual-spec-assertions.yaml:9-16`, `teqblaze.dual-spec-assertions.yaml:9-20`.
+
+   ```
+   [warn] static/bidder-params/{bidder}.json:1 — Rule 38 byte-fidelity divergence
+     Evidence: bidder_params_sha256 mismatch (Go: <sha-a>, source: <sha-b>); diff localized to <indent|trailing-newline|tabs|inline-vs-multiline-required>
+     Recommendation: align with source spec OR document in PR description why Rule 38 was deliberately violated
+   ```
+
+2. **Dual-spec `severity: fail` elevation (canonical aax pattern; `urgent` tier).** When the PR touches a field flagged `severity: fail` in `cross-language-pairs/{bidder}.dual-spec-assertions.yaml`, ELEVATE the finding to `urgent`. The canonical example is **aax**: `cross-language-pairs/aax.dual-spec-assertions.yaml:9-41, 116-134` flags Java's omission of `minLength: 1` on `cid` / `crid` as `severity: fail` because the Go source enforces the constraint but Java accepts empty strings. A PR that adds, removes, or modifies the `minLength: 1` constraint on those fields lands at `urgent` — the dual-spec gap is now load-bearing for this PR.
+
+   ```
+   [urgent] static/bidder-params/{bidder}.json:N — dual-spec severity:fail field touched
+     Evidence: cross-language-pairs/{bidder}.dual-spec-assertions.yaml:<L1-L2> declares severity: fail on this field
+     Recommendation: align Java-side constraint upstream (Row 7 — upstream PR against prebid-server-java) OR update the dual-spec assertion to reflect the new alignment
+   ```
+
+3. **`schema_interpretation.combinators_used` asymmetry.** Java's `@JsonAlias` annotations (Jackson) accept alternative key names without a JSON-schema construct; Go has no equivalent — Go must use `anyOf` or duplicate `properties` entries. Cite `cross-language-pairs/appnexus.dual-spec-assertions.yaml:75-76` — Java accepts `placementId`/`invCode`/`trafficSourceCode`/`use_payment_rule` via @JsonAlias; Go must add equivalent JSON-schema flexibility or document the asymmetry. Severity `warn`.
+
+   ```
+   [warn] static/bidder-params/{bidder}.json:N — combinators_used asymmetry (@JsonAlias vs JSON-schema combinator)
+     Evidence: source spec declares params.schema_interpretation.combinators_used contains 'json-aliases-present'; Go JSON-schema must use anyOf or duplicate property entries to accept the same key set
+     Recommendation: add Go-side anyOf/oneOf construct mirroring the Java @JsonAlias acceptance set; or update the source spec to declare the asymmetry intentional
+   ```
+
+4. **`*string` for present-empty trichotomy (Java→Go ports only).** F-new-38 (teal canary) — Java distinguishes `placement==null` (field absent) vs `placement==""` (field present but empty); Go bare `string` collapses both. The Go-side `ExtImp{X}` struct must use `*string` for optional fields whose absent-vs-empty distinction matters semantically. Cite `docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:200-207`. Severity `info` per-canary (LOW) but `warn` when the source spec declares the trichotomy is semantically load-bearing.
+
+   ```
+   [info|warn] openrtb_ext/imp_{bidder}.go:N — present-empty trichotomy field uses bare string
+     Evidence: source spec declares params.ext_pojo.{Field}.optionality_semantics expects present-empty trichotomy; Go bare `string` collapses null/empty
+     Recommendation: change Go-side field type to `*string` (pointer) to preserve trichotomy; update test data to cover the three states
+   ```
+
+**Surface, suppress, dedupe**:
+
+- Surface `warn` / `fail` / `urgent` flags in the Step 5 summary using the canonical emission template at `../shared/framework-utilities.md` §Step 5 emission template
+- Suppress `info` unless the PR diff elevates severity (e.g., a Rule 9 `info` becomes `warn` when the Go-side schema change INTRODUCES a new flexible-type that the Java side doesn't have)
+- Net-new findings whose pattern matches an entry in `--- PRIOR SOURCE SPEC COMPARISON ---` dedupe as `Previously flagged by prior_source_spec — confirm with reviewer if intentional`
 
 If the block is absent or reads `prior_source_spec not present — section omitted`, skip this substep — the PR is not a cross-language port.
+
+Symmetric counterpart: `prebid-server-java/review/skills/bidder-params-java-pr-review/SKILL.md:99-139` (the Java→Go mirror of this hook, landed in F4 PR #10).
 
 ### Step 2: Extract Changes From the Diff
 

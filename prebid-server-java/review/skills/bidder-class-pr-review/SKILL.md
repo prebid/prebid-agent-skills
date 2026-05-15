@@ -126,7 +126,7 @@ Dedupe semantics:
 - Suppress `info` unless the PR diff elevates severity (e.g., introduces NEW divergence not previously captured)
 - Net-new findings whose pattern matches an entry in `--- PRIOR SOURCE SPEC COMPARISON ---` are deduped as `Previously flagged by prior_source_spec — confirm with reviewer if intentional` (analogous to the `Previously flagged by {reviewer}` / `Previously flagged by prior agent` patterns)
 
-Downstream consumption mechanics here mirror the Go-side F5 work in `prebid-server-go/review/skills/adapter-code-pr-review` once that branch lands; the Java consumption hook IS in scope for this commit so cross-language reviews work symmetrically.
+Downstream consumption mechanics here are symmetric with the Go-side F5 hook at [`prebid-server-go/review/skills/adapter-code-pr-review/SKILL.md` §Step 1g](../../../../prebid-server-go/review/skills/adapter-code-pr-review/SKILL.md). Both sides LANDED — Java in F4 PR #10, Go in F5. The 4-tier severity matrix (info/warn/fail/urgent) + dedup phrase + Step 5 emission template are all canonicalized at [`prebid-server-go/review/skills/shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../../../../prebid-server-go/review/skills/shared/framework-utilities.md#cross-language-port-fidelity-hook-contract).
 
 ### Step 2: Extract Changes From the Diff
 

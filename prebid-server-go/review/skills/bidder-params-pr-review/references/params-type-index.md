@@ -298,3 +298,16 @@ Patterns extracted from periodic review of the 89 reference adapter PRs (`prebid
 ### Entries
 
 (Populated by current refresh — see SKILL.md for the active rule list.)
+
+---
+
+## Cross-Language Port-Fidelity (consumed in Step 1g)
+
+When the routing manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block, this skill consumes it in [SKILL.md §Step 1g](../SKILL.md). Empirically-grounded bidder-params JSON port-fidelity patterns (canary-cited):
+
+- **Rule 38 byte-fidelity** (the canonical Go-side check) — bidder-params SHA must match the source spec; indent variants and trailing-newline asymmetries flag `warn` minimum. Cite `cross-language-pairs/{adverxo,adkernelAdn,thetradedesk,vungle,teqblaze}.dual-spec-assertions.yaml`
+- **Dual-spec `severity: fail` elevation (canonical aax `urgent`)** — Java omits `minLength: 1` on `cid`/`crid`; a Go PR touching the field elevates to `urgent`. Cite `cross-language-pairs/aax.dual-spec-assertions.yaml:9-41, 116-134`
+- **`schema_interpretation.combinators_used` asymmetry** — Java `@JsonAlias` vs Go `anyOf`; cite `cross-language-pairs/appnexus.dual-spec-assertions.yaml:75-76`
+- **`*string` for present-empty trichotomy** (F-new-38) — Java distinguishes null vs ""; Go bare `string` collapses both. Cite `docs/runs/d3.8-teal-canary-2026-05-05T-canary8-teal.md:200-207`
+
+Canonical severity / dedup / emission template: [`../../shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). Symmetric Java counterpart: `prebid-server-java/review/skills/bidder-params-java-pr-review/SKILL.md` §Step 1g (the only Java skill with an explicit Step 5 emission template; promoted to canonical in F5).
