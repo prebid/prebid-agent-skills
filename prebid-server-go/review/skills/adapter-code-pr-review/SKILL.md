@@ -82,6 +82,7 @@ Cross-reference the PR comments from the triage manifest against your review fin
 - If a reviewer has already flagged an issue you also find, note: `Previously flagged by {reviewer}` and reference their comment
 - If a CI bot report indicates a failure relevant to your scope (e.g., test failures, build errors), use it as additional evidence for your verification steps
 - If the author has responded to reviewer feedback with fixes, check whether the current diff reflects those fixes
+- If the manifest contains a `--- PRIOR AGENT FINDINGS ---` block (CodeRabbit / Copilot / ChatGPT prior-agent review recorded via `agent_review: yes`), cross-reference each of your findings against the listed prior-agent flags. Exact duplicates (same file, same rule, same severity) dedup as `Previously flagged by prior agent` instead of emitting a fresh finding; net-new findings emit normally. Symmetric counterpart: `prebid-server-java/review/skills/bidder-params-java-pr-review/SKILL.md:85-89` (canonical Java Step 1e pattern).
 
 **1e. Fetch full file content and capabilities.**
 

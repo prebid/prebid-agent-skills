@@ -69,6 +69,7 @@ All 6 consumer SKILLs (3 Go + 3 Java) reference this section instead of restatin
 - Each Go review skill's `references/*-index.md` gained a "Cross-Language Port-Fidelity" subsection with 5 canary-cited bullet points pointing back to Step 1g + the shared subsection
 - Frontmatter bumps 1.0.0 → 1.1.0 on all 3 Go downstream review skills (additive substep; backward-compatible on non-port PRs; SemVer MINOR per the project's read-adapter-orchestrator precedent for the `--output=` flag addition)
 - All 3 Go SKILL Step 1a manifest-input lists updated to enumerate `PRIOR AGENT FINDINGS`, `PRIOR SPEC COMPARISON`, `PRIOR SOURCE SPEC COMPARISON` blocks symmetric with the Java side
+- All 3 Go SKILL Step 1d (reviewer-feedback substep) extended to walk the `--- PRIOR AGENT FINDINGS ---` block explicitly — exact duplicates dedup as `Previously flagged by prior agent`; net-new findings emit normally. Closes the Go/Java asymmetry where Java downstream skills explicitly consumed the block (e.g., `bidder-params-java-pr-review/SKILL.md:85-89` canonical Step 1e) but Go skills relied only on the generic `Previously flagged by {reviewer}` baseline.
 - ROADMAP § "Phase E": cross-language hook consumption moved from "Still future" to "Shipped in F5"; Java review-skill suite reflagged as F4-landed (no longer "currently absent")
 - `docs/runs/post-d3.8-remaining-work.md` §F5 items 22-24 marked LANDED with this PR reference
 
