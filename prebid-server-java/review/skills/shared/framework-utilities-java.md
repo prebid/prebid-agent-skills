@@ -10,6 +10,46 @@ This is the Java analog of `prebid-server-go/review/skills/shared/framework-util
 
 ---
 
+## Review disposition system (severity · action · fidelity↔conformance tie-breaker)
+
+> **Governs how every finding across the four Java review skills is rated and acted on.** This is the canonical disposition reference; per-skill checks and the F-new trap table (§8) cite it instead of re-deriving severity. Established by [ADR-009 — lean-conformance doctrine](../../../../docs/decisions/009-lean-conformance-doctrine.md). The detailed severity-vocabulary mapping (skill-finding severity ↔ F-new-trap catalog severity) lives in §8.1; this section adds the **disposition (action)** dimension and the **fidelity↔conformance tie-breaker**.
+
+### Severity → disposition ladder
+
+| Severity (per §8.1) | Disposition | Meaning |
+|---|---|---|
+| **FAIL** (HIGH BLOCKING / most HIGH) | **BLOCK** merge | Won't compile / pass build (checkstyle, jacoco, IT), a correctness bug, or a violation of a hard upstream-java merge norm. |
+| **WARN** (MEDIUM) | **ASK** the author | Likely a problem but context-dependent. Raise as a change request; the author fixes or vouches acceptably. |
+| **INFO** (LOW / WARN) | **NOTE** (non-blocking) | Style/process heads-up. Mention once; never blocks. |
+
+Severity is set by the **target repo's merge bar** (prebid-server-java), not by how the Go source adapter behaves. The two historical miscalibrations — "the Go source does it this way" and "more coverage/artifacts can't hurt" — are corrected by the tie-breaker and the more-artifacts corollary below.
+
+### Tie-breaker: target-conformance beats source-fidelity
+
+When a finding is defended by source-fidelity — *"the Go source adapter does exactly this, so the Java port should too"* — do NOT dismiss it. Re-rate against the **target (Java)** norm:
+
+- If upstream-java would reject the pattern, **the finding stands at its target-norm severity**, regardless of faithful reproduction. Fidelity is the means; a merge-ready Java PR is the end (ADR-009).
+- Record the divergence in the port's `port-report.json` `quirks[]`; for a genuine source-side defect, recommend an upstream issue against prebid-server (Go) so both sides re-align.
+- Java-specific sharp edge: the Go→Java direction frequently transliterates Go-canonical helper *names* that do not exist in Java (F-new-90 `BidderUtil.isResponseStatusCodeNoContent`; F-new-57b `.bidderInfo(...)`). That is fidelity-to-Go the Java compiler rejects outright — **FAIL / BLOCK** regardless of the Go original.
+
+This is the core calibration fix from the Teal review: reviews must resolve toward target-conformance, not source-fidelity.
+
+### Guard: the tie-breaker does NOT auto-promote WARN-by-design findings
+
+The tie-breaker resolves *fidelity-vs-conformance* conflicts; it is not license to escalate every strict-reading divergence to FAIL. **WARN/INFO by design** (keep unless an independent target-norm violation applies):
+
+- **Specific-ID defensive checks the framework does NOT enforce** (`site.id`, `app.id`, `publisher.id` null guards) — legitimately KEEP/WARN.
+- **Forward-compat branches** for not-yet-schematized fields/values.
+- **Constant bid-type fallbacks that match the bidder's real default.** ASYMMETRY WITH GO: Java has **no operator-vouching surface** (Go vouches via `port-report.json` `quirks[]`). A silent constant `resolveBidType` fallback in Java is therefore more likely a latent bug (F-new-64) and should be flagged at HIGH absent a clear, code-evident reason — but a fallback that demonstrably matches the bidder's sole declared media type remains legitimate. Flag *silent / unvouched / mis-typing*, not the mere existence of a default.
+
+Default to WARN (ASK) when uncertain between WARN and FAIL on a defensive check; let the author vouch.
+
+### Corollary: more artifacts ≠ higher quality
+
+A port PR that ships *more than the canonical Java corpus* is off-spec, not premium. Emit exactly what upstream-java merges — `{X}Bidder.java`, the Spring `{X}Configuration.java`, `ExtImp{X}.java`, `bidder-config/{x}.yaml`, `bidder-params/{x}.json`, `{X}BidderTest.java`, the per-scenario IT class + 4-file fixtures (Rule 36), registry lines — and nothing carried over from the Go side's dev aids (the Go port's `doc.go` / `*_fuzz_test.go` / `*_bench_test.go` have no Java equivalent and no place in a Java PR). Speculative scaffolding or gratuitous standalone helper tests are **findings to flag, not merits** (ADR-009). Coverage is demonstrated through the unit + IT corpus the jacoco gate measures.
+
+---
+
 ## 1. Spring DI conventions
 
 Every bidder in the Java codebase is wired into the Spring `ApplicationContext` via a `@Configuration` class under `org.prebid.server.spring.config.bidder`. The wiring quartet is `@Configuration` + `@PropertySource` (binds the bidder's YAML) + `@Bean` (factory method) + `@ConfigurationProperties` (typed properties binding). Skills MUST recognize this canonical pattern AND the few legitimate variations.

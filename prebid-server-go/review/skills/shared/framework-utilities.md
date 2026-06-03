@@ -9,6 +9,48 @@ Canonical framework-level reference shared by all four prebid-server-go review s
 
 ---
 
+## Review disposition system (severity · action · fidelity↔conformance tie-breaker)
+
+> **Governs how every finding across the four Go review skills is rated and acted on.** This is the canonical disposition reference; per-skill checks cite it instead of re-deriving severity. Established by [ADR-009 — lean-conformance doctrine](../../../../docs/decisions/009-lean-conformance-doctrine.md).
+
+### Severity → disposition ladder
+
+Every finding carries a **severity** (what kind of defect) and a **disposition** (what the reviewer does about it):
+
+| Severity | Disposition | Meaning |
+|---|---|---|
+| **FAIL** | **BLOCK** merge | Won't compile / build / pass CI, a correctness bug, or a violation of a hard target-repo merge norm. Cannot merge until resolved. |
+| **WARN** | **ASK** the author | Likely a problem but context-dependent. Raise as a change request; the author fixes it or vouches with a reason the reviewer accepts. |
+| **INFO** | **NOTE** (non-blocking) | Style/perf nicety or heads-up. Mention once; never blocks. |
+
+A finding's severity is set by the **target repo's merge bar** (prebid-server Go), not by how the source adapter behaves. The two ways a reviewer historically *under*-rates a finding — "the source does it this way" and "extra coverage/artifacts can't hurt" — are both miscalibrations, corrected by the tie-breaker and the more-artifacts corollary below.
+
+### Tie-breaker: target-conformance beats source-fidelity
+
+When a finding is defended by source-fidelity — *"the Java source adapter does exactly this, so the Go port should too"* — do NOT dismiss it on that basis. Re-rate against the **target (Go)** norm:
+
+- If upstream Go would reject the pattern, **the finding stands at its target-norm severity**, regardless of faithful reproduction. Fidelity is the porting *means*; a merge-ready target PR is the *end* (ADR-009).
+- Record the divergence so it is deliberate, not silent: note it in the port's `port-report.json` `quirks[]`, and for a genuine source-side defect recommend an upstream issue against the source repo so both sides re-align.
+- Canonical example (Teal #4765): the Java source's `getBidType` returned `banner` *silently* for an undeterminable type. Faithfully porting that ships a latent bug; the Go bar (error-or-skip on unresolved type) wins. The fidelity defense does NOT lower the severity.
+
+This is the core calibration fix from the Teal review: our reviews *saw* the issues and resolved them toward fidelity — they must resolve toward target-conformance.
+
+### Guard: the tie-breaker does NOT auto-promote WARN-by-design findings
+
+The tie-breaker resolves *fidelity-vs-conformance* conflicts. It is NOT license to escalate every divergence-from-a-strict-reading to FAIL. The following are **WARN/INFO by design** and stay there unless an independent target-norm violation applies:
+
+- **Specific-ID defensive checks the framework does NOT enforce** — `Site.ID`, `App.ID`, `Publisher.ID` non-empty guards are legitimately KEEP/WARN (see "Site / App ID — nuanced enforcement" below). Only the *outer* `Site == nil && App == nil` check is genuinely redundant.
+- **Forward-compat branches** handling fields/values not yet in the current schema.
+- **Operator-vouched constant fallbacks** that match the source's *real* default (e.g., a `getBidType` returning a constant the bidder genuinely always serves, vouched in `quirks[]`). Flag only *silent / unvouched / mis-typing* fallbacks — not every constant fallback. (Verified: 63/261 upstream adapters use a bare-constant bid type legitimately; 135/261 return `(BidType, error)`.)
+
+When uncertain between WARN and FAIL on a defensive check, default to WARN (ASK) and let the author vouch — over-blocking erodes reviewer trust as much as under-blocking.
+
+### Corollary: more artifacts ≠ higher quality
+
+A PR that ships *more than the canonical corpus* is off-spec, not premium. Non-canonical artifacts — `doc.go`, `*_fuzz_test.go`, `*_bench_test.go`, and large stand-alone Go unit-test files that duplicate JSON-fixture coverage — are **findings to flag, not merits to praise** (ADR-009). They are dev-time aids: run them during development, pin any bug they surface with a normal test or supplemental fixture, and strip them before the PR. Per-skill checks set the exact severity; the default disposition is to flag, never to commend.
+
+---
+
 ## Builder inputs and call signatures
 
 The framework passes these struct values into adapter implementations. Adapters can rely on every field listed here being present in v4 master. Verified at master @2fae16f31693452b62dd2a0924b78e71bbec43ec (2026-05-03).
