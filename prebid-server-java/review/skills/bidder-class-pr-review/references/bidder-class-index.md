@@ -370,6 +370,8 @@ private BidType getBidType(Bid bid) {
 
 Walks `bid.ext → "prebid" → ObjectNode → ExtBidPrebid.type`, falling back to `BidType.banner`. The `parseExtBidPrebid` helper wraps `mapper.mapper().treeToValue(prebid, ExtBidPrebid.class)` in a try/catch returning `null` on `JsonProcessingException`. Broadest-coverage pattern — most empire bidders use it.
 
+**Caveat (F-new-64 / disposition system):** the `.orElse(BidType.banner)` silently mis-types any bid the chain fails to classify. **Acceptable** only when `banner` is the bidder's *sole* declared media type; a likely-unreachable safety net on a fully-covered chain is **WARN** (prefer erroring on the unreachable branch); a default that can mislabel a declared video/native/audio bid as banner is **FAIL** (the Teal #4765 latent-bug class). See [SKILL.md](../SKILL.md) makeBids step 5.
+
 **Cross-language asymmetry note**: When `prior_source_spec` declares the Go side uses `bid.ext.prebid.type`, the Java emit MUST walk the same chain. Different resolution chains for the same bidder is a `warn` cross-language finding.
 
 ### 5.6 `by-imp-id-suffix` / `imp-prefix-lookup` — side-channel correlation
@@ -382,7 +384,7 @@ Cross-reference the bid-type resolution against `bidder-config/{x}.yaml` `meta-i
 
 - Every YAML-declared media type MUST have a Java return path; missing is **FAIL** (PBS routes that media type here and the adapter can't handle it).
 - Java code returning a media type NOT in YAML is dead branch — **WARN**.
-- The fallback `.orElse(BidType.banner)` is acceptable ONLY when banner is in the YAML capabilities; otherwise misroutes traffic.
+- The fallback `.orElse(BidType.banner)` is **acceptable** only when `banner` is the bidder's *sole* declared media type; a never-hit safety net on a fully-covered chain is **WARN** (prefer erroring on the unreachable branch); a default that can mislabel a declared video/native/audio bid as banner is **FAIL** (F-new-64 / Teal #4765). See SKILL.md makeBids step 5.
 
 ---
 
