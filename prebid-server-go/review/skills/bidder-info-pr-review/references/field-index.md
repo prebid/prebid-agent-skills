@@ -61,7 +61,7 @@ type BidderInfo struct {
 | `xapi` | XAPI | AdapterXAPI | No | — |
 | `platform_id` | PlatformID | string | No | — |
 | `app_secret` | AppSecret | string | No | SECURITY: no real secrets |
-| `endpointCompression` | EndpointCompression | string | No | **`"GZIP"` (uppercase, case-sensitive)**. The check is direct string comparison against the `Gzip = "GZIP"` constant in `exchange/bidder.go:100`; lowercase `"gzip"` silently fails to enable compression. Omit entirely if not supporting compression. |
+| `endpointCompression` | EndpointCompression | string | No | Value casing NOT case-sensitive: runtime `strings.ToUpper`s it (`exchange/bidder.go:850`) before matching `Gzip = "GZIP"` (`:100`), so `gzip`/`GZIP`/`Gzip` all enable compression — non-uppercase *value* is **INFO** (uppercase `GZIP` is convention), not FAIL. The real FAIL is a field-NAME typo (`endpoint-compression`/`endpoint_compression` ≠ camelCase key) → silent no-op (Ogury). Omit entirely if not supporting compression. |
 
 ---
 
@@ -254,7 +254,7 @@ Patterns surfaced from review of the 89 reference adapter PRs (`prebid-server-go
 - **GVL inheritance quirk**: aliases cannot effectively override the parent's GVL vendor ID — `config/bidderinfo.go` deliberately inherits whether the alias sets `gvlVendorID: 0` or omits the field. Setting `gvlVendorID: 0` adds confusion; reviewers ask to remove it (PR #4329).
 - **GVL name tolerance**: GVL ID 377 = "AddApptr GmbH" but PR #4547 (Gravite) was accepted because privacy URL is gravite.net — corporate restructure case. GVL name mismatches are tolerated when there's a credible relationship.
 - **modifyingVastXmlAllowed**: rare; only seen in #4522 alliance_gravity. Set deliberately when video adapter wants to opt-in/opt-out of VAST modification tracking.
-- **endpointCompression: GZIP** is increasingly common (4+ PRs in 2025–2026). Suggest as INFO when adapter handles large requests. Value MUST be uppercase `"GZIP"` — case-sensitive comparison against the `Gzip = "GZIP"` constant.
+- **endpointCompression: GZIP** is increasingly common (4+ PRs in 2025–2026). Suggest as INFO when adapter handles large requests. Uppercase `"GZIP"` is the convention, but the runtime `strings.ToUpper`s the value (`exchange/bidder.go:850`) so any value casing works — flag a non-uppercase value as INFO, not FAIL. The FAIL case is a field-NAME typo (`endpoint-compression`), not value casing.
 - **userSync.supports list**: declares which sync types (`iframe`, `redirect`) the bidder supports without providing default URLs (host configures URLs). Common when bidder requires onboarding before sync activation.
 - **Bidder rename for major version**: rename PRs (e.g., `progx` → `programmaticX` PR #4456) are deferred to the next major release (v3 → v4) due to breaking-change semantics. Flag rename intent as INFO.
 

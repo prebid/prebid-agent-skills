@@ -273,8 +273,9 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 **Triggers when:** `endpointCompression` is added or modified.
 
-1. **Valid value**: **`"GZIP"` (uppercase, case-sensitive)**. The compression check in `exchange/bidder.go` declares the constant `Gzip string = "GZIP"` and compares directly — lowercase `"gzip"` will NOT match and compression will silently NOT be applied. All current master examples (`adkernel.yaml`, etc.) use `"GZIP"`. Flag any other casing (`gzip`, `Gzip`) as **FAIL** — silent runtime no-op.
-2. **Server support verification**: Confirm the bidder's endpoint actually accepts `Content-Encoding: gzip` requests. If possible, test with a gzip-compressed request
+1. **Value casing is NOT case-sensitive (INFO, not FAIL)**: The runtime compares `strings.ToUpper(endpointCompression)` against the `Gzip = "GZIP"` constant (`exchange/bidder.go:850`; constant at `:100`), so `"gzip"`, `"GZIP"`, and `"Gzip"` ALL enable compression. Uppercase `"GZIP"` is the convention (all master examples use it) — flag a non-uppercase *value* as **INFO** ("functional; uppercase `GZIP` is the convention"), NOT FAIL.
+2. **Field-NAME typo IS the silent-no-op bug (FAIL)**: The real regression is a misspelled YAML *key* — `endpoint-compression` / `endpoint_compression` (kebab/snake) instead of the camelCase `endpointCompression`. A typo'd key does not bind, so compression is silently never applied (canonical regression: Ogury). Flag a non-`endpointCompression` key as **FAIL** (read-side `endpoint-compression-typo` taxon).
+3. **Server support verification**: Confirm the bidder's endpoint actually accepts `Content-Encoding: gzip` requests. If possible, test with a gzip-compressed request
 
 ### Workflow: Capabilities Changed
 
@@ -337,7 +338,8 @@ Complete mapping of every BidderInfo field to its review criteria. Source: `conf
 
 ### `endpointCompression` (string)
 
-- **Only valid value: `"GZIP"` (uppercase, case-sensitive)**. The check in `exchange/bidder.go:100` declares `Gzip string = "GZIP"` and compares directly — lowercase `"gzip"` silently fails to enable compression.
+- **Value casing is NOT case-sensitive**: runtime compares `strings.ToUpper(endpointCompression)` to the `Gzip = "GZIP"` constant (`exchange/bidder.go:850`; constant at `:100`), so `"gzip"`/`"GZIP"`/`"Gzip"` all work. Uppercase `"GZIP"` is the convention — a non-uppercase *value* is **INFO**, not FAIL.
+- **Field-NAME typo is the real FAIL**: a misspelled key (`endpoint-compression`/`endpoint_compression` instead of camelCase `endpointCompression`) does not bind → compression silently disabled (Ogury regression) → **FAIL**.
 - Omit entirely if bidder does not support compression
 - Verify bidder server actually accepts gzip-compressed bid requests
 - **Workflow**: [Endpoint Compression Changed](#workflow-endpoint-compression-changed)
