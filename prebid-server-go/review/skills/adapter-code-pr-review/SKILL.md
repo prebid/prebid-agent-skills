@@ -240,6 +240,7 @@ After all tasks are complete, produce a review summary:
     - **Specific-field defensive checks ARE valid**: PBS only enforces `Site.ID || Site.Page` (not `Site.ID` alone), does NOT enforce `App.ID`, does NOT enforce `Publisher.ID`. If your endpoint specifically needs one of these fields, KEEP the defensive check — see [../shared/framework-utilities.md#site--app-id--nuanced-enforcement](../shared/framework-utilities.md#site--app-id--nuanced-enforcement) for the full table.
     
     See [../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this](../shared/framework-utilities.md#anti-pattern-pbs-core-already-does-this) for the canonical list.
+11. **Request-level key derived from imps — divergence handling**: If the adapter derives a *request-level* value from impressions (e.g., account ID → `publisher.id`, an endpoint token, a host shard) by reading it from the first valid imp, verify it handles imps that disagree. Silently letting "first valid wins" while ignoring divergent values across imps is a latent bug (the Teal #4765 mixed-account class). Expected: validate and return `errortypes.BadInput` on divergence, OR document why first-wins is safe for this bidder. Severity: **WARN** (escalate to **FAIL** if divergence would route a publisher's request to the wrong account/endpoint). See the **Review disposition system** in [../shared/framework-utilities.md](../shared/framework-utilities.md).
 
 ### Workflow: MakeBids Changed
 
@@ -251,17 +252,19 @@ After all tasks are complete, produce a review summary:
    - Non-2xx errors (4xx/5xx): `MakeBids` is NOT called for these (PBS surfaces `BadServerResponse` automatically). Defensive checks for non-2xx in `MakeBids` are redundant unless the adapter specifically handles a 3xx redirect path.
    - Both checks must come BEFORE attempting to unmarshal the response body.
 3. **Response unmarshaling**: Use `jsonutil.Unmarshal` (not `json.Unmarshal`) to unmarshal `responseData.Body` into `openrtb2.BidResponse`
-4. **Bid type resolution**: Must determine bid type for each bid. Preferred approach (in order):
+4. **Bid type resolution**: Must determine bid type for each bid. Resolution order (use the first the bidder actually populates):
    - From `bid.MType` (OpenRTB 2.6 markup type): `openrtb2.MarkupBanner` (1), `openrtb2.MarkupVideo` (2), `openrtb2.MarkupAudio` (3), `openrtb2.MarkupNative` (4)
    - From response ext (e.g., `bid.Ext.prebid.type`)
-   - From impression lookup (match `bid.ImpID` to original imp and check which media type exists)
-   - Flag if bid type resolution has no fallback for unknown types
-   - Error messages from MakeBids that fail to resolve bid type MUST include the `bid.ImpID` for log diagnosability. Example: `fmt.Errorf("unsupported bid mtype %d for impID %s", bid.MType, bid.ImpID)`. Use `%w` (wrapping) when wrapping a downstream error.
+   - From impression lookup (match `bid.ImpID` to the original imp and check which media type is set)
+   - **Unresolved type must ERROR, not silently default.** The catch-all for an undeterminable type must return a typed error and skip that bid (canonical model: `teqblaze::getMediaTypeForBid` returning `(openrtb_ext.BidType, error)`, collected/skipped in `MakeBids`) — NOT silently assign a constant such as `BidTypeBanner`. A silent default is the Teal #4765 latent bug; a source-fidelity argument ("the Java original defaults to banner") does NOT lower this, per the **Review disposition system** tie-breaker in [../shared/framework-utilities.md](../shared/framework-utilities.md). Severity: **FAIL** for a silent or mis-typing fallback.
+   - **Exception — vouched constant fallback:** a bare constant return (no error) is legitimate when it matches the bidder's *real, sole* default and is vouched in `port-report.json` `quirks[]` (e.g., `adkernelAdn`→`BidTypeVideo`; 63/261 upstream adapters do this, vs 135/261 that return `(BidType, error)`). Flag only *silent / unvouched / mis-typing* fallbacks — never a vouched constant. Do NOT require an `impsByID` map: only 14/261 adapters build one; it is an optional perf choice (see step 10), not a correctness requirement.
+   - Error messages that fail to resolve bid type MUST include the `bid.ImpID` for log diagnosability. Example: `fmt.Errorf("unsupported bid mtype %d for impID %s", bid.MType, bid.ImpID)`. Use `%w` when wrapping a downstream error.
 5. **BidderResponse construction**: Must use `adapters.NewBidderResponseWithBidsCapacity(len(request.Imp))` for proper allocation
 6. **Currency**: Set `bidResponse.Currency` from the response **only if non-empty** — do not overwrite the default `"USD"` with an empty string. Guard with `if response.Cur != "" { bidResponse.Currency = response.Cur }`
 7. **Bid pointer safety**: When appending bids, use `&seatBid.Bid[i]` (pointer to slice element), not `&bid` (pointer to loop variable)
 8. **BidMeta / BidVideo population**: If the adapter extracts metadata from `bid.Ext` (e.g., advertiser ID, network ID, brand ID for BidMeta; duration, primary category for BidVideo), verify: proper error handling for malformed `bid.Ext`, zero-value checking before populating numeric fields, and JSON framework test coverage for the extraction wherever possible (unit tests only as last resort when the framework can't compare enriched objects)
-9. **Coverage of declared media types**: Cross-reference the bid type resolution against `static/bidder-info/{bidder}.yaml` capabilities. Every media type declared in capabilities must have a Go-side handling path (return value or typed error). If YAML declares `audio` but `MakeBids` switch only covers banner/video/native, flag as **FAIL** — PBS core will route audio impressions here based on YAML and the adapter cannot handle them. Conversely, if Go handles a media type not in YAML, flag as **WARN** (dead branch).
+9. **Coverage of declared media types (code ↔ config)**: Cross-reference the bid type resolution against `static/bidder-info/{bidder}.yaml` capabilities. Every media type declared in capabilities must have a Go-side handling path (return value or typed error). If YAML declares `audio` but `MakeBids` only covers banner/video/native, flag as **FAIL** — PBS core routes audio impressions here based on YAML and the adapter cannot handle them. Conversely, if Go handles a media type NOT in YAML (dead branch — `infoawarebidder.go::pruneImps` strips it before `MakeRequests`), do not just leave it: **investigate** whether the bidder genuinely supports that type (the source adapter's meta-info + docs.prebid.org), then either **remove the Go branch** (if unsupported — the Teal #4765 audio case) or **add it to YAML capabilities** (if genuinely supported). Severity: **WARN** pending that determination.
+10. **Imp-lookup loop efficiency (perf — nested loops only)**: If bid-type resolution scans `request.Imp` *inside* the per-bid loop (O(bids × imps)), suggest building an `impsByID map[string]openrtb2.Imp` once before the loop. Severity: **INFO** (WARN only when both collections are plausibly large). A single non-nested O(n) pass is fine — do NOT flag it, and building the map is never *required* (only 14/261 adapters do; see step 4). This is the only perf pattern this skill flags; ordinary linear scans are idiomatic.
 
 ### Workflow: Helper Function Changed
 
@@ -286,11 +289,15 @@ After all tasks are complete, produce a review summary:
 
 ### Workflow: Additional Go File Changed
 
-**Triggers when:** A Go file in `adapters/{bidder}/` is added or modified that does NOT match `{bidder}.go`, `{bidder}_test.go`, or `params_test.go`. Examples: `{bidder}_relay_test.go`, `{bidder}_utils.go`, `{bidder}_types.go`.
+**Triggers when:** A Go file in `adapters/{bidder}/` is added or modified that does NOT match `{bidder}.go`, `{bidder}_test.go`, or `params_test.go`. Examples: `{bidder}_utils.go`, `models.go`, `{bidder}_relay_test.go`, `doc.go`, `{bidder}_fuzz_test.go`, `{bidder}_bench_test.go`.
 
-1. **Necessity**: The additional file should serve a clear purpose (separate test suite, helper utilities, type definitions). Flag if it duplicates logic already in the main adapter file
-2. **Package name**: Must match `package {bidder}`
-3. **Test files**: If the file is a `_test.go` file, verify it follows Go testing conventions and tests meaningful adapter behavior. Large test files (>500 lines) may indicate the adapter has custom test infrastructure beyond the standard JSON test runner — review for correctness but note this is non-standard
+1. **Non-canonical artifact (lean-conformance)**: The following are NOT part of the canonical adapter corpus the target repo merges — they are dev-time aids, not PR deliverables. Flag for removal (ADR-009 + the "more artifacts ≠ quality" corollary in the [Review disposition system](../shared/framework-utilities.md)):
+   - `doc.go` (package-doc file) — **FAIL**; remove (no upstream adapter ships one).
+   - `*_fuzz_test.go` — **FAIL**; fuzzing is a dev-time tool. If a fuzz run found a real bug, pin it with a normal supplemental JSON fixture (or a minimal unit test) and remove the harness.
+   - `*_bench_test.go` — **FAIL**; benchmarks are dev-time. Remove before the PR.
+   - A large stand-alone Go unit-test file (>~100 lines) that duplicates coverage achievable via JSON fixtures — **WARN**; convert to `exemplary/`/`supplemental/` fixtures (reviewer convention PR #4533: coverage via the JSON framework wherever possible). Pin only genuinely Go-only cases (e.g., malformed JSON the loader rejects before the adapter sees it) in a minimal unit test.
+2. **Necessity (legit multi-file split)**: A non-test helper file (`models.go`, `utils.go`, `parsers.go`, `structs.go`, etc.) IS allowed when justified by non-trivial non-OpenRTB serialization or sizeable helper logic — single-file is the default, the Mediasquare split is the canonical exception. Flag as **WARN** only if it duplicates logic already in `{bidder}.go` or exists with no clear purpose — not merely for existing.
+3. **Package name**: Must match `package {bidder}`
 4. **No exported symbols**: Additional Go files in adapter packages should generally not export types or functions (same rules as the main adapter file — only `Builder` should be exported)
 
 ### Workflow: Builder Registration Changed
