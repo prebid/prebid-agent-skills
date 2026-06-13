@@ -331,7 +331,7 @@ For each added or modified alias entry:
 
 1. **Manual reviewer process**: The maintainer-email "received" verification gate is a manual reviewer process (typical: bsardo sends an email; merge is gated on the maintainer replying "received"). Skills cannot automate this gate. When the triage manifest reports `blocking-confirmation-pending`, note this in the finding.
 2. **Generic-domain emails** (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `proton.me`, `icloud.com`): flag as **INFO** — these don't establish organizational ownership and historically receive extra scrutiny.
-3. **Personal-name patterns** (`firstname.lastname@`, `firstname@`): flag as **WARN** — reviewer convention is to require a group/role mailbox (`tech@`, `support@`, `prebid@`, etc.).
+3. **Local-part is not a role/group token**: flag as **WARN** — reviewer convention is to require a group/role mailbox (`tech@`, `support@`, `prebid@`, `info@`, etc.). A personal name or handle (`firstname.lastname@`, `firstname@`, `flast@`, initials, a nickname) is not a role token **even on the bidder's own corporate domain** — that corporate-domain-personal case is the one a name-pattern regex misses (the Teal #4765 class). Judge role-vs-person, not just the regex.
 4. **Aliases inherit**: When the change is to a parent's `maintainer-email` and aliases are tilde-inherit, the new email applies to all aliases. Note this in the finding.
 5. If the PR comments include phrases like "please reply 'received'", record `email-confirmation-pending` status.
 
