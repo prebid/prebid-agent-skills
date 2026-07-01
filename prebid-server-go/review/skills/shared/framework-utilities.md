@@ -447,6 +447,23 @@ A frequent (7+ PRs in 2025–2026) review finding: `static/bidder-info/{bidder}.
 
 The cross-check: extract every media type from YAML capabilities; verify the adapter's bid-type resolution (`MType` switch or fallback) covers each. **Severity: FAIL** when YAML declares a media type the Go code cannot return; **WARN** when Go handles a media type not declared in YAML (dead branch).
 
+### Multiformat imps require per-bid disambiguation (`bid.MType`)
+
+Coverage is necessary but NOT sufficient. When `static/bidder-info/{bidder}.yaml` declares `openrtb.multiformat-supported: true` (or a single `capabilities.{site,app,dooh}` block lists more than one media type), a **single imp can carry more than one format at once** (e.g. `banner` + `video` on one imp). Bid-type resolution that keys **only** off the imp — introspecting `imp.Banner/Video/Native` in a fixed priority order — cannot tell which format a given returned bid is for, so the first-priority branch wins for *every* bid and non-banner bids get silently mis-typed. This passes the coverage check above (each type has *a* return path) yet is still wrong.
+
+For a multiformat adapter the authoritative per-bid signal is the response's own `bid.mtype` (OpenRTB 2.6). The correct shape switches on `bid.MType` **first**, keeping imp introspection only as a fallback for responses that omit mtype, then errors:
+
+```go
+switch bid.MType {
+case openrtb2.MarkupBanner: return openrtb_ext.BidTypeBanner, nil
+case openrtb2.MarkupVideo:  return openrtb_ext.BidTypeVideo, nil
+case openrtb2.MarkupNative:  return openrtb_ext.BidTypeNative, nil
+}
+// fallback: imp introspection by ImpID, then error
+```
+
+**Severity: FAIL** when a `multiformat-supported` adapter resolves bid type *primarily* by imp-mediatype introspection (fixed banner>video>native priority) instead of `bid.MType` — it mis-types co-present formats. This holds even when the imp lookup is the source adapter's faithful shape (apply the source-fidelity tie-breaker above). Single-format adapters (exactly one declared media type) are exempt — imp introspection is unambiguous there. Canonical example: Teal #4765 (`postindustria-code` review) — imp-priority resolution on a banner+video+native imp typed every bid `banner`; fixed by switching on `bid.MType` first + a multi-format-imp fixture with mtype-tagged bids.
+
 ---
 
 ## Open-URL endpoint policy

@@ -211,6 +211,10 @@ Distinction vs. the sibling `imp-mediatype-introspection` branch: the latter has
 
 Per the canary 7 trace (`docs/runs/d3.8-adkernelAdn-canary-2026-05-05T1636Z-7686.md` § Finding F-new-7 EXTENSION sub-finding B), adkernelAdn is the only confirmed corpus bidder using imp-id-correlation today; the audit estimates 1-2 corpus-wide pairs.
 
+**Multiformat overrides imp-only resolution (Teal #4765).** Both imp-only branches above (`imp-mediatype-introspection`, `imp-id-correlation`) resolve bid type from the imp's populated mediatype fields in a fixed priority order. That is only correct for a **single-format** adapter. When the target `static/bidder-info/{bidder}.yaml` declares `openrtb.multiformat-supported: true` (or a `capabilities` block lists more than one media type), a single imp can carry co-present formats (e.g. banner+video), and imp-priority resolution mis-types every bid that isn't the first-priority format — the exact latent bug the Java Teal source carried into the Go port. In that case set `ctx.multiformat_supported: true` and select `ctx.bid_type_resolution == "by-bid-mtype"` (switch on `bid.MType` first, imp lookup only as the omitted-mtype fallback, then error). The template enforces this: selecting an imp-only resolution while `ctx.multiformat_supported` is true fails loudly at render. Faithfully porting the source's imp-only shape does NOT override this — target-conformance beats source-fidelity (ADR-009). Verify the multiformat flag from the YAML during ctx assembly, not from the source adapter's Java shape.
+
+- `ctx.multiformat_supported: bool` — mirror of the target YAML `openrtb.multiformat-supported` (or a capabilities block with >1 media type). Defaults to false when omitted. When true, only `by-bid-mtype` (or an equivalent per-bid-signal resolution) is valid.
+
 Canonical reference adapter: `adapters/adkernelAdn/adkernelAdn.go::getMediaTypeForImpID`.
 
 **Cross-language metadata.** Same as D2 §Step 4 with directions reversed:

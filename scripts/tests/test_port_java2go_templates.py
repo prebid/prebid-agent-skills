@@ -1467,6 +1467,40 @@ class TestImpIdCorrelation(unittest.TestCase):
         with self.assertRaises(Exception):
             _render("bidder.go.j2", ctx)
 
+    def test_multiformat_imp_only_resolution_fails_loudly(self):
+        """Teal #4765 guard: a multiformat-supported adapter cannot resolve bid
+        type by imp introspection (fixed priority) — a co-present-format imp
+        mis-types every non-first-priority bid. Selecting either imp-only
+        resolution while multiformat_supported is true MUST fail loudly at
+        render rather than silently emit the mis-typing shape."""
+        for resolution in ("imp-mediatype-introspection", "imp-id-correlation"):
+            with self.subTest(resolution=resolution):
+                ctx = _kobler_bidder_go_ctx()
+                ctx["multiformat_supported"] = True
+                ctx["bid_type_resolution"] = resolution
+                ctx["bid_type_fallback_value"] = "banner"
+                with self.assertRaises(Exception):
+                    _render("bidder.go.j2", ctx)
+
+    def test_multiformat_by_bid_mtype_renders(self):
+        """The correct multiformat shape — by-bid-mtype — renders cleanly and
+        emits the bid.MType switch (imp introspection is fallback only)."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["multiformat_supported"] = True
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        ctx["bid_type_fallback_action"] = "throw"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("switch bid.MType", rendered)
+
+    def test_single_format_imp_introspection_still_renders(self):
+        """No regression: a single-format adapter (multiformat_supported unset /
+        false) may still resolve by imp introspection — the guard is scoped to
+        multiformat adapters only."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["bid_type_resolution"] = "imp-mediatype-introspection"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("func getBidType(", rendered)
+
     # ------------- composition with full F2 stack -------------------------
 
     def test_full_f2_composition_adkernelAdn_shape(self):
