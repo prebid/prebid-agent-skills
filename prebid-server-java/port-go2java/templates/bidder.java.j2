@@ -28,7 +28,17 @@ the SKILL passes from the source spec):
   ctx.bid_type_resolution      : str  — one of {"imp-mediatype-introspection",
                                           "ext-prebid-video-placement",
                                           "constant-banner",
+                                          "by-bid-mtype",
                                           "method-chain-fallback"}; Rule 23-25
+  ctx.multiformat_supported    : bool — mirrors bidder-config meta-info
+                                          {app,site,dooh}-media-types declaring
+                                          >1 media type. When true, resolveBidType
+                                          MUST use bid_type_resolution=="by-bid-mtype"
+                                          (imp introspection is fallback only); an
+                                          imp-only resolution fails loudly at render
+                                          — a multiformat imp carries co-present
+                                          formats imp priority cannot disambiguate
+                                          (Teal #4765). Defaults false when omitted.
   ctx.javadoc_summary          : str|null  — class-level Javadoc
   ctx.imports_extra            : list[str]  — caller-collected; alphabetically sorted
 
@@ -386,8 +396,37 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {% endif %}
 
     private BidType resolveBidType(Bid bid, BidRequest bidRequest) {
+{# Multiformat guard (Teal #4765). A multiformat adapter can receive an imp
+   carrying more than one media type at once (e.g. banner+video), so imp-only
+   resolution (fixed video>native>audio>banner priority) cannot tell which
+   format a returned bid is for and mis-types every non-first bid. The
+   authoritative per-bid signal is bid.getMtype(); such an adapter MUST use
+   bid_type_resolution=="by-bid-mtype". Fail loudly at render if an imp-only
+   resolution is selected for a multiformat adapter (mirrors the Go template
+   guard; Java has no vouching surface to excuse a silent constant). #}
+{%- if (ctx.multiformat_supported | default(false)) and ctx.bid_type_resolution == "imp-mediatype-introspection" -%}
+{{ {}.multiformat_adapter_must_use_by_bid_mtype_resolution.fail }}
+{%- endif -%}
 {% if ctx.bid_type_resolution == "constant-banner" %}
         return BidType.banner;
+{% elif ctx.bid_type_resolution == "by-bid-mtype" %}
+        // Rule 23 — classify by the response's own bid.mtype (OpenRTB 2.6:
+        // 1=banner, 2=video, 3=audio, 4=native). Authoritative for multiformat
+        // imps where a single imp carries co-present formats. Unresolved mtype
+        // surfaces an error rather than silently defaulting to banner.
+        final Integer mType = bid.getMtype();
+        if (mType == null) {
+            throw new PreBidException(
+                    "Missing bid.mtype for bid with impId: " + bid.getImpid());
+        }
+        return switch (mType) {
+            case 1 -> BidType.banner;
+            case 2 -> BidType.video;
+            case 3 -> BidType.audio;
+            case 4 -> BidType.xNative;
+            default -> throw new PreBidException(
+                    "Unsupported bid.mtype " + mType + " for impId: " + bid.getImpid());
+        };
 {% elif ctx.bid_type_resolution == "imp-mediatype-introspection" %}
         // Walk bid.impid → matching imp; classify by populated mediatype field.
         for (Imp imp : bidRequest.getImp()) {

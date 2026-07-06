@@ -630,6 +630,38 @@ class TestBidderJ2(unittest.TestCase):
         self.assertIn("if (imp.getVideo() != null)", rendered)
         self.assertIn("if (imp.getXNative() != null)", rendered)
 
+    def test_by_bid_mtype_switches_on_mtype(self):
+        """Teal #4765 — the correct multiformat shape resolves from the
+        response's own bid.mtype (imp introspection is fallback only) and
+        surfaces an error rather than silently defaulting to banner."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("bid.getMtype()", rendered)
+        self.assertIn("switch (mType)", rendered)
+        self.assertIn("case 2 -> BidType.video;", rendered)
+        self.assertIn("case 4 -> BidType.xNative;", rendered)
+
+    def test_multiformat_imp_introspection_fails_loudly(self):
+        """A multiformat adapter cannot resolve bid type by imp introspection —
+        a co-present-format imp mis-types every non-first bid. Selecting
+        imp-only resolution while multiformat_supported is true MUST fail
+        loudly at render rather than emit the mis-typing shape (mirrors the
+        port-java2go guard)."""
+        ctx = _kobler_bidder_ctx()
+        ctx["multiformat_supported"] = True
+        ctx["bid_type_resolution"] = "imp-mediatype-introspection"
+        with self.assertRaises(Exception):
+            _render("bidder.java.j2", ctx)
+
+    def test_single_format_imp_introspection_still_renders(self):
+        """No regression: a single-format adapter may still resolve by imp
+        introspection — the guard is scoped to multiformat adapters only."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "imp-mediatype-introspection"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("private BidType resolveBidType(", rendered)
+
 
 class TestBidderTestJ2(unittest.TestCase):
     """Tests for templates/bidder-test.java.j2."""

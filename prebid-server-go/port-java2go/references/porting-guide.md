@@ -148,6 +148,7 @@ Real-PR audit identified patterns that recur in declined Go new-adapter PRs. The
 | Returning `nil, nil` from `MakeRequests` on success | Return `[]*adapters.RequestData{}, nil` (or no requests = nil framework treats as zero) | The convention is empty slice, not nil-with-no-error. |
 | Importing `github.com/sirupsen/logrus` | Use `glog` if logging is needed (rare in adapters) | Upstream restricts logging deps; adapters typically don't log. |
 | Per-bidder utility files like `helpers.go` for one-line helpers | Inline in `{bidder}.go` | Single-file adapters are the norm; multi-file is for genuinely large codebases (rubicon, appnexus). |
+| Hand-rolled string/collection helper duplicating a Go stdlib idiom (e.g. a `unicode.IsSpace` rune-loop reproducing Java `StringUtils.isBlank`) | The stdlib idiom (`strings.TrimSpace(s) == ""`); drop the now-unused `unicode` import | Port Java Apache-Commons / `Character` calls to their Go-stdlib equivalent, not rune-for-rune — target-idiom beats source-fidelity (ADR-009). `strings.TrimSpace` uses `unicode.IsSpace`, so NBSP-class behavior is preserved; the hand-rolled loop buys nothing. Record load-bearing behavioral divergence in `quirks[]`. |
 
 ## 5. Mandatory steps before submitting the PR
 

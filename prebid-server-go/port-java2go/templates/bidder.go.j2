@@ -221,6 +221,16 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         400, StatusOK=200, StatusNoContent=204,
                                         StatusNotFound=404, etc.); non-canonical
                                         codes fall back to integer literals.
+  ctx.multiformat_supported   : bool — mirrors static/bidder-info YAML
+                                        openrtb.multiformat-supported (or a
+                                        capabilities block declaring >1 media
+                                        type). When true, getBidType MUST use
+                                        bid_type_resolution=="by-bid-mtype"
+                                        (imp introspection is fallback only);
+                                        an imp-only resolution fails loudly at
+                                        render — a multiformat imp carries
+                                        co-present formats that imp priority
+                                        cannot disambiguate (Teal #4765).
   ctx.bid_type_resolution     : str  — discriminator. One of:
                                           "imp-mediatype-introspection",
                                           "imp-id-correlation",
@@ -922,6 +932,17 @@ func (a *adapter) resolveEndpoint(request *openrtb2.BidRequest) string {
 }
 {% endif %}
 
+{# Multiformat guard (Teal #4765). A multiformat-supported adapter can receive
+   an imp carrying more than one media type at once (e.g. banner+video), so an
+   imp-only resolution (fixed banner>video>native priority) cannot tell which
+   format a returned bid is for — the first branch wins for every bid and
+   non-banner bids get mis-typed. The authoritative per-bid signal is bid.mtype;
+   such an adapter MUST use bid_type_resolution=="by-bid-mtype" (imp introspection
+   is a fallback only). Fail loudly at render if an imp-only resolution is
+   selected for a multiformat adapter. #}
+{%- if (ctx.multiformat_supported | default(false)) and ctx.bid_type_resolution in ["imp-mediatype-introspection", "imp-id-correlation"] -%}
+{{ _bid_type_short_to_go.multiformat_adapter_must_use_by_bid_mtype_resolution.fail }}
+{%- endif -%}
 {% if _bid_type_returns_error %}
 func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) (openrtb_ext.BidType, error) {
 {% else %}

@@ -9,6 +9,48 @@ Canonical framework-level reference shared by all four prebid-server-go review s
 
 ---
 
+## Review disposition system (severity · action · fidelity↔conformance tie-breaker)
+
+> **Governs how every finding across the four Go review skills is rated and acted on.** This is the canonical disposition reference; per-skill checks cite it instead of re-deriving severity. Established by [ADR-009 — lean-conformance doctrine](../../../../docs/decisions/009-lean-conformance-doctrine.md).
+
+### Severity → disposition ladder
+
+Every finding carries a **severity** (what kind of defect) and a **disposition** (what the reviewer does about it):
+
+| Severity | Disposition | Meaning |
+|---|---|---|
+| **FAIL** | **BLOCK** merge | Won't compile / build / pass CI, a correctness bug, or a violation of a hard target-repo merge norm. Cannot merge until resolved. |
+| **WARN** | **ASK** the author | Likely a problem but context-dependent. Raise as a change request; the author fixes it or vouches with a reason the reviewer accepts. |
+| **INFO** | **NOTE** (non-blocking) | Style/perf nicety or heads-up. Mention once; never blocks. |
+
+A finding's severity is set by the **target repo's merge bar** (prebid-server Go), not by how the source adapter behaves. The two ways a reviewer historically *under*-rates a finding — "the source does it this way" and "extra coverage/artifacts can't hurt" — are both miscalibrations, corrected by the tie-breaker and the more-artifacts corollary below.
+
+### Tie-breaker: target-conformance beats source-fidelity
+
+When a finding is defended by source-fidelity — *"the Java source adapter does exactly this, so the Go port should too"* — do NOT dismiss it on that basis. Re-rate against the **target (Go)** norm:
+
+- If upstream Go would reject the pattern, **the finding stands at its target-norm severity**, regardless of faithful reproduction. Fidelity is the porting *means*; a merge-ready target PR is the *end* (ADR-009).
+- Record the divergence so it is deliberate, not silent: note it in the port's `port-report.json` `quirks[]`, and for a genuine source-side defect recommend an upstream issue against the source repo so both sides re-align.
+- Canonical example (Teal #4765): the Java source's `getBidType` returned `banner` *silently* for an undeterminable type. Faithfully porting that ships a latent bug; the Go bar (error-or-skip on unresolved type) wins. The fidelity defense does NOT lower the severity.
+
+This is the core calibration fix from the Teal review: our reviews *saw* the issues and resolved them toward fidelity — they must resolve toward target-conformance.
+
+### Guard: the tie-breaker does NOT auto-promote WARN-by-design findings
+
+The tie-breaker resolves *fidelity-vs-conformance* conflicts. It is NOT license to escalate every divergence-from-a-strict-reading to FAIL. The following are **WARN/INFO by design** and stay there unless an independent target-norm violation applies:
+
+- **Specific-ID defensive checks the framework does NOT enforce** — `Site.ID`, `App.ID`, `Publisher.ID` non-empty guards are legitimately KEEP/WARN (see "Site / App ID — nuanced enforcement" below). Only the *outer* `Site == nil && App == nil` check is genuinely redundant.
+- **Forward-compat branches** handling fields/values not yet in the current schema.
+- **Operator-vouched constant fallbacks** that match the source's *real* default (e.g., a `getBidType` returning a constant the bidder genuinely always serves, vouched in `quirks[]`). Flag only *silent / unvouched / mis-typing* fallbacks — not every constant fallback. (Verified: 63/261 upstream adapters use a bare-constant bid type legitimately; 135/261 return `(BidType, error)`.)
+
+When uncertain between WARN and FAIL on a defensive check, default to WARN (ASK) and let the author vouch — over-blocking erodes reviewer trust as much as under-blocking.
+
+### Corollary: more artifacts ≠ higher quality
+
+A PR that ships *more than the canonical corpus* is off-spec, not premium. Non-canonical artifacts — `doc.go`, `*_fuzz_test.go`, `*_bench_test.go`, and large stand-alone Go unit-test files that duplicate JSON-fixture coverage — are **findings to flag, not merits to praise** (ADR-009). They are dev-time aids: run them during development, pin any bug they surface with a normal test or supplemental fixture, and strip them before the PR. Per-skill checks set the exact severity; the default disposition is to flag, never to commend.
+
+---
+
 ## Builder inputs and call signatures
 
 The framework passes these struct values into adapter implementations. Adapters can rely on every field listed here being present in v4 master. Verified at master @2fae16f31693452b62dd2a0924b78e71bbec43ec (2026-05-03).
@@ -405,6 +447,23 @@ A frequent (7+ PRs in 2025–2026) review finding: `static/bidder-info/{bidder}.
 
 The cross-check: extract every media type from YAML capabilities; verify the adapter's bid-type resolution (`MType` switch or fallback) covers each. **Severity: FAIL** when YAML declares a media type the Go code cannot return; **WARN** when Go handles a media type not declared in YAML (dead branch).
 
+### Multiformat imps require per-bid disambiguation (`bid.MType`)
+
+Coverage is necessary but NOT sufficient. When `static/bidder-info/{bidder}.yaml` declares `openrtb.multiformat-supported: true` (or a single `capabilities.{site,app,dooh}` block lists more than one media type), a **single imp can carry more than one format at once** (e.g. `banner` + `video` on one imp). Bid-type resolution that keys **only** off the imp — introspecting `imp.Banner/Video/Native` in a fixed priority order — cannot tell which format a given returned bid is for, so the first-priority branch wins for *every* bid and non-banner bids get silently mis-typed. This passes the coverage check above (each type has *a* return path) yet is still wrong.
+
+For a multiformat adapter the authoritative per-bid signal is the response's own `bid.mtype` (OpenRTB 2.6). The correct shape switches on `bid.MType` **first**, keeping imp introspection only as a fallback for responses that omit mtype, then errors:
+
+```go
+switch bid.MType {
+case openrtb2.MarkupBanner: return openrtb_ext.BidTypeBanner, nil
+case openrtb2.MarkupVideo:  return openrtb_ext.BidTypeVideo, nil
+case openrtb2.MarkupNative:  return openrtb_ext.BidTypeNative, nil
+}
+// fallback: imp introspection by ImpID, then error
+```
+
+**Severity: FAIL** when a `multiformat-supported` adapter resolves bid type *primarily* by imp-mediatype introspection (fixed banner>video>native priority) instead of `bid.MType` — it mis-types co-present formats. This holds even when the imp lookup is the source adapter's faithful shape (apply the source-fidelity tie-breaker above). Single-format adapters (exactly one declared media type) are exempt — imp introspection is unambiguous there. Canonical example: Teal #4765 (`postindustria-code` review) — imp-priority resolution on a banner+video+native imp typed every bid `banner`; fixed by switching on `bid.MType` first + a multi-format-imp fixture with mtype-tagged bids.
+
 ---
 
 ## Open-URL endpoint policy
@@ -425,7 +484,7 @@ Unacceptable: full URL from `imp.ext` or other publisher-controlled input. **Sev
 `static/bidder-info/{bidder}.yaml` `maintainer.email`:
 - Must be a **group/role mailbox** (e.g., `tech@bidder.com`, `prebid@bidder.com`, `support@bidder.com`), NOT a personal address (e.g., `firstname.lastname@bidder.com`).
 - A reviewer (typically `bsardo`) sends a verification email and blocks merge until the maintainer replies "received". This is a manual blocking gate — skills cannot fully automate it but should:
-  - Flag `maintainer.email` matching personal-name patterns (e.g., `firstname.lastname@`, `firstname@`) as **WARN** with note "may require change to group mailbox per reviewer policy"
+  - Flag any `maintainer.email` whose **local-part is not a recognized role/group token** as **WARN** with note "may require change to group mailbox per reviewer policy". A role token is a function/team word (`tech`, `prebid`, `support`, `info`, `engineering`, `adops`, `partnerships`, `dev`, `contact`, or a clear product/team handle — but NOT `noreply`/`donotreply`, which defeat the reply-based verification gate); a personal name or handle — `firstname.lastname@`, `firstname@`, `flast@`, initials, a nickname — is NOT a role token **even on the bidder's own corporate domain**. That corporate-domain-personal case is exactly what a name-pattern regex misses: in Teal #4765 a company employee's personal address sat on the corporate domain and was caught only when the person asked, in review, to have their personal details removed. Judge the local-part's role-vs-person character, not just whether it matches `firstname.lastname@`.
   - Note in summary: "email confirmation pending" until evidence of reply is in PR comments
 - Personal-domain emails (gmail, yahoo, hotmail, outlook, proton.me, icloud) are tolerated for small bidders but flagged as **INFO** — reviewer historically requests change.
 

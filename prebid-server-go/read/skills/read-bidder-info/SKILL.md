@@ -37,7 +37,7 @@ The output is a YAML fragment matching the `bidder_info:` schema; the orchestrat
 Walk the parsed YAML and map each known top-level key to the spec field. The canonical key list and Go-struct mapping is mastered at [../../../review/skills/bidder-info-pr-review/references/field-index.md](../../../review/skills/bidder-info-pr-review/references/field-index.md). For each canonical key found, emit the corresponding spec field:
 
 - `endpoint` -> `bidder_info.endpoint` (string).
-- `endpointCompression` -> `bidder_info.endpoint_compression` (string; expected canonical value `"GZIP"` uppercase per `exchange/bidder.go` constant — silently fails compression if any other casing).
+- `endpointCompression` -> `bidder_info.endpoint_compression` (string; canonical value `"GZIP"` uppercase by convention, but the runtime `strings.ToUpper`s it at `exchange/bidder.go:850` so any *value* casing works — value casing is cosmetic, NOT a silent-failure. The silent-failure regression is a field-NAME typo, e.g. `endpoint-compression`; see Step 8 typo registry).
 - `disabled` (bool) -> `meta.disabled` is OWNED by the orchestrator's `meta` block (NOT this skill); but if present in this YAML, surface here so the orchestrator can read it. Do NOT emit a `disabled` field under bidder_info — there is no such path in the schema; emit only via meta.
 - `whiteLabelOnly` -> same handling as `disabled`: orchestrator reads it from this skill's pass-through.
 - `modifyingVastXmlAllowed` (bool) -> `bidder_info.modifying_vast_xml_allowed`. Default `false` if absent.
