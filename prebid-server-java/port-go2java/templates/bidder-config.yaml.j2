@@ -6,7 +6,14 @@ Inputs:
   ctx.maintainer_email      : str  — from bidder_info.maintainer.email
   ctx.gvl_vendor_id         : int|null
   ctx.endpoint_compression  : str|null
-  ctx.modifying_vast_xml    : bool
+  ctx.modifying_vast_xml    : bool — the source-EFFECTIVE value (declared source
+                              value, else the SOURCE framework's absent-key default:
+                              Go plain bool → false). Rule 49: emitted explicitly in
+                              BOTH polarities because the Java adapter-default is
+                              true (application.yaml adapter-defaults +
+                              BidderConfigurationProperties.init() defaultIfNull) —
+                              omitting the key when the source is effective-false
+                              silently flips VastModifier behavior (F-new-105).
   ctx.geoscope              : list[str]  — alphabetical sort applied by caller
   ctx.site_media_types      : list[str]|null  — from capabilities.site.mediaTypes (sorted)
   ctx.app_media_types       : list[str]|null  — from capabilities.app.mediaTypes (sorted)
@@ -40,9 +47,7 @@ adapters:
 {% for region in ctx.geoscope %}
       - {{ region }}
 {% endfor %}
-{% if ctx.modifying_vast_xml %}
-    modifying-vast-xml-allowed: true
-{% endif %}
+    modifying-vast-xml-allowed: {{ 'true' if ctx.modifying_vast_xml else 'false' }}
     meta-info:
       maintainer-email: {{ ctx.maintainer_email | tojson }}
 {% if ctx.gvl_vendor_id is not none %}

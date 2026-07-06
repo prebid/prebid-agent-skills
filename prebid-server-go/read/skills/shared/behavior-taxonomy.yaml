@@ -9,7 +9,7 @@
 #
 # Phase 2.4 of execution-plan.md.
 
-taxonomy_version: "1.0.0"
+taxonomy_version: "1.1.0"
 adapter_spec_version_min: "1.0.0"
 
 intro: |
@@ -146,6 +146,7 @@ enumerations:
           - ["`multi-token-substitution`", "Multiple macros substituted.", "rubicon (`{{.AccountID}}` + `{{.ZoneID}}`)"]
           - ["`query-parameter-augmentation`", "Endpoint URL has query params appended at request time (e.g., `?member_id=123`).", "appnexus (`member_id`)"]
           - ["`runtime-region-selection`", "Endpoint URL chosen from a runtime context (e.g., country code → region).", "huaweiads"]
+          - ["`param-derived-endpoint-macros`", "Endpoint macros filled by PARSING a publisher-supplied param value (typically a routing URL) — components validated against a code-level allow-list before substitution; parent domain stays pinned in config. Port-translation Rule 48.", "rtbstack (route URL → `{{Region}}`/`{{SspID}}`/`{{ZoneID}}`/`{{PartnerId}}`)"]
           - ["`deploy-time-token`", "Endpoint URL has a non-Go-template placeholder substituted pre-deployment by the operator. Surfaces in `deploy_time_tokens[]`.", "rubicon (`REGION` token)"]
           - ["`dev-prod-toggle`", "Endpoint chosen between two literal URLs based on a request-time flag.", "kobler (`testMode` flag toggles between endpoint and devEndpoint)"]
           - ["`custom`", "Anything else. REQUIRES `quirks` entry.", "n/a"]
@@ -172,7 +173,7 @@ enumerations:
 
           A spec emits `kind` always and the relevant `mechanism_*` for its source language; the other-language mechanism is null.
 
-          > **Cross-reference — two distinct enums by design**: The schema declares two related but DIFFERENT enums for endpoint classification. `bidder_info.endpoint_construction.kind` (per `adapter-spec.schema.json` `$defs/BidderInfo.endpoint_construction.kind`) declares 9 values describing the YAML-declared endpoint shape: `static, template-macro, url-with-query, dev-prod-toggle, hardcoded-toggle, runtime-region-selection, deploy-time-token, single-token-substitution, custom`. `code.make_requests.endpoint_resolution.kind` declares 8 values describing the adapter-code mechanism: `static, single-token-substitution, multi-token-substitution, query-parameter-augmentation, runtime-region-selection, deploy-time-token, dev-prod-toggle, custom`. The overlap covers the cases where YAML form and code form align; the per-scope differences capture cases where they don't (e.g., a YAML `template-macro` may be implemented in code as `multi-token-substitution`). Earlier versions of this doc claimed they "share one canonical enum citing port-translation Rule 5" — that was incorrect (Rule 5 is actually about Site/App mutation idiom, not endpoint construction); the two enums have always been disjoint by schema design.
+          > **Cross-reference — two distinct enums by design**: The schema declares two related but DIFFERENT enums for endpoint classification. `bidder_info.endpoint_construction.kind` (per `adapter-spec.schema.json` `$defs/BidderInfo.endpoint_construction.kind`) declares 9 values describing the YAML-declared endpoint shape: `static, template-macro, url-with-query, dev-prod-toggle, hardcoded-toggle, runtime-region-selection, deploy-time-token, single-token-substitution, custom`. `code.make_requests.endpoint_resolution.kind` declares 9 values describing the adapter-code mechanism: `static, single-token-substitution, multi-token-substitution, query-parameter-augmentation, runtime-region-selection, param-derived-endpoint-macros, deploy-time-token, dev-prod-toggle, custom`. The overlap covers the cases where YAML form and code form align; the per-scope differences capture cases where they don't (e.g., a YAML `template-macro` may be implemented in code as `multi-token-substitution`). Earlier versions of this doc claimed they "share one canonical enum citing port-translation Rule 5" — that was incorrect (Rule 5 is actually about Site/App mutation idiom, not endpoint construction); the two enums have always been disjoint by schema design.
 
   - field_path: "code.make_requests.mutation"
     description: |
@@ -458,6 +459,9 @@ quirks_taxa:
   - id: nested-configuration-properties
     description: '`XyzConfigurationProperties` declares a nested non-trivial inner sub-class with multiple fields. Canonical&#58; huaweiads `ExtraInfo` (6 fields nested inside `HuaweiAdsConfigurationProperties`).'
     surfaces_in: ["quirks + spring_config.configuration_properties_class.nested_classes"]
+  - id: param-derived-endpoint-macros
+    description: 'Endpoint macros filled by parsing a publisher-supplied param value (typically a routing URL) — parsed components validated against a code-level allow-list before substitution; the endpoint''s parent domain stays pinned in bidder config. Same value as `endpoint_resolution.kind: param-derived-endpoint-macros`; port-translation Rule 48. Canonical&#58; rtbstack (route URL hostname label → region {us, eu, sg}; client/endpoint/ssp query params → macros).'
+    surfaces_in: ["quirks + endpoint_resolution"]
   - id: parameterized-request-type
     description: Java bidder class declares `Bidder<CustomType>` with a non-default request body type. Canonical&#58; huaweiads (`Bidder<HuaweiAdsRequest>`), mediasquare (`Bidder<MediasquareRequest>`).
     surfaces_in: ["quirks + bidder_class.parameterized_request_type"]

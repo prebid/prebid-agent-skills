@@ -180,7 +180,7 @@ Six pairs covering distinct pipeline paths. Per-pair acceptance criteria (ALL mu
 2. Emitted unit tests pass via `mvn -B test -Dtest={Bidder}BidderTest --file extra/pom.xml`.
 3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90%.
 4. `mvn -B checkstyle:check` exits 0.
-5. Emitted YAML validates against Java's `bidder-info-schema.json`; emitted JSON validates against `static/bidder-params/_schema.json`.
+5. Emitted bidder-params JSON is accepted by Java's runtime validation — `BidderParamValidator` parses every `static/bidder-params/*.json` at application startup and the IT boot exercises it. (Corrected 2026-07-06, retiring F-new-62: earlier drafts referenced `bidder-info-schema.json` / `static/bidder-params/_schema.json`, which do NOT exist in upstream prebid-server-java; the emitted YAML is validated by Spring config binding at IT boot, the params JSON by `BidderParamValidator` — there are no standalone schema files to validate against.)
 6. `port-report.json` schema-validates against `port-report.schema.json` v0.2.0.
 7. `r5_check.state` matches the per-pair expectation below.
 

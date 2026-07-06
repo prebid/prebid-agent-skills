@@ -762,6 +762,8 @@ Across all dispatches, use these section conventions:
 - **Cross-cutting concerns** section for findings that span multiple skill boundaries.
 - **Methodology notes** at bottom for any decisions about scope/severity.
 
+**Delivery protocol (rtbstack gauntlet lesson, 2026-07-06).** When reviewers run as named teammate agents (Agent-tool teammates rather than synchronous subagents), their plain-text output is NOT visible to the orchestrator — a reviewer that "finishes" by printing its findings has silently delivered nothing and idles. The dispatch prompt MUST instruct the reviewer to deliver its findings via an explicit message back to the orchestrator (e.g., SendMessage to the team-lead) and treat that delivery — not the printed report — as task completion. On the rtbstack gauntlet one of six reviewers idled exactly this way; the fix was a delivery re-instruction, after which the same instruction was pre-emptively queued to the other five. Synchronous subagents (whose final text IS the return value) are unaffected.
+
 ### Model choice + thinking effort
 
 User mandate: **always use opus subagents with max thinking** for all canary subagent dispatches. Per memory note `feedback_subagent_model.md`. Lower-effort sonnet calls produce inferior fidelity-audit output (fewer findings, weaker rationale).
@@ -979,6 +981,12 @@ What NOT to do, learned from canary 1's chaos before canaries 5–7's clean runs
 **Symptom.** Canary 1's F11 (read-orchestrator `fetch_method` enum) was a Java-side read-skill finding. Easy to fix once; easy to forget the Go-side has the SAME structurally-different organization issue (per F11 follow-up note in canary 2).
 
 **Fix.** Direction-specific findings must explicitly note "this is direction-X-specific" with an inverse-direction sibling task captured. Update §8 notes when a direction-asymmetric finding surfaces.
+
+### Piping gate runs through tail/grep
+
+**Symptom.** On the rtbstack canary (2026-07-06), `mvn` gate runs piped through `tail`/`grep` bit three separate times: a standalone `checkstyle:check` swept generated protobuf sources with the failure status hidden by the pipe; an IT failure was reported as "completed exit 0" while tests were failing; and a WireMock near-miss diff — the exact evidence needed for the fix — was truncated away by `tail -25`. Pipes mask exit codes (the pipeline's status is the LAST command's) and destroy the diagnostics the failure exists to give you.
+
+**Fix.** NEVER pipe a gate run. Run the canonical gate command bare (`mvn -B package --file extra/pom.xml` for the Java side — checkstyle binds to the validate phase in `extra/pom.xml`, so the standalone `checkstyle:check` goal is the WRONG harness and sweeps generated sources), let the full output land, and verify results from the build's own artifacts: surefire XML reports for tests, `checkstyle-result.xml` for style. If output volume is a concern, redirect to a file and inspect the file — redirection preserves the exit code; a pipe consumes it.
 
 ### Letting the renderer drift from the SKILL prose
 

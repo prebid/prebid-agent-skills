@@ -14,20 +14,22 @@ Phase D1.3 deliverable — alphabetical insertion-position rules for Java-side f
 | `src/test/java/org/prebid/server/bidder/{bidder}/{Bidder}BidderTest.java` | Create | N/A | direct write |
 | `src/test/java/org/prebid/server/it/{Bidder}Test.java` | Create | N/A | direct write |
 | `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-*.json` | Create | N/A | direct write |
-| `src/test/resources/org/prebid/server/it/test-application.properties` | APPEND (not sorted) | none | append two lines |
+| `src/test/resources/org/prebid/server/it/test-application.properties` | INSERT at end of `adapters.*` cluster (not sorted) | none | insert two lines |
 
 Java's Spring DI does most registry work automatically — there is no `bidders.go`-equivalent constants file or `adapter_builders.go`-equivalent dispatch map to keep alphabetical. The {Bidder}Configuration class is auto-discovered by Spring at startup.
 
-## test-application.properties append shape
+## test-application.properties insertion shape
 
-The IT-test resource at `src/test/resources/org/prebid/server/it/test-application.properties` carries one section per bidder. Append exactly two lines AT THE END of the file:
+> **Corrected 2026-07-06 (F-new-110).** Earlier versions of this doc said "append at the end of the file" — that is WRONG against the live file. The `adapters.*` entries form one contiguous cluster in the FIRST part of the file; the file's tail carries non-adapter settings (`ccpa.enforce`, mock endpoints, etc.). An EOF append lands the new bidder ~60 lines below the cluster, which reads as misplaced and was flagged by a fresh-eyes upstream review on the rtbstack canary.
+
+The IT-test resource at `src/test/resources/org/prebid/server/it/test-application.properties` carries two lines per bidder. Insert exactly two lines at the END of the contiguous `adapters.*` cluster (immediately after the last existing `adapters.*` line):
 
 ```properties
 adapters.{bidder}.enabled=true
 adapters.{bidder}.endpoint=http://localhost:8090/{bidder}-exchange
 ```
 
-NO alphabetical sort. NO empty-line separation between bidders. Entries land in the order they were added historically. Concurrent ports can both append without conflict.
+NO alphabetical sort within the cluster. NO empty-line separation between bidders. Entries land in the order they were added historically. Two concurrent ports inserting at the cluster end produce a trivially-resolvable adjacent-line conflict (both orderings are valid).
 
 ## Why no `bidders.go`-equivalent exists
 

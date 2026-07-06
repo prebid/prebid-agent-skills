@@ -130,11 +130,14 @@ class TestPortRulesRenderDrift(unittest.TestCase):
                         missing.append(f"Rule {r.get('id', '?')!r} missing {key!r}")
         self.assertEqual(missing, [], "\n".join(missing))
 
-    def test_rules_version_is_phase_2_5(self):
-        """Phase 2.5 bumps rules_version to 0.2.0 (was 0.1.0 with 43 rules)."""
+    def test_rules_version_is_current(self):
+        """F6 (ADR-010) bumps rules_version to 0.3.0 — Rules 47/48/49 from the
+        rtbstack green-field canary. History: 0.2.0 at Phase 2.5 (46 rules),
+        0.1.0 before that (43 rules). This pin is a tripwire: bumping the YAML
+        without a CHANGELOG entry + ADR should fail here first."""
         data = render_port_rules.load_yaml()
-        self.assertEqual(data["rules_version"], "0.2.0",
-                         f"Expected rules_version 0.2.0 (Phase 2.5), got {data['rules_version']!r}")
+        self.assertEqual(data["rules_version"], "0.3.0",
+                         f"Expected rules_version 0.3.0 (F6 / ADR-010), got {data['rules_version']!r}")
 
     def test_render_rejects_unknown_yaml_keys(self):
         """Wave 11b B4 C4: render() must raise ValueError when the YAML grows

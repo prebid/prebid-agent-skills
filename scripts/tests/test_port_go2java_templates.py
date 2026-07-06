@@ -123,12 +123,27 @@ class TestBidderConfigYamlJ2(unittest.TestCase):
         self.assertEqual(meta["app-media-types"], ["banner"])
         self.assertNotIn("dooh-media-types", meta)  # null in ctx → omitted
 
-    def test_modifying_vast_xml_omitted_when_false(self):
-        """Java convention: emit `modifying-vast-xml-allowed: true` only when
-        the bidder modifies VAST XML; omit the key entirely when false (the
-        default). Verified against upstream kobler bidder-config: no such key."""
+    def test_modifying_vast_xml_explicit_false_when_false(self):
+        """Rule 49 (F-new-105): the Java adapter-default is TRUE
+        (application.yaml `adapter-defaults` + BidderConfigurationProperties
+        .init() defaultIfNull back-fill), so a source-effective-false value
+        MUST be declared explicitly — omitting the key silently flips
+        VastModifier behavior on every video bid. The pre-0.3.0 template had
+        this arm inverted (emit-only-when-true). Master sample: rtbstack
+        (prebid-server-java PR #4552 ships explicit false)."""
         rendered = _render("bidder-config.yaml.j2", _kobler_ctx())
-        self.assertNotIn("modifying-vast-xml-allowed", rendered)
+        parsed = yaml.safe_load(rendered)
+        self.assertIs(parsed["adapters"]["kobler"]["modifying-vast-xml-allowed"], False)
+
+    def test_modifying_vast_xml_explicit_true_when_true(self):
+        """Rule 49: the key is emitted explicitly in BOTH polarities
+        (self-documenting; aax/vungle live upstream precedent for explicit
+        true)."""
+        ctx = _kobler_ctx()
+        ctx["modifying_vast_xml"] = True
+        rendered = _render("bidder-config.yaml.j2", ctx)
+        parsed = yaml.safe_load(rendered)
+        self.assertIs(parsed["adapters"]["kobler"]["modifying-vast-xml-allowed"], True)
 
     def test_aliases_block_emitted_when_present(self):
         ctx = _kobler_ctx()
@@ -641,6 +656,80 @@ class TestBidderJ2(unittest.TestCase):
         self.assertIn("switch (mType)", rendered)
         self.assertIn("case 2 -> BidType.video;", rendered)
         self.assertIn("case 4 -> BidType.xNative;", rendered)
+
+    def test_grouped_by_key_batching_emits_linkedhashmap_grouping(self):
+        """Rule 47 (F-new-107): grouped-by-key emits a LinkedHashMap keyed on
+        the imp.ext.bidder field, preserving FIRST-SEEN group order (the Go
+        map + order-slice idiom), with per-imp AND per-group badInput error
+        isolation. Master sample: rtbstack route grouping."""
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "grouped-by-key"
+        ctx["batching_per_key"] = {"key_field": "route"}
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("import java.util.LinkedHashMap;", rendered)
+        self.assertIn("import java.util.Map;", rendered)
+        self.assertIn("final Map<String, List<Imp>> impsByGroup = new LinkedHashMap<>();", rendered)
+        self.assertIn("impsByGroup.computeIfAbsent(extImp.getRoute(), key -> new ArrayList<>())", rendered)
+        self.assertIn("for (Map.Entry<String, List<Imp>> groupEntry : impsByGroup.entrySet())", rendered)
+        # Per-imp loop AND per-group loop each isolate failures with badInput.
+        self.assertEqual(rendered.count("errors.add(BidderError.badInput(e.getMessage()));"), 2)
+        # The kind is template-mapped now — must not fall through to the TODO throw.
+        self.assertNotIn("UnsupportedOperationException", rendered)
+
+    def test_grouped_by_key_camel_case_key_field_getter(self):
+        """key_field is camelCase-preserving: 'accountId' → getAccountId().
+        (A |capitalize filter would emit getAccountid — regression pin.)"""
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "grouped-by-key"
+        ctx["batching_per_key"] = {"key_field": "accountId"}
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("extImp.getAccountId()", rendered)
+
+    def test_linkedhashmap_not_imported_for_other_batching_kinds(self):
+        """The grouped-by-key imports are conditional — checkstyle
+        UnusedImports would flag them on any other batching kind."""
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertNotIn("LinkedHashMap", rendered)
+        self.assertNotIn("import java.util.Map;", rendered)
+
+    def test_per_bid_skip_mtype_accumulates_and_continues(self):
+        """F-new-108 (rtbstack master sample): per-bid-skip tolerance emits
+        the accumulate-and-continue shape — an unresolved mtype adds
+        badServerResponse and yields null; the extractBids stream filters the
+        null so sibling bids in the same response survive (mirrors the Go
+        `errs = append(...); continue` loop)."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        ctx["bid_type_error_tolerance"] = "per-bid-skip"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("case null, default ->", rendered)
+        self.assertIn("errors.add(BidderError.badServerResponse(", rendered)
+        self.assertIn("yield null;", rendered)
+        self.assertIn("return Result.of(extractBids(bidResponse, errors), errors);", rendered)
+        self.assertIn("private BidType resolveBidType(Bid bid, List<BidderError> errors)", rendered)
+        self.assertIn("private BidderBid makeBidderBid(Bid bid, String currency, List<BidderError> errors)", rendered)
+        # The abort-all throw-on-miss shape must not co-emit.
+        self.assertNotIn('"Missing bid.mtype for bid with impId: "', rendered)
+
+    def test_per_bid_skip_requires_by_bid_mtype(self):
+        """Tolerance guard: per-bid-skip with a non-mtype resolution is a
+        context-assembly bug — only by-bid-mtype has the null-means-skip
+        contract. Render must fail loudly."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "imp-mediatype-introspection"
+        ctx["bid_type_error_tolerance"] = "per-bid-skip"
+        with self.assertRaises(Exception):
+            _render("bidder.java.j2", ctx)
+
+    def test_abort_all_mtype_default_unchanged(self):
+        """Regression pin: without the tolerance flag, by-bid-mtype keeps the
+        abort-all PreBidException shape (the Teal #4765 baseline)."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn('"Missing bid.mtype for bid with impId: "', rendered)
+        self.assertNotIn("case null, default ->", rendered)
+        self.assertNotIn("makeBidderBid", rendered)
 
     def test_multiformat_imp_introspection_fails_loudly(self):
         """A multiformat adapter cannot resolve bid type by imp introspection —

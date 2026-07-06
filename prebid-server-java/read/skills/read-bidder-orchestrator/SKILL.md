@@ -171,7 +171,7 @@ Goldens at `read/test-fixtures/*.golden.spec.yaml` (Java side) demonstrate the c
 
 ## Cross-skill integration
 
-The output spec feeds the future `port-java2go/` skill (Phase D; will live under `prebid-server-go/port-java2go/` since it produces Go artifacts). That skill will consume a Java-source spec and emit Go artifacts using the 46 port-translation rules at `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`. Specifically:
+The output spec feeds the future `port-java2go/` skill (Phase D; will live under `prebid-server-go/port-java2go/` since it produces Go artifacts). That skill will consume a Java-source spec and emit Go artifacts using the 49 port-translation rules at `../../../../prebid-server-go/read/skills/shared/port-translation-rules.md`. Specifically:
 
 - `port-java2go` reverses Rules 33 (alias inversion), 34 (YAML unification), 36 (4-file split → httpCalls), 37 (per-alias IT class deletion — Go aliases need no test files).
 - `port-java2go` consumes `cross_language.java_specific_concerns[]` to flag fidelity issues that don't translate cleanly to Go.

@@ -44,13 +44,11 @@ package org.prebid.server.spring.config.bidder;
 
 ## 4. Import order (checkstyle ImportOrder: strict)
 
-Three groups separated by exactly one blank line. Within each group, imports are alphabetically sorted (case-sensitive ASCII).
+> **Corrected 2026-07-06 (F-new-111).** Earlier versions of this doc showed the groups INVERTED (`java.*` first). The live convention — enforced by upstream checkstyle and matched by every emitted template and merged adapter (e.g., `RtbStackBidder`) — puts `java.*`/`javax.*` LAST.
+
+Groups separated by exactly one blank line. Within each group, imports are alphabetically sorted (case-sensitive ASCII).
 
 ```java
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.iab.openrtb.request.BidRequest;
 import com.iab.openrtb.response.BidResponse;
@@ -59,12 +57,16 @@ import lombok.Builder;
 import lombok.Value;
 import org.prebid.server.bidder.Bidder;
 import org.prebid.server.bidder.model.BidderBid;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 ```
 
-Group 1: `java.*`, `javax.*` (only; no third-party packages mixed in).
-Group 2: third-party + project-own packages (`com.*`, `io.*`, `lombok.*`, `org.*`).
+Group 1: third-party + project-own packages (`com.*`, `io.*`, `lombok.*`, `org.*`).
+Group 2: `java.*`, `javax.*` LAST (only; no third-party packages mixed in).
 
-Static imports (when used) form a third group below the regular imports, separated by one blank line. Most adapters do not use static imports.
+Static imports (when used) form a further group below the regular imports, separated by one blank line. Most main-source adapters do not use static imports; test classes routinely do (`org.assertj.core.api.Assertions.*`, fixture helpers).
 
 **Banned**: `io.vertx.core.json.Json` (per upstream checkstyle ban-list; use `org.prebid.server.json.JacksonMapper` instead). Templates MUST NOT emit this import.
 
@@ -87,6 +89,14 @@ Hard cap. Long lines wrap at:
 - Generic type parameters: break before the `<`
 - Constructor parameter lists: break after the `(`, one parameter per line, closing `)` on its own line aligned with the opening line
 - String concatenation: prefer `String.format(...)` over `+` chains for >2 components
+
+## 6.1 Idiom currency when hand-filling from siblings (F-new-114)
+
+Operator-fill steps naturally copy shapes from sibling adapters — but siblings age. Prefer the CURRENT idiom over an older sibling's:
+
+- `stream...toList()` over `collect(Collectors.toList())` (zentotem-era; also drops the `Collectors` import) — applies when the list is never mutated afterwards, which is every emitted `extractBids`.
+- Static-import `org.assertj.core.api.Assertions.tuple` in tests over a local `tuple(...)` shim; plain `import java.util.function.UnaryOperator` over fully-qualified references.
+- Reference set for "current": the most recently merged adapters (kueezrtb, metax, limelightDigital at the 2026-07 pin), not the adapter that happens to share your behavioral pattern.
 
 ## 7. Lombok annotation order
 
@@ -118,18 +128,18 @@ The Spring-config class lives at `src/main/java/org/prebid/server/spring/config/
 
 Templates emit the form that matches the source spec's `cross_language.java_artifacts.config_class` field (when present, populated by Phase E read skills).
 
-## 10. test-application.properties append shape
+## 10. test-application.properties insertion shape
 
-The IT-test resource file at `src/test/resources/org/prebid/server/it/test-application.properties` carries one section per bidder. The port skill APPENDS exactly two lines (per upstream convention):
+The IT-test resource file at `src/test/resources/org/prebid/server/it/test-application.properties` carries two lines per bidder. The port skill INSERTS exactly two lines (per upstream convention):
 
 ```properties
 adapters.{bidder}.enabled=true
 adapters.{bidder}.endpoint=http://localhost:8090/{bidder}-exchange
 ```
 
-Where `{bidder}` is the lowercase Java YAML name. The append happens at the END of the file (no alphabetical sort on this file — entries land in the order they were added).
+Where `{bidder}` is the lowercase Java YAML name. The insertion point is the END of the contiguous `adapters.*` cluster — NOT the end of the file (corrected 2026-07-06, F-new-110: the file's tail carries non-adapter settings like `ccpa.enforce`, so an EOF append lands the entry outside the cluster). No alphabetical sort within the cluster — entries land in the order they were added.
 
-DO NOT rewrite the file or move existing entries; that conflicts with concurrent ports.
+DO NOT rewrite the file or move existing entries; that conflicts with concurrent ports. See [`registration-rules.md`](registration-rules.md) for the full insertion rule.
 
 ## 11. Bidder-config YAML emission rules
 
@@ -139,21 +149,23 @@ DO NOT rewrite the file or move existing entries; that conflicts with concurrent
 adapters:
   {bidder}:
     endpoint: <URL>
+    ortb-version: "2.6"                # when the source speaks ≠ the Java adapter-default 2.5
+    modifying-vast-xml-allowed: false  # Rule 49: ALWAYS declared explicitly (source-effective value)
     geoscope: [<region>, ...]
     meta-info:
       maintainer-email: <email>
-      gvl-vendor-id: <int>
+      vendor-id: <int>
       site-media-types: [banner, video, native]
       app-media-types: [banner, video, native]
-    yaml-extra-fields:
-      key: value
     aliases:
       {alias}: ~ # or per-alias overrides per Rule 33 alias-graph-invert
-    user-sync:
+    usersync:
       ...
 ```
 
 **Field-name convention**: kebab-case (NOT camelCase). The Go-side equivalent uses camelCase. The template MUST emit kebab-case regardless of what the source spec recorded. (Source of truth: `bidder_info.yaml_field_name_quirks[]` is informational, NOT the canonical naming for the target language.)
+
+> **Corrected 2026-07-06 (F-new-112).** Earlier versions of this block showed `gvl-vendor-id:` and `user-sync:` — both are WRONG against the live binding and would be silently ignored at startup (the silent-binding-typo class the config review skill exists to catch). The live keys, verified across the upstream corpus (164 files carry `usersync:`, zero carry `user-sync:`; every meta-info block carries `vendor-id:`), are **`vendor-id`** (under `meta-info`) and **`usersync`** (one word). The `modifying-vast-xml-allowed` line follows Rule 49's effective-value contract — see `port-translation-rules.md` Rule 49.
 
 ## 12. IT-fixture pair shape (test-resources)
 

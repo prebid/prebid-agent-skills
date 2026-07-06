@@ -17,6 +17,103 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 1.3.0] · [taxonomy_version 1.1.0] · [port_translation_rules_version 0.3.0] · [port_report_version 0.2.0] — 2026-07-06 (F6: port-go2java SKILL 0.5.0 → 1.0.0 PRODUCTION PROMOTION — rtbstack green-field canary)
+
+**port-go2java SKILL bumped 0.5.0 → 1.0.0**, completing the symmetric
+promotion (port-java2go reached 1.0.0 on 2026-05-12 below) — **both port
+directions now ship production-promoted**. The promotion evidence is the
+**rtbstack green-field validation canary** (run-id `2026-07-06T1908Z-79b6`,
+the D3.8-canary-8 analog the 0.5.0 status block required): an adapter
+outside the MVP corpus, ported read → port → 6-reviewer gauntlet →
+upstream submission as `prebid/prebid-server-java#4552` ("Port RTBStack:
+New Adapter", closes #4497; source Go PR #4685). Gates 2+3 cleared
+green-field (unit 27/27 first-run at emission, 29/29 post-review; Jacoco
+100% line on the emitted bidder; suite 8,595/8,595; IT 1/1; checkstyle 0
+across the reactor). Gauntlet: 25 findings, 0 FAIL, every finding
+adversarially verified. Trace:
+[`docs/runs/f6-rtbstack-greenfield-canary-2026-07-06.md`](docs/runs/f6-rtbstack-greenfield-canary-2026-07-06.md);
+decision record: ADR-010. Findings F-new-105 … F-new-114.
+
+### Added
+
+- **Rule 47 — Grouped-by-key imp batching** (Multi-imp grouping section):
+  Go map + first-seen order slice ↔ Java `LinkedHashMap`, with two-level
+  (per-imp / per-group) badInput isolation. Master sample: rtbstack route
+  grouping. Template: new `bidder.java.j2` `grouped-by-key` arm driven by
+  `ctx.batching_per_key={key_field}` (schema name symmetric to
+  port-java2go's F2 field) — F-new-107.
+- **Rule 48 — Param-derived endpoint macros** (Endpoint resolution
+  section): all endpoint macros filled by parsing ONE publisher-supplied
+  param (rtbstack route URL: hostname-label region vs `{us, eu, sg}`
+  allow-list + required query params), distinct from Rule 11 (direct field
+  substitution) and Rule 14 (request geo context). Deliberately
+  operator-fill (`unresolved_translations[]: novel-pattern`); the rule's
+  verbatim worked example is the porting contract — F-new-109.
+- **Rule 49 — Opposite-framework-default config keys (effective-value
+  emission)**: MUST declare a bidder-config key explicitly when
+  source-EFFECTIVE value ≠ target adapter-default (canonical:
+  `modifying-vast-xml-allowed` — Go absent-key false vs Java
+  adapter-defaults true). Spec-authoring corollary in SKILL Steps 4/6
+  (effective-value carry-over + re-derivation from the emitted artifact
+  before the R5 compare) — F-new-105/F-new-106. Live-corpus evidence:
+  adkernelAdn/adverxo/thetradedesk pairs divergent upstream today, all
+  passing R5 spec-strict.
+- **Taxonomy 1.0.0 → 1.1.0 (MINOR)**: new `param-derived-endpoint-macros`
+  value on `code.make_requests.endpoint_resolution.kind` (9 kinds) + new
+  quirk-registry taxon of the same name (canonical: rtbstack). No schema
+  bump — the schema's `endpoint_resolution` object is open.
+- **`bidder.java.j2` per-bid-skip mtype tolerance**
+  (`ctx.bid_type_error_tolerance ∈ {abort-all, per-bid-skip}`,
+  render-guarded to `by-bid-mtype`): the rtbstack/zentotem
+  accumulate-and-continue shape (`case null, default -> { errors.add(…);
+  yield null; }` + null-filter) alongside the Teal-baseline abort-all
+  throw — F-new-108. 8 new render tests across both template arms + the
+  Rule 49 polarity pair (template suite 80/80 green).
+
+### Fixed
+
+- **F-new-105 (HIGH)**: `bidder-config.yaml.j2` emitted
+  `modifying-vast-xml-allowed` ONLY when true — inverted against Java's
+  adapter-default; the behavioral case (Go-effective false) emitted
+  nothing. Now always-explicit in both polarities (aax/vungle precedent
+  for explicit true; apacdex/bliink/bmtm/generic + rtbstack for explicit
+  false).
+- **F-new-62 (doc)**: execution-plan-phase-d.md §183 Gate 5 referenced
+  schema files that don't exist upstream — corrected to runtime
+  validation via `BidderParamValidator` + Spring config binding.
+- **Doc-vs-live corrections** (all caught by the gauntlet against the
+  live repo): properties insertion is at the END of the `adapters.*`
+  cluster, NOT end-of-file (F-new-110 — registration-rules.md,
+  java-artifact-shapes.md §10, SKILL Step-5); import groups put
+  `java.*`/`javax.*` LAST, not first (F-new-111 — java-artifact-shapes.md
+  §4); bidder-config keys are `vendor-id` and `usersync`, not
+  `gvl-vendor-id`/`user-sync` (F-new-112 — §11); SKILL Step-4
+  `port_lineage` block listed two keys the closed schema rejects
+  (F-new-113).
+- **canary-runbook.md**: two process additions — never pipe gate runs
+  (§10 anti-pattern; exit-code masking + diagnostics loss, bit 3× on this
+  canary) and the teammate-reviewer delivery protocol (§7; findings must
+  be messaged back to the orchestrator, not printed).
+
+### Side effects
+
+- `prebid-server-java/port-go2java/SKILL.md` frontmatter `0.5.0` →
+  `1.0.0`; status block rewritten to "v1.0.0 — PRODUCTION-PROMOTED" with
+  the full promotion ledger; rule-count references 46 → 49; rules-version
+  pin 0.2.0 → 0.3.0; Step-3 prose for Rules 47/48/49 + tolerance variant;
+  new java-artifact-shapes.md §6.1 (sibling idiom currency, F-new-114).
+- `port-report.schema.json` unchanged at 0.2.0
+  (`port_translation_rules_version` is pattern-validated, `rule_id` has
+  no upper bound — reports citing rules 47-49 at 0.3.0 validate as-is).
+- Deferred follow-up (tracked in ROADMAP Phase E + ADR-010): reader-side
+  effective-value emission for adapter-default-backed `bidder_info`
+  fields + pair-corpus re-audit; goldens, dual-spec assertions, and
+  `r5_check.py` intentionally untouched here.
+
+References: ADR-010; `docs/runs/f6-rtbstack-greenfield-canary-2026-07-06.md`.
+
+---
+
 ## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-12 (F2: port-java2go SKILL 0.5.0 → 1.0.0 PRODUCTION PROMOTION)
 
 **port-java2go SKILL bumped 0.5.0 → 1.0.0**, the production-promotion
