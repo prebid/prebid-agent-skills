@@ -32,7 +32,10 @@ green-field (unit 27/27 first-run at emission, 29/29 post-review; Jacoco
 across the reactor). Gauntlet: 25 findings, 0 FAIL, every finding
 adversarially verified. Trace:
 [`docs/runs/f6-rtbstack-greenfield-canary-2026-07-06.md`](docs/runs/f6-rtbstack-greenfield-canary-2026-07-06.md);
-decision record: ADR-010. Findings F-new-105 … F-new-114.
+decision record: ADR-010. Findings F-new-105 … F-new-115 (F-new-115 —
+`coverage-report.py --check` environment-sensitivity via the gitignored
+`.tmp` port-report glob — was surfaced by this very PR's first CI run and
+fixed in it: transient reports no longer feed the committed report).
 
 ### Added
 

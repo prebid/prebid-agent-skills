@@ -385,8 +385,14 @@ PORT_REPORT_GLOB_PATHS = (
     # Persisted output (operator-controlled; gitignored by default).
     "prebid-server-go/port-java2go/output/*/port-report.json",
     "prebid-server-java/port-go2java/output/*/port-report.json",
-    # Transient run-scoped (gitignored; only present mid-Teal-flow).
-    ".tmp/full-loop/*/port-report.json",
+    # NOTE (F-new-115, F6): the transient run-scoped glob
+    # ".tmp/full-loop/*/port-report.json" was REMOVED from default discovery.
+    # `--check` compares the committed markdown against a regeneration, so any
+    # input that exists only on one machine makes the check environment-
+    # sensitive: an operator mid-Teal-flow either fails the check locally or
+    # bakes transient counts into the commit, which then fails on CI (exactly
+    # what happened on the F6 reflection PR's first CI run). The committed
+    # report must be a function of committed state only.
 )
 
 

@@ -41,7 +41,7 @@ Six parallel, independent reviewers: three skill-driven (bidder-class / bidder-c
 | INFO rejected with rationale | 2 | params-JSON trailing newline (2 reviewers independently) — Rule 38 byte-fidelity wins; sha `eb49518f…` is the contract |
 | INFO corroboration / framework-validated / pre-documented | 13 | incl. R1 independently converging on exactly the two pre-declared deltas (encodeUrl, mtype error-message wording) — no undocumented divergence found |
 
-## 4. F-new findings catalogued (F-new-105 … F-new-114)
+## 4. F-new findings catalogued (F-new-105 … F-new-115)
 
 | ID | Description | Severity | Status |
 |----|-------------|----------|--------|
@@ -55,6 +55,7 @@ Six parallel, independent reviewers: three skill-driven (bidder-class / bidder-c
 | F-new-112 | java-artifact-shapes.md §11 showed `gvl-vendor-id:` and `user-sync:` — both silently-ignored keys against the live binding (the silent-binding-typo class). Live: `vendor-id` (every meta-info block) and `usersync` (164 files, zero `user-sync`). | LOW | **FIXED** — §11 corrected + Rule-49 line added to the example |
 | F-new-113 | SKILL Step-4 `port_lineage` doc block listed `port_translation_rules_version` + `port_skill_version` — the schema's `$defs/CrossLanguage.port_lineage` is closed (`additionalProperties: false`) and rejects both (hit live during the canary; keys dropped to pass Step-4 validation) | LOW | **FIXED** — doc block matches the 5 schema keys; note points to the port-report layer |
 | F-new-114 | Sibling-idiom drift: hand-filling from zentotem (the behavioral sibling) imported zentotem-era idioms (`Collectors.toList()`, local `tuple()` shim, fully-qualified `UnaryOperator`) that the gauntlet then modernized | LOW | **FIXED** — java-artifact-shapes.md §6.1 "idiom currency" guidance (reference set = most recently merged adapters, not the behavioral sibling) |
+| F-new-115 | `coverage-report.py --check` was environment-sensitive: default discovery included the gitignored `.tmp/full-loop/*/port-report.json` glob, so an operator mid-Teal-flow either fails the check locally or bakes transient counts into the committed report, which then fails on CI. Surfaced live by this reflection PR's own first `validate` run (drift in 10s). | MEDIUM | **FIXED** — transient glob removed from default discovery; the committed report is a function of committed state only (persisted `output/` globs kept — operator-explicit) |
 
 **Process lessons (runbook, not F-new-numbered):**
 - **Never pipe gate runs** — `mvn | tail/grep` masked exit codes and destroyed diagnostics three separate times (standalone `checkstyle:check` sweeping generated protobuf sources with hidden status; an IT failure reported as exit 0; a WireMock near-miss diff truncated away). Canonical Java gate: `mvn -B package --file extra/pom.xml` (checkstyle binds to validate in `extra/pom.xml`); verify from surefire XML / `checkstyle-result.xml`. → canary-runbook §10 anti-pattern.
