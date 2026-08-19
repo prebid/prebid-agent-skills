@@ -1,8 +1,12 @@
 name: upstream-sync
 
 # Phase 4.1 drift detection. Runs Mondays at 09:00 UTC against upstream
-# `prebid/prebid-server` and `prebid/prebid-server-java` master HEADs and
-# uploads the drift report as an artifact.
+# `prebid/prebid-server` and `prebid/prebid-server-java` master HEADs.
+#
+# A run that finds drift files or updates ONE tracking issue whose body
+# carries the current drift report, and closes that issue on the first
+# clean run. Without `issues: write` the job could only emit a
+# `::warning::` and an artifact, which nothing reads.
 #
 # Manual trigger via workflow_dispatch supports ad-hoc runs (e.g., after a
 # merge of a major upstream PR).
@@ -16,12 +20,27 @@ on:
         description: 'Upstream ref to compare against (default: master)'
         type: string
         default: 'master'
+      scan-tier:
+        description: 'core | source | full (default: full)'
+        type: choice
+        options: ['full', 'source', 'core']
+        default: 'full'
+
+permissions:
+  contents: read
+
+env:
+  # The tracking issue is keyed on this exact title. Changing it orphans the
+  # existing issue and the next drifting run opens a second one.
+  TRACKING_TITLE: 'Upstream drift: pinned goldens need review'
+  REPORT_MD: scripts/output/drift-report.md
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write            # file/update/close the single drift tracking issue
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -36,17 +55,22 @@ jobs:
 
       - name: Run sync-from-upstream
         id: sync
+        env:
+          # Lifts the api.github.com rate limit for the one recursive tree
+          # call per upstream repo that makes presence checks free.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
           python3 scripts/sync-from-upstream.py \
             --source-mode=github-raw \
+            --scan-tier=${{ github.event.inputs.scan-tier || 'full' }} \
             --ref=${{ github.event.inputs.ref || 'master' }}
           EXIT=$?
           set -e
-          # Exit 0 = clean; 1 = fail (real drift requiring update); 2 = warn-only.
-          # Always upload the report; only block the workflow on EXIT=1.
+          # 0 = clean; 1 = fail (real drift); 2 = warn-only; 3 = instrument
+          # failure (empty scan set / unusable source). This step never fails;
+          # the exit code is enforced after the issue has been filed.
           echo "exit=$EXIT" >> $GITHUB_OUTPUT
-          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
 
       - name: Upload drift-report artifact
         if: always()
@@ -60,10 +84,90 @@ jobs:
       - name: Surface drift summary in workflow output
         if: always()
         run: |
-          if [ -f scripts/output/drift-report.md ]; then
+          if [ -f "$REPORT_MD" ]; then
             echo "## Drift report summary" >> $GITHUB_STEP_SUMMARY
-            cat scripts/output/drift-report.md >> $GITHUB_STEP_SUMMARY
+            cat "$REPORT_MD" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ steps.sync.outputs.exit }}" = "1" ]; then
-            echo "::warning::Upstream drift detected — review scripts/output/drift-report.md and update goldens."
+
+      - name: File or update the drift tracking issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXIT: ${{ steps.sync.outputs.exit }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          # Locate the tracking issue by exact title over open AND closed
+          # issues. Deliberately not `gh issue list --search`: the search
+          # index lags issue creation by minutes, which is long enough for a
+          # second run to open a duplicate.
+          NUMBER="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" \
+            --jq ".[] | select(.pull_request == null) | select(.title == \"${TRACKING_TITLE}\") | .number" \
+            | head -n 1 || true)"
+          STATE=""
+          if [ -n "$NUMBER" ]; then
+            STATE="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${NUMBER}" --jq .state)"
           fi
+          echo "tracking issue: number='${NUMBER:-none}' state='${STATE:-n/a}' sync-exit='${EXIT}'"
+
+          if [ "$EXIT" = "0" ]; then
+            if [ -n "$NUMBER" ] && [ "$STATE" = "open" ]; then
+              gh issue comment "$NUMBER" --body \
+                "Clean run — the pinned goldens match upstream on the scanned surface. Closing. [Run](${RUN_URL})"
+              gh issue close "$NUMBER"
+            fi
+            exit 0
+          fi
+
+          BODY=body.md
+          {
+            echo "<!-- upstream-drift-tracker: this issue is rewritten in place by .github/workflows/upstream-sync.yml -->"
+            echo
+            if [ "$EXIT" = "3" ]; then
+              echo "**The last run could not scan.** Exit 3 means an empty scan set or an unusable upstream source — it is not an all-clear."
+            else
+              echo "Upstream has moved away from the pinned goldens. The report below is regenerated on every run; the issue closes automatically on the first clean run."
+            fi
+            echo
+            echo "- Last run: [\`${GITHUB_RUN_ID}\`](${RUN_URL}) (exit ${EXIT})"
+            echo "- Full \`drift-report.json\` is attached to that run as the \`drift-report\` artifact."
+            echo
+            echo "---"
+            echo
+            if [ -f "$REPORT_MD" ]; then
+              head -c 55000 "$REPORT_MD"
+              if [ "$(wc -c < "$REPORT_MD")" -gt 55000 ]; then
+                echo
+                echo "_… truncated; see the \`drift-report\` artifact for the full report._"
+              fi
+            else
+              echo "_No drift report was produced — the script did not reach its write step._"
+            fi
+          } > "$BODY"
+
+          if [ -z "$NUMBER" ]; then
+            gh issue create --title "$TRACKING_TITLE" --body-file "$BODY"
+          else
+            gh issue edit "$NUMBER" --body-file "$BODY"
+            if [ "$STATE" != "open" ]; then
+              gh issue reopen "$NUMBER"
+            fi
+            gh issue comment "$NUMBER" --body \
+              "Drift still present as of [run \`${GITHUB_RUN_ID}\`](${RUN_URL}) (exit ${EXIT}). Issue body updated with the current report."
+          fi
+
+      - name: Enforce sync exit code
+        if: always()
+        run: |
+          EXIT="${{ steps.sync.outputs.exit }}"
+          case "$EXIT" in
+            0|2) exit 0 ;;
+            3)
+              echo "::error::sync-from-upstream could not scan (exit 3). A zero-input run is not a clean verdict."
+              exit 1 ;;
+            *)
+              echo "::error::Upstream drift detected — see the tracking issue and the drift-report artifact."
+              exit 1 ;;
+          esac

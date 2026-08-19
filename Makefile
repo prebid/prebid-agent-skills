@@ -14,7 +14,7 @@ help:
 	@echo "  audit-goldens      Manual upstream-signature audit. Requires \`gh auth login\` (calls gh api). Run before submitting fixture-touching PRs. NOT part of \`make ci\` — see test-fixtures READMEs."
 	@echo "  audit-pr URL=…     Phase 4.2 PR audit (requires CLAUDE_API_KEY for novelty classification)"
 	@echo "  coverage           Phase 4.3 per-rule, per-empire coverage report (markdown)"
-	@echo "  sync               Phase 4.1 drift detection vs upstream prebid-server / prebid-server-java"
+	@echo "  sync [TIER=full]   Drift detection vs upstream prebid-server / prebid-server-java (default tier: source)"
 	@echo "  render-taxonomy    Phase 2.4 regenerate behavior-taxonomy.md from .yaml source"
 	@echo "  render-port-rules  Phase 2.5 regenerate port-translation-rules.md from .yaml source"
 	@echo "  lint-port-rules    Phase 2.6 mechanizable port-rule lints (Rules 5/9/33/36/38/44/46)"
@@ -61,10 +61,15 @@ audit-pr:
 coverage:
 	python3 scripts/coverage-report.py
 
+# Local convenience runs the cheap tier: the two per-bidder config artifacts,
+# ~84 upstream paths. The weekly workflow runs --scan-tier=full (~610 paths,
+# every artifact the goldens actually pin) because it has a token, a tree cache
+# and no one waiting on it. Override here with TIER=full when you want parity.
 sync:
-	python3 scripts/sync-from-upstream.py
+	python3 scripts/sync-from-upstream.py --scan-tier=$(if $(TIER),$(TIER),source)
 	@echo ""
 	@echo "Drift report: scripts/output/drift-report.{json,md}"
+	@echo "Tier: $(if $(TIER),$(TIER),source)  (make sync TIER=full for the weekly job's surface)"
 
 render-taxonomy:
 	python3 scripts/render-taxonomy.py
