@@ -46,7 +46,12 @@ For framework-wide concerns (helper functions, marshaling safety, error types, e
 
 ### Naming
 - Package: `openrtb_ext`
-- **Canonical type name: `ExtImp{Bidder}`** (e.g., `ExtImpAax`, `ExtImpAdkernel`, `ExtImp33across`). Dominant pattern in current master: ~160 of ~235 imp ext structs use `ExtImp{Bidder}`. ~75 still use the legacy `ImpExt{Bidder}` form (e.g., `ImpExtMsft`).
+- **Canonical type name: `ExtImp{Bidder}`** (e.g., `ExtImpAax`, `ExtImpAdkernel`, `ExtImp33across`) — the majority form in current master; the legacy `ImpExt{Bidder}` form (e.g., `ImpExtMsft`) is a substantial minority. Regenerate the split rather than quoting a stale count:
+  ```bash
+  grep -rhoP 'type ExtImp\w+' openrtb_ext/imp_*.go | wc -l   # 170 at @0ba3523
+  grep -rhoP 'type ImpExt\w+' openrtb_ext/imp_*.go | wc -l   #  78 at @0ba3523
+  ls openrtb_ext/imp_*.go | wc -l                             # 259 at @0ba3523
+  ```
 - The legacy `ImpExt{Bidder}` pattern exists in some older files but is NOT recommended for new adapters. When reviewing a NEW adapter that uses `ImpExt{Bidder}`, flag as INFO — recommend converting for consistency. When reviewing modifications to existing files, do not require renames.
 - Bidder name in type is CamelCase: `ExtImpAax`, `ExtImpAJA`, `ExtImp33across`. Helper types (e.g., `ExtImpGumGumBanner`) are acceptable when they support the main imp ext struct.
 - Go field-name capitalization fixes (e.g., `ApiKey` → `APIKey` per Go acronym conventions) are non-functional if `json:"..."` tags are unchanged. Accept without follow-up.
@@ -88,7 +93,7 @@ type ExtImpAJA struct {
 ## JSON Schema draft-04 Rules
 
 ### Required Elements
-- `"$schema": "http://json-schema.org/draft-04/schema#"` — must be draft-04 (not draft-07 or later)
+- `"$schema": "http://json-schema.org/draft-04/schema#"` — house style, **not loader-enforced**. `NewBidderParamsValidator` (`openrtb_ext/bidders.go:783-830`) delegates to `gojsonschema` without pinning a draft; the draft comes from each file's own `$schema`. 271 of 272 files use draft-04 at @0ba3523; `ogury.json` uses `https://json-schema.org/draft/2020-12/schema` and loads fine. A different draft string is **WARN**, not FAIL. What *is* FAIL is using a post-draft-04 keyword under a draft-04 `$schema` — the constraint is then silently ignored.
 - `"title"` — descriptive title like `"{Bidder} Adapter Params"`
 - `"type": "object"` — top-level must be object
 - `"properties": {}` — must exist even if adapter has no params
@@ -136,7 +141,7 @@ type ExtImpAJA struct {
 ```
 
 ### Common Mistakes
-- Using draft-07 features (`if`/`then`/`else`, `const`, `contentEncoding`) — not supported
+- Using draft-07 features (`if`/`then`/`else`, `const`, `contentEncoding`) under a draft-04 `$schema` — the keyword is ignored, so the constraint silently does nothing
 - Missing `$schema` declaration
 - Using `additionalProperties: true` without reason (allows arbitrary fields)
 - Declaring `required` fields that are actually optional in the adapter code
@@ -211,18 +216,25 @@ var invalidParams = []string{ /* ... */ }
 
 ## Reserved OpenRTB Fields (Must NOT Be Bidder Params)
 
-These standard OpenRTB 2.x fields must not be duplicated as bidder-specific parameters. Publishers configure them through standard Prebid paths:
+These standard OpenRTB 2.x fields should not be duplicated as bidder-specific parameters. Publishers configure them through standard Prebid paths. **The table is split by whether upstream master actually holds the line** — a rule with 24 merged counterexamples cannot be a FAIL.
+
+**Hard exclusions — FAIL (zero upstream counterexamples at @0ba3523):**
 
 | Field | Standard Path | Why Not a Bidder Param |
 |-------|--------------|----------------------|
-| Bid floor | `imp.bidfloor` / `ext.prebid.floors` | PBS handles floor management |
-| Supply chain | `source.ext.schain` | Standard OpenRTB 2.5+ |
-| Video params | `imp.video.*` | Standard OpenRTB 2.x |
-| First party data | `imp.ext.data`, `site.ext.data`, `user.ext.data` | PBS first-party data paths |
-| GDPR consent | `regs.ext.gdpr`, `user.ext.consent` | Standard privacy path |
+| Supply chain | `source.ext.schain` | Standard OpenRTB 2.5+. `grep -l '"schain"' static/bidder-params/*.json` returns 0 files. |
+| GDPR consent | `regs.ext.gdpr`, `user.ext.consent` | Standard privacy path; duplicating it lets a publisher param contradict the real consent signal |
 | US Privacy | `regs.ext.us_privacy` | Standard privacy path |
-| COPPA | `regs.coppa` | Standard OpenRTB 2.x |
+| COPPA | `regs.coppa` | Standard OpenRTB 2.x; a per-bidder COPPA override is a compliance hazard |
 | GPP | `regs.gpp`, `regs.gpp_sid` | Standard OpenRTB 2.6 |
+
+**Soft exclusions — WARN (ASK), with upstream precedent:**
+
+| Field | Standard Path | Precedent |
+|-------|--------------|-----------|
+| Bid floor | `imp.bidfloor` / `ext.prebid.floors` | **24** `static/bidder-params/*.json` declare `bidfloor` or `bidFloor` at @0ba3523 (`grep -l '"bidfloor"\|"bidFloor"' static/bidder-params/*.json \| wc -l`). Ask why the standard floor path is insufficient; accept a bidder-specific reason. Do NOT block. |
+| Video params | `imp.video.*` | Standard OpenRTB 2.x — ask before blocking; some bidders carry genuinely non-OpenRTB video config |
+| First party data | `imp.ext.data`, `site.ext.data`, `user.ext.data` | PBS first-party data paths |
 | Referrer | `site.page`, `site.ref` | Standard OpenRTB 2.x |
 
 ### Reserved Extension Keys (in `imp.ext.prebid`):
@@ -274,27 +286,10 @@ This means:
 
 When both `openrtb_ext/imp_{bidder}.go` AND `adapters/{bidder}/{bidder}.go` (or related files like `adapters/{bidder}/models.go`) are in the same PR, cross-verify that JSON tag spellings match across files:
 
-- The `json:"..."` tags on `openrtb_ext.ExtImp{Bidder}` (the inbound publisher-controlled imp ext) must match what the adapter code expects to read from `bidderExt.Bidder`.
-- If the adapter has its OWN outgoing-payload struct (e.g., `adapters/msft/models.go` `impExtOutgoingAppnexus`), the JSON tag spellings must be intentional and consistent with what the upstream bidder server expects.
-- Mismatch examples surfaced in real production code (e.g., `pubclick` vs `pub_click` in PR #4592 Microsoft, caught post-merge during a Java port).
+Compare **within a direction, never across the two** — inbound and outbound are separate wire contracts:
 
-The `adapter-code-pr-review` skill emits the FAIL on mismatch; this skill emits an INFO referencing it (avoid duplicate findings).
+- **Inbound** (publisher → PBS): the `json:"..."` tags on `openrtb_ext.ExtImp{Bidder}` must match the property names in `static/bidder-params/{bidder}.json` and what the adapter reads from `bidderExt.Bidder`.
+- **Outbound** (PBS → bidder server): if the adapter has its OWN payload struct (e.g., `adapters/msft/models.go`), its tags must match what the upstream server expects, as pinned by the exemplary fixtures' `expectedRequest.body`.
+- **An inbound tag differing from an outbound tag is normal, not a defect.** In merged `msft`, `openrtb_ext/imp_msft.go:14` declares `json:"pubclick"` (matching `static/bidder-params/msft.json`) while `adapters/msft/models.go:30` emits `json:"pub_click,omitempty"`, and `adapters/msft/test/exemplary/all-params.json` asserts both. Do not flag this shape.
 
-## Pattern Catalog
-
-Patterns extracted from periodic review of the 89 reference adapter PRs (`prebid-server-go/references/new-bid-adapter-prs.md`). Stable schema; cap 8 entries per skill.
-
-### Schema
-
-```
-### Pattern P-{NN}: {short title}
-- Symptom in diff: {what the diff looks like}
-- Frequency observed: {N of total reference PRs}
-- Affected workflow: {Workflow link}
-- Severity: FAIL | WARN | INFO
-- Action: {what the skill does when it sees this}
-```
-
-### Entries
-
-(Populated by current refresh — see SKILL.md for the active rule list.)
+The `adapter-code-pr-review` skill owns the disposition; this skill emits an INFO referencing it (avoid duplicate findings).

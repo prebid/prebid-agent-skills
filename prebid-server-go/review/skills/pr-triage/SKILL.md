@@ -134,8 +134,9 @@ Fetch all 3 in parallel:
    - If the live `BidderInfo` struct has fields not in our index, record: `DRIFT: bidder-info field index — new field(s): {field_names}`
 
 2. **bidder-params drift**: `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server/master/openrtb_ext/bidders.go"`
-   - Verify `NewBidderParamsValidator` still uses `gojsonschema` with draft-04 schemas
-   - If the validation mechanism changed, record: `DRIFT: bidder-params validator mechanism changed`
+   - Verify two observable properties of `NewBidderParamsValidator` (`openrtb_ext/bidders.go:783-830`): (a) it still delegates to `gojsonschema` via `newReferenceLoader` + `newSchema` per file, and (b) the alias-schema copy loop still assigns each alias its parent's compiled schema and schema contents (`for alias, parent := range aliasBidderToParent`).
+   - **Do NOT assert a JSON Schema draft.** The validator pins none — each file's draft comes from its own `$schema`, which is why `static/bidder-params/ogury.json` can declare draft 2020-12 and load. A drift check written as "still uses draft-04" reports drift that does not exist and misses drift that does.
+   - If either observable property changed, record: `DRIFT: bidder-params validator mechanism changed — {gojsonschema_delegation | alias_schema_copy_loop}`
 
 3. **adapter-code drift**: `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server/master/adapters/adapterstest/test_json.go"` (note: the canonical file is now `test_json.go`, not the older `adapterstest.go`)
    - Diff the fetched content against the snapshot conventions described in `adapter-code-pr-review/references/adapter-code-index.md` (Supported test data directories section).
@@ -293,7 +294,7 @@ Based on the categorized files, determine the PR type. A PR may have a primary t
 6. **Bidder Rename / Refactor**
    - Trigger: Files are deleted from `adapters/{old_bidder}/` AND added to `adapters/{new_bidder}/` in the same PR; OR `static/bidder-info/{old_bidder}.yaml` deleted with `static/bidder-info/{new_bidder}.yaml` added; OR `openrtb_ext/bidders.go` shows a constant rename
    - Label: `bidder-rename`
-   - Effect: All affected files routed to their normal owner skills. pr-triage records `RENAME: {old} → {new}` in the manifest. Reviewer guidance: bidder renames are breaking changes typically deferred to the next major release (per PR #4456 progx → programmaticX, PR #4639 adoppler → elementaltv).
+   - Effect: All affected files routed to their normal owner skills. pr-triage records `RENAME: {old} → {new}` in the manifest. Reviewer guidance: bidder renames are breaking changes typically deferred to the next major release (per PR #4639 adoppler → elementaltv).
 
 7. **Framework-Only**
    - Trigger: All changed files are in `unowned:*` categories
@@ -322,9 +323,9 @@ Check for issues that fall between the cracks of individual skills. These are co
 
 If the PR type is `alias-only`:
 - For each new alias file, extract the `endpoint` value from the diff
-- If the endpoint contains template macros (e.g., `{{.AccountID}}`), cross-reference against the valid macro list from `macros.EndpointTemplateParams` (see [routing-rules.md](references/routing-rules.md) for the full 18-field list)
-  - Any `{{.XYZ}}` macro where `XYZ` is not a field in `EndpointTemplateParams` is invalid and will silently resolve to empty string at runtime
-- Record as: `CROSS-SKILL: Invalid endpoint macro "{{.XYZ}}" in alias {bidder} — will silently become empty string. Adapter-code skill does not activate for alias-only PRs but this macro validation is critical.`
+- If the endpoint contains template macros (e.g., `{{.AccountID}}`), cross-reference against the canonical `macros.EndpointTemplateParams` allow-list (see [routing-rules.md](references/routing-rules.md), which links the single source of truth)
+  - Any `{{.XYZ}}` macro where `XYZ` is not a field in `EndpointTemplateParams` aborts startup — it does NOT silently resolve to empty string. `config/bidderinfo.go:492-507` (`validateAdapterEndpoint`) runs `macros.ResolveMacros` → `text/template` Execute, which errors on an unknown struct field, so `config.New` refuses to boot and `TestBidderInfoFiles` fails in CI.
+- Record as: `CROSS-SKILL: Invalid endpoint macro "{{.XYZ}}" in alias {bidder} — fails endpoint validation at startup (config.New aborts; TestBidderInfoFiles fails). Adapter-code skill does not activate for alias-only PRs but this macro validation is critical.`
 
 **5b. Framework File Impact Assessment**
 
@@ -396,14 +397,15 @@ Action:
 - Record: `FRAMEWORK IMPACT: adapter test harness modified ({file}). Expect cascading impact on existing adapter test fixtures across many other adapters in the same PR.`
 - Cross-reference the drift output from Step 2.3 — if drift was already detected, the message becomes: `FRAMEWORK IMPACT: adapter test harness modified — {specific drift name from Step 2}`
 - Reference: PR #4592 Microsoft cascaded to 35+ adapter test directories. Detailed drift output (not generic "drift detected") helps concurrent-PR reviewers attribute test failures correctly.
-- ALSO search open PRs that touch any `adapters/*/{*test,test,test-extrainfo}/**.json` file and were last updated BEFORE this PR's `head_sha` was pushed. Record any matches as: `CONCURRENT-PR RISK: PR #{N} touches {bidder} test fixtures and predates this test_json.go change — likely broken by the cascade. Recommend the PR author rebase.` Reference: PR #4592 → Clydo cascade where bsardo had to manually flag the breakage in an issue comment.
+- ALSO search open PRs that touch any `adapters/*/{*test,test,test-extrainfo}/**.json` file and were last updated BEFORE this PR's `head_sha` was pushed. Record any matches as: `CONCURRENT-PR RISK: PR #{N} touches {bidder} test fixtures and predates this test_json.go change — likely broken by the cascade. Recommend the PR author rebase.` Reference: PR #4592 → Clydo cascade, where the breakage had to be flagged manually in an issue comment.
 
 **5i. Approval-to-Merge Stall Detection**
 
 Trigger: Reviewer feedback in `Step 1d` includes approving reviews older than 30 days from current date AND PR is still open.
 
 Action:
-- Record: `STALL: PR has approving review(s) older than {N} days but is not merged. Likely waiting on docs PR or queue attention. Reference: PR #4321 (Nativery), PR #4283 (Performist) — both stalled 100+ days post-approval.`
+- Record: `STALL: PR has approving review(s) older than {N} days but is not merged. Likely waiting on docs PR or queue attention. Reference: PR #4283 (Performist) — approved 2025-06-26, merged 2025-10-30, 126 days post-approval.`
+- Measure the gap from the **first approving review**, not from PR creation. A long wall-clock age with recent approval is ordinary review iteration, not a stall: PR #4321 (Nativery) ran four months from open to first approval but merged 12 days after it (approved 2025-09-10, merged 2025-09-22) — pre-approval time is not what this detector is for.
 - Severity: **INFO** (process not code)
 
 Produce a cross-skill concerns summary:
@@ -653,8 +655,8 @@ For framework-wide concerns (endpoint template macros canonical list, error type
 
 ## One-Alias-Per-PR Rule
 
-Reviewers (per `bsardo` PR #4214 and `pm-isha-bharti` PR #4215) prefer one alias per PR for clean changelog. EXCEPTION: `references/routing-rules.md#bulk-mode-exception-for-multi-adapter-alias-prs` documents when N aliases-of-same-parent in one PR is acceptable.
+Reviewers (per PR #4214 and PR #4215) prefer one alias per PR for clean changelog. EXCEPTION: `references/routing-rules.md#bulk-mode-exception-for-multi-adapter-alias-prs` documents when N aliases-of-same-parent in one PR is acceptable.
 
 When the trigger conditions for the exception are NOT met, pr-triage should record:
-- `BULK-PR: {N} aliases bundled for {N_parents} different parents — reviewer may request split per pm-isha-bharti's policy.`
+- `BULK-PR: {N} aliases bundled for {N_parents} different parents — reviewer may request a split per the one-alias-per-PR convention.`
 - Severity: **WARN** (process recommendation)

@@ -109,8 +109,7 @@ Files not matching any skill's activation patterns. Grouped by sub-category.
 | `macros/*.go` | Macro resolution system | Verify backward compatibility |
 | `usersync/*.go` | All bidders with userSync config | Verify cookie handling backward compatibility |
 | `config/config.go` | Global configuration loading | Verify bidder config auto-discovery still works |
-| `config/biddersinfoconfigs.go` | Bidder info loading | Verify YAML parsing unchanged |
-| `config/bidderinfo.go` | BidderInfo struct definition | **Triggers drift in bidder-info field index** |
+| `config/bidderinfo.go` | BidderInfo struct, YAML loading, alias merge, endpoint validation | **Triggers drift in bidder-info field index.** Also owns `processBidderAliases`, `validateAliases`, `validateAdapterEndpoint`, `ToGVLVendorIDMap` |
 | `exchange/*.go` (excl. `adapter_builders.go`) | Auction/exchange behavior | General exchange logic review |
 | `openrtb_ext/request.go` | Request processing for all bidders | Verify request wrapper compatibility |
 | `openrtb_ext/request_wrapper.go` | Request wrapper used by all adapters | Verify interface unchanged |
@@ -148,7 +147,7 @@ Any `.go` file not in `adapters/`, `static/`, or matching known patterns above.
 | `go.mod` | Go module dependencies |
 | `go.sum` | Go module checksums |
 | `.gitignore` | Git ignore rules |
-| `config/*.go` (other than `bidderinfo.go`, `biddersinfoconfigs.go`, `config.go`) | General config files |
+| `config/*.go` (other than `bidderinfo.go`, `config.go`) | General config files |
 
 ### Other
 
@@ -215,7 +214,7 @@ A PR is classified as `bidder-rename` if:
 - AND/OR `openrtb_ext/bidders.go` shows the constant being renamed
 
 When detected:
-- Note that bidder renames are breaking changes typically deferred to the next major release (v3 → v4 boundary, e.g., PR #4456 progx → programmaticX, PR #4639 adoppler → elementaltv)
+- Note that bidder renames are breaking changes typically deferred to the next major release (e.g., PR #4639 adoppler → elementaltv)
 - Routing-wise: each affected file goes to its normal owner skill, but pr-triage records `RENAME: {old} → {new}` in the manifest and flags as INFO
 
 ### Cross-Cutting Framework Change
@@ -245,7 +244,9 @@ When detected:
 
 ## Valid Endpoint Template Macros
 
-The canonical 18-field list of `macros.EndpointTemplateParams` is at [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros). The pr-triage Step 5a (cross-skill concern: invalid macros in alias PRs) reads from that list.
+The canonical `macros.EndpointTemplateParams` allow-list is at [../../shared/framework-utilities.md#endpoint-template-macros](../../shared/framework-utilities.md#endpoint-template-macros) — the single source of truth. The pr-triage Step 5a (cross-skill concern: invalid macros in alias PRs) reads from that list. Do not keep a second copy or a field count here; both go stale and produce false FAILs.
+
+An unrecognized macro is a **startup abort**, not a silent empty substitution: `config/bidderinfo.go:492-507` resolves the endpoint template via `macros.ResolveMacros` → `text/template` Execute, which errors on an unknown struct field.
 
 **Non-Go-template placeholders** (e.g., `#{REGION}#`, `${X}`, `<X>`) are NOT runtime macros — they are deployment-time substitutions and require `disabled: true` in the YAML. See the canonical rule at the linked file.
 
@@ -263,13 +264,18 @@ A PR may bundle multiple alias-only files (e.g., 5 aliases-of-same-parent in one
 
 PR #4651 (5 Limelight adapters: altstar, anzuExchange, oveeo, rtbdemand, smootai) is the canonical example: all 5 use `aliasOf: limelightDigital`, identical 2-line schema, same macros. Approved without bundle-objection.
 
-OUTSIDE this exception, the one-alias-per-PR rule applies (PR #4214/#4215 reviewer convention from `pm-isha-bharti`: "Please raise a separate PR for each of the new alias you are contributing. This is helpful in maintenance.").
+OUTSIDE this exception, the one-alias-per-PR rule applies (PR #4214/#4215 reviewer convention: "Please raise a separate PR for each of the new alias you are contributing. This is helpful in maintenance.").
 
 ---
 
 ## Whitelabel Policy
 
-`whiteLabelOnly: true` in a parent's `static/bidder-info/{parent}.yaml` marks it as available only as an alias parent — but does NOT preclude Go adapter code on the parent. TeqBlaze, SmartHub are canonical parents with `whiteLabelOnly: true` AND Go code (the Go code serves the aliases).
+`whiteLabelOnly: true` in a `static/bidder-info/{bidder}.yaml` marks that bidder ineligible for direct auctions (`IsEnabled()`, `config/bidderinfo.go:249-251`) — but does NOT preclude Go adapter code on it. `teqblaze` has both the flag and a full Go adapter serving its aliases.
+
+Two corrections to a common misreading:
+
+- **The flag is not the alias-parent marker.** `teqblaze.yaml` is the ONLY upstream file carrying it at master @0ba3523; `smarthub.yaml` serves 11 aliases without it. Identify alias parents by alias count (`grep -rh "aliasOf" static/bidder-info/ | sort | uniq -c | sort -rn`), not by the flag.
+- **`whiteLabelOnly: true` together with `aliasOf:` on the same file is a startup abort — FAIL.** `validateAliases` (`config/bidderinfo.go:461-463`) returns `bidder '%s' is an alias and cannot be set as white label only`, which reaches `logger.Fatalf` via `processBidderAliases` → `LoadBidderInfoFromDisk`.
 
 For NEW PRs: when a full adapter is being added that resembles an existing adapter (similar endpoint, comparable params, copy-paste-style code), reviewers redirect contributor to use `aliasOf:` instead. This is detected heuristically — pr-triage cross-skill check 5g should flag PRs where:
 - Type is `new-adapter`

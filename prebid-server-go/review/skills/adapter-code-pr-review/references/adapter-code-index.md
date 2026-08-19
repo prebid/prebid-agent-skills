@@ -302,7 +302,7 @@ for _, bid := range seatBid.Bid {
 
 ## Framework Utilities
 
-The framework helper function table (`adapters.IsResponseStatusCodeNoContent`, `adapters.CheckResponseStatusCodeForErrors`, `adapters.NewBidderResponseWithBidsCapacity`, `openrtb_ext.GetImpIDs`, `jsonutil.Marshal/Unmarshal`, `errortypes.*`, `macros.NewStringIndexBasedReplacer`, `ptrutil.Clone`), the `EndpointTemplateParams` 18-field macro list, and the error-type taxonomy live in [../../shared/framework-utilities.md](../../shared/framework-utilities.md). Adapter-code-pr-review workflows reference those tables directly — do not duplicate them here.
+The framework helper function table (`adapters.IsResponseStatusCodeNoContent`, `adapters.CheckResponseStatusCodeForErrors`, `adapters.NewBidderResponseWithBidsCapacity`, `openrtb_ext.GetImpIDs`, `jsonutil.Marshal/Unmarshal`, `errortypes.*`, `macros.NewStringIndexBasedReplacer`, `ptrutil.Clone`), the canonical `EndpointTemplateParams` macro allow-list, and the error-type taxonomy live in [../../shared/framework-utilities.md](../../shared/framework-utilities.md). Adapter-code-pr-review workflows reference those tables directly — do not duplicate them here.
 
 ---
 
@@ -546,23 +546,3 @@ for bidderName := range bidderInfos {
 
 This means adding `static/bidder-info/{bidder}.yaml` is sufficient for config — no `config.go` changes needed.
 
----
-
-## Pattern Catalog
-
-Patterns extracted from periodic review of the 89 reference adapter PRs (`prebid-server-go/references/new-bid-adapter-prs.md`). Stable schema for each entry; cap 8 per skill to keep this file scannable. Phase-2 synthesis populates entries during refresh cycles.
-
-### Schema
-
-```
-### Pattern P-{NN}: {short title}
-- Symptom in diff: {what the diff looks like}
-- Frequency observed: {N of total reference PRs}
-- Affected workflow: {Workflow link}
-- Severity: FAIL | WARN | INFO
-- Action: {what the skill does when it sees this}
-```
-
-### Entries
-
-(Populated by current refresh — see SKILL.md for the active rule list.)

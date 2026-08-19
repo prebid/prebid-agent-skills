@@ -249,14 +249,15 @@ Patterns surfaced from review of the 89 reference adapter PRs (`prebid-server-go
 - **Standard alias** (2 lines): `endpoint:` + `aliasOf: parent` — most SmartHub/Limelight/Adkernel family aliases.
 - **Alias with override**: `aliasOf:` + override fields (`gvlVendorID`, `endpoint`, `maintainer`, `userSync`).
 - **Disabled-by-default + region placeholder**: when `endpoint` contains a non-Go-template placeholder (e.g., `#{REGION}#`, `${X}`), the YAML MUST set `disabled: true` and include a comment block listing valid values (PR #4502 appStockSSP).
-- **White-label parent**: parent has full Go adapter + `whiteLabelOnly: true` (TeqBlaze, SmartHub). Aliases reference the parent's name. The Go code of the parent serves the aliases — `whiteLabelOnly: true` does NOT preclude Go code.
-- **HTTP endpoint tolerated**: HTTPS preferred but HTTP permitted per `bsardo` PR #4211 quote. Limelight family adapters routinely use HTTP.
-- **GVL inheritance quirk**: aliases cannot effectively override the parent's GVL vendor ID — `config/bidderinfo.go` deliberately inherits whether the alias sets `gvlVendorID: 0` or omits the field. Setting `gvlVendorID: 0` adds confusion; reviewers ask to remove it (PR #4329).
+- **Alias parent**: a parent with many aliases keeps its own Go adapter, which serves the aliases. At @0ba3523 the largest are `teqblaze` (25 aliases), `limelightDigital` (23), `smarthub` (11). `whiteLabelOnly: true` does NOT preclude Go code — but it is also NOT the alias-parent marker: `teqblaze.yaml` is the only upstream file that sets it, and `smarthub.yaml` serves 11 aliases without it. Key alias-parent reasoning on alias count, not on the flag.
+- **`whiteLabelOnly` + `aliasOf` is a startup abort**: `validateAliases` (`config/bidderinfo.go:461-463`) returns `bidder '%s' is an alias and cannot be set as white label only`, reaching `logger.Fatalf` through `processBidderAliases` → `LoadBidderInfoFromDisk`. **FAIL**.
+- **HTTP endpoint tolerated**: HTTPS preferred but HTTP permitted per PR #4211. Limelight family adapters routinely use HTTP.
+- **GVL vendor ID is NEVER inherited by an alias**: `config/bidderinfo.go:371-373` states the alias's `GVLVendorID` is intentionally never set from the parent, "as inheriting from the parent is not safe for legal reasons"; the merge block below it copies nine other fields and omits this one. `ToGVLVendorIDMap` (`:428-436`) then drops any bidder with `GVLVendorID == 0`, so an alias omitting the field gets no GDPR vendor registration. A non-zero declaration on an alias is the required form (**PASS**); omission where the parent has a GVL is **WARN**; `gvlVendorID: 0` is **WARN** for removal (PR #4329). 44 of 113 upstream alias YAMLs declare their own.
 - **GVL name tolerance**: GVL ID 377 = "AddApptr GmbH" but PR #4547 (Gravite) was accepted because privacy URL is gravite.net — corporate restructure case. GVL name mismatches are tolerated when there's a credible relationship.
-- **modifyingVastXmlAllowed**: rare; only seen in #4522 alliance_gravity. Set deliberately when video adapter wants to opt-in/opt-out of VAST modification tracking.
-- **endpointCompression: GZIP** is increasingly common (4+ PRs in 2025–2026). Suggest as INFO when adapter handles large requests. Uppercase `"GZIP"` is the convention, but the runtime `strings.ToUpper`s the value (`exchange/bidder.go:850`) so any value casing works — flag a non-uppercase value as INFO, not FAIL. The FAIL case is a field-NAME typo (`endpoint-compression`), not value casing.
+- **modifyingVastXmlAllowed**: common — 61 `static/bidder-info/*.yaml` files carry the key at @0ba3523. Do not flag its presence as unusual; verify the value is deliberate for a video adapter opting in or out of VAST modification tracking.
+- **endpointCompression**: the runtime `strings.ToUpper`s the value before comparing it to the `Gzip = "GZIP"` constant (`exchange/bidder.go:849-850`; constant at `:100`), so any casing works and there is no uppercase convention to enforce — lowercase `gzip` is in fact the majority upstream (58 vs 16 at @0ba3523). Emit no finding on value casing. The FAIL case is a field-NAME typo (`endpoint-compression` / `endpoint_compression`), which does not bind and silently disables compression.
 - **userSync.supports list**: declares which sync types (`iframe`, `redirect`) the bidder supports without providing default URLs (host configures URLs). Common when bidder requires onboarding before sync activation.
-- **Bidder rename for major version**: rename PRs (e.g., `progx` → `programmaticX` PR #4456) are deferred to the next major release (v3 → v4) due to breaking-change semantics. Flag rename intent as INFO.
+- **Bidder rename for major version**: rename PRs (e.g., `adoppler` → `elementaltv` PR #4639) are deferred to the next major release due to breaking-change semantics. Flag rename intent as INFO.
 
 ---
 
@@ -321,24 +322,3 @@ xapi.username
 xapi.password
 xapi.tracker
 ```
-
----
-
-## Pattern Catalog
-
-Patterns extracted from periodic review of the 89 reference adapter PRs. Stable schema; cap 8 entries per skill.
-
-### Schema
-
-```
-### Pattern P-{NN}: {short title}
-- Symptom in diff: {what the diff looks like}
-- Frequency observed: {N of total reference PRs}
-- Affected workflow: {Workflow link}
-- Severity: FAIL | WARN | INFO
-- Action: {what the skill does when it sees this}
-```
-
-### Entries
-
-(Populated by current refresh — see SKILL.md for the active rule list.)
