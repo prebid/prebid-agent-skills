@@ -8,7 +8,22 @@ Inputs:
   ctx.has_typed_config_props   : bool — Rule 35 fired (typed config subclass exists);
                                          when true, configurationProperties() returns the subclass
                                          and bidderCreator passes the subclass-typed config in.
-  ctx.typed_config_class_name  : str|null — subclass name when has_typed_config_props (e.g., "KoblerBidderConfigurationProperties")
+  ctx.typed_config_class_name  : str|null — subclass name when has_typed_config_props.
+                                         MUST be "{Bidder}ConfigurationProperties" (e.g.
+                                         "KoblerConfigurationProperties"). NOT
+                                         "{Bidder}BidderConfigurationProperties": that suffix belongs
+                                         to the framework's own model/BidderConfigurationProperties
+                                         and model/DefaultBidderConfigurationProperties, and no
+                                         bidder upstream uses it.
+  ctx.typed_fields             : list[dict]|null — the subclass's fields when has_typed_config_props;
+                                         each: java_name, java_type, validation_annotations (list|null),
+                                         notes (str|null), default_value (str|null). The subclass is
+                                         emitted NESTED in this file -- see the shape note below.
+  ctx.typed_config_javadoc     : str|null — Javadoc summary on the nested subclass
+  ctx.typed_config_constraint_imports : list[str]|null — jakarta.validation.constraints.* imports
+                                         needed by typed_fields' annotations, alphabetically
+                                         sorted. Emitted in the bottom java/jakarta group per
+                                         upstream ImportOrder.
   ctx.extra_constructor_args   : list[dict]|null — per-bidder extra constructor args; each:
       java_type    : str  — "CurrencyConversionService", custom service type, etc.
       java_name    : str  — argument name as referenced inside bidderCreator lambda
@@ -32,6 +47,23 @@ form vs Kobler "Configuration" form): both forms are accepted by upstream; this 
 emits the "Configuration" form as default. Operator flag --bidder-configuration-form
 (future) can switch to the BidderConfiguration form.
 
+RULE 35 SHAPE — the typed config subclass is NESTED in this file, not a separate one.
+All 16 Rule-35 subclasses at e3ffd57 are nested classes inside their {Bidder}Configuration
+(Adnuntius, Aduptech, Appnexus, AudienceNetwork, Beachfront, Epsilon, HuaweiAds, Kobler,
+Magnite, MinuteMedia, Msft, NextMillennium, Rediads, Smartadserver, TheTradeDesk,
+TripleliftNative); 15 are `private static class` and none is a separate file. Regenerate:
+
+  git grep -lP 'class \w+ConfigurationProperties extends BidderConfigurationProperties' \
+    -- 'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
+
+Annotation order is uniform across all 16: [@Validated] @Data
+@EqualsAndHashCode(callSuper = true) @NoArgsConstructor. @Validated is emitted only when a
+typed field carries a jakarta constraint, which is exactly the upstream correlation (7 of
+the 16 carry it, and every one of those has at least one constraint). It is redundant --
+the parent BidderConfigurationProperties is itself @Validated and spring resolves the
+annotation up the type hierarchy -- but emitting it on a constrained subclass matches the
+house form. It goes on the CLASS, not on the @Bean factory method.
+
 ImportOrder per upstream checkstyle.xml `groups="*,/^java|^jakarta/"`,
 `separated=true`: the catch-all `*` group (org.*, com.*, lombok.*) comes FIRST,
 then a blank line, then `java.*` + `jakarta.*` at the BOTTOM. This is inverted
@@ -39,18 +71,35 @@ from typical Java conventions.
 
 The PropertySource @value path is hardcoded to classpath:/bidder-config/{bidder}.yaml
 (the upstream convention; matches the bidder-config.yaml.j2 emission).
+
+FORMS MEASURED across the 255 upstream {Bidder}Configuration.java files at e3ffd57. Kobler
+is the atypical file on three of the four, so diffing this template against Kobler alone
+will suggest changes that move it AWAY from the corpus:
+
+  @ConfigurationProperties argument   literal "adapters.x"   255/255   (concatenation: 0)
+  BidderDepsAssembler.forBidder       bare, no type witness  243/255   (Kobler has one)
+  bidderCreator lambda parameter      `config`               253/254   (Kobler uses `cfg`)
+  bidderDeps first parameter name     {bidder}ConfigurationProperties  14/15  (Kobler: `config`)
+
+Regenerate any of them with, e.g.:
+
+  git grep -c -P '@ConfigurationProperties\("adapters\.[a-z]' \
+    -- 'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
 #}
 package org.prebid.server.spring.config.bidder;
 
+{% if ctx.has_typed_config_props %}
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+{% endif %}
 import org.prebid.server.bidder.BidderDeps;
 import org.prebid.server.bidder.{{ ctx.bidder_name }}.{{ ctx.bidder_class_root }}Bidder;
 {% if ctx.uses_currency_conversion %}
 import org.prebid.server.currency.CurrencyConversionService;
 {% endif %}
 import org.prebid.server.json.JacksonMapper;
-{% if not ctx.has_typed_config_props %}
 import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;
-{% endif %}
 import org.prebid.server.spring.config.bidder.util.BidderDepsAssembler;
 import org.prebid.server.spring.env.YamlPropertySourceFactory;
 {% if ctx.endpoint_external_url_macro %}
@@ -60,14 +109,37 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
-{% if ctx.has_typed_config_props %}
+{% if ctx.has_typed_config_props and ctx.typed_fields | selectattr('validation_annotations') | list | length > 0 %}
 import org.springframework.validation.annotation.Validated;
 {% endif %}
-{% if ctx.endpoint_external_url_macro %}
+{% if ctx.endpoint_external_url_macro or ctx.typed_config_constraint_imports %}
 
+{% for imp in ctx.typed_config_constraint_imports or [] %}
+import {{ imp }};
+{% endfor %}
+{% if ctx.endpoint_external_url_macro and 'jakarta.validation.constraints.NotBlank' not in (ctx.typed_config_constraint_imports or []) %}
 import jakarta.validation.constraints.NotBlank;
 {% endif %}
+{% endif %}
 
+{#
+  Guard: has_typed_config_props and typed_fields must agree.
+
+  With jinja's default Undefined, a missing `typed_fields` iterates as empty, so
+  a caller that sets the flag and forgets the data used to render a subclass with
+  an EMPTY body -- a Rule 35 class that binds no properties at all, which is the
+  one thing Rule 35 exists to do. Silent and downstream-invisible.
+
+  Calling an undefined name is the one construct that raises under default
+  Undefined (rendering one merely yields ""), so the guard is written as a call
+  and the name carries the diagnosis.
+#}
+{% if ctx.has_typed_config_props and not ctx.typed_fields %}
+{{ ERROR_rule35_fired_but_ctx_typed_fields_is_empty__an_empty_subclass_would_bind_nothing() }}
+{% endif %}
+{% if ctx.typed_fields and not ctx.has_typed_config_props %}
+{{ ERROR_ctx_typed_fields_supplied_but_has_typed_config_props_is_false__the_fields_would_be_dropped() }}
+{% endif %}
 {% set config_class = ctx.config_class_name if ctx.config_class_name else (ctx.bidder_class_root ~ 'Configuration') %}
 {% if ctx.javadoc_summary %}
 /**
@@ -81,9 +153,8 @@ public class {{ config_class }} {
     private static final String BIDDER_NAME = "{{ ctx.bidder_name }}";
 
     @Bean("{{ ctx.bidder_name }}ConfigurationProperties")
-    @ConfigurationProperties("adapters." + BIDDER_NAME)
+    @ConfigurationProperties("adapters.{{ ctx.bidder_name }}")
 {% if ctx.has_typed_config_props %}
-    @Validated
     {{ ctx.typed_config_class_name }} configurationProperties() {
         return new {{ ctx.typed_config_class_name }}();
     }
@@ -118,4 +189,37 @@ public class {{ config_class }} {
                 .bidderCreator(config -> new {{ ctx.bidder_class_root }}Bidder(config.getEndpoint(){% if ctx.uses_currency_conversion %}, currencyConversionService{% endif %}{% if ctx.bidder_creator_extra_args %}, {{ ctx.bidder_creator_extra_args }}{% endif %}, mapper))
                 .assemble();
     }
+{% if ctx.has_typed_config_props %}
+
+{% if ctx.typed_config_javadoc %}
+    /**
+     * {{ ctx.typed_config_javadoc }}
+     */
+{% endif %}
+{% if ctx.typed_fields | selectattr('validation_annotations') | list | length > 0 %}
+    @Validated
+{% endif %}
+    @Data
+    @EqualsAndHashCode(callSuper = true)
+    @NoArgsConstructor
+    private static class {{ ctx.typed_config_class_name }} extends BidderConfigurationProperties {
+
+{% for field in ctx.typed_fields %}
+{% if field.notes %}
+        // {{ field.notes }}
+{% endif %}
+{% for ann in field.validation_annotations or [] %}
+        {{ ann }}
+{% endfor %}
+{% if field.default_value %}
+        private {{ field.java_type }} {{ field.java_name }} = {{ field.default_value }};
+{% else %}
+        private {{ field.java_type }} {{ field.java_name }};
+{% endif %}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+    }
+{% endif %}
 }

@@ -506,3 +506,59 @@ claims:
     sites:
       - path: prebid-server-java/review/skills/bidder-config-pr-review/references/field-index.md
         assert: Conventional on 8 of 255
+
+  # ---------------------------------------------------------------------------
+  # Rule 35 subclass shape. The Go->Java port emitted the typed config subclass
+  # as a separate {Bidder}BidderConfigurationProperties.java -- a shape with no
+  # upstream instance, whose suffix names two framework classes. Every upstream
+  # Rule-35 subclass is nested in its {Bidder}Configuration.java. Pinned in both
+  # directions: the nested count, and the absence of the separate file.
+  - id: java.rule35.subclass-is-nested
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder
+    glob: '*Configuration.java'
+    mode: files
+    pattern: 'class \w+ConfigurationProperties extends BidderConfigurationProperties'
+    expect: 16
+    why: >
+      A port that emits the separate-file form arrives in a shape the Java
+      reviewer has no precedent for. The count is allowed to move as adapters
+      land; what must not move is that the number is nonzero while the
+      separate-file count stays zero.
+    regenerate: |
+      git grep -lP 'class \w+ConfigurationProperties extends BidderConfigurationProperties' \
+        -- 'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/configuration.java.j2
+        assert: All 16 Rule-35 subclasses at e3ffd57 are nested classes
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/references/field-index.md
+        assert: all 16 currently-shipped Rule 35 subclasses are nested classes
+
+  # Counted as "exactly the two framework files", not phrased as an absence: an
+  # absence claim searching for `extends BidderConfigurationProperties` inside
+  # *BidderConfigurationProperties.java hits
+  # `private final Class<? extends BidderConfigurationProperties> selfClass` in
+  # the parent itself. The falsifiable form is the file count -- a third file
+  # with this name would be a bidder's, which is the drift to catch.
+  - id: java.rule35.no-separate-properties-file
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder
+    glob: '*BidderConfigurationProperties.java'
+    mode: files
+    pattern: 'class \w*BidderConfigurationProperties'
+    expect: 2
+    strict: true
+    why: >
+      Both are framework classes under model/ (BidderConfigurationProperties and
+      DefaultBidderConfigurationProperties). A third would be a bidder's, meaning
+      the separate-file form finally has an upstream instance -- at which point
+      the port's nested-only emission should be revisited rather than silently
+      outvoted.
+    regenerate: |
+      git ls-files src/main/java/org/prebid/server/spring/config/bidder \
+        | grep -cP 'BidderConfigurationProperties\.java$'
+    sites:
+      - path: prebid-server-java/port-go2java/SKILL.md
+        assert: has no upstream instance and its suffix names two framework classes
