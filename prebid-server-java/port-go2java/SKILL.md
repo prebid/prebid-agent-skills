@@ -20,7 +20,7 @@ Takes a structured Go-source Adapter Spec (read by `prebid-server-go/read/skills
 - `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java`
 - `src/main/java/org/prebid/server/proto/openrtb/ext/request/{bidder}/ExtImp{Bidder}.java`
 - `src/main/resources/bidder-config/{bidder}.yaml`
-- `src/main/resources/static/bidder-params/{bidder}.json` (byte-copy from Go per Rule 38)
+- `src/main/resources/static/bidder-params/{bidder}.json` (materialised from the source spec's `bidder_params_ref` per Rule 38)
 - `src/test/java/org/prebid/server/bidder/{bidder}/{Bidder}BidderTest.java`
 - `src/test/java/org/prebid/server/it/{Bidder}Test.java`
 - `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-auction-{bidder}-{request,response}.json`
@@ -111,7 +111,7 @@ For alias-child shapes, the SKILL loads the parent spec (the alias inherits pare
 
 | # | Rule | Helper | Output |
 |---|---|---|---|
-| 1 | Rule 38 — bidder-params byte-fidelity | `port_engine.byte_copy(source_path, dest_path)` | Java `static/bidder-params/{bidder}.json` is byte-identical to Go's. SHA-256 verified post-copy. |
+| 1 | Rule 38 — bidder-params byte-fidelity | `port_engine.materialize_params(source_spec['bidder_params_ref'], blobs_dir=…, checkout=…)` | Returns the exact params bytes the ref names — blob store at `prebid-server-go/read/test-fixtures/blobs/<sha256>` first, else the Go clone pinned to `ref.resolved_commit`. The helper hashes what it returns against `ref.sha256` and checks its length against `ref.bytes`, raising rather than returning suspect bytes; a missing blob with no checkout is an error, never an empty return. Step 5 writes those bytes to `src/main/resources/static/bidder-params/{bidder}.json` and re-hashes the emitted file. |
 | 2 | Rule 46 — naming-convention normalization | `port_engine.normalize_bidder_name(go_name, target_lang='java')` | Java YAML name (lowercase + drop non-`[a-z0-9]`); allow-list overrides for rebrands like `cadent_aperture_mx → emxdigital`. Stored at `dest_spec.meta.bidder_name`. |
 | 3 | Rule 33 — alias-graph invert | `port_engine.alias_graph_invert(parent_spec, alias_specs, direction='go-to-java')` | Java `aliases:` block content for the parent's bidder-config YAML. Per-child overrides for diverging fields only. |
 | 4 | Rule 44 — alias-empire flavor coherence | inline check (no helper) | Verify each empire child's `bidder_info` flavor matches parent's. Divergences emit `quirks[]: alias-empire-flavor-divergence`. |
@@ -162,7 +162,9 @@ The SKILL must NOT skip a prose-driven rule silently. If the rule's `spec_field_
 - `bidder_info.modifying_vast_xml_allowed`
 - `bidder_info.endpoint` (form-divergent per language; Step 3 Rule 11 already normalized)
 - `params.schema_interpretation.{required_fields, combinators_used, flexible_types}`
-- `bidder_params_json` (verbatim string)
+- `bidder_params_ref` (the whole `{path, resolved_commit, sha256, bytes}` block, unchanged except that `path` is re-rooted to `src/main/resources/static/bidder-params/{bidder}.json` for Java's layout — `resolved_commit`, `sha256` and `bytes` are NEVER recomputed)
+
+`bidder_params_sha256` mirrors `bidder_params_ref.sha256`; set it from the ref, not by hashing anything. If `source_spec` also carries the deprecated `bidder_params_json`, copy it across verbatim so dual-spec consumers still validate, but treat it as non-normative: no field on `dest_spec` may be derived from it. When the source spec has no `bidder_params_json` at all, omit it — nothing downstream requires it.
 
 **Java-specific construction.** Build the Java-only spec blocks:
 
@@ -190,7 +192,13 @@ port_lineage:
     - <one entry per applied prose-driven rule, e.g., 'rule-46-naming-normalization'>
 ```
 
-**bidder_params_sha256 re-compute.** SHA-256 of `dest_spec.bidder_params_json`. Since Rule 38's byte-copy produced byte-identical JSON, this MUST equal `source_spec.bidder_params_sha256`. If they differ, the SKILL has bug; abort with `ERROR: bidder_params_sha256 mismatch — Rule 38 byte-copy invariant violated`.
+**Rule 38 materialise-from-ref invariant.** Do NOT hash `bidder_params_json` — it is the reader's own transcription, so hashing it proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec that carries only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes, in this order:
+
+1. `dest_spec.bidder_params_ref.{resolved_commit, sha256, bytes}` are identical to the source's, and `dest_spec.bidder_params_ref.path` is the Java path for this bidder. Otherwise abort with `ERROR: bidder_params_ref carried forward incorrectly — Rule 38 materialise-from-ref invariant violated`.
+2. `dest_spec.bidder_params_sha256 == dest_spec.bidder_params_ref.sha256` (the mirror, not a fresh hash). Otherwise abort with `ERROR: bidder_params_sha256 does not mirror bidder_params_ref.sha256 — Rule 38 materialise-from-ref invariant violated`.
+3. The bytes Step 5 will emit are exactly the bytes `port_engine.materialize_params` returned. **The emitted file's sha256 MUST equal `bidder_params_ref.sha256` and its length MUST equal `bidder_params_ref.bytes`.** Step 5 re-hashes the file on disk after writing it; on mismatch abort with `ERROR: emitted bidder-params sha256 {actual} != bidder_params_ref.sha256 {expected} — Rule 38 materialise-from-ref invariant violated`.
+
+`materialize_params` already raises on either witness before returning, so a mismatch surfacing here means the write path corrupted the bytes (text-mode write, newline translation, a re-serialising template) rather than the read path.
 
 **Provenance pinning.** `dest_spec.provenance.source.resolved_commit = source_spec.provenance.source.resolved_commit` — the Java port is point-in-time relative to the source. `dest_spec.provenance.read.timestamp_utc` is fresh (the moment the Step ran).
 
@@ -207,7 +215,7 @@ port_lineage:
 | File | Template | Notes |
 |---|---|---|
 | `src/main/resources/bidder-config/{bidder}.yaml` | `bidder-config.yaml.j2` | Kebab-case YAML keys per `references/java-artifact-shapes.md` §11. |
-| `src/main/resources/static/bidder-params/{bidder}.json` | `byte_copy` (no template) | Byte-identical to Go's per Rule 38; SHA-256 verified. |
+| `src/main/resources/static/bidder-params/{bidder}.json` | `materialize_params` (no template) | Write the bytes the helper returned in **binary** mode (`Path.write_bytes`) — never a text write, never a re-serialised dict. Then re-read the file and assert its sha256 equals `bidder_params_ref.sha256` and its length equals `bidder_params_ref.bytes`; that makes the emitted file byte-identical to Go's by construction rather than by assumption. |
 | `src/main/java/org/prebid/server/proto/openrtb/ext/request/{bidder}/ExtImp{Bidder}.java` | `ext-imp-pojo.java.j2` | Lombok @Builder + @Value + @JsonProperty annotations. |
 | `src/main/java/org/prebid/server/bidder/{bidder}/{Bidder}Bidder.java` | `bidder.java.j2` | Implements `Bidder<BidRequest>`; Rule-specific control flow per `rules_consumed`. |
 | `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java` | `configuration.java.j2` | Spring DI; `BidderDepsAssembler` factory bean. |
@@ -282,7 +290,7 @@ report = {
     "pre_submit_rebase": pre_submit_rebase_result_or_null,
     "human_todos": human_todos,                 # accumulated across Steps 3, 5, 6
     "unresolved_translations": unresolved_translations,
-    "port_translation_rules_version": "0.2.0",
+    "port_translation_rules_version": "0.3.0",
 }
 ```
 

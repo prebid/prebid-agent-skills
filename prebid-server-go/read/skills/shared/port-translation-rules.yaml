@@ -1,4 +1,4 @@
-rules_version: "0.2.0"
+rules_version: "0.3.0"
 intro: |-
   46 explicit translation rules between Go and Java prebid-server adapter patterns, each anchored to an Adapter Specification field driver. Used by the future `port-go2java` and `port-java2go` skills as their translation contract. Two specs for the same bidder produced from each language MUST be consistent with these rules — a port that violates a rule surfaces as a port-fidelity warning.
 toc:
@@ -77,34 +77,76 @@ how_to_use: |-
 sections:
 - kind: rules
   title: Bidder-params byte-fidelity rules (2)
-  driver: Driven by `bidder_params_json` + `bidder_params_sha256` and the read-vs-port boundary.
+  driver: Driven by `bidder_params_ref` + `bidder_params_sha256` and the read-vs-port boundary.
   rules:
   - id: 38
-    title: bidder_params_json byte-fidelity contract
-    pattern: The porter copies `static/bidder-params/{bidder}.json` bytes verbatim. Whitespace, indent style, trailing-newline
-      presence, and BOM marks are preserved exactly. The porter NEVER reformats the JSON.
-    spec_field_driver: '`bidder_params_json` (verbatim string) + `bidder_params_sha256`'
+    title: bidder_params_ref byte-fidelity contract
+    pattern: The porter carries `bidder_params_ref` forward unchanged and MATERIALISES the params bytes from the
+      content-addressed blob store, or from upstream at `resolved_commit` when no blob is present. Whitespace, indent
+      style, trailing-newline presence, and BOM marks survive because nothing re-serialises the JSON. The porter NEVER
+      reformats, and NEVER reconstructs the file from the deprecated `bidder_params_json` string.
+    spec_field_driver: '`bidder_params_ref` (`{path, resolved_commit, sha256, bytes}`) + `bidder_params_sha256` (mirrors
+      `bidder_params_ref.sha256`)'
     body: |-
-      **Go file** (`static/bidder-params/{xyz}.json` — bytes copied as-is):
-      ```json
-      {"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params","type":"object","properties":{"placementId":{"type":"string"}},"required":["placementId"]}
+      **The reference the spec carries** — `path` is upstream-relative, so it differs per language while the digest does not:
+      ```yaml
+      bidder_params_ref:
+        path: static/bidder-params/kobler.json
+        resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+        sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+        bytes: 431
+      bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
       ```
 
-      **Java file** (`src/main/resources/static/bidder-params/{xyz}.json` — same bytes):
+      **Materialising the bytes.** The exact bytes live in the content-addressed blob store at `prebid-server-{go,java}/read/test-fixtures/blobs/<sha256>`. The porter calls `port_engine.materialize_params(ref, blobs_dir=..., checkout=...)`, which resolves the blob first and falls back to a local upstream clone pinned to the commit:
+      ```bash
+      # blob store — offline, self-naming (a blob is filed under the digest of its own content)
+      cat prebid-server-go/read/test-fixtures/blobs/125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+
+      # upstream at resolved_commit — pinned, so a clone fetched past the spec's commit still yields these bytes
+      git -C <clone> cat-file blob d7f8515b86258688304b0d9b6668c6a0e258bc9e:static/bidder-params/kobler.json
+      ```
+      The helper verifies what it returns: it hashes the bytes against `ref.sha256` AND checks their length against `ref.bytes`, and raises on either mismatch rather than handing back suspect bytes. A missing blob with no usable checkout is an error, never an empty return.
+
+      **Go file** (`static/bidder-params/kobler.json` at `resolved_commit` — 431 bytes, materialised, never retyped). The blank line after `"type": "object",` is upstream's and is load-bearing for the digest:
       ```json
-      {"$schema":"http://json-schema.org/draft-04/schema#","title":"Kobler Adapter Params","type":"object","properties":{"placementId":{"type":"string"}},"required":["placementId"]}
+      {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "Kobler Adapter Params",
+        "description": "A schema which validates params accepted by the Kobler adapter",
+        "type": "object",
+
+        "properties": {
+          "test": {
+            "type": "boolean",
+            "description": "Whether the request is for testing only. When multiple ad units are submitted together, it is enough to set this parameter on the first one."
+          }
+        }
+      }
       ```
 
-      **Translation rule**: A port that produces a JSON file with different bytes (different whitespace, different indent, different newline style) violates R5 cross-language byte-equality. Both Go-side `bidder_params_sha256` and Java-side `bidder_params_sha256` MUST match for the same bidder. The `cross-language-byte-divergence` warning surfaces in the lossy direction.
+      **Java file** (`src/main/resources/static/bidder-params/kobler.json` — the same 431 bytes; same `sha256`, same `bytes`, different `path` and `resolved_commit`):
+      ```yaml
+      bidder_params_ref:
+        path: src/main/resources/static/bidder-params/kobler.json
+        resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+        sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+        bytes: 431
+      ```
+      Two refs whose `sha256` and `bytes` agree name the same bytes; that is the cross-language assertion, and it holds without either spec quoting the schema text.
 
-      **Round-trip considerations**: Round-trip-safe IFF the porter is the only writer and reads the file in binary mode (preserve trailing newlines, encoding). Optidigital and Appnexus port pairs in the wild fail this rule due to historical reformatting on the Java side; reviewers SHOULD reformat one side to restore byte parity rather than accept divergence. See `cross-skill-integration.md` §8.3 for canonical worked examples.
+      **Translation rule**: unchanged in substance — **the destination `static/bidder-params/{bidder}.json` MUST be byte-identical to the source's**. What changed is how the porter obtains and proves it. The porter (a) copies the source's `bidder_params_ref` block onto the destination spec with only `path` re-rooted for the target language's layout, (b) materialises the bytes, (c) writes them in binary, and (d) re-hashes the file it just wrote — the emitted file's sha256 MUST equal `ref.sha256` and its length MUST equal `ref.bytes`. A port that emits different bytes (different whitespace, indent, or newline style) violates R5 cross-language byte-equality; the `cross-language-byte-divergence` warning surfaces in the lossy direction.
 
-      **Notes**: This is the strongest cross-language contract — even stronger than R2 (semantic schema equivalence). The porter MUST NOT pretty-print, MUST NOT add trailing newlines, MUST NOT collapse `\r\n` → `\n`. Use `cat` / `cp` / `Files.copy` (binary mode), never `json.Marshal(json.Unmarshal(bytes))`.
+      **Why the ref is verifiable where the inline copy was not**: the superseded contract hashed `bidder_params_json` — the reader's own transcription of the file. A lossy transcription therefore produced a *self-consistent* hash: the digest described the text the reader emitted, not the text upstream holds, so params text that was never upstream passed every check. Two corpus goldens carried exactly that. `bidder_params_ref` breaks the circle twice over. `sha256` now describes bytes the reader did not author, addressable independently in the blob store and re-derivable from upstream at `resolved_commit`. `bytes` is a second, independent witness: a byte count cannot be back-derived from text the reader wrote, so a ref whose two witnesses disagree is detectably wrong even before any file is read.
+
+      **Round-trip considerations**: round-trip-safe IFF the porter materialises rather than re-serialises. Reading and writing in binary mode is still required (preserve trailing newlines, encoding), but the failure is now caught instead of inferred: a re-serialised or reformatted emit fails the post-write digest check at the port step. Optidigital and Appnexus port pairs in the wild fail this rule due to historical reformatting on the Java side; reviewers SHOULD reformat one side to restore byte parity rather than accept divergence. See `cross-skill-integration.md` §8.3 for canonical worked examples.
+
+      **Notes**: This is the strongest cross-language contract — even stronger than R2 (semantic schema equivalence). The porter MUST NOT pretty-print, MUST NOT add trailing newlines, MUST NOT collapse `\r\n` → `\n`, and MUST NOT re-emit from `bidder_params_json`. That field still exists on the spec and still validates, but it is DEPRECATED and non-normative: it is a convenience view for readers, and no port decision may rest on it. Materialise via `port_engine.materialize_params`; where a plain file-to-file copy is genuinely all that is needed, `port_engine.byte_copy` (binary `cat` / `cp` / `Files.copy` semantics) remains available — but never `json.Marshal(json.Unmarshal(bytes))`.
   - id: 39
     title: params.schema_interpretation is a derived view, not translated
     pattern: '`params.schema_interpretation.{properties, combinators_used, required, ...}` is a NORMALIZED view of the JSON
-      Schema computed independently by each language''s reader from the verbatim `bidder_params_json` bytes. The porter never
-      re-parses or re-translates the schema interpretation across languages.'
+      Schema computed independently by each language''s reader from the verbatim params bytes that `bidder_params_ref`
+      identifies. The porter never re-parses or re-translates the schema interpretation across languages.'
     spec_field_driver: '`params.schema_interpretation` (derived) + meta-rule about read-vs-port boundary'
     body: |-
       **Go side**: N/A — `schema_interpretation` is computed at read time by `read-bidder-params/` skill from the verbatim bytes; not emitted as code.
@@ -113,7 +155,7 @@ sections:
 
       **Translation rule**: When porting Go→Java, the porter copies bytes per Rule 38 and STOPS — does NOT regenerate the Java spec's `schema_interpretation` block. The Java reader will compute it independently when the post-port spec is re-read. Two specs of the same bidder produced from each language MUST agree on `schema_interpretation` because the input bytes are byte-equal (Rule 38). Disagreement signals a Rule 38 violation upstream.
 
-      **Round-trip considerations**: Round-trip-safe iff Rule 38 holds. If `bidder_params_json` bytes diverge, `schema_interpretation` may also diverge but the divergence is downstream — a porter who corrects Rule 38 violations will see `schema_interpretation` agreement restore automatically.
+      **Round-trip considerations**: Round-trip-safe iff Rule 38 holds. If the params bytes diverge — i.e. the two sides' `bidder_params_ref.sha256` disagree — `schema_interpretation` may also diverge, but the divergence is downstream: a porter who corrects Rule 38 violations will see `schema_interpretation` agreement restore automatically.
 
       **Notes**: This is a meta-rule clarifying that the read pipeline and the port pipeline have disjoint responsibilities. Read computes derived views from bytes; port copies bytes. A porter that re-derives `schema_interpretation` violates the boundary and risks introducing divergence (e.g., re-ordering `properties[]` keys, collapsing `oneOf` arms, normalizing `description` whitespace). The reader is the single source of truth for derived views; the porter is the single source of truth for byte-fidelity.
 - kind: rules
@@ -1568,16 +1610,23 @@ sections:
       - Cross-language
       - Lossless-with-translation
       - '`constructor-arg` (Java) ↔ `static-init` (Go) is a deterministic mapping (Rule 42).'
-    - - '`bidder_params_json` (verbatim bytes)'
+    - - '`bidder_params_ref` (`{path, resolved_commit, sha256, bytes}`)'
       - Cross-language
       - None
       - Lossless
-      - Per Rule 38 — bytes copied verbatim. Round-trip-safe IFF Rule 38 is enforced.
+      - Per Rule 38 — the ref carries forward with only `path` re-rooted; bytes are materialised from the blob store
+        or upstream at `resolved_commit`, never re-serialised. Round-trip-safe IFF Rule 38 is enforced.
+    - - '`bidder_params_json` (deprecated inline text)'
+      - Neither — not consulted
+      - N/A
+      - Non-normative
+      - Still present and still schema-valid, but no port decision may rest on it. It is the reader's own
+        transcription, so its digest is self-consistent even when the text is wrong — see Rule 38.
   implications_subheading: Implications for porters
   implications: |-
     A porter MUST surface lossy-direction asymmetries as `cross_language.<source>_specific_concerns[]` entries on the SOURCE spec, AND emit a TODO on the destination side noting the dropped field. A round-trip-validation harness comparing round-tripped specs to originals MUST exempt the lossy fields from byte-equality assertions — see `cross-skill-integration.md` §6.3 for R4 round-trip determinism semantics, and §8 for the bounded-fidelity caveats that survive the contract.
 
-    The dual-spec assertion harness at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` codifies which fields MUST be byte-equal, semantically-equivalent, or per-language-divergent — Rule 38 (bidder_params_json) and Rule 39 (schema_interpretation) drive the must-match set; lossy-direction fields are explicitly exempted via the R5-divergent key list.
+    The dual-spec assertion harness at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` codifies which fields MUST be byte-equal, semantically-equivalent, or per-language-divergent — Rule 38 (keyed on `bidder_params_sha256`, which mirrors `bidder_params_ref.sha256`) and Rule 39 (`schema_interpretation`) drive the must-match set; lossy-direction fields are explicitly exempted via the R5-divergent key list.
 - kind: rules
   title: Test fixture rules (2)
   driver: Driven by `tests`.

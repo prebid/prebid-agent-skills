@@ -121,6 +121,13 @@ bumping the others.
   added new rules but the schema was already populated with the fields
   via Phase 2.0/2.1; Phase 2.5's `rules_version: 0.2.0` is a rules-only
   bump).
+- **A rules MINOR does not require a new rule.** `0.3.0` added none: it
+  restated Rule 38's mechanism from "compare the inlined
+  `bidder_params_json`" to "materialise from `bidder_params_ref` and verify
+  sha256 and byte length". The rule count stayed at 46 and the taxonomy did
+  not move, but a skill pinned at `0.2.0` would copy an inline string that is
+  now non-normative. Bump when the CONTRACT a consumer implements changes,
+  not when the rule count does.
 - Taxonomy MINOR ships when new taxa are added (Phase 2.4's 8 new taxa).
 
 The only correlation: the dual-spec assertion file format AND the rules
@@ -137,9 +144,12 @@ on independent version numbers.
   which read-skill version produced each block. This is independent of
   `adapter_spec_version`; the skill_versions evolve faster than the schema
   and let consumers detect "this spec was emitted by an older skill build."
-- Port skills (Phase D, future) MUST declare a `port_translation_rules_version`
-  they were authored against. A port skill against `0.2.0` may not know how
-  to apply Rule 47 (when added).
+- Port skills MUST declare a `port_translation_rules_version` they were
+  authored against, and it is load-bearing rather than decorative. A port
+  skill pinned at `0.2.0` satisfies Rule 38 by copying
+  `bidder_params_json`; under `0.3.0` that field is deprecated and the rule
+  is satisfied only by materialising `bidder_params_ref`. Reading the
+  version tells a consumer which of the two it is looking at.
 
 ## Deprecation lifecycle
 

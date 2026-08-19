@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -32,6 +33,7 @@ from scripts.lib.port_engine import (
     iab_table_translate,
     imp_ext_shape_transform_java_to_go,
     lookup_forms,
+    materialize_params,
     normalize_bidder_name,
     port_report_emit,
     prefix_uniqueness_check,
@@ -73,6 +75,391 @@ class TestByteCopy(unittest.TestCase):
             ok = byte_copy(src, dst)
             self.assertTrue(ok)
             self.assertEqual(dst.read_bytes(), b"")
+
+
+# ---------------------------------------------------------------------------
+# Helper 1b: materialize_params (Rule 38)
+# ---------------------------------------------------------------------------
+
+# Verbatim `static/bidder-params/kobler.json` as it stands in
+# prebid/prebid-server at d7f8515b86258688304b0d9b6668c6a0e258bc9e (and
+# byte-identically in prebid/prebid-server-java at
+# 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a). Reproduce with:
+#   git -C <clone> cat-file blob d7f8515b:static/bidder-params/kobler.json
+# The blank line after `"type": "object",` and the two-space indent are
+# upstream's; they are load-bearing for the byte contract.
+KOBLER_PARAMS_BYTES = (
+    b'{\n'
+    b'  "$schema": "http://json-schema.org/draft-04/schema#",\n'
+    b'  "title": "Kobler Adapter Params",\n'
+    b'  "description": "A schema which validates params accepted by the Kobler adapter",\n'
+    b'  "type": "object",\n'
+    b'\n'
+    b'  "properties": {\n'
+    b'    "test": {\n'
+    b'      "type": "boolean",\n'
+    b'      "description": "Whether the request is for testing only. When multiple ad units'
+    b' are submitted together, it is enough to set this parameter on the first one."\n'
+    b'    }\n'
+    b'  }\n'
+    b'}\n'
+)
+KOBLER_PARAMS_SHA256 = "125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685"
+KOBLER_PARAMS_BYTES_LEN = 431
+
+KOBLER_REF = {
+    "path": "static/bidder-params/kobler.json",
+    "resolved_commit": "d7f8515b86258688304b0d9b6668c6a0e258bc9e",
+    "sha256": KOBLER_PARAMS_SHA256,
+    "bytes": KOBLER_PARAMS_BYTES_LEN,
+}
+
+
+class TestMaterializeParams(unittest.TestCase):
+    """Rule 38: the port materialises params bytes from `bidder_params_ref`.
+
+    The fixture constants above are a *witness*, not an oracle the helper
+    generated: the sha256 and the byte count were read out of the two
+    upstream clones, so a transcription slip in KOBLER_PARAMS_BYTES fails
+    `test_fixture_constants_are_self_consistent` instead of silently
+    redefining the contract.
+    """
+
+    def test_fixture_constants_are_self_consistent(self):
+        import hashlib
+
+        self.assertEqual(len(KOBLER_PARAMS_BYTES), KOBLER_PARAMS_BYTES_LEN)
+        self.assertEqual(
+            hashlib.sha256(KOBLER_PARAMS_BYTES).hexdigest(), KOBLER_PARAMS_SHA256
+        )
+
+    # --- blob-store resolution -------------------------------------------
+
+    def test_reads_verified_bytes_from_blob_store(self):
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(KOBLER_PARAMS_BYTES)
+            got = materialize_params(KOBLER_REF, blobs_dir=blobs)
+            self.assertEqual(got, KOBLER_PARAMS_BYTES)
+
+    def test_blob_store_hit_needs_no_checkout_and_no_resolved_commit(self):
+        # A content-addressed hit is offline-resolvable: `resolved_commit`
+        # is provenance for the git read, not a precondition for the blob.
+        ref = {k: v for k, v in KOBLER_REF.items() if k != "resolved_commit"}
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(KOBLER_PARAMS_BYTES)
+            self.assertEqual(materialize_params(ref, blobs_dir=blobs), KOBLER_PARAMS_BYTES)
+
+    def test_corrupted_blob_raises_and_returns_nothing(self):
+        # The blob store is named by sha256, so a mutated blob is stored
+        # under a name that no longer describes it. This is the case the
+        # old `bidder_params_json` self-hash could not detect.
+        mutated = KOBLER_PARAMS_BYTES.replace(b'"type": "boolean"', b'"type": "string" ')
+        self.assertEqual(len(mutated), len(KOBLER_PARAMS_BYTES))  # same length
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(mutated)
+            with self.assertRaises(ValueError) as ctx:
+                materialize_params(KOBLER_REF, blobs_dir=blobs)
+            self.assertIn("sha256 mismatch", str(ctx.exception))
+
+    def test_truncated_blob_raises_on_byte_count(self):
+        # `bytes` is the second witness: a truncation that somehow cleared
+        # the hash check would still be caught by the length check.
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(KOBLER_PARAMS_BYTES[:-1])
+            with self.assertRaises(ValueError) as ctx:
+                materialize_params(KOBLER_REF, blobs_dir=blobs)
+            msg = str(ctx.exception)
+            self.assertIn("sha256 mismatch", msg)
+            self.assertIn("byte-count mismatch", msg)
+            self.assertIn("430", msg)
+
+    def test_ref_whose_two_witnesses_disagree_raises_on_bytes_alone(self):
+        # Isolates the byte-count arm. A length mismatch that also cleared
+        # the hash would need a sha256 collision, so the arm's real job is
+        # catching a ref edited in one witness and not the other — the
+        # spec-authoring slip the single-witness contract could not see.
+        ref = dict(KOBLER_REF, bytes=430)
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(KOBLER_PARAMS_BYTES)
+            with self.assertRaises(ValueError) as ctx:
+                materialize_params(ref, blobs_dir=blobs)
+            msg = str(ctx.exception)
+            self.assertIn("byte-count mismatch", msg)
+            self.assertNotIn("sha256 mismatch", msg)
+
+    def test_empty_blob_for_nonempty_ref_raises(self):
+        # An empty read is never a silent success.
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(b"")
+            with self.assertRaises(ValueError):
+                materialize_params(KOBLER_REF, blobs_dir=blobs)
+
+    # --- checkout resolution ---------------------------------------------
+
+    def test_reads_verified_bytes_from_checkout_at_resolved_commit(self):
+        with TemporaryDirectory() as td:
+            checkout = _make_git_checkout(
+                td, {"static/bidder-params/kobler.json": KOBLER_PARAMS_BYTES}
+            )
+            commit = _git_head(checkout)
+            ref = dict(KOBLER_REF, resolved_commit=commit)
+            got = materialize_params(ref, checkout=checkout)
+            self.assertEqual(got, KOBLER_PARAMS_BYTES)
+
+    def test_checkout_read_is_pinned_to_resolved_commit_not_worktree(self):
+        # The pin is the point: a clone fetched past the spec's commit must
+        # still yield the bytes the ref attests to.
+        with TemporaryDirectory() as td:
+            checkout = _make_git_checkout(
+                td, {"static/bidder-params/kobler.json": KOBLER_PARAMS_BYTES}
+            )
+            pinned = _git_head(checkout)
+            drifted = KOBLER_PARAMS_BYTES.replace(b'"boolean"', b'"string"')
+            (checkout / "static" / "bidder-params" / "kobler.json").write_bytes(drifted)
+            _git(checkout, "add", "-A")
+            _git(checkout, "commit", "-m", "upstream moved on")
+            ref = dict(KOBLER_REF, resolved_commit=pinned)
+            self.assertEqual(materialize_params(ref, checkout=checkout), KOBLER_PARAMS_BYTES)
+
+    def test_blob_store_wins_over_checkout_when_both_available(self):
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(KOBLER_PARAMS_BYTES)
+            checkout = _make_git_checkout(
+                Path(td) / "clone", {"static/bidder-params/kobler.json": b"not this\n"}
+            )
+            ref = dict(KOBLER_REF, resolved_commit=_git_head(checkout))
+            self.assertEqual(
+                materialize_params(ref, blobs_dir=blobs, checkout=checkout),
+                KOBLER_PARAMS_BYTES,
+            )
+
+    def test_missing_blob_falls_through_to_checkout(self):
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()  # present but empty — no blob for this sha
+            checkout = _make_git_checkout(
+                Path(td) / "clone", {"static/bidder-params/kobler.json": KOBLER_PARAMS_BYTES}
+            )
+            ref = dict(KOBLER_REF, resolved_commit=_git_head(checkout))
+            self.assertEqual(
+                materialize_params(ref, blobs_dir=blobs, checkout=checkout),
+                KOBLER_PARAMS_BYTES,
+            )
+
+    def test_checkout_drift_without_pin_is_caught_by_verification(self):
+        # Non-git directory (or a clone lacking the commit): the helper may
+        # fall back to the working tree, but verification still governs.
+        with TemporaryDirectory() as td:
+            checkout = Path(td) / "plain"
+            target = checkout / "static" / "bidder-params"
+            target.mkdir(parents=True)
+            (target / "kobler.json").write_bytes(
+                KOBLER_PARAMS_BYTES.replace(b'"boolean"', b'"string"')
+            )
+            with self.assertRaises(ValueError) as ctx:
+                materialize_params(KOBLER_REF, checkout=checkout)
+            self.assertIn("sha256 mismatch", str(ctx.exception))
+
+    def test_plain_directory_checkout_with_matching_bytes_resolves(self):
+        with TemporaryDirectory() as td:
+            checkout = Path(td) / "plain"
+            target = checkout / "static" / "bidder-params"
+            target.mkdir(parents=True)
+            (target / "kobler.json").write_bytes(KOBLER_PARAMS_BYTES)
+            self.assertEqual(
+                materialize_params(KOBLER_REF, checkout=checkout), KOBLER_PARAMS_BYTES
+            )
+
+    def test_injected_runner_supplies_the_pinned_read(self):
+        seen = []
+
+        def runner(argv, cwd):
+            seen.append((argv, cwd))
+            return 0, KOBLER_PARAMS_BYTES
+
+        got = materialize_params(KOBLER_REF, checkout="/no/such/clone", runner=runner)
+        self.assertEqual(got, KOBLER_PARAMS_BYTES)
+        argv = seen[0][0]
+        self.assertIn("cat-file", argv)
+        # The commit, not HEAD, is what gets asked for.
+        self.assertIn(
+            "d7f8515b86258688304b0d9b6668c6a0e258bc9e:static/bidder-params/kobler.json",
+            argv,
+        )
+
+    def test_injected_runner_failure_falls_back_to_working_tree(self):
+        # Stands in for "git absent / shallow clone lacks the commit".
+        def runner(argv, cwd):
+            return 128, b""
+
+        with TemporaryDirectory() as td:
+            checkout = Path(td) / "clone"
+            target = checkout / "static" / "bidder-params"
+            target.mkdir(parents=True)
+            (target / "kobler.json").write_bytes(KOBLER_PARAMS_BYTES)
+            self.assertEqual(
+                materialize_params(KOBLER_REF, checkout=checkout, runner=runner),
+                KOBLER_PARAMS_BYTES,
+            )
+
+    def test_injected_runner_returning_empty_bytes_with_rc_zero_raises(self):
+        # A runner that lies about success must not produce an empty return.
+        def runner(argv, cwd):
+            return 0, b""
+
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(KOBLER_REF, checkout="/no/such/clone", runner=runner)
+        self.assertIn("sha256 mismatch", str(ctx.exception))
+
+    # --- unresolvable ----------------------------------------------------
+
+    def test_no_blob_and_no_checkout_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(KOBLER_REF)
+        msg = str(ctx.exception)
+        self.assertIn("cannot resolve", msg)
+        self.assertIn(KOBLER_PARAMS_SHA256, msg)
+
+    def test_missing_blob_and_no_checkout_raises_not_empty(self):
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            with self.assertRaises(ValueError) as ctx:
+                materialize_params(KOBLER_REF, blobs_dir=blobs)
+            self.assertIn("cannot resolve", str(ctx.exception))
+
+    def test_checkout_missing_the_path_raises(self):
+        with TemporaryDirectory() as td:
+            checkout = _make_git_checkout(td, {"README.md": b"unrelated\n"})
+            ref = dict(KOBLER_REF, resolved_commit=_git_head(checkout))
+            with self.assertRaises(ValueError) as ctx:
+                materialize_params(ref, checkout=checkout)
+            self.assertIn("cannot resolve", str(ctx.exception))
+
+    def test_checkout_without_resolved_commit_raises(self):
+        ref = {k: v for k, v in KOBLER_REF.items() if k != "resolved_commit"}
+        with TemporaryDirectory() as td:
+            checkout = _make_git_checkout(
+                td, {"static/bidder-params/kobler.json": KOBLER_PARAMS_BYTES}
+            )
+            with self.assertRaises(ValueError) as ctx:
+                materialize_params(ref, checkout=checkout)
+            self.assertIn("resolved_commit", str(ctx.exception))
+
+    # --- malformed refs --------------------------------------------------
+
+    def test_ref_missing_sha256_raises(self):
+        ref = {k: v for k, v in KOBLER_REF.items() if k != "sha256"}
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(ref, blobs_dir="/nonexistent")
+        self.assertIn("sha256", str(ctx.exception))
+
+    def test_ref_missing_bytes_raises(self):
+        # Losing the second witness silently would restore exactly the
+        # single-witness weakness the ref replaced.
+        ref = {k: v for k, v in KOBLER_REF.items() if k != "bytes"}
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(ref, blobs_dir="/nonexistent")
+        self.assertIn("bytes", str(ctx.exception))
+
+    def test_ref_missing_path_raises(self):
+        ref = {k: v for k, v in KOBLER_REF.items() if k != "path"}
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(ref, blobs_dir="/nonexistent")
+        self.assertIn("path", str(ctx.exception))
+
+    def test_ref_with_absolute_path_raises(self):
+        ref = dict(KOBLER_REF, path="/etc/passwd")
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(ref, checkout="/")
+        self.assertIn("relative to the upstream root", str(ctx.exception))
+
+    def test_ref_with_parent_traversal_in_path_raises(self):
+        ref = dict(KOBLER_REF, path="static/../../../etc/passwd")
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(ref, checkout="/")
+        self.assertIn("relative to the upstream root", str(ctx.exception))
+
+    def test_ref_with_non_hex_sha256_raises(self):
+        ref = dict(KOBLER_REF, sha256="not-a-hash")
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(ref, blobs_dir="/nonexistent")
+        self.assertIn("sha256", str(ctx.exception))
+
+    def test_ref_with_non_integer_bytes_raises(self):
+        ref = dict(KOBLER_REF, bytes="431")
+        with self.assertRaises(ValueError) as ctx:
+            materialize_params(ref, blobs_dir="/nonexistent")
+        self.assertIn("bytes", str(ctx.exception))
+
+    def test_non_mapping_ref_raises(self):
+        with self.assertRaises(ValueError):
+            materialize_params(None)
+
+    def test_deprecated_inline_json_is_not_consulted(self):
+        # Rule 38 no longer trusts `bidder_params_json`. A ref whose
+        # deprecated sibling disagrees with the blob must still return the
+        # blob's bytes — the inline text has no authority.
+        ref = dict(KOBLER_REF, bidder_params_json="{}")
+        with TemporaryDirectory() as td:
+            blobs = Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / KOBLER_PARAMS_SHA256).write_bytes(KOBLER_PARAMS_BYTES)
+            self.assertEqual(
+                materialize_params(ref, blobs_dir=blobs), KOBLER_PARAMS_BYTES
+            )
+
+
+def _git(cwd: Path, *args: str) -> str:
+    env = dict(os.environ)
+    env.update(
+        {
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.com",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.com",
+        }
+    )
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _make_git_checkout(root: Any, files: Dict[str, bytes]) -> Path:
+    """Build a throwaway git repo containing ``files``; return its path."""
+    checkout = Path(root)
+    checkout.mkdir(parents=True, exist_ok=True)
+    _git(checkout, "init", "-q")
+    for rel, payload in files.items():
+        dest = checkout / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(payload)
+    _git(checkout, "add", "-A")
+    _git(checkout, "commit", "-q", "-m", "seed")
+    return checkout
+
+
+def _git_head(checkout: Path) -> str:
+    return _git(checkout, "rev-parse", "HEAD").strip()
 
 
 # ---------------------------------------------------------------------------

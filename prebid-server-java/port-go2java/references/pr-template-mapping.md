@@ -134,7 +134,9 @@ The upstream template's checks above are necessary but not sufficient — the po
   HttpUtil) per [`framework-utilities-java.md`](../../read/skills/shared/framework-utilities-java.md);
   no direct Vert.x JSON usage; no direct HttpClient usage.
 - Specific rules and tips per the porting guide: bidder-params byte-fidelity
-  (Rule 38 verified via `port_engine.byte_copy` SHA-256 check); naming
+  (Rule 38 — bytes materialised from `bidder_params_ref` and the emitted file
+  re-checked against `ref.sha256` + `ref.bytes` via
+  `port_engine.materialize_params`); naming
   normalization (Rule 46 + ADR-005); alias-empire flavor coherence (Rule 44
   if applicable); IAB-cat translation (Rule 42 if applicable).
 - Companion docs PR drafted at `prebid/prebid.github.io::dev-docs/bidders/{bidder}.md`
