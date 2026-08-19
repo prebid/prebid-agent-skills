@@ -625,7 +625,7 @@ class TestPortReportV020Invariants(unittest.TestCase):
 # The version a reader is told to emit must be one the schema can validate.
 # ---------------------------------------------------------------------------
 
-CURRENT_SPEC_VERSION = "2.0.0"
+CURRENT_SPEC_VERSION = "2.1.0"
 
 # Skills that instruct a reader to write adapter_spec_version. Both orchestrators
 # now do; before 2.0.0 only the Java one did, and it named a version whose

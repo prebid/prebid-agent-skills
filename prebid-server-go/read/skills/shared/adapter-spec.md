@@ -18,7 +18,7 @@ A reader skill MUST emit the version it produced. A consumer (write, port) MUST 
 
 The legacy integer form `adapter_spec_version: 1` is **rejected** — the property is `type: string` with pattern `^[0-9]+\.[0-9]+\.[0-9]+$`, so both `1` and `"1"` fail validation. The Phase 2 migration window it was accepted in is closed.
 
-A new read emits `"2.0.0"`. All 42 goldens declare it. Earlier versions stay documented in the schema because a spec produced by an older skill build declares one of them, but a spec that carries `bidder_params_ref` while declaring an earlier version is self-contradictory: the ref is what 2.0.0 requires.
+A new read emits `"2.1.0"`. All 42 goldens declare it. Earlier versions stay documented in the schema because a spec produced by an older skill build declares one of them, but a spec that carries `bidder_params_ref` while declaring an earlier version is self-contradictory: the ref is what 2.0.0 requires.
 
 ---
 

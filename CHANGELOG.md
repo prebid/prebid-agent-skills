@@ -17,6 +17,74 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 2.1.0] · [taxonomy_version 1.2.0] · [port_translation_rules_version 0.4.0] · [port_report_version 0.2.0] — 2026-08-19 (four enum values; golden read errors)
+
+MINOR. Four enum values are added, nothing is removed or tightened, so every
+2.0.0 spec still validates.
+
+### Added — `adapter_spec_version` 2.0.0 → 2.1.0
+
+- `$defs/EndpointResolution.kind` gains `param-derived-endpoint-macros`, and
+  `bidder_info.endpoint_construction.macro_syntax` gains `java-uri-template`. Both
+  describe the Vert.x `UriTemplate` endpoint form prebid-server-java moved to in
+  upstream #4444. Without the first, a spec using Rule 48's own `spec_field_driver`
+  fails validation.
+- `tests.integration_test_pattern` and `tests.java_it_folder_naming` each gain
+  `custom`. `read-bidder-class/references/junit-it-patterns.md` and that skill's
+  SKILL.md already instructed readers to emit it — for an incomplete 4-file set,
+  and for a folder layout matching no named convention — against enums that
+  rejected the value, so a reader following either instruction produced a spec that
+  failed its own Step 4 validation.
+
+The first two landed earlier in this cycle without a version bump, which
+`docs/methodology/schema-versioning.md` requires for an added enum value. This
+entry covers all four.
+
+No migration script: those ship for breaking changes. The 42 goldens moved to
+`"2.1.0"` regardless, because this corpus keeps one version corpus-wide and
+several checks assert that unanimity — including the CHANGELOG header gate, which
+reads the current version from golden agreement. Reproduce with:
+
+```
+python3 - <<'EOF'
+import glob, pathlib
+for p in glob.glob("prebid-server-*/read/test-fixtures/*.golden.spec.yaml"):
+    f = pathlib.Path(p); t = f.read_text()
+    f.write_text(t.replace('adapter_spec_version: "2.0.0"', 'adapter_spec_version: "2.1.0"', 1))
+EOF
+```
+
+### Fixed — two goldens asserting things that were not true
+
+Both found by binding `tests.integration_test_pattern` to the length of
+`tests.fixture_inventory.integration[]`. Two of that field's values name a file
+count, so each predicts the entry count, and nothing checked the prediction.
+
+- **beachfront** declared `4-file-split` beside six entries. Four named
+  `test-beachfront-{banner,video}-bid-{request,response}.json`, which have no
+  commit in upstream history — `git log --all --diff-filter=A` over the IT folder
+  shows numbered variants and never a banner/video split. Each carried
+  `sha256: pending-operator-fetch`, which downgrades the drift check to
+  presence-only, so the one thing it reported was the absence of files that never
+  existed. The folder holds four files at this golden's own pin and at
+  `e3ffd57db`, each byte-identical between them; the inventory is now those four,
+  generated from `git show` output rather than transcribed.
+- **appnexus** declared `6-file-with-cache` beside eight entries, all real files
+  with real digests. `AppnexusVideoTest.java` stubs two bidder calls, one cache
+  call, and asserts against the auction pair, so eight is the shape and the label
+  was the error. Now `custom`, with the shape readable from the inventory's roles.
+
+`read-bidder-class`'s per-fixture `role` list also gained the cache roles
+(`cache-request`, `cache-response`, `cache-response-matcher`) that the corpus uses
+and it omitted — a reader with a cache pair had no role to assign.
+
+Drift scan against both checkouts: 6 fail → 2 fail. The remainder are emxdigital
+(bidder-params path moved upstream, byte-identical) and rubicon (renamed upstream
+to magnite). Each golden is true at its own pin, so neither is a read error and
+neither is fixable by editing a field.
+
+---
+
 ## [adapter_spec_version 2.0.0] · [taxonomy_version 1.2.0] · [port_translation_rules_version 0.4.0] · [port_report_version 0.2.0] — 2026-08-19 (Rules 47/48/49 and their wiring)
 
 Three rules from the rtbstack Go → Java port, the templates and SKILL contract
