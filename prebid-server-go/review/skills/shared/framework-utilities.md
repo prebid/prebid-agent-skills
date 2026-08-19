@@ -607,6 +607,69 @@ At @0ba3523 the largest parents are `limelightDigital` (23), `teqblaze` (25 acro
 
 ---
 
+## Cross-Language Port-Fidelity Hook Contract
+
+Canonical reference for the `--- PRIOR SOURCE SPEC COMPARISON ---` manifest block that `pr-triage` authors whenever a PR is a cross-language port — typically a Java → Go port via `port-java2go`, with the source spec resolved from the Teal-flow path `.tmp/full-loop/{run-id}/java/{bidder}.yaml` or from a user-persisted `prebid-server-java/read/specs/{bidder}/latest.yaml`. All three downstream Go review skills reference this section instead of restating the policy.
+
+Before this contract existed the block was authored and never read: `pr-triage` emitted it, the Java side consumed its mirror in three skills, and no Go review skill did anything with it. A Java → Go port therefore got port-fidelity review in one direction only.
+
+**Symmetric counterpart**: [`framework-utilities-java.md`](../../../../prebid-server-java/review/skills/shared/framework-utilities-java.md). Producer-side block authoring lives in [`pr-triage/SKILL.md` §Cross-language ports](../pr-triage/SKILL.md#cross-language-ports-prior_source_spec) and [`pr-triage-java/SKILL.md` §Cross-language ports](../../../../prebid-server-java/review/skills/pr-triage-java/SKILL.md#cross-language-ports-prior_source_spec).
+
+### Severity matrix
+
+| Severity | When to use |
+|---|---|
+| `info` | Default. The asymmetry is legitimate per Rules 5 / 9 / 11 / 35 / 38 (e.g. Go's `text/template` macro syntax against Java's `Uri.replaceMacro` single-brace form). Suppressed in Step 5 unless the PR diff elevates it. |
+| `warn` | The divergence touches a Rule 38 byte-fidelity assertion, an R5-strict cross-language equivalence (`capabilities`, `gvl_vendor_id`, `maintainer`, `geoscope`), or a known master-sample pattern. Surfaced in Step 5. |
+| `fail` | A dual-spec assertion under `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` records the divergence at `severity: fail`. Surfaced in Step 5. |
+| `urgent` | A `fail`-severity dual-spec finding whose field is touched by this PR's diff. Top-bucket Step 5 emission, blocking unless the reviewer explicitly waives it. |
+
+The severity floor is the dual-spec file, not the reviewer's judgment: when the pair file records `severity: fail`, do not emit it lower.
+
+### Dedup contract
+
+A finding the downstream skill also discovers independently from the diff dedupes with the exact phrase:
+
+> `Previously flagged by prior_source_spec — confirm with reviewer if intentional`
+
+This mirrors `Previously flagged by {reviewer}` and `Previously flagged by prior agent`. Surface net-new concerns only; never re-report a finding already in the block.
+
+### Step 5 emission template
+
+```
+[severity] file:line — finding
+  Evidence: <quote / SHA / dual-spec citation>
+  Recommendation: <align | accept | escalate | defer to upstream PR>
+```
+
+Promoted from `bidder-params-java-pr-review`'s findings-format block. Bucket map: `urgent` → Step 5 top bucket (blocking unless waived), `fail` → Step 5 must-address, `warn` → Step 5 reviewer judgment, `info` → suppressed unless the diff elevates it.
+
+### Reflection-loop routing
+
+Findings from this hook flow into [`reflection-loop.md`](../../../../docs/methodology/reflection-loop.md):
+
+| Severity / pattern | Reflect destination |
+|---|---|
+| `warn` Rule 38 byte-only divergence | `port-translation-rules.yaml` Rule 38 notes, or an upstream PR |
+| `fail` / `urgent` dual-spec semantic divergence | Upstream PR, NOT this repo. Record `severity: fail` in the pair file if it is not already there. |
+| `info` pattern absent from the taxonomy | `behavior-taxonomy.yaml` `quirks_taxa[]`, MINOR addition |
+| Any severity where the source spec under-extracted a field | The relevant `read/skills/*/SKILL.md` extraction step |
+
+When in doubt emit at `info` with a citation; routing happens on the next sweep.
+
+### Citing evidence
+
+Every worked example in a Step 1g table cites a dual-spec assertion or a canary trace. Cite the **key path** in a dual-spec file (`aax.dual-spec-assertions.yaml` → `bidder_params_sha256`) or the **finding id** in a canary trace (`F-new-43`), never a line number: these are in-repo files that every edit renumbers, and a stale line number sends a reviewer to the wrong assertion while still looking precise.
+
+Canonical patterns worth knowing:
+
+- **aax** — `bidder_params_sha256` semantic divergence, the suite's `severity: fail` case and so the canonical `urgent` elevation.
+- **adverxo** — `bidder_info_endpoint` macro-form divergence: same observable URL, different macro syntax *and* different query-param key.
+- **mediasquare** — `bidder_info_capabilities`: Java records an empty `site` list where Go declares three media types. R5-strict, so `warn`.
+- **thetradedesk** — `java_aliases` carries a tilde-stub `ttd` with no Go registration at all, so `bidders=ttd` resolves on Java and 404s on Go.
+
+---
+
 ## Sources
 
 - `prebid/prebid-server` master at @2fae16f31693452b62dd2a0924b78e71bbec43ec (2026-05-03)

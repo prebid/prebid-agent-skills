@@ -1,7 +1,7 @@
 ---
 name: bidder-params-pr-review
 description: Reviews changes to bidder parameter schemas (static/bidder-params/*.json), impression extension Go structs (openrtb_ext/imp_*.go), and parameter validation tests (adapters/*/params_test.go). USE WHEN any of those files are added/modified/removed. Verifies JSON Schema draft-04 correctness, Go struct alignment, reserved-OpenRTB-field exclusions, jsonutil.StringInt usage for flexible types, and test coverage. Do NOT use for adapters/{bidder}/{bidder}.go (adapter implementation), static/bidder-info/*.yaml, or non-imp_*.go files in openrtb_ext/.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Bidder Params PR Review
@@ -49,6 +49,9 @@ The pr-triage skill provides:
 - Duplicate PR search results
 - Bidder metadata (aliasOf status, capabilities if available from the PR)
 
+- `--- PRIOR AGENT FINDINGS ---` block (when a prior-agent review was recorded; consumed in Step 1d)
+- `--- PRIOR SPEC COMPARISON ---` block (same-language regression detection; opt-in; deduped like `--- PRIOR AGENT FINDINGS ---`)
+- `--- PRIOR SOURCE SPEC COMPARISON ---` block (cross-language port-fidelity detection; opt-in; consumed in Step 1g)
 **1b. Handle drift warnings.**
 
 If the triage manifest reports drift for bidder-params, include the drift warning in the review output. Do not re-fetch `bidders.go`.
@@ -64,6 +67,7 @@ Cross-reference the PR comments from the triage manifest against your review fin
 - If a CI bot report indicates a failure relevant to your scope (e.g., schema validation, struct compilation), use it as additional evidence for your verification steps
 - If the author has responded to reviewer feedback with fixes, check whether the current diff reflects those fixes
 
+- If the manifest carries a `--- PRIOR AGENT FINDINGS ---` block (a CodeRabbit / Copilot / ChatGPT review recorded via `agent_review: yes`), cross-reference each of your findings against the listed flags. An exact duplicate — same file, same rule, same severity — dedupes as `Previously flagged by prior agent` rather than emitting a fresh finding; net-new findings emit normally.
 **1e. Fetch full file content when needed.**
 
 For files with status `modified`, the patch contains only changed regions. When verification requires full file context (e.g., checking all properties in a schema, verifying struct field alignment):
@@ -82,6 +86,23 @@ curl -sS "https://raw.githubusercontent.com/{owner}/{repo}/{head_sha}/static/bid
 **1f. Handle shared file: openrtb_ext/bidders.go.**
 
 If the triage manifest includes `openrtb_ext/bidders.go` in this skill's file list (because the diff touched `NewBidderParamsValidator` or schema validation logic), include it in scope. Otherwise, ignore this file even if it appears in the PR.
+
+**1g. Consume `--- PRIOR SOURCE SPEC COMPARISON ---` (cross-language ports).**
+
+When the manifest carries this block, the PR is a cross-language port — for a Go PR, typically a Java → Go port via `port-java2go`. Severity tiers, the dedup phrase, the Step 5 emission template, and reflection-loop routing all live in [the port-fidelity hook contract](../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract); do not restate them here. Use the source-spec context to inform Step 4 verification.
+
+If the block is absent, or reads `prior_source_spec not present — section omitted`, skip this substep: the PR is not a cross-language port.
+
+Worked examples for this skill's scope, each citing a dual-spec key path:
+
+| Divergence | Severity | Evidence |
+|---|---|---|
+| `bidder_params_sha256` differs semantically, not just by whitespace — the two schemas are not the same schema. This is the suite's canonical `fail`, and it becomes `urgent` when the PR diff touches the field in question (aax: Java omits `minLength: 1` on `cid` / `crid`). | `fail`, `urgent` when the diff touches it | `aax.dual-spec-assertions.yaml` → `bidder_params_sha256` |
+| `bidder_params_sha256` differs by formatting only — tabs against spaces, or trailing-newline. Rule 38 makes the canonical bytes the source of truth, so do not "fix" the target to match your editor. | `warn` | `thetradedesk.dual-spec-assertions.yaml` → `bidder_params_sha256` |
+| A required field is required on one side only, or a `oneOf` / `anyOf` combinator appears on one side only. | `warn`, `fail` when the pair file records one | the pair file's `params_schema_interpretation` block |
+| The params schema accepts a value the adapter code rejects (Rule 48 validation-layering: a code-level allow-list beside a permissive schema). Source-faithful; do not tighten the schema unilaterally. | `info` | Rule 48 in `port-translation-rules.md` |
+
+Surface `warn` / `fail` / `urgent` in the Step 5 summary; suppress `info` unless the diff elevates it — for example a documented camelCase↔kebab-case `info` becomes `warn` when the Go-side change drops an R5-strict shared field entirely.
 
 ### Step 2: Extract Changes From the Diff
 
