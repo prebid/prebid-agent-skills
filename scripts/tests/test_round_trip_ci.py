@@ -964,6 +964,55 @@ class TestEndpointMacrosRegistry(unittest.TestCase):
         self.assertIn("AUCTION_PRICE", rtci.OPENRTB_MACROS)
 
 
+class TestEndpointMacroNormalization(unittest.TestCase):
+    """The forms `normalize_endpoint_macros` met after it was written.
+
+    R5 compares endpoints after canonicalizing macro syntax, so a form it does
+    not know reads as a structural divergence. Two were missing.
+    """
+
+    def _norm(self, value):
+        from scripts.lib import r5_check  # noqa: local import keeps module load cheap
+        return r5_check.normalize_endpoint_macros(value)
+
+    def test_single_brace_is_canonicalized(self):
+        """Every Java endpoint uses this form since upstream #4444 (2026-07-20)
+        moved substitution to Vert.x UriTemplate."""
+        self.assertEqual("{{Host}}", self._norm("{Host}"))
+        self.assertEqual("https://x/{{A}}?b={{B}}", self._norm("https://x/{A}?b={{.B}}"))
+
+    def test_a_doubled_pair_is_not_re_wrapped(self):
+        """The reason the single-brace arm needs a lookaround: a bare pattern
+        rewrites the inside of `{{X}}` and yields `{{{X}}}`."""
+        self.assertEqual("{{Host}}", self._norm("{{Host}}"))
+        self.assertEqual("{{Host}}", self._norm("{{.Host}}"))
+
+    def test_deploy_time_token_consumes_its_trailing_hash(self):
+        """The corpus form is `#{REGION}#` (teqblaze). The old pattern took only
+        the leading `#`, leaving `{{REGION}}#` -- a string that can never equal a
+        canonical form, so the normalization silently did nothing."""
+        self.assertEqual("{{REGION}}", self._norm("#{REGION}#"))
+        self.assertEqual("{{REGION}}", self._norm("#{REGION}"))
+
+    def test_printf_positional_is_still_left_alone(self):
+        """`%s` has no name to canonicalize against, so a pair with `%s` on one
+        side must keep surfacing as a real divergence."""
+        self.assertEqual("%s", self._norm("%s"))
+        self.assertEqual("http://x/hb?zone=%s", self._norm("http://x/hb?zone=%s"))
+
+    def test_non_strings_pass_through(self):
+        for value in (None, 42, ["{A}"], {"a": "{B}"}):
+            self.assertEqual(value, self._norm(value))
+
+    def test_a_refreshed_java_golden_would_not_read_as_divergent(self):
+        """The forward case this exists for: the Java goldens still carry the
+        pre-migration double-brace form, so today the fix changes no verdict.
+        Refresh one to single-brace and, without this arm, it diverges from the
+        Go side on syntax alone."""
+        go_form, java_after_refresh = "https://x/{{.Host}}/a", "https://x/{Host}/a"
+        self.assertEqual(self._norm(go_form), self._norm(java_after_refresh))
+
+
 class TestR11PortRoundTrip(unittest.TestCase):
     """Phase D4.1: r_port_round_trip validates round-trip artifacts when
     the operator persists them. Without artifacts, the function emits SKIP
