@@ -88,6 +88,8 @@ For each child key inside `adapters.{xyz}.aliases`:
 2. Tilde-syntax detection rule: a YAML value `~` parses to **YAML null**. Distinguish from absent (key not present). When `aliases:` is itself absent or empty, emit `aliases: []` (NOT null). When `aliases.<name>` is the YAML null (`~`), emit `config_form: tilde_inherit`. When `aliases.<name>` is a non-null map, emit `config_form: full_block`. Other shapes (scalar string, list) are warnings (`alias-shape-unknown`).
 3. Per-alias `aliases[].name` is the child YAML key. Per-alias `aliases[].alias_of` equals the parent (`{xyz}`). Per-alias `aliases[].overrides` is the map of override fields when full-block; absent when tilde-inherit.
 
+`aliases[].overrides` is a **verbatim field** under V1 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): the subtree is copied out of the parsed bytes of the parent's `bidder-config/{xyz}.yaml`, and stays re-derivable through that file's recorded reference (`{ path, resolved_commit, sha256, bytes }`, blob at `../../test-fixtures/blobs/<sha256>`). Do not fill an override from the parent's value, from a sibling alias, or from what an endpoint "should" be — an override that is not in the blob is an invented upstream fact.
+
 The aliases-inversion semantic (Port Translation Rule 33) is owned by the orchestrator — it sets `cross_language.port_concerns.aliases_inverted: true` whenever this skill emits a non-empty `aliases[]`. This skill produces the children-list view from the unified YAML; the Go-side reader produces the inverse child-side view from per-child YAMLs.
 
 Quirk emission: each tilde-inherit alias also emits a `quirks[]` entry with `edge_case_taxon: tilde-alias-syntax` so cross-language porters consuming a Java-source spec are reminded to split the entry into a child YAML when porting to Go.
@@ -158,11 +160,13 @@ Pass through the typo'd value in `yaml_extra_fields` so round-trip writes preser
 
 Any YAML key not matched in Steps 3 / 5 / 7 -> `bidder_info.yaml_extra_fields` as a verbatim subtree. Preserve original key (do NOT normalize case or hyphens), original value type, and insertion order.
 
+Same V1 requirement as `aliases[].overrides` in Step 5: this subtree (and `bidder_info.user_sync`) is copied out of the parsed bytes of the referenced `bidder-config/{xyz}.yaml`, never retyped, and remains re-derivable through that file's `sha256` + `bytes`.
+
 Common Java custom fields (operator-supplied, mapped to a `BidderConfigurationProperties` subclass — captured cross-skill by `read-bidder-class` under `spring_config.configuration_properties_class.extra_fields[]`):
 
 - `dev-endpoint` (Kobler PR #3684) — second URL for dev/test mode. Promoted from Go-side hardcoded const into Java YAML config (Port Translation Rule 35 — `dev-endpoint-config-promotion` quirk).
 - `platform-id` (Appnexus) — partner-supplied platform identifier.
-- `iab-categories` (Appnexus) — 120-entry inlined map of IAB category IDs to bidder-internal codes. Captured cross-skill in `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: 120}`.
+- `iab-categories` (Appnexus) — inlined map of IAB category IDs to bidder-internal codes. Captured cross-skill in `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: <counted>}`; `table_size` is a computed value (V4) — count the entries with the command named in `read-bidder-class` Step 6 rather than quoting a remembered cardinality (the count at master and in the appnexus goldens is 95).
 - `extra-info` (Huaweiads, NextMillennium) — opaque JSON or nested map for the `ExtraInfo` static nested class.
 
 For each known custom field, emit (additionally) an INFO-level entry under `quirks[]` with `edge_case_taxon: dev-endpoint-config-promotion` (for `dev-endpoint`) so cross-language porters going Java→Go know to either inline the value as a Go const (anti-pattern, surfaces a separate `hardcoded-config-as-anti-pattern` quirk) or pass it through `extra_info` JSON in Go's `static/bidder-info/{xyz}.yaml`.

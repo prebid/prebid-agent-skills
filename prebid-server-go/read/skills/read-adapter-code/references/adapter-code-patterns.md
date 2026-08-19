@@ -230,7 +230,7 @@ Most Go adapters do NOT lookup IAB categories. When they do (canonical: msft):
 
 - `storage_kind: go-data-table` — co-located Go data file (e.g., `iab_categories.go`).
 - `go_data_file: adapters/msft/iab_categories.go` — full path.
-- `table_size: <int>` — number of entries.
+- `table_size: <int>` — number of entries, and a computed value under V4 in [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): record the stdout of `<fetch> | awk '/^var <mapVar>/,/^}/' | grep -c ':[[:space:]]*"'`. For msft's `iabCategoryMap` at master this prints 95, matching the msft golden. Rule 42 makes the cardinality a cross-language fidelity invariant, so the number must be counted rather than asserted.
 - `delivery_mechanism: static-init` — typically a package-level `var iabCategories = map[string]string{ ... }`. (Renamed from `injection` per ADR-001 D2.)
 - `yaml_field: null` — Java-only.
 

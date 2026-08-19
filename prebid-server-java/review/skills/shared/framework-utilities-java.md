@@ -225,7 +225,13 @@ Reviewer pre-flag (mirrors `pr-triage-java` Step 5k): for every added Java file 
 
 ### 1.7 `@Validated` annotation usage
 
-`@Validated` on a `@ConfigurationProperties` subclass enables runtime validation of `jakarta.validation.constraints.*` (`@NotBlank`, `@NotNull`, etc.) during Spring binding. Common on Rule 35 typed-config subclasses to enforce that mandatory YAML fields (e.g., Kobler's `dev-endpoint`) are populated. Absence is tolerated for optional fields; presence + `@NotBlank` on a field is the canonical pair.
+`@Validated` marks a `@ConfigurationProperties` bean for `jakarta.validation.constraints.*` enforcement during Spring binding.
+
+**On a bidder's typed subclass it is redundant.** `BidderConfigurationProperties` — the parent — is itself annotated `@Validated` (`src/main/java/org/prebid/server/spring/config/bidder/model/BidderConfigurationProperties.java`), and spring-boot 3.5.10 resolves the annotation through `MergedAnnotations`/`SearchStrategy.TYPE_HIERARCHY` in `ConfigurationPropertiesBean`, which walks the superclass chain. Repeating it on the subclass is therefore redundant, not required.
+
+Corpus at `e3ffd57`: 8 of 255 bidder `*Configuration.java` files carry it, every one of those also carries at least one jakarta constraint, and of the 13 files that carry a constraint, five omit it — including `AduptechConfiguration` (`@NotNull`) and `RediadsConfiguration` (`@NotBlank`), whose constraints sit on subclass fields. So its presence tracks a house habit, not a functional requirement, and a review MUST NOT claim that omitting it makes a constraint inert.
+
+A separate case is genuinely different and is NOT covered by the parent: `@NotBlank` on a **constructor parameter** of a `@Bean` method, as in `AaxConfiguration`, `MedianetConfiguration`, and `TrustedstackConfiguration` (`@NotBlank @Value("${external-url}") String externalUrl`). Parameter validation is a different mechanism from properties binding and needs `@Validated` on the declaring class. Whether those three constraints fire at startup was NOT tested here; do not assert either way in a review.
 
 ---
 

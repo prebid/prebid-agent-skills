@@ -121,6 +121,8 @@ If a mediaType value is NOT in the four-valid set, emit warning type `invalid-me
 
 ### Step 7: Extract usersync block verbatim
 
+`bidder_info.user_sync` is a **verbatim field**: rule V1 in [`../shared/adapter-spec.md`](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4) applies to the whole subtree, so it is copied out of the parsed bytes of `static/bidder-info/{xyz}.yaml` and stays re-derivable from that file's recorded reference (`{ path, resolved_commit, sha256, bytes }`, blob at `../../test-fixtures/blobs/<sha256>`). No sub-field value is retyped from memory, from a sibling bidder's YAML, or from the Java spec.
+
 The `userSync:` block in Go YAML has a known shape mastered in the field index. This skill emits the entire `userSync:` subtree VERBATIM under `bidder_info.user_sync` — preserving:
 
 - Key order.
@@ -160,6 +162,8 @@ Any YAML key not matched in Steps 2 / 3 / 6 / 7 / 8 -> `bidder_info.yaml_extra_f
 - Insertion order.
 
 This is the round-trip determinism contract (Validation Rule R4). The future `write/` skill reconstructs the YAML byte-for-byte by re-emitting `yaml_extra_fields` in original order alongside the canonical fields.
+
+`yaml_extra_fields` is a **verbatim field** under V1 in [`../shared/adapter-spec.md`](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4) — same requirement as `user_sync` in Step 7: the subtree is copied out of the parsed bytes of the recorded source file, whose reference (`sha256` + `bytes`) is what lets a checker re-derive it. A value that appears here but not in the blob is an invented upstream fact, and nothing else in the pipeline will catch it.
 
 The Optidigital golden's `yaml_extra_fields: { openrtb: { version: 2.6 } }` is the canonical example — `openrtb` is a recognized canonical parent (per field index), but the Go reader chose to preserve its nested layout rather than flatten to top-level `ortb_version`.
 

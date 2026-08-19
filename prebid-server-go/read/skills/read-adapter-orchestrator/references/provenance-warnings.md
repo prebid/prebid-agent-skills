@@ -213,9 +213,9 @@ Note: NON-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros —
 
 ### `cross-language-byte-divergence`
 
-**Trigger**: `bidder_params_json` byte-content (or `bidder_params_sha256`) differs between the Go-side and Java-side specs for the same bidder. The byte-identity contract is per Rule 1 of [`../../shared/port-translation-rules.md`](../../shared/port-translation-rules.md): porters copy bytes verbatim; any whitespace or ordering divergence breaks port-fidelity.
+**Trigger**: the bidder-params file's digest differs between the Go-side and Java-side specs for the same bidder. The byte-identity contract is per Rule 1 of [`../../shared/port-translation-rules.md`](../../shared/port-translation-rules.md): porters copy bytes verbatim; any whitespace or ordering divergence breaks port-fidelity.
 
-**Detection**: Step 6 cross-check (R5 cross-language structural parity, when a sibling-language spec is locally available). If the orchestrator can resolve the sibling spec, it compares `bidder_params_sha256`; mismatch emits this warning AND a paired `quirks[]` entry.
+**Detection**: Step 6 cross-check (R5 cross-language structural parity, when a sibling-language spec is locally available). If the orchestrator can resolve the sibling spec, it compares `bidder_params_ref.sha256` and `bidder_params_ref.bytes`; mismatch emits this warning AND a paired `quirks[]` entry. Both sides' numbers must have been measured by their own reader's Step 1 — comparing two transcriptions of the same value proves nothing (V2 in [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)).
 
 **Real example** (Java side detecting divergence vs Go):
 

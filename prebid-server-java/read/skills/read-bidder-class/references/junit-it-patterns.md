@@ -59,8 +59,8 @@ public class KoblerBidderTest extends VertxTest {
 |---|---|---|
 | `tests.test_root_directory` | The bidder unit-test directory: `src/test/java/org/prebid/server/bidder/{xyz}/`. | Always set this exact path on Java specs. |
 | `tests.uses_canonical_harness` | `true` if the test class `extends VertxTest`. | `VertxTest` is the Java equivalent of Go's `RunJSONBidderTest` — it provides `jacksonMapper`, time/clock helpers, and the standard test fixtures. |
-| `tests.unit_test_methods_count` | Count of `@Test`-annotated methods. | Use regex `^\s*@Test\b` on the file. Multiline `@Test` annotations (`@Test\n(timeout = ...)`) are rare; the regex still matches. |
-| `tests.unit_test_loc` | Total line count of the test file. | Including blank lines and the final newline. |
+| `tests.unit_test_methods_count` | Stdout of `<fetch> \| grep -c '^[[:space:]]*@Test'`. | Computed value (V4 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)) — record the command's number. `[[:space:]]` is used instead of `\s` because BSD `grep` does not interpret `\s` in a basic regex, so an `\s` pattern can return a wrong count rather than an error. Multiline `@Test` annotations (`@Test\n(timeout = ...)`) are rare; the pattern still matches the annotation line. |
+| `tests.unit_test_loc` | Stdout of `<fetch> \| wc -l`. | Computed value (V4). Blank lines count; `wc -l` counts newlines, so a file with no terminal newline reports one less than its visible line count — that is the recorded value. |
 | `tests.hand_written_test_methods[]` | List of method names in declaration order. | Extract the method name following each `@Test` annotation. |
 
 ### `@Test` method counting
@@ -352,7 +352,7 @@ Detection: the folder path under `src/test/resources/org/prebid/server/it/openrt
 
 ## Central `test-application.properties` registry append (edge case #25)
 
-Every Java adapter PR adds 2-4 lines to `src/test/resources/test-application.properties`:
+Every Java adapter PR adds 2-4 lines to `src/test/resources/org/prebid/server/it/test-application.properties` — its location both on current master and at the Phase A-4 pinned commit `69b1993c`, where `src/test/resources/test-application.properties` does not exist:
 
 ```properties
 adapters.{xyz}.enabled=true
@@ -368,8 +368,13 @@ adapters.{xyz}.aliases.{name}.endpoint=http://localhost:8090/{name}-exchange
 
 ### Detection rules
 
-1. Read `src/test/resources/test-application.properties`.
-2. Count lines that begin with `adapters.{xyz}.` for THIS bidder (and any parent_aliases).
+1. Count the lines that begin with `adapters.{xyz}.` for THIS bidder (and any parent_aliases) with one command, and record its stdout — a computed value under V4 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4):
+
+```bash
+<fetch src/test/resources/org/prebid/server/it/test-application.properties> | grep -c '^adapters\.{xyz}\.'
+```
+
+2. For kobler at master this prints 2, matching the Java kobler golden. A `0` is a finding ONLY after the file has been confirmed to exist at the resolved commit — a zero from a wrong path is an instrument failure.
 3. Emit:
 
 ```yaml
@@ -390,9 +395,7 @@ adapters.kobler.enabled=true
 adapters.kobler.endpoint=http://localhost:8090/kobler-exchange
 ```
 
-Count: 2 lines.
-
-(The Kobler golden currently emits `0` because the registry append count is computed by the orchestrator after the read, not by the read-bidder-class skill itself. Skills downstream read this from the orchestrator. The skill SHOULD populate the field when the orchestrator's input includes the properties file content.)
+Count: the command above prints 2, and the Java Kobler golden records `test_application_properties_entries_added: 2`. Re-run the command rather than trusting either number here — this document is not a source of measurements (V2).
 
 For Adverxo (parent + 3 aliases), the registry contains:
 

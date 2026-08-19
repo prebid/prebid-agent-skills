@@ -106,8 +106,12 @@ class TestSiteCheck(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             m = Path(td) / "m.yaml"
             m.write_text(
+                # A valid SHAPE with a stale anchor: --check-sites never reads
+                # upstream, but the manifest still has to be well-formed, so the
+                # upstream keys are present and only the anchor is wrong.
                 "version: 1\nclaims:\n"
                 "  - id: t.anchor\n    kind: symbol\n    repo: go\n    why: t\n"
+                "    symbol: adapters.Bidder\n    upstream_path: adapters\n"
                 "    sites:\n      - path: README.md\n"
                 "        assert: 'this string is not in the README'\n",
                 encoding="utf-8")
@@ -283,6 +287,87 @@ class TestSymbol(unittest.TestCase):
             ok, detail = vuc.check_symbol(root, {"upstream_path": "util/ptrutil", "symbol": "Clone"})
             self.assertFalse(ok)
             self.assertIn("no definition", detail)
+
+
+class TestManifestShape(unittest.TestCase):
+    """A misspelled key used to widen a check's scope instead of failing it.
+
+    `check_count` defaulted `upstream_path` to "." and `glob` to "*", so
+    `upstrem_path:` scoped the search to the whole repository -- and the count
+    still matched, so the claim reported PASS. That is worse than a crash: the
+    gate is green for a check that never ran at the scope it names. Every
+    scoping key is now mandatory and the manifest's shape is validated before
+    any claim is checked.
+    """
+
+    GOOD = {
+        "id": "t.count", "kind": "count", "repo": "java", "why": "t", "sites": [],
+        "upstream_path": "src/main/resources/bidder-config", "glob": "appnexus.yaml",
+        "mode": "matches", "pattern": r"(?m)^\s+\d+:\s", "expect": 95,
+    }
+
+    def _shape(self, claim: dict):
+        return vuc.validate_manifest({"claims": [claim]})
+
+    def test_clean_claim_produces_no_findings(self):
+        self.assertEqual([], self._shape(dict(self.GOOD)))
+
+    def test_real_manifest_shape_is_valid(self):
+        import yaml
+        findings = vuc.validate_manifest(yaml.safe_load(MANIFEST.read_text(encoding="utf-8")))
+        self.assertEqual([], [f"{r.claim_id}: {r.detail}" for r in findings])
+
+    def test_misspelled_scope_key_fails_instead_of_widening_the_search(self):
+        claim = dict(self.GOOD)
+        claim["upstrem_path"] = claim.pop("upstream_path")
+        details = " | ".join(r.detail for r in self._shape(claim))
+        self.assertIn("requires ['upstream_path']", details)
+        self.assertIn("upstrem_path", details)
+
+    def test_misspelled_glob_fails_instead_of_matching_every_file(self):
+        claim = dict(self.GOOD)
+        claim["glub"] = claim.pop("glob")
+        self.assertIn("requires ['glob']", " ".join(r.detail for r in self._shape(claim)))
+
+    def test_count_checker_no_longer_has_a_permissive_default(self):
+        """Belt and braces: even called directly, a missing scope key must raise
+        rather than silently search from the checkout root."""
+        claim = dict(self.GOOD)
+        claim.pop("upstream_path")
+        with self.assertRaises(KeyError):
+            vuc.check_count(REPO_ROOT, claim)
+
+    def test_duplicate_id_is_a_finding(self):
+        a = dict(self.GOOD)
+        findings = vuc.validate_manifest({"claims": [a, dict(a)]})
+        self.assertIn("duplicate claim id", " ".join(r.detail for r in findings))
+
+    def test_bad_repo_is_a_finding(self):
+        claim = dict(self.GOOD); claim["repo"] = "golang"
+        self.assertIn("repo must be", " ".join(r.detail for r in self._shape(claim)))
+
+    def test_invalid_shape_stops_the_run_rather_than_checking_at_a_wrong_scope(self):
+        bad = dict(self.GOOD); bad["upstrem_path"] = bad.pop("upstream_path")
+        with tempfile.TemporaryDirectory() as td:
+            m = Path(td) / "m.yaml"
+            import yaml
+            m.write_text(yaml.safe_dump({"version": 1, "claims": [bad]}), encoding="utf-8")
+            self.assertEqual(3, _run_quiet(["--manifest", str(m), "--check-sites"]))
+
+    def test_malformed_claim_reports_the_key_rather_than_raising(self):
+        """check_upstream's own guard, for a claim that reaches a checker anyway.
+
+        The artifact must EXIST: check_enforcement skips unreadable artifacts, so
+        with a bogus path the missing `construct` is never evaluated and the
+        claim fails for an unrelated reason.
+        """
+        results = vuc.check_upstream(
+            {"claims": [{"id": "t.z", "kind": "enforcement", "repo": "go", "why": "t",
+                         "sites": [], "artifacts": ["README.md"], "enforced": True}]},
+            {"go": REPO_ROOT})
+        self.assertEqual(results[0].status, vuc.FAIL)
+        self.assertIn("malformed claim", results[0].detail)
+        self.assertIn("construct", results[0].detail)
 
 
 class TestUnknownKind(unittest.TestCase):

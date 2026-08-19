@@ -120,7 +120,7 @@ aliases:
         maintainer-email: "ops@mybrand.example.com"
 ```
 
-`overrides` is a verbatim subtree of the YAML map under the alias key — preserve insertion order, raw value types, and nested structure for round-trip determinism.
+`overrides` is a verbatim subtree of the YAML map under the alias key — preserve insertion order, raw value types, and nested structure for round-trip determinism. It is a **verbatim field** under V1 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): copy it out of the parsed bytes of the parent's `bidder-config/{xyz}.yaml`, keep that file's reference (`sha256` + `bytes`) in the spec so the subtree stays re-derivable, and never supply a value the blob does not contain (a parent's endpoint, a plausible maintainer address, a sibling alias's field).
 
 ### Other shapes (warnings)
 
@@ -231,13 +231,13 @@ Operator-supplied custom YAML fields (the keys outside the canonical Java set) a
 |---|---|---|---|
 | `dev-endpoint` | Kobler | `KoblerConfigurationProperties.devEndpoint` (`@NotBlank private String`) | Promoted from Go-side hardcoded const into Java YAML config. Surfaces as `dev-endpoint-config-promotion` quirk (cross-language win). Port Translation Rule 35. |
 | `platform-id` | Appnexus | `AppnexusConfigurationProperties.platformId` | Mapped to a typed field for validation. |
-| `iab-categories` | Appnexus | `AppnexusConfigurationProperties.iabCategories` (`Map<String, String>`) | 120-entry inlined map. Cross-skill correlation: `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: 120, delivery_mechanism: constructor-arg}`. Go's equivalent is a separate `iab_categories.go` data file (storage_kind: go-data-table). |
+| `iab-categories` | Appnexus | `AppnexusConfigurationProperties.iabCategories` (`Map<String, String>`) | Inlined map; the entry count is counted, not asserted (V4 — 95 at master and in both appnexus goldens). Cross-skill correlation: `iab_category_storage.{storage_kind: yaml-inlined, yaml_field: iab-categories, table_size: <counted>, delivery_mechanism: constructor-arg}`. Go's equivalent is a separate `iab_categories.go` data file (storage_kind: go-data-table). |
 | `extra-info` | Huaweiads, NextMillennium | nested static class `ExtraInfo` with typed fields | Java pattern for opaque-config: typed nested class instead of Go's stringified-JSON `extra_info`. |
 
 For each known custom field, the skill emits an INFO-level entry under `quirks[]` to surface the cross-language asymmetry to porters:
 
 - `dev-endpoint` -> quirk `dev-endpoint-config-promotion` (cross-language win — Java promotes Go-const to YAML).
-- `iab-categories` -> quirk that captures the 120-entry inlined map and references `iab_category_storage` cross-skill.
+- `iab-categories` -> quirk that captures the inlined map (95 entries at master — count it, per V4) and references `iab_category_storage` cross-skill.
 - `extra-info` -> quirk that flags the nested-static-class pattern and contrasts with Go's `extra_info: '{}'` stringified JSON.
 - `platform-id` -> no quirk by default; surfaces only if mismatched casing (`platformId`) is detected.
 

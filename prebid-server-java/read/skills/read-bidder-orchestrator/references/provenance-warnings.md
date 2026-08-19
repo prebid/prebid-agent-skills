@@ -27,7 +27,7 @@ These warnings are language-neutral and emitted by both orchestrators:
 | `ref-resolution-failure` | Step 1 cannot resolve `--ref` to a SHA. The read aborts. | `pr=99999 returned 404` |
 | `missing-expected-file` | Step 2 cannot find a required file. Severity depends on file: `Bidder.java` missing aborts; `BidderTest.java` missing is just a warning. | `src/test/java/org/prebid/server/it/KoblerTest.java not found` |
 | `incomplete-classification` | A reader could not classify a behavioral field with affirmative evidence. Surfaces also as a `quirks` entry. | `make_requests.batching.rules[]` left empty because the reader saw bespoke logic it couldn't categorize |
-| `cross-language-byte-divergence` | Step 6 R5 cross-check detects `bidder_params_sha256` mismatch with the sibling Go-side spec. Bytes must be byte-identical to satisfy Rule 1 of `port-translation-rules.md`. Paired with quirks taxon of the same name. | `bidder-params/{bidder}.json` differs by whitespace ordering between Go and Java |
+| `cross-language-byte-divergence` | Step 6 R5 cross-check detects a `bidder_params_ref.sha256` / `bidder_params_ref.bytes` mismatch with the sibling Go-side spec, each side's digest measured by its own reader. Bytes must be byte-identical to satisfy Rule 1 of `port-translation-rules.md`. Paired with quirks taxon of the same name. | `bidder-params/{bidder}.json` differs by whitespace ordering between Go and Java |
 
 ## Java-specific warnings
 

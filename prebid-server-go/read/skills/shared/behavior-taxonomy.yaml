@@ -354,7 +354,7 @@ enumerations:
     description: ""
     columns: ["Value", "What it means", "Example"]
     rows:
-      - ["`yaml-inlined`", "The IAB-category lookup map is inlined directly in `bidder-config/{xyz}.yaml`. Java-only pattern.", "appnexus (Java) — 120-entry `iabCategories` map."]
+      - ["`yaml-inlined`", "The IAB-category lookup map is inlined directly in `bidder-config/{xyz}.yaml`. Java-only pattern.", "appnexus (Java) — 95-entry `iabCategories` map, counted at master."]
       - ["`go-data-table`", "The lookup is a Go data file (e.g., `iab_categories.go`) co-located in the adapter directory.", "msft (Go)"]
       - ["`dynamic-fetched`", "The lookup is fetched at runtime from an upstream service. Rare.", "n/a in master sample."]
       - ["`none`", "Adapter does not perform IAB-category lookup.", "kobler, optidigital"]
@@ -496,7 +496,7 @@ quirks_taxa:
     description: YAML config carries a list of rewriting rules consumed at runtime. Canonical&#58; huaweiads `extra-info.pkgNameConvert` (app-bundle rewrite rules).
     surfaces_in: [quirks]
   - id: yaml-inlined-data-table
-    description: 'YAML config inlines a large lookup data table (>50 entries) consumed at runtime. Canonical&#58; appnexus 120-entry IAB-category inline map. Pairs with `iab_category_storage.storage_kind: yaml-inlined`.'
+    description: 'YAML config inlines a large lookup data table (>50 entries) consumed at runtime. Canonical&#58; appnexus 95-entry IAB-category inline map (counted at master, not asserted). Pairs with `iab_category_storage.storage_kind: yaml-inlined`.'
     surfaces_in: ["quirks + iab_category_storage"]
 
   # New taxa from ADR-007 (Phase 2 novel-pattern schema additions):

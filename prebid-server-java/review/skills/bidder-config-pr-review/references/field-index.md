@@ -199,7 +199,7 @@ The `{X}Configuration.java` / `{X}BidderConfiguration.java` file (filename varia
 | `@Bean("{x}ConfigurationProperties")` | **Yes** | Bean name MUST match Spring autowire-by-name pattern (lowercase + suffix `ConfigurationProperties`) | Mismatch with the `bidderDeps` parameter name breaks autowiring → **FAIL**. SKILL.md cross-field rule #3. |
 | `@ConfigurationProperties("adapters.{x}")` | **Yes** | Prefix MUST equal the YAML wrapper key (`adapters.{x}`) | Mismatch produces silent zero-field binding → **FAIL**. SKILL.md cross-field rule #4. |
 | Return type | **Yes** | When no Rule 35 subclass: `BidderConfigurationProperties`. When Rule 35: `{X}ConfigurationProperties extends BidderConfigurationProperties` | If a Rule 35 subclass is declared but the bean returns the base class, the typed fields are unreachable → **FAIL**. SKILL.md cross-field rule #6. |
-| `@Validated` (on subclass) | When Rule 35 | Triggers jakarta validation at startup | Without `@Validated`, `@NotBlank`/`@NotNull` on subclass fields are inert. See framework-utilities-java.md §1.7. |
+| `@Validated` (on subclass) | No — redundant | Nothing the parent does not already do | The parent `BidderConfigurationProperties` is `@Validated` and spring resolves it up the type hierarchy, so subclass constraints fire without it. 8 of 255 repeat it. Not a blocker. See framework-utilities-java.md §1.7. |
 
 #### B.2.2 The `BidderDeps` bean factory (canonical Kobler signature)
 
@@ -283,7 +283,7 @@ Same class shape but lives at `src/main/java/org/prebid/server/spring/config/bid
 
 | Annotation | Required | Purpose | Reviewer Concerns |
 |------------|----------|---------|-------------------|
-| `@Validated` | **Yes** | Triggers jakarta validation on the subclass fields | Without it, `@NotBlank`/`@NotNull` are inert. See framework-utilities-java.md §1.7 + §2.5. |
+| `@Validated` | No — redundant | Nothing the parent does not already do | Inherited in effect from `BidderConfigurationProperties`; subclass constraints fire without it. Conventional on 8 of 255. See framework-utilities-java.md §1.7. |
 | `@Data` | **Yes** | Lombok-generates getters + setters + toString + equals + hashCode | Required because Spring relaxed-binding uses setters. |
 | `@EqualsAndHashCode(callSuper = true)` | **Yes** | Lombok delegates to base class's equals/hashCode | `callSuper = true` is mandatory; without it, two instances with different parent-field values compare equal. See framework-utilities-java.md §2.5. (F-new-59 is specifically the `lombok.Data` *import-ordering* trap — see §B.4 / framework-utilities-java.md §6.3 — not this annotation's `callSuper` parameter.) |
 | `@NoArgsConstructor` | **Yes** | Lombok-generates no-arg constructor | Spring requires no-arg constructor for `@ConfigurationProperties` instantiation. |

@@ -747,7 +747,7 @@ cross_language:
     # a new BidderConfigurationProperties subclass. The Go side chose option (a)
     # — a wholesale fork.
   go_specific_concerns:
-    - "Multi-file Go layout (msft.go + models.go + iab_categories.go) — a porter to Java must split the IAB lookup table into a separate resource (Java's appnexus inlines the iabCategories map directly in bidder-config/appnexus.yaml as a 120-entry block; msft Java would do similarly)."
+    - "Multi-file Go layout (msft.go + models.go + iab_categories.go) — a porter to Java must split the IAB lookup table into a separate resource (Java's appnexus inlines the iabCategories map directly in bidder-config/appnexus.yaml as a 95-entry block; msft Java would do similarly)."
     - "iabCategoryMap is a package-level static-init (storage_kind: go-data-table); the Java port would inline as yaml-inlined and inject via constructor-arg per the iab_category_storage taxonomy."
     - "Adapter struct holds url.URL by VALUE (not pointer). Builder dereferences the parsed *url.URL once and stores the value (msft.go:52); each MakeRequests call copies a.uri before potentially appending the member_id query param. Java equivalent would use String for the endpoint and URIBuilder per-request (Rule 12)."
     - "extraAdapterInfo (HBSource, HBSourceVideo) is parsed in the Builder via parseExtraInfo and applied directly to adapter struct fields. Java port should promote both fields to a MsftConfigurationProperties subclass with @NotBlank/@PositiveOrZero annotations (Rule 35)."

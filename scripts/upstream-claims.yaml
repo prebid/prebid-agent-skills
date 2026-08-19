@@ -415,3 +415,94 @@ claims:
     sites:
       - path: prebid-server-go/review/skills/shared/framework-utilities.md
         assert: "90% coverage in the changed code"
+
+  # ---------------------------------------------------------------------------
+  # Appnexus IAB-category cardinality. The skills carried "~120" in six places
+  # (taxonomy, Rule 42, the port-report schema example, two Java references, and
+  # a Go golden quirk). Both languages are 95 at master, and the msft rebrand
+  # sibling is 95 on both sides too. Registered as a count so the next drift is
+  # a finding rather than a number nobody re-ran.
+  - id: java.appnexus.iab-categories-cardinality
+    kind: count
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: appnexus.yaml
+    mode: matches
+    pattern: '(?m)^\s+\d+:\s'
+    expect: 95
+    strict: true
+    why: >
+      A porter reads this figure to size the table they are translating, and Rule
+      42 makes IAB-category cardinality a cross-language fidelity invariant. An
+      approximate figure defeats both.
+    regenerate: |
+      git grep -cP '^\s+\d+:\s' -- src/main/resources/bidder-config/appnexus.yaml
+    sites:
+      - path: prebid-server-java/read/skills/read-bidder-config/SKILL.md
+        assert: the count at master and in the appnexus goldens is 95
+      - path: prebid-server-go/read/skills/shared/behavior-taxonomy.yaml
+        assert: appnexus 95-entry IAB-category inline map
+
+  - id: go.appnexus.iab-categories-cardinality
+    kind: count
+    repo: go
+    upstream_path: adapters/appnexus
+    glob: iab_categories.go
+    mode: matches
+    pattern: '(?m)^\t"\d+":'
+    expect: 95
+    strict: true
+    why: >
+      The Go side of the same invariant. Keys are quoted strings, not bare ints —
+      a matcher written for the Java shape returns 0 here and reads as "table
+      gone" rather than "wrong matcher".
+    regenerate: |
+      git grep -cP '^\t"\d+":' -- adapters/appnexus/iab_categories.go
+    sites:
+      - path: prebid-server-go/read/skills/read-adapter-code/references/adapter-code-patterns.md
+        assert: For msft's `iabCategoryMap` at master this prints 95
+
+  # ---------------------------------------------------------------------------
+  # @Validated on a bidder's typed config subclass. The Java review suite called
+  # it REQUIRED and said omitting it makes jakarta constraints inert. The parent
+  # BidderConfigurationProperties is itself @Validated and spring-boot resolves
+  # the annotation with SearchStrategy.TYPE_HIERARCHY, so the subclass copy is
+  # redundant -- and two upstream files ship constrained subclass fields without
+  # it. Pinned so a reviewer cannot re-derive "required" from the fact that the
+  # files which DO carry a constraint mostly also carry the annotation.
+  - id: java.config-properties.parent-is-validated
+    kind: enforcement
+    repo: java
+    enforced: true
+    artifacts:
+      - src/main/java/org/prebid/server/spring/config/bidder/model/BidderConfigurationProperties.java
+    construct: '@Validated\s*\npublic class BidderConfigurationProperties'
+    why: >
+      This one annotation is why subclass @Validated is optional. Without this
+      line the review suite's original "REQUIRED, else inert" reading would be
+      correct, so the claim has to be pinned to the line it rests on.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: '**On a bidder''s typed subclass it is redundant.**'
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
+        assert: conventional, not required, and never a blocker
+
+  - id: java.config-properties.validated-is-not-universal
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder
+    glob: '*Configuration.java'
+    mode: files
+    pattern: '@Validated'
+    expect: 8
+    why: >
+      8 of 255. A review that treats the annotation as mandatory contradicts
+      247 merged files. The count is allowed to drift (new adapters land often);
+      what must not drift is the conclusion, which is why this claim is not
+      strict and the parent-is-validated claim above is.
+    regenerate: |
+      git grep -l '@Validated' -- 'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
+      # NOT '<dir>/*.java': a git pathspec `*` crosses `/` and sweeps bidder/model/.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/references/field-index.md
+        assert: Conventional on 8 of 255

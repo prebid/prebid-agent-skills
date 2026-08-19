@@ -87,7 +87,7 @@ def check_symbol(root: Path, claim: dict) -> tuple[bool, str]:
     search_dir = root / claim["upstream_path"]
     if not search_dir.exists():
         return False, f"path not found: {claim['upstream_path']}"
-    files = [search_dir] if search_dir.is_file() else sorted(search_dir.rglob(claim.get("glob", "*.go")))
+    files = [search_dir] if search_dir.is_file() else sorted(search_dir.rglob(claim.get("glob") or "*.go"))
     patterns = [
         rf"^func\s+{re.escape(name)}\s*[\[(]",           # func Name( / func Name[T any](
         rf"^func\s+\([^)]*\)\s*{re.escape(name)}\s*[\[(]",  # method
@@ -111,10 +111,10 @@ def check_symbol(root: Path, claim: dict) -> tuple[bool, str]:
 def check_absence(root: Path, claim: dict) -> tuple[bool, str]:
     """A name must NOT appear upstream. Several checks FAIL on its presence."""
     needle = claim["absent"]
-    scope = root / claim.get("upstream_path", ".")
+    scope = root / claim["upstream_path"]
     if not scope.exists():
-        return False, f"scope not found: {claim.get('upstream_path', '.')}"
-    globs = claim.get("glob_list") or [claim.get("glob", "*.java")]
+        return False, f"scope not found: {claim['upstream_path']}"
+    globs = claim.get("glob_list") or [claim.get("glob") or "*.java"]
     hits: list[str] = []
     for g in globs:
         for f in scope.rglob(g):
@@ -129,7 +129,7 @@ def check_absence(root: Path, claim: dict) -> tuple[bool, str]:
                 break
     if hits:
         return False, f"{needle} still present in {len(hits)}+ file(s): {hits[:3]}"
-    return True, f"{needle} absent under {claim.get('upstream_path', '.')}"
+    return True, f"{needle} absent under {claim['upstream_path']}"
 
 
 def check_path(root: Path, claim: dict) -> tuple[bool, str]:
@@ -203,12 +203,12 @@ def check_enforcement(root: Path, claim: dict) -> tuple[bool, str]:
 
 
 def check_count(root: Path, claim: dict) -> tuple[bool, str]:
-    scope = root / claim.get("upstream_path", ".")
+    scope = root / claim["upstream_path"]
     if not scope.exists():
-        return False, f"scope not found: {claim.get('upstream_path', '.')}"
+        return False, f"scope not found: {claim['upstream_path']}"
     rx = re.compile(claim["pattern"])
     n = 0
-    for f in scope.rglob(claim.get("glob", "*")):
+    for f in scope.rglob(claim["glob"]):
         if not f.is_file():
             continue
         try:
@@ -233,6 +233,55 @@ CHECKERS = {
     "enforcement": check_enforcement,
     "count": check_count,
 }
+
+# Keys each checker needs, validated up front. The reason this is a table and not
+# a `.get(..., default)` per checker: `check_count` used to default
+# `upstream_path` to "." and `glob` to "*", so a MISSPELLED key silently widened
+# the search to the whole repository and the claim still passed. A claim that
+# passes because its scope collapsed is worse than one that errors -- it reports
+# green for a check that never ran. Every scoping key is mandatory; write
+# `upstream_path: '.'` explicitly if whole-repo really is the intent.
+REQUIRED_KEYS = {
+    "symbol":        ("symbol", "upstream_path"),
+    "absence":       ("absent", "upstream_path"),
+    "path":          ("upstream_path",),
+    "struct_fields": ("struct", "upstream_path"),
+    "config_value":  ("upstream_path", "key", "expect"),
+    "enforcement":   ("artifacts", "construct", "enforced"),
+    "count":         ("upstream_path", "glob", "pattern", "expect"),
+}
+
+
+def validate_manifest(manifest: dict) -> list[Result]:
+    """Shape errors, reported as claim failures rather than raised.
+
+    A traceback in CI gets triaged as an instrument failure and the malformed
+    claim is never fixed; a FAIL naming the claim and the key gets fixed.
+    """
+    out: list[Result] = []
+    seen: set[str] = set()
+    for i, claim in enumerate(manifest["claims"]):
+        cid = claim.get("id") or f"<claim #{i} with no id>"
+        if not claim.get("id"):
+            out.append(Result(cid, FAIL, "claim has no `id`"))
+        elif cid in seen:
+            out.append(Result(cid, FAIL, "duplicate claim id -- the later one shadows the earlier in any id-keyed report"))
+        seen.add(cid)
+        kind = claim.get("kind")
+        if kind not in REQUIRED_KEYS:
+            out.append(Result(cid, FAIL, f"unknown kind {kind!r}; known: {sorted(REQUIRED_KEYS)}"))
+            continue
+        if claim.get("repo") not in ("go", "java"):
+            out.append(Result(cid, FAIL, f"repo must be 'go' or 'java', got {claim.get('repo')!r}"))
+        missing = [k for k in REQUIRED_KEYS[kind] if k not in claim]
+        if missing:
+            out.append(Result(cid, FAIL, f"kind={kind} requires {missing}, absent -- "
+                                         f"check for a typo in the key name"))
+        unknown_scope = [k for k in claim if k.endswith("_path") and k != "upstream_path"]
+        if unknown_scope:
+            out.append(Result(cid, FAIL, f"unrecognised scoping key(s) {unknown_scope}; "
+                                         f"the scope key is `upstream_path`"))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -282,7 +331,17 @@ def check_upstream(manifest: dict, roots: dict[str, Path]) -> list[Result]:
         if fn is None:
             out.append(Result(claim["id"], FAIL, f"unknown kind {claim['kind']}"))
             continue
-        ok, detail = fn(root, claim)
+        try:
+            ok, detail = fn(root, claim)
+        except KeyError as exc:
+            # A claim missing a key its checker requires used to raise, and a
+            # traceback in CI reads as "the instrument broke", not "this claim is
+            # malformed" -- so the run gets triaged as infrastructure and the
+            # claim is never fixed. Name the key and fail the claim instead.
+            out.append(Result(claim["id"], FAIL,
+                              f"malformed claim: kind={claim['kind']} requires key "
+                              f"{exc.args[0]!r}, which is absent"))
+            continue
         if ok:
             out.append(Result(claim["id"], PASS, detail))
         else:
@@ -344,6 +403,16 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     results: list[Result] = []
+    shape = validate_manifest(manifest)
+    results += shape
+    if any(r.status == FAIL for r in shape):
+        # Do not run checks over a manifest whose shape is wrong: the results
+        # would be about a scope nobody intended.
+        for r in shape:
+            if r.status != PASS:
+                print(f"[{r.status.upper():4}] {r.claim_id}: {r.detail}")
+        sys.stderr.write("ERROR: manifest shape is invalid; no claims were checked\n")
+        return 3
     if args.check_sites or not (args.upstream or args.discover):
         results += check_sites(manifest)
     if args.upstream:

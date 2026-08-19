@@ -44,7 +44,7 @@ If this file is missing, the bidder does not exist at the resolved commit — ha
 | `adapters/<xyz>/<xyz>test/video/*.json` | optional | Video-specific tests. |
 | `adapters/<xyz>/<xyz>test/videosupplemental/*.json` | optional | Video error-path fixtures. |
 
-Each fixture file is recorded with `{ filename, sha256, bytes }` (`fixture-mode=count`, default), or with extracted media types (`summary`), or inlined (`verbatim`). See the orchestrator SKILL's `## Output` section for the per-mode payload.
+Each fixture file is recorded with `{ filename, sha256, bytes }` in every mode; `summary` adds extracted media types and `verbatim` adds the inlined JSON on top of that pair. Both numbers come from the fetch pipe (V1/V2 in [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)). See the orchestrator SKILL's `## Output` section for the per-mode payload.
 
 ### Registration files (read-only — orchestrator inspects, doesn't dispatch)
 

@@ -48,14 +48,14 @@ The `write/` skill is the symmetric inverse of `read/`: spec → adapter files. 
 
 ### 2.1 Verbatim file outputs (byte-for-byte)
 
-A `write/` skill MUST emit these files byte-identical to the spec's verbatim copies. Re-reading the written adapter MUST produce the same `bidder_params_sha256`.
+A `write/` skill MUST emit these files byte-identical to the bytes the spec references. The check is `sha256` of the written FILE against `bidder_params_ref.sha256` (and its `bytes`) — a digest taken over the spec's own inline text on both sides would compare the spec to itself and pass on a lossy write (V2 in [`adapter-spec.md`](adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)).
 
 | Spec field | Output file (Go target) | Output file (Java target) | Notes |
 |---|---|---|---|
-| `bidder_params_json` (verbatim string) | `static/bidder-params/{xyz}.json` | `src/main/resources/static/bidder-params/{xyz}.json` | The cross-language contract — same bytes on both sides. R2 hard-error if the SHA mismatches the verbatim. |
+| `bidder_params_ref` → blob at `read/test-fixtures/blobs/<sha256>` (the deprecated inline `bidder_params_json` is a copy, not the source of truth) | `static/bidder-params/{xyz}.json` | `src/main/resources/static/bidder-params/{xyz}.json` | The cross-language contract — same bytes on both sides. R2 hard-error when the written file's digest differs from `bidder_params_ref.{sha256,bytes}`. |
 | `bidder_info.*` (entire subtree) | `static/bidder-info/{xyz}.yaml` | (folded into the unified `bidder-config/{xyz}.yaml` — see §2.3) | Endpoint, capabilities, geoscope, gvl_vendor_id, user_sync, yaml_extra_fields. |
 
-Worked example — Optidigital. The spec at [`prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml) line 68 carries the JSON Schema as a YAML double-quoted scalar (preserving the trailing `}` with no terminal newline). A `write/` skill must reconstruct those exact bytes — `bidder_params_sha256` is `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31`, and a single-byte deviation breaks R2.
+Worked example — Optidigital. The golden at [`prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml) carries the JSON Schema in double-quoted form, which is what the V3 probe returns for that file (trailing whitespace on a blank line, no terminal newline). A `write/` skill must reconstruct exactly the bytes the golden's reference names; verify by digesting the written file and comparing against `bidder_params_ref.{sha256,bytes}`. A single-byte deviation breaks R2. Read the digest from the golden — do not copy a hash out of this document into a spec (V2).
 
 ### 2.2 Behavioral fields drive code generation
 
@@ -282,7 +282,7 @@ When a user wants to port an adapter Go ↔ Java (or vice versa):
    → read/specs/kobler/{shortsha}.yaml (source_language: java)
 
 4. Verify with dual-spec assertion
-   diff <(yq '.bidder_params_sha256' go-spec) <(yq '.bidder_params_sha256' java-spec)
+   diff <(yq '.bidder_params_ref | {sha256, bytes}' go-spec) <(yq '.bidder_params_ref | {sha256, bytes}' java-spec)
    diff <(yq '.bidder_info.capabilities' go-spec) <(yq '.bidder_info.capabilities' java-spec)
    diff <(yq '.params.schema_interpretation' go-spec) <(yq '.params.schema_interpretation' java-spec)
    # All three MUST be byte-identical (R5).
@@ -312,7 +312,7 @@ Golden specs at `prebid-server-go/read/test-fixtures/{bidder}.golden.spec.yaml` 
 
 ### 8.3 R5 byte-equality is rare in practice
 
-The `bidder_params_sha256` cross-language equality (R5) is the ideal — same JSON Schema bytes on both sides. In practice, most port pairs have whitespace divergence:
+The `bidder_params_ref.sha256` cross-language equality (R5) is the ideal — same JSON Schema bytes on both sides, each side measuring its own. In practice, most port pairs have whitespace divergence:
 
 - Go writes 4-space indent with stray blank lines and no trailing newline (Optidigital, msft).
 - Java writes 2-space indent with trailing newlines (most adapters).

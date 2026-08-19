@@ -61,7 +61,7 @@ Two shapes that older revisions of this file taught are NOT part of the current 
 | `factory_class` | Class declaration `public class <Name>Configuration` (or `<Name>BidderConfiguration` per edge case #19). | Record verbatim. |
 | `factory_method` | The `@Bean` method that returns `BidderDeps`. Method-name convention: `<name>BidderDeps`. | One per factory class. |
 | `property_source_path` | The `value` attribute of `@PropertySource`. | E.g., `classpath:/bidder-config/kobler.yaml`. |
-| `bidder_creator_lambda` | The verbatim lambda body inside `.bidderCreator(cfg -> ...)`. | Preserve indentation, line breaks, constructor-arg order. Round-trip fidelity is load-bearing. |
+| `bidder_creator_lambda` | The verbatim lambda body inside `.bidderCreator(cfg -> ...)`, extracted from the fetched file (`<fetch> \| sed -n '<start>,<end>p'`). | Preserve indentation, line breaks, constructor-arg order. Verbatim field under V1 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): the source file's reference (`sha256` + `bytes`) is what makes the span re-derivable, and the inline encoding is chosen with the V3 probe. Never retype the body from the constructor signature. |
 | `bean_dependencies[]` | The `@Bean` method's parameter list. | Each parameter recorded as `{ name, type, source }`. |
 
 ### Factory class naming variance (edge case #19)
@@ -152,11 +152,18 @@ configuration_properties_class:
 
 #### Appnexus — `platformId` + inlined IAB-categories map
 
+Verbatim from `AppnexusConfiguration.java` at master (note: **no** `@Validated`,
+and the fields are package-private, not `private`):
+
 ```java
-@Validated @Data @EqualsAndHashCode(callSuper = true) @NoArgsConstructor
-public static class AppnexusConfigurationProperties extends BidderConfigurationProperties {
-    private Integer platformId;
-    private Map<String, Long> iabCategories;     // inlined ~120 entries in YAML
+@Data
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+private static class AppnexusConfigurationProperties extends BidderConfigurationProperties {
+
+    Integer platformId;
+
+    Map<Integer, String> iabCategories;
 }
 ```
 
@@ -171,28 +178,45 @@ configuration_properties_class:
       type: Integer
       validations: []
     - name: iabCategories
-      type: "Map<String, Long>"
+      type: "Map<Integer, String>"
       validations: []
   nested_classes: []
   lombok_annotations: [Data, EqualsAndHashCode, NoArgsConstructor]
 ```
 
-The inlined `iabCategories` map carries 120-ish entries directly in `bidder-config/appnexus.yaml`. Read-bidder-class does NOT inventory the map's contents (that is `read-bidder-config`'s job), but it DOES set `iab_category_storage.storage_kind: yaml-inlined` + `yaml_field: iab-categories` + `table_size: ~120` + `delivery_mechanism: constructor-arg` (because the lambda passes `cfg.getIabCategories()` to the bidder constructor).
+The map is keyed by IAB category id and valued by the Appnexus category code —
+`Map<Integer, String>`. Read the declaration; a transposed key/value type
+produces a spec that a Go port turns into the wrong map direction.
+
+The inlined `iabCategories` map lives directly in `bidder-config/appnexus.yaml`. Read-bidder-class does NOT inventory the map's contents (that is `read-bidder-config`'s job), but it DOES set `iab_category_storage.storage_kind: yaml-inlined` + `yaml_field: iab-categories` + `table_size: <counted>` + `delivery_mechanism: constructor-arg` (because the lambda passes `cfg.getIabCategories()` to the bidder constructor). `table_size` comes from the counting command in the SKILL's Step 6 — 95 for appnexus at master — never from an approximate figure.
 
 #### Huaweiads / NextMillennium — nested ExtraInfo
 
 ```java
 @Validated @Data @EqualsAndHashCode(callSuper = true) @NoArgsConstructor
-public static class HuaweiAdsConfigurationProperties extends BidderConfigurationProperties {
-    private ExtraInfo extraInfo;
+private static class HuaweiAdsConfigurationProperties extends BidderConfigurationProperties {
 
-    @Data @NoArgsConstructor
-    public static class ExtraInfo {
-        private String pkgNameConvert;
-        private String closeSiteSelectionByCountry;
-    }
+    @Valid
+    @NotNull
+    private ExtraInfo extraInfo = new ExtraInfo();
+}
+
+@Data
+@NoArgsConstructor
+private static class ExtraInfo {
+
+    List<PkgNameConvert> pkgNameConvert;
+
+    String closeSiteSelectionByCountry;
+
+    String chineseEndpoint;
+    // … four more endpoint fields; see the file for the full list
 }
 ```
+
+Two details the abridged form used to lose: `ExtraInfo` is a **sibling**
+nested class, not nested inside the properties class, and `pkgNameConvert` is
+`List<PkgNameConvert>` — a list of a further nested type, not a `String`.
 
 Spec emits:
 
@@ -203,11 +227,11 @@ configuration_properties_class:
   extra_fields:
     - name: extraInfo
       type: ExtraInfo
-      validations: []
+      validations: ["@Valid", "@NotNull"]
   nested_classes:
     - name: ExtraInfo
       fields:
-        - { name: pkgNameConvert, type: String }
+        - { name: pkgNameConvert, type: "List<PkgNameConvert>" }
         - { name: closeSiteSelectionByCountry, type: String }
   lombok_annotations: [Data, EqualsAndHashCode, NoArgsConstructor]
 ```

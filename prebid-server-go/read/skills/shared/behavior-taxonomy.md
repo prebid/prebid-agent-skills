@@ -388,7 +388,7 @@ Sibling field `where_branched`:
 
 | Value | What it means | Example |
 |---|---|---|
-| `yaml-inlined` | The IAB-category lookup map is inlined directly in `bidder-config/{xyz}.yaml`. Java-only pattern. | appnexus (Java) — 120-entry `iabCategories` map. |
+| `yaml-inlined` | The IAB-category lookup map is inlined directly in `bidder-config/{xyz}.yaml`. Java-only pattern. | appnexus (Java) — 95-entry `iabCategories` map, counted at master. |
 | `go-data-table` | The lookup is a Go data file (e.g., `iab_categories.go`) co-located in the adapter directory. | msft (Go) |
 | `dynamic-fetched` | The lookup is fetched at runtime from an upstream service. Rare. | n/a in master sample. |
 | `none` | Adapter does not perform IAB-category lookup. | kobler, optidigital |
@@ -449,7 +449,7 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `vendor-specific-protocol-quirk` | Bidder protocol carries a vendor-specific encoding quirk that doesn't map to OpenRTB cleanly. Canonical: huaweiads `creativeType > 100 ? type - 100 : type` offset, `nativeVersion: "1.1"` default. | quirks |
 | `vendor-to-iab-mapping` | Adapter maps vendor-specific category codes to IAB categories at request or response time. Canonical: huaweiads + appnexus IAB lookups. | quirks + iab_category_storage |
 | `yaml-configuration-rewrite-table` | YAML config carries a list of rewriting rules consumed at runtime. Canonical: huaweiads `extra-info.pkgNameConvert` (app-bundle rewrite rules). | quirks |
-| `yaml-inlined-data-table` | YAML config inlines a large lookup data table (>50 entries) consumed at runtime. Canonical: appnexus 120-entry IAB-category inline map. Pairs with `iab_category_storage.storage_kind: yaml-inlined`. | quirks + iab_category_storage |
+| `yaml-inlined-data-table` | YAML config inlines a large lookup data table (>50 entries) consumed at runtime. Canonical: appnexus 95-entry IAB-category inline map (counted at master, not asserted). Pairs with `iab_category_storage.storage_kind: yaml-inlined`. | quirks + iab_category_storage |
 | `multi-endpoint-by-mediatype` | Adapter routes requests to multiple distinct endpoints based on mediatype. ADR-007 F1. Canonical: beachfront (banner endpoint vs video endpoint). | quirks + code.make_requests.endpoint_resolution.endpoints[] |
 | `language-stamped-header-divergence` | Header value differs by language (e.g., `Componentid: prebid-go` vs `prebid-java`). Breaks byte-equality of outgoing requests across languages. ADR-007 F2. Canonical: freewheelssp. | quirks + headers_constructed.language_stamped_headers |
 | `mediatype-context-rewrite-site-to-app` | Adapter destructively converts request shape (deletes `request.Site`, synthesizes `App{}`) to coerce mediatype context. ADR-007 F3. Canonical: vungle. | quirks + code.make_requests.mutation.entity_strategies.Site |
