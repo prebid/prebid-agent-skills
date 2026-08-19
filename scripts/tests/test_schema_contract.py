@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Schema contract test — phantom-path detector with documented gaps.
 
-Every dotted path used in any SKILL.md under prebid-server-{go,java}/read/skills/
-is checked against the canonical schema vocabulary derived from:
+Every dotted path used in any `*.md` under the four skill surfaces —
+`prebid-server-{go,java}/read/skills/`, `prebid-server-{go,java}/review/skills/`,
+`prebid-server-go/port-java2go/` and `prebid-server-java/port-go2java/` — is
+checked against the canonical schema vocabulary derived from:
 - prebid-server-go/read/skills/shared/adapter-spec.schema.json (Phase 2.0+ canonical)
 - prebid-server-go/read/skills/shared/behavior-taxonomy.md (taxonomy enums, still markdown)
 
@@ -93,10 +95,47 @@ ADAPTER_SPEC_SCHEMA_JSON = os.path.join(
 BEHAVIOR_TAXONOMY = os.path.join(
     REPO_ROOT, "prebid-server-go", "read", "skills", "shared", "behavior-taxonomy.md"
 )
+# Every skill surface the repo ships. The read/ suites were the original
+# scope; the review/ suites and the two port skills are the surfaces that
+# actually run against real upstream PRs, so a phantom path there is the
+# one that reaches a reviewer. All four are scanned identically.
 SKILL_DIRS = (
     os.path.join(REPO_ROOT, "prebid-server-go", "read", "skills"),
     os.path.join(REPO_ROOT, "prebid-server-java", "read", "skills"),
+    os.path.join(REPO_ROOT, "prebid-server-go", "review", "skills"),
+    os.path.join(REPO_ROOT, "prebid-server-java", "review", "skills"),
+    os.path.join(REPO_ROOT, "prebid-server-go", "port-java2go"),
+    os.path.join(REPO_ROOT, "prebid-server-java", "port-go2java"),
 )
+
+# Directories holding the canonical vocabulary itself. A doc that IS the
+# registry cannot be checked against itself — every path it defines would
+# have to already be in the registry it defines. Only these two trees are
+# circular; `*/review/skills/shared/` holds framework-utility references,
+# not vocabulary, so it is scanned like any other skill doc.
+#
+# Paths are repo-relative with forward slashes and a trailing slash.
+REGISTRY_DIRS = (
+    "prebid-server-go/read/skills/shared/",
+    "prebid-server-java/read/skills/shared/",
+)
+
+# Phantom paths accepted for now, keyed by (repo-relative path, dotted path).
+# Line numbers are deliberately NOT part of the key — an edit above the site
+# must not silently retire the waiver.
+#
+# This list is a two-way gate. A listed phantom is downgraded to a WAIVED
+# report instead of failing the run; a listed phantom that NO LONGER fires
+# fails the run so the stale entry gets deleted rather than accumulating.
+#
+# Each entry carries the date it was accepted and why. Adding one is a
+# deliberate act, not a way to keep the gate quiet.
+# Dated waivers for phantom paths a gate-widening PR surfaces but does not own.
+# Empty is the correct steady state: the widening that introduced this list also
+# carried the one violation it found (`macros[]` -> `macros_used`), so the entry
+# it shipped with was deleted in the same change. A waiver here is a two-way
+# ratchet -- it fails when the underlying path is fixed and the entry lingers.
+KNOWN_PHANTOMS: dict[tuple[str, str], str] = {}
 
 # Top-level keys recognised as belonging to the schema. Phantom-path detection
 # runs ONLY on dotted paths whose first segment matches one of these — that
@@ -439,10 +478,18 @@ def discover_skill_files() -> List[str]:
         if f not in seen and os.path.isfile(f):
             seen.add(f)
             out.append(f)
-    # Exclude shared/ docs — they ARE the registry; checking them against
-    # themselves would be circular.
-    out = [f for f in out if "/skills/shared/" not in f.replace(os.sep, "/")]
-    return sorted(out)
+    # Exclude the registry trees — they ARE the vocabulary; checking them
+    # against themselves would be circular. See REGISTRY_DIRS.
+    root_prefix = REPO_ROOT.replace(os.sep, "/").rstrip("/") + "/"
+    filtered: List[str] = []
+    for f in out:
+        rel = f.replace(os.sep, "/")
+        if rel.startswith(root_prefix):
+            rel = rel[len(root_prefix):]
+        if any(rel.startswith(d) for d in REGISTRY_DIRS):
+            continue
+        filtered.append(f)
+    return sorted(filtered)
 
 
 def main(argv=None) -> int:
@@ -457,10 +504,23 @@ def main(argv=None) -> int:
 
     skill_files = discover_skill_files()
     if not skill_files:
-        sys.stderr.write("ERROR: no SKILL.md files found under read/skills/\n")
+        sys.stderr.write(
+            "ERROR: no *.md files found under any of SKILL_DIRS\n")
         return 2
 
+    # An empty per-tree result is a finding, not a pass: a directory rename
+    # would otherwise silently drop a whole skill surface from the gate
+    # while the run still reported EXIT 0.
+    for root in SKILL_DIRS:
+        if not any(f.startswith(root + os.sep) for f in skill_files):
+            sys.stderr.write(
+                f"ERROR: skill dir contributed zero scanned files: {root}\n"
+                f"       (moved/renamed tree, or every file excluded by REGISTRY_DIRS)\n")
+            return 2
+
     phantoms: List[Tuple[str, str, int]] = []
+    waived: List[Tuple[str, str, int]] = []
+    waivers_hit: Set[Tuple[str, str]] = set()
     checked = 0
     for sf in skill_files:
         with open(sf, "r", encoding="utf-8") as fh:
@@ -468,23 +528,40 @@ def main(argv=None) -> int:
         for path, line_no in extract_paths_from_skill(text):
             checked += 1
             if is_phantom(path, registry):
-                rel = os.path.relpath(sf, REPO_ROOT)
-                phantoms.append((rel, path, line_no))
+                rel = os.path.relpath(sf, REPO_ROOT).replace(os.sep, "/")
+                key = (rel, path)
+                if key in KNOWN_PHANTOMS:
+                    waivers_hit.add(key)
+                    waived.append((rel, path, line_no))
+                else:
+                    phantoms.append((rel, path, line_no))
             elif args.verbose:
                 rel = os.path.relpath(sf, REPO_ROOT)
                 print(f"OK   {rel}:{line_no} {path}")
+
+    stale_waivers = sorted(set(KNOWN_PHANTOMS) - waivers_hit)
 
     print(f"=== Schema contract test ===")
     print(f"Files scanned: {len(skill_files)}")
     print(f"Schema paths in registry: {len(registry)}")
     print(f"Dotted paths checked: {checked}")
+    if waived:
+        print(f"Waived phantom paths: {len(waived)} (see KNOWN_PHANTOMS)")
+        for rel, path, line_no in waived:
+            print(f"  WAIVED  {rel}:{line_no}  `{path}`")
+    if stale_waivers:
+        print(f"Stale waivers: {len(stale_waivers)}")
+        for rel, path in stale_waivers:
+            print(f"  STALE   {rel}  `{path}` — no longer phantom; delete this KNOWN_PHANTOMS entry")
+        print("EXIT 1 — a waived phantom was fixed; the waiver must shrink with it.")
+        return 1
     if phantoms:
         print(f"Phantom paths detected: {len(phantoms)}")
         for rel, path, line_no in phantoms:
             print(f"  PHANTOM {rel}:{line_no}  `{path}`")
         print("EXIT 1 — at least one SKILL references a path absent from the canonical schema.")
         return 1
-    print("All paths resolve to the canonical schema. EXIT 0.")
+    print("All paths resolve to the canonical schema (waivers aside). EXIT 0.")
     return 0
 
 

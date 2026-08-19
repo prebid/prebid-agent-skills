@@ -40,6 +40,16 @@ auto-discovered — no manifest update needed.
   would require unambiguous phrasing in the corpus or a more elaborate
   regex with negative lookbehind for SemVer fragments. Deferred.
 
+## Gated surfaces
+
+All four skill surfaces are walked: `prebid-server-{go,java}/read/skills/`,
+`prebid-server-{go,java}/review/skills/`, `prebid-server-go/port-java2go/`
+and `prebid-server-java/port-go2java/`. The read suites were the original
+scope; the review suites and the port skills are the surfaces that run
+against real upstream PRs. The two port SKILLs each cite the live
+port-translation rule count twice — four claim sites that would go stale
+on the next rules bump if the gate stopped at the read trees.
+
 Files NOT gated (intentional):
 - `CHANGELOG.md` — version-history snapshots; counts there are frozen.
 - `docs/audits/` — audit snapshots; intentionally past-tense.
@@ -76,6 +86,10 @@ JAVA_FIXTURES_DIR = REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures"
 DUAL_SPECS_DIR = REPO_ROOT / "cross-language-pairs"
 GO_SKILLS_DIR = REPO_ROOT / "prebid-server-go" / "read" / "skills"
 JAVA_SKILLS_DIR = REPO_ROOT / "prebid-server-java" / "read" / "skills"
+GO_REVIEW_SKILLS_DIR = REPO_ROOT / "prebid-server-go" / "review" / "skills"
+JAVA_REVIEW_SKILLS_DIR = REPO_ROOT / "prebid-server-java" / "review" / "skills"
+GO_PORT_SKILL_DIR = REPO_ROOT / "prebid-server-go" / "port-java2go"
+JAVA_PORT_SKILL_DIR = REPO_ROOT / "prebid-server-java" / "port-go2java"
 
 
 # === Canonical source-of-truth functions ===
@@ -202,6 +216,14 @@ INCLUDED_DIRS = (
     REPO_ROOT / "docs" / "methodology",          # methodology docs
     GO_SKILLS_DIR,                               # SKILL.md + references/*.md (recursive)
     JAVA_SKILLS_DIR,
+    # The review suites and the two port skills are the surfaces that run
+    # against real upstream PRs. The port SKILLs each cite the live
+    # port-translation rule count twice, so a rules bump that skips them
+    # ships four stale claims into the skills a reviewer actually loads.
+    GO_REVIEW_SKILLS_DIR,
+    JAVA_REVIEW_SKILLS_DIR,
+    GO_PORT_SKILL_DIR,
+    JAVA_PORT_SKILL_DIR,
     GO_FIXTURES_DIR,                             # test-fixtures/README.md
     JAVA_FIXTURES_DIR,
     DUAL_SPECS_DIR,                              # cross-language-pairs/README.md
@@ -300,6 +322,43 @@ class TestDocCountClaims(unittest.TestCase):
                 f"DISCOVERY_REGEX alternation `{m.group(2)}` (normalized `{phrase}`) "
                 f"has no entry in CANONICAL_SOURCES",
             )
+
+    def test_included_dirs_all_contribute_docs(self):
+        """Every INCLUDED_DIR yields at least one eligible `*.md`.
+
+        An empty tree is a finding, not a pass: renaming or moving a skill
+        surface would otherwise drop it from the gate while the run still
+        reported OK.
+        """
+        eligible = _eligible_docs()
+        for d in INCLUDED_DIRS[1:]:  # REPO_ROOT is handled non-recursively
+            with self.subTest(directory=str(d.relative_to(REPO_ROOT))):
+                self.assertTrue(d.is_dir(), f"included dir missing: {d}")
+                self.assertTrue(
+                    any(_is_under(p, d) for p in eligible),
+                    f"included dir contributed zero gated docs: {d}",
+                )
+
+    def test_port_skills_rule_count_claims_are_gated(self):
+        """The port SKILLs' live rule-count citations are inside the gate.
+
+        Both port SKILL.md files cite the port-translation rule count. This
+        asserts the citations are discovered, so a future path-filter change
+        that drops the port trees fails here instead of silently letting the
+        four claims drift on the next rules bump.
+        """
+        eligible = set(_eligible_docs())
+        port_skills = [GO_PORT_SKILL_DIR / "SKILL.md", JAVA_PORT_SKILL_DIR / "SKILL.md"]
+        sites = 0
+        for p in port_skills:
+            self.assertIn(p, eligible, f"port SKILL not gated: {p}")
+            for m in DISCOVERY_REGEX.finditer(p.read_text(encoding="utf-8")):
+                if _normalize_phrase(m.group(2)) == "port-translation rules":
+                    sites += 1
+        self.assertGreaterEqual(
+            sites, 2,
+            "expected each port SKILL to cite the port-translation rule count",
+        )
 
     def test_doc_claims_match_canonical_sources(self):
         """Every tracked claim's number matches its canonical source.
