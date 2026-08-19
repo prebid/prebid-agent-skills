@@ -4,7 +4,7 @@
 # live in scripts/ and scripts/tests/. The Makefile is a thin convenience
 # layer; the scripts themselves are the authoritative entry points.
 
-.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules lint-java-roles clean
+.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules lint-java-roles verify-claims verify-claims-upstream clean
 
 help:
 	@echo "Available targets:"
@@ -19,6 +19,8 @@ help:
 	@echo "  render-port-rules  Phase 2.5 regenerate port-translation-rules.md from .yaml source"
 	@echo "  lint-port-rules    Phase 2.6 mechanizable port-rule lints (Rules 5/9/33/36/38/44/46)"
 	@echo "  lint-java-roles    Wave 4 file-role enum gate (Java + Go via --include-go)"
+	@echo "  verify-claims      Hermetic: registered upstream claims are still anchored in the skills"
+	@echo "  verify-claims-upstream GO=<checkout> JAVA=<checkout>  Re-derive every claim from upstream source"
 	@echo "  clean              Remove __pycache__ and .pyc files"
 
 install:
@@ -29,6 +31,7 @@ ci: test
 	python3 scripts/render-port-rules.py --check
 	python3 scripts/coverage-report.py --check
 	python3 scripts/tests/test_schema_contract.py
+	python3 scripts/verify-upstream-claims.py --check-sites
 	@PAIRS=$$(grep -vE '^\s*(#|$$)' .github/known-broken-pairs.txt | tr '\n' ',' | sed 's/,$$//'); \
 	python3 scripts/round-trip-ci.py --strict-r3 --allow-known-broken-pairs "$$PAIRS"; \
 	EXIT=$$?; \
@@ -72,6 +75,21 @@ lint-port-rules:
 
 lint-java-roles:
 	python3 scripts/lib/lint-java-roles.py --include-go
+
+verify-claims:
+	python3 scripts/verify-upstream-claims.py --check-sites
+
+# Networked: needs local checkouts of both upstream repos. This is the check that
+# catches upstream moving under the skills; --check-sites cannot see that.
+verify-claims-upstream:
+	@if [ -z "$(GO)" ] && [ -z "$(JAVA)" ]; then \
+		echo "Usage: make verify-claims-upstream GO=/path/to/prebid-server JAVA=/path/to/prebid-server-java"; \
+		exit 1; \
+	fi
+	@python3 scripts/verify-upstream-claims.py --upstream \
+		$(if $(GO),--go-checkout $(GO),) $(if $(JAVA),--java-checkout $(JAVA),); \
+	EXIT=$$?; \
+	if [ $$EXIT -eq 0 ] || [ $$EXIT -eq 2 ]; then exit 0; else exit $$EXIT; fi
 
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +

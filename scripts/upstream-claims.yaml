@@ -1,0 +1,384 @@
+# Registry of the claims this repo makes about upstream prebid-server / -java.
+#
+# Every entry here drives a verdict on a real pull request. A stale one blocks a
+# good PR or waves through a bad adapter, so each claim carries the upstream
+# artifact that settles it and the repo sites that assert it.
+#
+# Verified with:
+#   python3 scripts/verify-upstream-claims.py --check-sites          (hermetic, CI)
+#   python3 scripts/verify-upstream-claims.py --upstream \
+#       --go-checkout <path> --java-checkout <path>                  (weekly)
+#
+# Adding a claim: prefer `enforcement` over prose whenever the assertion is that
+# upstream REQUIRES or BLOCKS something. Two defects in this repo's history were
+# enforcement claims with no enforcing construct -- a Jacoco coverage gate that
+# does not exist, and a "maintainer-mandatory" docs PR with no instance in the
+# repo it was asserted for. A symbol check cannot catch that class.
+
+version: 1
+
+pins:
+  go: 0ba352315253f6692af6497d553cfb12909a1b8b    # prebid/prebid-server master, fetched 2026-08-18
+  java: e3ffd57dbeb4                              # prebid/prebid-server-java master, fetched 2026-08-18
+
+claims:
+
+  # ---------------------------------------------------------------- Go: macros
+  - id: go.macros.endpoint-template-params
+    kind: struct_fields
+    repo: go
+    upstream_path: macros/macros.go
+    struct: EndpointTemplateParams
+    expect:
+      count: 22
+      contains: [Host, PublisherID, ZoneID, SourceId, AccountID, AdUnit, MediaType,
+                 GvlID, PageID, SupplyId, ImpID, SspId, SspID, SeatID, TokenID,
+                 PartnerId, Region, PlacementID, NetworkId, SiteDomain, AppDomain, Bundle]
+      exact: true
+    why: >
+      The macro allow-list drives a FAIL verdict on any endpoint using a name
+      outside it. It sat at 18 fields for three months after upstream added four,
+      making every PR that used one of them a false FAIL.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "NetworkId"
+
+  - id: go.macros.usersync-privacy
+    kind: struct_fields
+    repo: go
+    upstream_path: macros/macros.go
+    struct: UserSyncPrivacy
+    expect:
+      count: 5
+      contains: [GDPR, GDPRConsent, USPrivacy, GPP, GPPSID]
+      exact: true
+    why: User-sync URL review keys on this set; it is separate from the endpoint set.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "GPPSID"
+
+  # ------------------------------------------------------- Go: alias semantics
+  - id: go.alias.gvl-never-inherited
+    kind: enforcement
+    repo: go
+    enforced: true
+    artifacts: [config/bidderinfo.go]
+    construct: "GVLVendorID is intentionally never set to the parent"
+    why: >
+      An alias omitting gvlVendorID gets no GDPR vendor registration at all --
+      ToGVLVendorIDMap drops zero values. The suite asserted the opposite for
+      months, so an omission was recorded as PASS.
+    sites:
+      - path: prebid-server-go/review/skills/bidder-info-pr-review/references/field-index.md
+        assert: "NEVER inherited by an alias"
+
+  - id: go.alias.whitelabelonly-is-fatal
+    kind: enforcement
+    repo: go
+    enforced: true
+    artifacts: [config/bidderinfo.go]
+    construct: "is an alias and cannot be set as white label only"
+    why: Startup abort, not a style nit; the suite had no check for it at all.
+    sites:
+      - path: prebid-server-go/review/skills/bidder-info-pr-review/SKILL.md
+        assert: "white label only"
+
+  # ----------------------------------------------------------- Go: multiformat
+  - id: go.multiformat.defaults-true
+    kind: enforcement
+    repo: go
+    enforced: true
+    artifacts: [adapters/infoawarebidder.go]
+    construct: "func IsMultiFormatSupported[\\s\\S]{0,400}?return true"
+    why: >
+      Absent config key means multiformat IS supported, so nearly every adapter
+      receives co-present formats. A check phrased as opt-in lets a reviewer
+      exempt the exact case it exists to catch (Teal #4765).
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "IsMultiFormatSupported"
+
+  # ------------------------------------------------------- Go: framework calls
+  - id: go.adapters.status-helpers
+    kind: symbol
+    repo: go
+    upstream_path: adapters
+    symbol: IsResponseStatusCodeNoContent
+    why: Cited as the canonical 204 check in adapter review.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "adapters.IsResponseStatusCodeNoContent"
+
+  - id: go.adapterstest.runjsonbiddertest
+    kind: symbol
+    repo: go
+    upstream_path: adapters/adapterstest
+    symbol: RunJSONBidderTest
+    why: >
+      The JSON test harness entry point. The port skill's prose called it
+      adapters.RunJSONBidderTest; it lives in the adapterstest package.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "adapterstest.RunJSONBidderTest"
+
+  - id: go.ptrutil.clone-is-generic
+    kind: symbol
+    repo: go
+    upstream_path: util/ptrutil
+    symbol: Clone
+    why: >
+      Generic signature (func Clone[T any]). Registered because a naive
+      definition regex misses generics and reports a false absence.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "ptrutil.Clone"
+
+  - id: go.iterutil.slicepointervalues
+    kind: symbol
+    repo: go
+    upstream_path: util/iterutil
+    symbol: SlicePointerValues
+    why: Perf helper cited as INFO-level guidance; lives in slices.go, not iterutil.go.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "iterutil.SlicePointerValues"
+
+  # --------------------------------------------------------- Go: endpoint gate
+  - id: go.endpoint.unknown-macro-fails-startup
+    kind: enforcement
+    repo: go
+    enforced: true
+    artifacts: [config/bidderinfo.go]
+    construct: "func validateAdapterEndpoint[\\s\\S]{0,800}?ResolveMacros"
+    why: >
+      An unrecognized macro does NOT silently resolve to empty string: template
+      execution errors, config.New refuses to boot, and TestBidderInfoFiles
+      fails. The severity was right; the mechanism sentence was wrong.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "validateAdapterEndpoint"
+
+  - id: go.params.no-draft-pin
+    kind: enforcement
+    repo: go
+    enforced: false
+    artifacts: [openrtb_ext/bidders.go]
+    construct: "draft-04"
+    why: >
+      NewBidderParamsValidator pins no JSON Schema draft -- the draft comes from
+      each file's own $schema. A drift check asserting a draft-04 pin can never
+      observe what it claims to watch.
+    sites:
+      - path: prebid-server-go/review/skills/pr-triage/SKILL.md
+        assert: "gojsonschema"
+
+  - id: go.coverage.is-warning-only
+    kind: enforcement
+    repo: go
+    enforced: true
+    artifacts: [scripts/check_coverage.sh]
+    construct: "COV_MIN=30"
+    why: >
+      Upstream Go coverage is a 30% WARNING, not a blocking gate. Recorded so a
+      future "CI enforces N% coverage" claim has something to check against.
+    sites:
+      - path: docs/execution-plan-phase-d.md
+        assert: "30% coverage warning"
+
+  # ------------------------------------------------- Java: deleted / absent API
+  - id: java.usersynccreator.deleted-upstream
+    kind: absence
+    repo: java
+    upstream_path: src/main/java
+    absent: UsersyncerCreator
+    glob: "*.java"
+    why: >
+      Deleted upstream in 2880782f (#4464, 2026-07-09). The port template emitted
+      it unconditionally, so every Go->Java emission failed to compile, and the
+      review suite required it in 15 places with a FAIL when missing.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
+        assert: "COMPILE ERROR"
+      - path: prebid-server-java/port-go2java/templates/configuration.java.j2
+        assert: "Upstream deleted `UsersyncerCreator`"
+
+  - id: java.validateurlsyntax.does-not-exist
+    kind: absence
+    repo: java
+    upstream_path: src/main/java
+    absent: validateUrlSyntax
+    glob: "*.java"
+    why: >
+      The suite told reviewers to "accept either form" of a method that has never
+      existed, and called HttpUtil.validateUrl deprecated when it is not.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "validateUrl"
+
+  - id: java.whitelabelonly.is-go-only
+    kind: absence
+    repo: java
+    upstream_path: src/main/resources
+    absent: white-label-only
+    glob: "*.yaml"
+    why: The key exists only in Go; a Java check keyed on it can never fire.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/references/field-index.md
+        assert: "white-label"
+
+  # ------------------------------------------------------ Java: assembler + Uri
+  - id: java.assembler.bidder-creator
+    kind: symbol
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder/util/BidderDepsAssembler.java
+    symbol: bidderCreator
+    glob: "*.java"
+    why: Part of the real 4-member assembler surface that replaced the phantom chain call.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "bidderCreator"
+
+  - id: java.uri.replace-macro
+    kind: symbol
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/util/Uri.java
+    symbol: replaceMacro
+    glob: "*.java"
+    why: >
+      The current substitution idiom (Uri.of(url).replaceMacro(NAME, v).expand()).
+      Upstream migrated to Vert.x UriTemplate in bc0409271 (#4444); the suite
+      still documented String.replace("{{TOKEN}}", ...), which no adapter uses.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "replaceMacro"
+
+  - id: java.macros.no-double-brace-framework-names
+    kind: absence
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    absent: "{{gdpr}}"
+    glob: "*.yaml"
+    why: >
+      Framework macros are single-brace since the UriTemplate migration. Note the
+      genuine exception the review skills carve out: bidder-owned uid-macro
+      VALUES are still double-braced, which is why this claim names one specific
+      framework macro rather than banning the sequence outright.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
+        assert: "single-brace"
+
+  # ------------------------------------------------------ Java: config defaults
+  - id: java.adapter-defaults.modifying-vast-xml-allowed
+    kind: config_value
+    repo: java
+    upstream_path: src/main/resources/application.yaml
+    key: adapter-defaults.modifying-vast-xml-allowed
+    expect: true
+    why: >
+      Java back-fills true where Go's absent key means false -- the Rule 49
+      opposite-default class. An emission that omits the key silently flips
+      vendor-owned VAST behavior.
+    sites:
+      - path: prebid-server-java/port-go2java/templates/bidder-config.yaml.j2
+        assert: "modifying-vast-xml-allowed"
+
+  - id: java.adapter-defaults.multiformat-supported
+    kind: config_value
+    repo: java
+    upstream_path: src/main/resources/application.yaml
+    key: adapter-defaults.ortb.multiformat-supported
+    expect: true
+    why: Same default-true semantics as Go; both sides fail open if a guard assumes false.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
+        assert: "multiformat"
+
+  # ------------------------------------------------------------ Java: CI truth
+  - id: java.jacoco.has-no-coverage-gate
+    kind: enforcement
+    repo: java
+    enforced: false
+    artifacts: [pom.xml, extra/pom.xml]
+    construct: "jacoco-maven-plugin[\\s\\S]{0,1500}?<goal>check</goal>"
+    why: >
+      Jacoco runs prepare-agent + report only. The suite asserted a 90% gate that
+      "fails the build", and leaned on it INSTEAD of demanding a test -- so
+      untested code passed on a guarantee that does not exist.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "report-only"
+
+  - id: java.jacoco.excludes-spring-config
+    kind: enforcement
+    repo: java
+    enforced: true
+    artifacts: [pom.xml]
+    construct: "org/prebid/server/spring/config/\\*\\*"
+    why: >
+      Typed-config subclasses live under spring/config and are excluded from
+      coverage measurement entirely, which is why the F-new-52 "0% coverage"
+      trap could never happen.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "excludes"
+
+  - id: java.checkstyle.binds-to-validate-phase
+    kind: enforcement
+    repo: java
+    enforced: true
+    artifacts: [extra/pom.xml]
+    construct: "maven-checkstyle-plugin[\\s\\S]{0,1200}?<phase>validate</phase>"
+    why: >
+      Checkstyle genuinely blocks the build even though no check-run is named for
+      it -- it surfaces inside `build`. Registered so the correction to the CI
+      model cannot over-swing and delete the pre-flag checks.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "validate"
+
+  - id: java.checkstyle.import-order-bottom
+    kind: enforcement
+    repo: java
+    enforced: true
+    artifacts: [checkstyle.xml]
+    construct: "ImportOrder[\\s\\S]{0,300}?value=\"bottom\""
+    why: java.*/jakarta.* imports go LAST; emitted code and review both key on it.
+    sites:
+      - path: prebid-server-java/port-go2java/templates/configuration.java.j2
+        assert: "at the BOTTOM"
+
+  - id: java.toolchain.java-25
+    kind: enforcement
+    repo: java
+    enforced: true
+    artifacts: [extra/pom.xml]
+    construct: "<java.version>25</java.version>"
+    why: >
+      The suite's version baselines were a full major behind, so the drift check
+      fired on every correct PR.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "Java 25"
+
+  # ------------------------------------------------------------ Java: lifecycle
+  - id: java.magnite.replaced-rubicon
+    kind: path
+    repo: java
+    upstream_path: src/main/resources/bidder-config/magnite.yaml
+    expect_exists: true
+    why: >
+      Renamed in #4573 (2026-07-27); rubicon survives only as a disabled alias.
+      Skills still cite Rubicon* classes as canonical examples.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
+        assert: "Magnite"
+
+  - id: java.rubicon-config.removed
+    kind: path
+    repo: java
+    upstream_path: src/main/resources/bidder-config/rubicon.yaml
+    expect_exists: false
+    why: Paired with the claim above so a revert upstream is visible too.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
+        assert: "Magnite"

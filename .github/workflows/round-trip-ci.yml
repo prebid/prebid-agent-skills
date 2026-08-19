@@ -71,6 +71,13 @@ jobs:
       - name: Schema-contract test (dotted paths in registry)
         run: python3 scripts/tests/test_schema_contract.py
 
+      # Hermetic half of the upstream-claims gate: every registered claim is
+      # still anchored in the skill text that depends on it. The networked half
+      # (re-deriving each claim from upstream source) runs in upstream-sync.yml,
+      # because it needs checkouts of both upstream repos.
+      - name: Upstream-claims anchors (hermetic)
+        run: python3 scripts/verify-upstream-claims.py --check-sites
+
       - name: Schema validation — all goldens
         run: python3 -m unittest scripts.tests.test_schema_jsonschema -v
 
