@@ -713,3 +713,65 @@ claims:
     sites:
       - path: prebid-server-java/port-go2java/references/java-artifact-shapes.md
         assert: "162 carry `usersync:`"
+
+  - id: go.adapterstest.request-order-insensitive
+    kind: count
+    repo: go
+    upstream_path: adapters/adapterstest
+    glob: test_json.go
+    mode: files
+    pattern: without assuming order
+    expect: 1
+    strict: true
+    why: 'Rule 47 told porters that emitting a HashMap "breaks deterministic request
+      order and fixture matching" and that Java->Go must re-introduce an explicit order
+      slice. The harness those fixtures run through matches requests order-insensitively
+      on purpose. A rule that invents a constraint the target repo does not have sends
+      a porter to add code a reviewer will ask them to remove.
+
+      '
+    regenerate: 'git grep -n "without assuming order" -- adapters/adapterstest/test_json.go
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: as the use of maps in some adapters purposely randomizes
+
+  - id: java.imp-grouping.no-linkedhashmap
+    kind: absence
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    absent: 'List<Imp>> impsBy'
+    why: 'Pins the shape of the grouping idiom by pinning what it is NOT. All six merged
+      groupers declare their map inline with HashMap; none names it impsBy* with a
+      LinkedHashMap, which is what an earlier revision of the Rule 47 template emitted.
+      A future adapter adopting that shape should force this claim to be re-decided
+      rather than passing quietly.
+
+      '
+    regenerate: 'git grep -l "List<Imp>> impsBy" -- src/main/java/org/prebid/server/bidder
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/templates/bidder.java.j2
+        assert: HashMap matches all six merged Java groupers
+
+  - id: java.adkernel.grouping-key-is-not-a-string
+    kind: symbol
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder/adkernel/AdkernelBidder.java
+    symbol: 'Map<ExtImpAdkernel, List<Imp>>'
+    why: 'The single fact that disproves a String-keyed grouping template. adkernel is in
+      this repo''s golden corpus, groups imps, and keys on its whole ext type -- whose own
+      key field is an Integer zoneId. A template hardcoding Map<String, ...> cannot emit
+      this adapter at all.
+
+      '
+    regenerate: 'git grep -n "Map<ExtImpAdkernel, List<Imp>>" -- src/main/java/org/prebid/server/bidder/adkernel
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: Integer (adtarget) and an enum (taboola)
+

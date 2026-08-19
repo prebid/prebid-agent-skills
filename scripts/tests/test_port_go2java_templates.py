@@ -806,47 +806,72 @@ class TestBidderJ2(unittest.TestCase):
         self.assertIn("case 2 -> BidType.video;", rendered)
         self.assertIn("case 4 -> BidType.xNative;", rendered)
 
-    def test_grouped_by_key_batching_emits_linkedhashmap_grouping(self):
-        """Rule 47 / F-new-107. One outgoing request per distinct
-        imp.ext.bidder.<key>, in FIRST-SEEN key order, with per-imp AND
-        per-group failures isolated. LinkedHashMap is load-bearing: it is what
-        reproduces the Go map + order-slice idiom, and a HashMap would make
-        request order depend on hash iteration."""
+    def test_grouped_by_key_defaults_to_keying_on_the_whole_ext_object(self):
+        """Rule 47. The default shape is what upstream does most.
+
+        Measured at prebid-server-java e3ffd57db and prebid-server 0ba35231, the
+        merged adapters that group imps key their map on:
+
+            ExtImpAdkernel / ExtImpDatablocks / ExtImpZeroclickfraud  (whole ext)
+            Integer  (adtarget)
+            MediaType enum  (taboola)
+            String  (thirtythreeacross)
+
+        so the whole-ext shape is 3 of 6, and on the Go side it is 4 of 4
+        (`map[openrtb_ext.ExtImpAdkernel][]openrtb2.Imp`). port-java2go already
+        emits that, so defaulting to it here also makes the two port skills
+        agree. An earlier revision hardcoded `Map<String, …>` keyed on one field,
+        which is 1 of 6 and could not express adkernel at all.
+        """
         ctx = _kobler_bidder_ctx()
         ctx["batching_kind"] = "grouped-by-key"
-        ctx["batching_per_key"] = {"key_field": "route"}
         rendered = _render("bidder.java.j2", ctx)
-        self.assertIn("import java.util.LinkedHashMap;", rendered)
-        self.assertIn("import java.util.Map;", rendered)
-        self.assertIn("final Map<String, List<Imp>> impsByGroup = new LinkedHashMap<>();", rendered)
-        self.assertIn("impsByGroup.computeIfAbsent(extImp.getRoute(), key -> new ArrayList<>())", rendered)
-        self.assertIn("for (Map.Entry<String, List<Imp>> groupEntry : impsByGroup.entrySet())", rendered)
-        # Two catches: one per imp, one per group. Collapsing them to one would
-        # let a bad group key reject every group.
+        self.assertIn("final Map<ExtImpKobler, List<Imp>> impsByGroup = new HashMap<>();", rendered)
+        self.assertIn("impsByGroup.computeIfAbsent(extImp, key -> new ArrayList<>())", rendered)
+        self.assertIn("for (Map.Entry<ExtImpKobler, List<Imp>> groupEntry : impsByGroup.entrySet())",
+                      rendered)
+        # Per-imp AND per-group failures stay isolated.
         self.assertEqual(rendered.count("errors.add(BidderError.badInput(e.getMessage()));"), 2)
-        # Template-mapped now, so it must not fall through to the TODO throw.
         self.assertNotIn("UnsupportedOperationException", rendered)
 
-    def test_grouped_by_key_camel_case_key_field_getter(self):
-        """key_field is camelCase-preserving: 'accountId' -> getAccountId().
-        A |capitalize filter would emit getAccountid(), which does not compile
-        against a Lombok-generated getter -- regression pin."""
+    def test_grouped_by_key_uses_hashmap_not_linkedhashmap(self):
+        """All six merged Java groupers use `new HashMap<>()`; none uses
+        LinkedHashMap. An earlier revision emitted LinkedHashMap and carried a
+        comment calling HashMap a defect that "breaks deterministic request order
+        and fixture matching" -- which Go's own harness contradicts:
+        `adapters/adapterstest/test_json.go` matches requests order-insensitively
+        on purpose, "as the use of maps in some adapters purposely randomizes
+        order"."""
         ctx = _kobler_bidder_ctx()
         ctx["batching_kind"] = "grouped-by-key"
-        ctx["batching_per_key"] = {"key_field": "accountId"}
         rendered = _render("bidder.java.j2", ctx)
-        self.assertIn("extImp.getAccountId()", rendered)
+        self.assertIn("new HashMap<>()", rendered)
+        self.assertNotIn("LinkedHashMap", rendered)
 
-    def test_grouped_by_key_without_per_key_fails_loudly(self):
-        """No default key exists. Defaulting would emit a getter for a field the
-        ExtImp class does not declare and report success -- the same hole the
-        Rule 35 empty-subclass guard closes."""
+    def test_grouped_by_key_typed_field_key(self):
+        """The minority shape: key on one field, with its type carried across."""
+        for key_type, field, getter in (("String", "route", "getRoute"),
+                                        ("Integer", "zoneId", "getZoneId")):
+            ctx = _kobler_bidder_ctx()
+            ctx["batching_kind"] = "grouped-by-key"
+            ctx["batching_per_key"] = {"key_field": field, "key_type": key_type}
+            with self.subTest(key_type=key_type):
+                rendered = _render("bidder.java.j2", ctx)
+                self.assertIn(f"final Map<{key_type}, List<Imp>> impsByGroup = new HashMap<>();",
+                              rendered)
+                self.assertIn(f"impsByGroup.computeIfAbsent(extImp.{getter}(), "
+                              f"key -> new ArrayList<>())", rendered)
+
+    def test_typed_field_key_without_a_type_fails_loudly(self):
+        """`String` cannot be assumed: adtarget keys on Integer and taboola on an
+        enum, so a field key with no declared type would emit a map whose type is
+        a guess. adkernel's own key is `Integer zoneId`."""
         ctx = _kobler_bidder_ctx()
         ctx["batching_kind"] = "grouped-by-key"
+        ctx["batching_per_key"] = {"key_field": "zoneId"}
         with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
             _render("bidder.java.j2", ctx)
-        self.assertIn("rule47_grouped_by_key_requires_ctx_batching_per_key_key_field",
-                      str(cm.exception))
+        self.assertIn("rule47_key_field_requires_key_type", str(cm.exception))
 
     def test_grouped_by_key_non_identifier_key_field_fails_loudly(self):
         """A source-side JSON field name may be snake_case or hyphenated; the
@@ -855,18 +880,18 @@ class TestBidderJ2(unittest.TestCase):
         for bad in ("account_id", "account-id", "AccountId", "9lives"):
             ctx = _kobler_bidder_ctx()
             ctx["batching_kind"] = "grouped-by-key"
-            ctx["batching_per_key"] = {"key_field": bad}
+            ctx["batching_per_key"] = {"key_field": bad, "key_type": "String"}
             with self.subTest(key_field=bad):
                 with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
                     _render("bidder.java.j2", ctx)
                 self.assertIn("rule47_key_field_must_be_a_lower_camelCase_java_identifier",
                               str(cm.exception))
 
-    def test_linkedhashmap_not_imported_for_other_batching_kinds(self):
-        """The grouping imports are conditional -- checkstyle UnusedImports
-        would fail the build on any other batching kind."""
+    def test_grouping_imports_absent_for_other_batching_kinds(self):
+        """The grouping imports are conditional -- checkstyle UnusedImports would
+        fail the build on any other batching kind."""
         rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
-        self.assertNotIn("LinkedHashMap", rendered)
+        self.assertNotIn("import java.util.HashMap;", rendered)
         self.assertNotIn("import java.util.Map;", rendered)
 
     def test_per_bid_skip_mtype_accumulates_and_continues(self):

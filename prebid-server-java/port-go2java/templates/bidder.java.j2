@@ -25,22 +25,42 @@ the SKILL passes from the source spec):
                                           port-java2go's ctx spells the same kind "per-key".
                                           Both feed a ctx.batching_per_key dict.
   ctx.batching_max_imps        : int|null  — when batching_kind == "max-imps-per-request"
-  ctx.batching_per_key         : dict  — REQUIRED when batching_kind == "grouped-by-key"
-                                          (Rule 47); absent for every other kind. One key:
-                                            - key_field: str — the ExtImp{X} FIELD NAME whose
-                                              value keys the groups (e.g. "route"). Must be a
-                                              lower-camelCase Java identifier: the template
-                                              derives the getter as get<Field>(), so the
-                                              SKILL owns any snake_case→camelCase
+  ctx.batching_per_key         : dict|null — Rule 47, when batching_kind ==
+                                          "grouped-by-key". Selects WHAT the groups are keyed
+                                          on. Two shapes, both drawn from merged upstream
+                                          adapters:
+                                            absent / key_field null
+                                              Key on the WHOLE ExtImp{X} object:
+                                              `Map<ExtImp{X}, List<Imp>>`. This is the default
+                                              because it is what upstream does most —
+                                              AdkernelBidder, DatablocksBidder and
+                                              ZeroclickfraudBidder all key on their ext type,
+                                              and every Go grouper does the same
+                                              (`map[openrtb_ext.ExtImp{X}][]openrtb2.Imp`), so
+                                              it is also what port-java2go emits. Requires the
+                                              ext POJO to carry `@Value` for equals/hashCode,
+                                              which ext-imp-pojo.java.j2 emits.
+                                            {key_field, key_type}
+                                              Key on ONE field: `Map<{key_type}, List<Imp>>`
+                                              keyed on `extImp.get<Field>()`. Upstream uses
+                                              this with String (ThirtyThreeAcrossBidder),
+                                              Integer (AdtargetBidder) and an enum
+                                              (TaboolaBidder), so key_type is REQUIRED here
+                                              rather than assumed to be String — the previous
+                                              revision hardcoded String and therefore could
+                                              not express adkernel, whose key is an Integer
+                                              zoneId. key_field must be a lower-camelCase Java
+                                              identifier; the SKILL owns any snake_case
                                               normalization (Rule 46) before it lands here.
-                                              A non-identifier value fails at render rather
-                                              than emitting a getter that does not compile.
-                                          Emits a LinkedHashMap grouping loop — first-seen
-                                          key order is behavioral parity with the Go
-                                          map + order-slice idiom, so a HashMap here breaks
-                                          deterministic request order and fixture matching.
-                                          Symmetric to port-java2go's ctx.batching_per_key
-                                          (F-new-7 EXT-A / F-new-107).
+                                          `HashMap`, not `LinkedHashMap`: all six merged Java
+                                          groupers use HashMap, and Go's own fixture harness
+                                          matches requests order-insensitively on purpose
+                                          (`adapters/adapterstest/test_json.go`: "try to match
+                                          expected to actual without assuming order, as the use
+                                          of maps in some adapters purposely randomizes
+                                          order"). If a bidder genuinely needs a stable
+                                          outgoing order, that is a per-bidder decision to make
+                                          explicitly, not a default to inherit.
   ctx.endpoint_resolution_kind : str  — one of {"static", "single-token-substitution",
                                           "query-parameter-augmentation", "dev-prod-toggle",
                                           "multi-token-substitution"}; Rule 11/12/13/14
@@ -126,7 +146,7 @@ import org.prebid.server.util.HttpUtil;
 import java.util.ArrayList;
 import java.util.Collections;
 {% if ctx.batching_kind == "grouped-by-key" %}
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 {% endif %}
 import java.util.List;
 {% if ctx.batching_kind == "grouped-by-key" %}
@@ -305,24 +325,37 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
             }
         }
 {% elif ctx.batching_kind == "grouped-by-key" %}
-{# Rule 47. key_field is REQUIRED here and deliberately not defaulted: a
-   silently-defaulted key would emit a getter for a field the ExtImp class does
-   not declare, and the render would report success. Same class of hole as the
-   Rule 35 empty-subclass guard. #}
-{%- if not (ctx.batching_per_key and ctx.batching_per_key.key_field) -%}
-{{ {}.rule47_grouped_by_key_requires_ctx_batching_per_key_key_field__no_default_exists.fail }}
-{%- endif -%}
-{%- set group_key_field = ctx.batching_per_key.key_field -%}
+{# Rule 47. Two keying shapes, both taken from merged adapters. Defaulting to
+   the whole ext object matches AdkernelBidder / DatablocksBidder /
+   ZeroclickfraudBidder and every Go grouper, so it is also what port-java2go
+   emits. A single-field key must declare its TYPE: upstream uses String,
+   Integer and an enum for this, and hardcoding String is what made the previous
+   revision unable to express adkernel's Integer zoneId. #}
+{%- set _per_key = ctx.batching_per_key or {} -%}
+{%- set group_key_field = _per_key.key_field if _per_key else none -%}
+{%- if group_key_field -%}
 {%- set _JAVA_IDENT_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' -%}
 {%- if (group_key_field | reject('in', _JAVA_IDENT_CHARS) | list) or group_key_field[0] not in 'abcdefghijklmnopqrstuvwxyz' -%}
 {{ {}.rule47_key_field_must_be_a_lower_camelCase_java_identifier__normalize_it_in_the_skill.fail }}
 {%- endif -%}
+{%- if not _per_key.key_type -%}
+{{ {}.rule47_key_field_requires_key_type__upstream_uses_String_Integer_and_enum_keys_so_String_cannot_be_assumed.fail }}
+{%- endif -%}
+{%- endif -%}
+{%- set group_key_type = _per_key.key_type if group_key_field else ("ExtImp" ~ ctx.imp_ext_class_root) -%}
+{%- set group_key_expr = ("extImp.get" ~ group_key_field[0] | upper ~ group_key_field[1:] ~ "()") if group_key_field else "extImp" -%}
         // Rule 47 — grouped-by-key batching: one outgoing request per distinct
-        // imp.ext.bidder.{{ group_key_field }}, preserving FIRST-SEEN key order.
-        // LinkedHashMap gives the same ordered-multimap semantics as the Go
-        // map + order-slice idiom; a HashMap here breaks deterministic request
-        // order and fixture matching.
-        final Map<String, List<Imp>> impsByGroup = new LinkedHashMap<>();
+{% if group_key_field %}
+        // imp.ext.bidder.{{ group_key_field }}.
+{% else %}
+        // imp.ext.bidder value, keyed on the parsed ext object as
+        // AdkernelBidder, DatablocksBidder and ZeroclickfraudBidder do.
+{% endif %}
+        // HashMap matches all six merged Java groupers. Request order is not
+        // pinned here on purpose: Go's fixture harness matches requests
+        // order-insensitively by design, so a stable order is a per-bidder
+        // decision rather than something this shape owes.
+        final Map<{{ group_key_type }}, List<Imp>> impsByGroup = new HashMap<>();
         for (Imp imp : bidRequest.getImp()) {
             try {
                 final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
@@ -337,14 +370,14 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {% else %}
                 final Imp modifiedImp = imp;
 {% endif %}
-                impsByGroup.computeIfAbsent(extImp.get{{ group_key_field[0] | upper }}{{ group_key_field[1:] }}(), key -> new ArrayList<>())
+                impsByGroup.computeIfAbsent({{ group_key_expr }}, key -> new ArrayList<>())
                         .add(modifiedImp);
             } catch (PreBidException e) {
                 errors.add(BidderError.badInput(e.getMessage()));
             }
         }
 
-        for (Map.Entry<String, List<Imp>> groupEntry : impsByGroup.entrySet()) {
+        for (Map.Entry<{{ group_key_type }}, List<Imp>> groupEntry : impsByGroup.entrySet()) {
             try {
                 final BidRequest groupRequest = bidRequest.toBuilder()
                         .imp(groupEntry.getValue())

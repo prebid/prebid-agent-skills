@@ -571,9 +571,10 @@ sections:
   - id: 47
     title: Grouped-by-key imp batching (one request per key group)
     pattern: Imps are grouped by an arbitrary key read from `imp.ext.bidder` (route, publisher ID, account
-      ID); one HTTP request is emitted per distinct key, preserving FIRST-SEEN key order. Go needs an
-      explicit order slice next to the map (map iteration is randomized); Java gets the same semantics
-      from a single `LinkedHashMap`.
+      ID); one HTTP request is emitted per distinct key. Both languages key the map on the WHOLE parsed
+      ext object in most merged adapters (`map[openrtb_ext.ExtImp{X}][]openrtb2.Imp` on the Go side,
+      `Map<ExtImp{X}, List<Imp>>` on the Java side); a single typed field is the minority shape.
+      Outgoing request ORDER is not part of the pattern — see the translation rule.
     spec_field_driver: '`batching.rules: [{ kind: grouped-by-key, key: <field-path>, group_id_construction:
       <expr> }]`'
     body: "**Go code** (rtbstack — master sample; map + first-seen order slice):\n```go\nvar errs []error\n\
@@ -594,22 +595,27 @@ sections:
       \        final String endpoint = buildEndpointUrl(routeImps.getKey());\n        final BidRequest\
       \ outgoingRequest = request.toBuilder().imp(routeImps.getValue()).build();\n        httpRequests.add(BidderUtil.defaultRequest(outgoingRequest,\
       \ endpoint, mapper));\n    } catch (PreBidException e) {\n        errors.add(BidderError.badInput(e.getMessage()));\n\
-      \    }\n}\n```\n\n**Translation rule**: The grouping key, the FIRST-SEEN group order, and the two-level\
+      \    }\n}\n```\n\n**Translation rule**: The grouping key and the two-level\
       \ error isolation must all survive the port: (1) an imp whose ext fails to parse is skipped with\
       \ BadInput while its siblings proceed; (2) a group whose key is invalid (e.g., Rule 48 endpoint\
       \ derivation fails) is rejected with BadInput without affecting other groups. Go's `map[string][]T`\
-      \ + order-slice idiom translates to Java `LinkedHashMap<String, List<T>>` — a porter emitting `HashMap`\
-      \ (or Go emitting bare map iteration) breaks deterministic request order and fixture matching. Java→Go\
-      \ MUST re-introduce the explicit order slice; the fidelity trap is silent because small-map iteration\
-      \ often LOOKS stable in tests.\n\n**Round-trip considerations**: Round-trip-safe — both idioms express\
-      \ the same ordered-multimap semantics. The taxonomy row (`grouped-by-key`, canonical: huaweiads\
+      \ idiom maps to Java's `Map<ExtImp{X}, List<Imp>>`; a single-field key must carry its TYPE across,\
+      \ because upstream keys on String (thirtythreeacross), Integer (adtarget) and an enum (taboola).\
+      \ ORDER IS NOT A RULE HERE, and an earlier revision of this rule wrongly made it one. All six merged\
+      \ Java groupers use `HashMap`, none uses `LinkedHashMap`; all four merged Go groupers return the bare\
+      \ map with no order slice; and Go's own fixture harness matches requests order-insensitively on\
+      \ purpose \u2014 `adapters/adapterstest/test_json.go`: \"try to match expected to actual without assuming\
+      \ order, as the use of maps in some adapters purposely randomizes order.\" A bidder that genuinely\
+      \ needs a stable outgoing order should say so per-bidder; do not inherit it as a default.\n\n**Round-trip considerations**: Round-trip-safe on the grouping\
+      \ itself — both idioms express the same multimap. Order is not carried, and nothing upstream\
+      \ carries it either. The taxonomy row (`grouped-by-key`, canonical: huaweiads\
       \ token-grouping, 33across accountId-grouping) predates this rule; rtbstack made it a template-mapped\
       \ translation in both directions (`port-java2go` `ctx.batching_per_key` per F-new-7 EXT-A; `port-go2java`\
       \ `ctx.batching_per_key` per F-new-107).\n\n**Notes**: Often composes with Rule 48 (the key doubles\
       \ as the endpoint-macro source, so endpoint resolution runs once per group). Composes with Rule\
       \ 16 in principle (`grouped-by-key` then `max-imps-per-request` inside each group) — no corpus sample\
       \ yet. Test-fixture parity per Rule 36: pin at least (a) two imps sharing one key → ONE request\
-      \ with both imps, (b) two distinct keys → TWO requests in first-seen order, (c) one bad imp + one\
+      \ with both imps, (b) two distinct keys → TWO requests, order unconstrained, (c) one bad imp + one\
       \ healthy group → partial tolerance."
 - kind: rules
   title: Header construction rules (4)
