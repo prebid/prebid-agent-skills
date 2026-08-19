@@ -256,5 +256,5 @@ Reflection loop (Phase F) consumes this section once port runs land. An always-z
 - Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (42 files).
 - Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (17 files).
 - Port-translation rules (49 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.
-- Port reports (0 discovered): `prebid-server-go/port-java2go/output/*/port-report.json, prebid-server-java/port-go2java/output/*/port-report.json, .tmp/full-loop/*/port-report.json` (Phase D4.2 — sourced when port skills run).
+- Port reports (0 discovered): `prebid-server-go/port-java2go/output/*/port-report.json, prebid-server-java/port-go2java/output/*/port-report.json` (Phase D4.2 — sourced when port skills run).
 - ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).

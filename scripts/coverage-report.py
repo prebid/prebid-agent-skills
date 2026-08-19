@@ -382,11 +382,19 @@ def compute_dual_spec_coherency(goldens: dict[str, set[str]],
 
 
 PORT_REPORT_GLOB_PATHS = (
-    # Persisted output (operator-controlled; gitignored by default).
+    # Persisted output. Operator-controlled and NOT gitignored (checked with
+    # `git check-ignore`), so a committed report is tracked state the rendered
+    # markdown may legitimately depend on.
     "prebid-server-go/port-java2go/output/*/port-report.json",
     "prebid-server-java/port-go2java/output/*/port-report.json",
-    # Transient run-scoped (gitignored; only present mid-Teal-flow).
-    ".tmp/full-loop/*/port-report.json",
+    # F-new-115: the transient run-scoped glob ".tmp/full-loop/*/port-report.json"
+    # is deliberately NOT discovered. `--check` compares the committed markdown
+    # against a fresh regeneration, so any input that exists on one machine only
+    # makes the check environment-sensitive: an operator mid-Teal-flow either
+    # fails the check locally or commits transient counts that then fail in CI.
+    # `.tmp/` is gitignored, so those counts can never be reproduced from
+    # committed state. The committed report must be a function of committed
+    # state alone.
 )
 
 
