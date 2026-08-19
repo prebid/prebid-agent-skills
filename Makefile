@@ -4,12 +4,13 @@
 # live in scripts/ and scripts/tests/. The Makefile is a thin convenience
 # layer; the scripts themselves are the authoritative entry points.
 
-.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules lint-java-roles verify-claims verify-claims-upstream review-evals clean
+.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules lint-java-roles verify-claims verify-claims-upstream review-evals clean verify-params-refs verify-upstream
 
 help:
 	@echo "Available targets:"
 	@echo "  install            pip install -r requirements.txt"
 	@echo "  ci                 Run unit tests + schema-contract + round-trip-ci + port-rule lints"
+	@echo "  verify-upstream    Networked: claims + params refs vs upstream (needs GO= JAVA=)"
 	@echo "  test               Run unit tests only (scripts/tests/)"
 	@echo "  audit-goldens      Manual upstream-signature audit. Requires \`gh auth login\` (calls gh api). Run before submitting fixture-touching PRs. NOT part of \`make ci\` — see test-fixtures READMEs."
 	@echo "  audit-pr URL=…     Phase 4.2 PR audit (requires CLAUDE_API_KEY for novelty classification)"
@@ -105,6 +106,21 @@ verify-claims-upstream:
 	fi
 	python3 scripts/verify-upstream-claims.py --upstream \
 		--go-checkout $(GO) --java-checkout $(JAVA)
+
+# R2c. `make ci` proves a blob hashes to its ref; only upstream proves the ref
+# describes upstream. A forgery editing blob, sha and byte count together is
+# self-consistent and passes the whole hermetic gate.
+verify-params-refs:
+	@if [ -z "$(GO)" ] || [ -z "$(JAVA)" ]; then \
+		echo "Both checkouts are required: a half-run leaves one language's refs"; \
+		echo "unchecked and would otherwise report success."; \
+		exit 1; \
+	fi
+	python3 scripts/verify-params-refs.py \
+		--go-checkout $(GO) --java-checkout $(JAVA)
+
+# Everything that needs the network, in one target.
+verify-upstream: verify-claims-upstream verify-params-refs
 
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +

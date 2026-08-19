@@ -551,8 +551,12 @@ def r2_check(spec: Spec) -> List[Finding]:
       R2b  the stored blob's length equals bidder_params_ref.bytes -- an
            independent witness, because a length cannot be re-derived from
            transcribed text the way a hash can
-      R2c  ref.sha256 equals upstream at ref.resolved_commit  (NOT here: needs
-           the network, so it runs in the weekly upstream-sync job)
+      R2c  ref.sha256 and ref.bytes equal upstream at ref.resolved_commit, and
+           the stored blob is byte-identical to it. NOT here -- it needs the
+           network. `scripts/verify-params-refs.py`, run by the upstream-sync
+           workflow. R2a/R2b alone cannot see a forgery that edits blob, sha and
+           byte count together: they agree with each other, and only upstream
+           breaks the tie.
 
     `bidder_params_json` is gone at 2.0.0. While it survived the migration it was
     compared against the blob as a WARN, and both beachfront goldens warned --

@@ -102,6 +102,25 @@ jobs:
             --go-checkout .upstream/go --java-checkout .upstream/java
           echo "exit=$?" >> $GITHUB_OUTPUT
 
+      # R2c: the networked half of the params-fidelity check. `make ci` proves a
+      # blob hashes to its ref; only upstream proves the ref describes upstream. A
+      # forgery that edits blob, sha and byte count together is self-consistent
+      # and passes the entire hermetic gate -- verified against a Go-only golden,
+      # where `make ci` exited 0 without naming the bidder. Non-blocking here for
+      # the same reason as the claims check; the exit code is enforced below.
+      #
+      # The checkouts above are fetch-depth 1 and every golden pins an older
+      # commit, so the script fetches the specific commits it needs. Without a
+      # token it still works: these are public repos over https.
+      - name: Verify bidder-params refs against upstream (R2c)
+        id: refs
+        continue-on-error: true
+        run: |
+          set +e
+          python3 scripts/verify-params-refs.py \
+            --go-checkout .upstream/go --java-checkout .upstream/java
+          echo "exit=$?" >> $GITHUB_OUTPUT
+
       - name: Upload drift-report artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -192,12 +211,34 @@ jobs:
         if: always()
         run: |
           EXIT="${{ steps.sync.outputs.exit }}"
+          CLAIMS="${{ steps.claims.outputs.exit }}"
+          REFS="${{ steps.refs.outputs.exit }}"
+          echo "sync=$EXIT claims=$CLAIMS refs=$REFS"
+          STATUS=0
+          # An EMPTY output is not a pass: it means the step never reached its
+          # echo, so nothing was checked. Treated as a failure, because the whole
+          # point of this job is that a zero-input run is not a clean verdict.
+          if [ -z "$CLAIMS" ]; then
+            echo "::error::the upstream-claims step produced no exit code — it did not run to completion."
+            STATUS=1
+          elif [ "$CLAIMS" != "0" ]; then
+            echo "::error::A registered claim no longer holds upstream (exit $CLAIMS). The skills are asserting something false."
+            STATUS=1
+          fi
+          if [ -z "$REFS" ]; then
+            echo "::error::the R2c params-ref step produced no exit code — it did not run to completion."
+            STATUS=1
+          elif [ "$REFS" != "0" ]; then
+            echo "::error::A bidder_params_ref no longer matches upstream, or could not be verified (exit $REFS)."
+            STATUS=1
+          fi
           case "$EXIT" in
-            0|2) exit 0 ;;
+            0|2) ;;
             3)
               echo "::error::sync-from-upstream could not scan (exit 3). A zero-input run is not a clean verdict."
-              exit 1 ;;
+              STATUS=1 ;;
             *)
               echo "::error::Upstream drift detected — see the tracking issue and the drift-report artifact."
-              exit 1 ;;
+              STATUS=1 ;;
           esac
+          exit $STATUS

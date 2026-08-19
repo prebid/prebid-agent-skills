@@ -1065,8 +1065,17 @@ _EXPR_SUBS = {
 }
 
 
-def _substitute(text: str, exit_code: str) -> str:
+def _substitute(text: str, exit_code: str, claims: str = "0", refs: str = "0") -> str:
+    """Render a step's shell body with the step outputs it reads.
+
+    `claims` and `refs` default to "0" so the many callers that only care about
+    the sync exit keep working. An EMPTY string is a meaningful value, not a
+    default: GitHub renders an unset step output as the empty string, which is
+    what a step that died before its `echo` produces.
+    """
     text = re.sub(r"\$\{\{\s*steps\.sync\.outputs\.exit\s*\}\}", exit_code, text)
+    text = re.sub(r"\$\{\{\s*steps\.claims\.outputs\.exit\s*\}\}", claims, text)
+    text = re.sub(r"\$\{\{\s*steps\.refs\.outputs\.exit\s*\}\}", refs, text)
     for pat, val in _EXPR_SUBS.items():
         text = re.sub(pat, val, text)
     return text
@@ -1173,6 +1182,7 @@ class TestWorkflowEscalation(unittest.TestCase):
         self.assertIn("could not scan", body)
 
     def test_exit_code_enforcement(self):
+        """The sync exit alone, with the other two steps clean."""
         step = self.steps["Enforce sync exit code"]
         for sync_exit, expected in (("0", 0), ("1", 1), ("2", 0), ("3", 1)):
             body = _substitute(step["run"], sync_exit)
@@ -1180,6 +1190,64 @@ class TestWorkflowEscalation(unittest.TestCase):
             proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
             self.assertEqual(expected, proc.returncode,
                              f"sync exit {sync_exit}: {proc.stdout}{proc.stderr}")
+
+    def test_claims_or_refs_failing_fails_the_job(self):
+        """Both non-blocking steps must reach the exit code.
+
+        They are `continue-on-error` so a failure there cannot mask the drift
+        report — which means the only thing that turns them into a verdict is
+        this step reading their outputs. If it did not, a claim that stopped
+        holding upstream, or a params ref that stopped matching it, would be
+        reported into a log nobody reads and the job would go green.
+        """
+        step = self.steps["Enforce sync exit code"]
+        cases = [
+            ("0", "0", "0", 0, "all clean"),
+            ("0", "1", "0", 1, "a registered claim no longer holds"),
+            ("0", "0", "1", 1, "a params ref no longer matches upstream"),
+            ("2", "1", "1", 1, "warn-only sync does not excuse the other two"),
+            ("0", "1", "1", 1, "both"),
+        ]
+        for sync, claims, refs, expected, why in cases:
+            body = _substitute(step["run"], sync, claims, refs)
+            self.assertNotIn("${{", body)
+            proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
+            self.assertEqual(expected, proc.returncode,
+                             f"{why} (sync={sync} claims={claims} refs={refs}): "
+                             f"{proc.stdout}{proc.stderr}")
+
+    def test_a_step_that_never_ran_is_not_a_pass(self):
+        """An empty step output means the step died before its echo.
+
+        This is the failure this job exists to catch, turned on the job itself:
+        zero checks run is not zero problems found. GitHub renders an unset
+        output as the empty string, so `[ "$CLAIMS" != "0" ]` alone would have
+        read it as... not-zero, and failed — but only by accident of string
+        comparison, and with a message blaming a claim instead of the step. The
+        emptiness is checked explicitly so the error says which step did not
+        finish.
+        """
+        step = self.steps["Enforce sync exit code"]
+        for claims, refs, needle in (("", "0", "upstream-claims step produced no exit code"),
+                                     ("0", "", "R2c params-ref step produced no exit code")):
+            body = _substitute(step["run"], "0", claims, refs)
+            proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
+            self.assertEqual(1, proc.returncode, f"{proc.stdout}{proc.stderr}")
+            self.assertIn(needle, proc.stdout + proc.stderr)
+
+    def test_r2c_step_is_present_and_non_blocking(self):
+        """R2c must run in this job and must not short-circuit the drift report."""
+        step = self.steps["Verify bidder-params refs against upstream (R2c)"]
+        self.assertTrue(step.get("continue-on-error"),
+                        "R2c must not mask the drift report; the verdict comes from "
+                        "the enforcement step")
+        self.assertEqual("refs", step.get("id"),
+                         "the enforcement step reads steps.refs.outputs.exit")
+        self.assertIn("scripts/verify-params-refs.py", step["run"])
+        self.assertIn("--go-checkout .upstream/go", step["run"])
+        self.assertIn("--java-checkout .upstream/java", step["run"])
+        self.assertNotIn("--allow-unverifiable", step["run"],
+                         "an unverifiable ref is not a verified one; do not blanket-allow it")
 
     def test_sync_step_does_not_short_circuit_the_escalation(self):
         # The escalation must run even when the sync step reports drift.

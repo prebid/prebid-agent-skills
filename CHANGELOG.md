@@ -45,8 +45,14 @@ R2 changed from `sha256(bidder_params_json) == bidder_params_sha256` to: the
 blob hashes to `ref.sha256` (R2a), its length equals `ref.bytes` (R2b), and
 `bidder_params_sha256` mirrors `ref.sha256`. A golden still carrying the removed
 field FAILs — a stale inline copy beside a ref is the ambiguity the ref exists
-to remove. R2c (ref vs upstream at `resolved_commit`) needs the network and runs
-in the weekly `upstream-sync` job.
+to remove. R2c — ref sha256 and bytes against upstream at `resolved_commit`,
+plus the stored blob byte-compared to it — needs the network and lives in
+`scripts/verify-params-refs.py`, wired into the `upstream-sync` workflow. It is a
+separate check because R2a/R2b cannot see a forgery that edits the blob, the sha
+and the byte count together: those three agree with each other, and only upstream
+breaks the tie. Measured on a Go-only golden with 10 bytes removed from the
+params and all three rewritten to match: `make ci` exit 0, zero mentions of the
+bidder; R2c fails it on all three grounds.
 
 Aliases carry a ref to their **parent's** upstream path rather than nothing:
 both alias goldens' inline text was byte-identical to their parent's real
