@@ -108,10 +108,12 @@ params:
     custom_unmarshal: false
     custom_unmarshal_accepts: []
   params_test:
-    file: adapters/freewheelssp/params_test.go
+    # No params_test.go here either -- absent at the pin, at master, and throughout
+    # upstream history. Param validation runs through `freewheelssp_test.go`.
+    file: null
     valid_cases_count: null
     invalid_cases_count: null
-    bidder_constant_referenced: openrtb_ext.BidderFreewheelSSP
+    bidder_constant_referenced: null
 
 code:
   package_or_class: freewheelssp

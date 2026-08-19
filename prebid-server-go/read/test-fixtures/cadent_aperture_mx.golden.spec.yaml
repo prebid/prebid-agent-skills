@@ -123,8 +123,8 @@ params:
     custom_unmarshal_accepts: []
   params_test:
     file: adapters/cadent_aperture_mx/params_test.go      # Canonical plural form (NOT vungle's singular `param_test.go` quirk)
-    valid_cases_count: null
-    invalid_cases_count: null
+    valid_cases_count: 1                                 # `{"tagid": "25251", "bidfloor": "0.01"}`
+    invalid_cases_count: 12                              # null, nil, "", [], true, {}, plus 6 tagid/placementId type and casing variants
     bidder_constant_referenced: openrtb_ext.BidderCadentApertureMX
 
 code:

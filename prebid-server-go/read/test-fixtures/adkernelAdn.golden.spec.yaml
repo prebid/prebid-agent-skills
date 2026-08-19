@@ -104,10 +104,17 @@ params:
     custom_unmarshal: false
     custom_unmarshal_accepts: []
   params_test:
-    file: adapters/adkernelAdn/params_test.go     # NOTE: search of upstream confirms `params_test.go` is NOT present in this adapter dir at the pinned commit (only `adkernelAdn_test.go` for unit tests). This field reflects the canonical-pluralised path; absence at upstream is acceptable.
+    # No params_test.go in this adapter dir -- not at the pin, not at master, and
+    # not anywhere in upstream history. 235 of 271 Go adapters have one; this is
+    # among the 36 that do not, and param validation is exercised through
+    # `adkernelAdn_test.go`'s TestJsonSamples instead. `file` names a file that
+    # exists or it is null, as `adkernel` records for the same situation; the
+    # earlier value was the conventional path, derived rather than observed, which
+    # is why both counts were null.
+    file: null
     valid_cases_count: null
     invalid_cases_count: null
-    bidder_constant_referenced: openrtb_ext.BidderAdkernelAdn
+    bidder_constant_referenced: null
 
 code:
   package_or_class: adkernelAdn               # CamelCase package name (matches directory)
