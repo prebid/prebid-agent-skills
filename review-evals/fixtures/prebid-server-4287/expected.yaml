@@ -56,7 +56,8 @@ forbidden: []
 #
 # Three of the eight are NOT here, and each names a rule that excludes it:
 #
-#  - WARN on optidigital_test.go `RunJSONBidderTest` (supplemental coverage). The
+#  - WARN on optidigital_test.go `RunJSONBidderTest` (supplemental coverage).
+#    adapter-code-pr-review/SKILL.md:409 step 3, the do-not-gate clause. The
 #    rule reports absences other than 204 "as a single INFO naming what is
 #    missing; never as six findings, and never as a FAIL"
 #    (adapter-code-pr-review/SKILL.md step 3). WARN is above the sanctioned
@@ -65,7 +66,8 @@ forbidden: []
 #    explicit: "A test-runner endpoint is not a finding at any severity" -- 134
 #    adapters configure their real production domain there and `fake.endpoint.test`
 #    appears in 0 upstream fixtures.
-#  - WARN on supplemental/no_response.json `"status": 204`. Step 4 says "Do NOT
+#  - WARN on supplemental/no_response.json `"status": 204`.
+#    adapter-code-pr-review/SKILL.md:411 step 4 says "Do NOT
 #    flag a fixture asserting graceful degradation ... This covers HTTP 204 /
 #    no-content" and "Do NOT flag 'this looks like it belongs in exemplary/'" --
 #    the recorded note gives both as its reasons.

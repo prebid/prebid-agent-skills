@@ -137,7 +137,7 @@ forbidden: []
 #
 # The one finding that stays `unexpected`, naming a rule that does not admit it:
 #  - WARN on adapters/teal/tealtest/supplemental/status-204.json.
-#    adapter-code-pr-review/SKILL.md step 4 says "Do NOT flag a fixture asserting
+#    adapter-code-pr-review/SKILL.md:411 step 4 says "Do NOT flag a fixture asserting
 #    graceful degradation ... This covers HTTP 204 / no-content" and "Do NOT flag
 #    'this looks like it belongs in exemplary/'", and the recorded note gives both
 #    as its reasons. The run quotes pre-calibration wording; that step measures the
