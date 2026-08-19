@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -68,20 +68,6 @@ bidder_info:
       adoppler: ~                                 # Backward-compat alias to retain pre-rename name. Tilde-inherit form (Edge case #33 + alias-back-via-tilde tag).
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "ElementalTV Adapter Params",
-    "description": "A schema which validates params accepted by the ElementalTV adapter",
-    "type": "object",
-    "properties": {
-      "adunit": {
-        "type": "string",
-        "description": "AdUnit to bid against to."
-      }
-    },
-    "required": ["adunit"]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/elementaltv.json
   resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
@@ -502,7 +488,3 @@ cross_language:
     - "ExtImpElementalTV uses @Value(staticConstructor=of) yielding ExtImpElementalTV.of('adunit') factory (rare for params POJOs which more commonly use @Value @Builder)."
     - "Class root case-preservation surfaces in seven artifacts: ElementalTVBidder, ElementalTVConfiguration, ElementalTVTest, ElementalTVBidderTest, ExtImpElementalTV, ElementalTVResponseExt, ElementalTVResponseAdsExt, ElementalTVResponseVideoAdsExt — eight including the SCREAMING_SNAKE constant ELEMENTALTV_EXT_TYPE_REFERENCE."
     - "Naming-convention asymmetry inside ElementalTVConfiguration.java: bean qualifier 'elementalTVConfigurationProperties' (camelCase preserving TV uppercase) co-exists with factory method 'elementaltvBidderDeps' (all lowercase yaml_name form). The same configuration class uses two different conventions for the same bidder."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

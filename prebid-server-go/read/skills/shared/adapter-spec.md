@@ -165,7 +165,7 @@ A **verbatim field** is one whose value is upstream bytes reproduced in the spec
 
 | Verbatim field | Owning skill |
 |---|---|
-| `bidder_params_ref` (the inline `bidder_params_json` + `bidder_params_sha256` pair is its deprecated predecessor) | `read-bidder-params`, `read-bidder-params-java` |
+| `bidder_params_ref` (+ `bidder_params_sha256`, a derived mirror of `bidder_params_ref.sha256`) | `read-bidder-params`, `read-bidder-params-java` |
 | `params.schema_interpretation.properties[].description` | same |
 | `bidder_info.user_sync` (whole subtree) | `read-bidder-info`, `read-bidder-config` |
 | `bidder_info.yaml_extra_fields` (whole subtree) | same |
@@ -212,7 +212,7 @@ Confirming a digest matches an independently-published value (the sibling-langua
 
 ### V3 — An inline verbatim scalar's YAML encoding is decided by a round-trip, not by a trigger list
 
-When bytes are carried inline (a deprecated `bidder_params_json`, or any multi-line verbatim scalar), the encoding is chosen mechanically. Run this against the blob:
+When bytes are carried inline — any multi-line verbatim scalar, such as `properties[].description` — the encoding is chosen mechanically, never by preference. Run this against the bytes being embedded:
 
 ```bash
 python3 -c 'import sys,yaml;s=sys.stdin.buffer.read().decode();e=yaml.dump(s,default_style="|");print("encoding:","literal" if e.lstrip().startswith("|") and yaml.safe_load(e)==s else "double-quoted")' < read/test-fixtures/blobs/<sha256>

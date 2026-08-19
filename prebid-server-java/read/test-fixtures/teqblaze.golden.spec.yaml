@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -74,37 +74,6 @@ bidder_info:
       bidder: gravite                         # gravite alias declares `mata-info` instead of canonical `meta-info` — silent typo. The maintainer-email + vendor-id under it are SILENTLY IGNORED by Spring's YAML binding (since meta-info is the recognized field).
       severity: WARN
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Teqblaze Adapter Params",
-    "description": "A schema which validates params accepted by the TeqBlaze adapter",
-    "type": "object",
-    "properties": {
-      "placementId": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Placement ID"
-      },
-      "endpointId": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Endpoint ID"
-      }
-    },
-    "oneOf": [
-      {
-        "required": [
-          "placementId"
-        ]
-      },
-      {
-        "required": [
-          "endpointId"
-        ]
-      }
-    ]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/teqblaze.json
   resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
@@ -520,9 +489,4 @@ cross_language:
     - "Bid type resolution supports mtype=1 (banner), 2 (video), 3 (audio), 4 (native). Capabilities only declare banner+video+native — but an audio bid would still classify correctly. Cross-language asymmetry: Go does NOT support mtype=3 (audio)."
     - "TeqblazeBidder uses BidderUtil.defaultRequest for outgoing HTTP request construction — Rule 8 Java side."
     - "ExtImpTeqblaze uses @Value(staticConstructor = \"of\"); TeqblazeExtImp uses @Value @Builder. Two POJO frameworks for the input vs output ext shapes."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg
-
 registry: {}

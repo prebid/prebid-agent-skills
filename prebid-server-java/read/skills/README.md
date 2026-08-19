@@ -42,7 +42,7 @@ Top-to-bottom guidance for a reviewer reading a Java-source adapter spec YAML. U
 8. **`spring_config`** — Java-only block. `factory_class`, `factory_method`, `property_source_path`, `bidder_creator_lambda` (verbatim for round-trip fidelity), `configuration_properties_class` (subclass with `@NotBlank` / `@NotNull` validations on `extra_fields[]`), `bean_dependencies[]` (`currencyConversionService`, `mapper`, `@Value(${external-url})`).
 9. **`bidder_class`** — Java-only block. `name`, `parameterized_request_type` (`BidRequest` default; non-default for Mediasquare's `Bidder<MediasquareRequest>`), `constructor.parameters[]` with `source` (`config-field`/`framework-injected`) and `role`, `static_fields[]` (TypeReferences, default-currency strings), `helper_classes_co_located[]` vs `helper_classes_in_proto[]`.
 10. **`quirks[]`** — free-text edge cases with `edge_case_taxon`. A `custom` value REQUIRES a paired quirks entry.
-11. **`cross_language`** — port concerns (`aliases_inverted`, `yaml_unification`, `mutation_idiom_divergence`), `port_lineage` (source/destination PR numbers), `reviewer_cohort` (inert; slated for removal in the next schema major — no skill may key a check on reviewer identity).
+11. **`cross_language`** — port concerns (`aliases_inverted`, `yaml_unification`, `mutation_idiom_divergence`), `port_lineage` (source/destination PR numbers). `reviewer_cohort` was removed at `adapter_spec_version` 2.0.0 — no skill may key a check on reviewer identity, so the field had nothing to do.
 
 ## Test fixtures
 

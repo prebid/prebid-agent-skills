@@ -13,10 +13,21 @@ The Adapter Specification format and the shared canonical references
 (adapter-spec.md, behavior-taxonomy.md, port-translation-rules.md) describe
 upstream behavior; they are derivative analytical works.
 
-Golden specifications under prebid-server-{go,java}/read/test-fixtures/ copy
-the bytes of upstream `static/bidder-params/{bidder}.json` files verbatim into
-the `bidder_params_json` field for SHA-256 byte-fidelity verification. Those
-bytes remain under Apache License 2.0 from upstream.
+This repository redistributes upstream `static/bidder-params/{bidder}.json`
+files byte-for-byte, under Apache License 2.0 from upstream. They are stored as
+whole files in the content-addressed blob stores at
 
-PR numbers, reviewer GitHub handles, file paths, and behavioral observations
-quoted in this repository are taken from public upstream sources.
+  prebid-server-go/read/test-fixtures/blobs/<sha256>
+  prebid-server-java/read/test-fixtures/blobs/<sha256>
+
+and each golden specification names the one it uses in `bidder_params_ref`
+(`path`, `resolved_commit`, `sha256`, `bytes`), so every blob is traceable to
+the upstream path and commit it was taken from. Before adapter_spec_version
+2.0.0 the same bytes were transcribed into a `bidder_params_json` field inside
+each golden; that field is gone and the blob store is the only copy.
+
+PR numbers, file paths, maintainer contact addresses as they appear in upstream
+bidder config, and behavioral observations quoted in this repository are taken
+from public upstream sources. Individual reviewers' GitHub usernames are no
+longer stored: the `cross_language.reviewer_cohort` field that held them was
+removed at adapter_spec_version 2.0.0.

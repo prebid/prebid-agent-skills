@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -72,26 +72,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Adverxo Adapter Params",
-    "description": "A schema which validates params accepted by the Adverxo adapter",
-    "type": "object",
-    "properties": {
-      "adUnitId": {
-        "type": "integer",
-        "minimum": 1,
-        "description": "Unique identifier for the ad unit in Adverxo platform."
-      },
-      "auth": {
-        "type": "string",
-        "minLength": 6,
-        "description": "Authentication token provided by Adverxo platform for the AdUnit."
-      }
-    },
-    "required": ["adUnitId", "auth"]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/adverxo.json
   resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
@@ -440,9 +420,4 @@ cross_language:
     - "Stream-pipeline defensive Objects::nonNull filters across getSeatbid → getBid → getBid (line 156-160) — five filters total. Go uses simple range loops without nil checks since Go ranges never iterate over nil-element slots."
     - "${AUCTION_PRICE} macro replacement happens TWICE on native bids: resolveAdm replaces it on the raw adm (line 187), then processBidMacros replaces it again via replaceMacro on the toBuilder-rebuilt bid (line 175). Defensive but unusual — second replacement is a no-op when the first succeeded."
     - "AdverxoBidderConfiguration uses `<Name>BidderConfiguration` naming form — Java edge case #19 alternate. Most Java configs use `<Name>Configuration`."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg
-
 registry: {}

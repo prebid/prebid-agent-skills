@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -67,33 +67,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |-
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Attekmi (formerly SmartHub) Adapter Params",
-    "description": "A schema which validates params accepted by the Attekmi (formerly SmartHub) adapter",
-    "type": "object",
-    "properties": {
-      "partnerName": {
-        "type": "string",
-        "description": "Attekmi (formerly SmartHub) unique partner name"
-      },
-      "seat": {
-        "type": "string",
-        "description": "Seat",
-        "minLength": 1
-      },
-      "token": {
-        "type": "string",
-        "description": "Token",
-        "minLength": 1
-      }
-    },
-    "required": [
-      "seat",
-      "token"
-    ]
-  }
 bidder_params_ref:
   path: static/bidder-params/smarthub.json
   resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
@@ -401,7 +374,3 @@ cross_language:
     - "9 aliases on Java side (markapp, jdpmedia, tredio, felixads, jambojar, adinify, artechnology, addigi, radianfusion) — each declares its own SaaS-host endpoint. Go side mirrors this via 9 separate static/bidder-info/<name>.yaml files with `aliasOf: smarthub`. White-label-saas empire flavor canonical (ADR-003 Rule 44)."
     - "Note: 1 of 9 aliases (jdpmedia) ships its IT fixture dir on Java side but does NOT have a corresponding JdpmediaTest.java IT class. Other 8 aliases all have IT classes. Inconsistency surfaces as `incomplete-classification` quirk on the alias spec."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

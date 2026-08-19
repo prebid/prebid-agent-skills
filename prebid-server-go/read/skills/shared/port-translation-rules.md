@@ -46,7 +46,7 @@ Driven by `bidder_params_ref` + `bidder_params_sha256` and the read-vs-port boun
 
 ### Rule 38: bidder_params_ref byte-fidelity contract
 
-**Pattern**: The porter carries `bidder_params_ref` forward unchanged and MATERIALISES the params bytes from the content-addressed blob store, or from upstream at `resolved_commit` when no blob is present. Whitespace, indent style, trailing-newline presence, and BOM marks survive because nothing re-serialises the JSON. The porter NEVER reformats, and NEVER reconstructs the file from the deprecated `bidder_params_json` string.
+**Pattern**: The porter carries `bidder_params_ref` forward unchanged and MATERIALISES the params bytes from the content-addressed blob store, or from upstream at `resolved_commit` when no blob is present. Whitespace, indent style, trailing-newline presence, and BOM marks survive because nothing re-serialises the JSON. The porter NEVER reformats, and NEVER reconstructs the file from any inline text in the spec.
 **Spec field driver**: `bidder_params_ref` (`{path, resolved_commit, sha256, bytes}`) + `bidder_params_sha256` (mirrors `bidder_params_ref.sha256`)
 
 **The reference the spec carries** — `path` is upstream-relative, so it differs per language while the digest does not:
@@ -1540,7 +1540,7 @@ Not every spec field round-trips losslessly across Go→Java→Go (or Java→Go�
 | `cross_language.java_specific_concerns[]` | Java-source spec | Go→Java→Go | Lossy | FlexibleExtension subclasses, Spring `@Autowired` quirks, Lombok choices — language-specific. |
 | `iab_category_storage.delivery_mechanism` | Per-language | Cross-language | Lossless-with-translation | `constructor-arg` (Java) ↔ `static-init` (Go) is a deterministic mapping (Rule 42). |
 | `bidder_params_ref` (`{path, resolved_commit, sha256, bytes}`) | Cross-language | None | Lossless | Per Rule 38 — the ref carries forward with only `path` re-rooted; bytes are materialised from the blob store or upstream at `resolved_commit`, never re-serialised. Round-trip-safe IFF Rule 38 is enforced. |
-| `bidder_params_json` (deprecated inline text) | Neither — not consulted | N/A | Non-normative | Still present and still schema-valid, but no port decision may rest on it. It is the reader's own transcription, so its digest is self-consistent even when the text is wrong — see Rule 38. |
+| `bidder_params_json` (removed at 2.0.0) | Neither — not consulted | N/A | Non-normative | Gone from the schema. It held the reader's own transcription and `bidder_params_sha256` hashed it, so the digest stayed self-consistent even when the text was wrong — two beachfront goldens shipped bytes that were never upstream and passed. A spec still carrying the field was not migrated; R2 fails it. See Rule 38. |
 
 ### Implications for porters
 

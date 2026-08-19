@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -76,23 +76,11 @@ bidder_info:
 # A Java-side alias has NO own params JSON; the schema validator looks up the parent's
 # file by the parent's bidder name (adkernel). 152media imp.ext params are validated
 # against the adkernel schema (zoneId required integer >= 1).
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Adkernel Adapter Params",
-    "description": "A schema which validates params accepted by the Adkernel adapter",
-    "type": "object",
-    "properties": {
-      "zoneId": {
-        "type": "integer",
-        "minimum": 1,
-        "description": "Publisher Id to use."
-      }
-    },
-    "required": [
-      "zoneId"
-    ]
-  }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/adkernel.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: e814426953d0dea7abac9ef9618600fa48a72c934381465a238863384228649c
+  bytes: 370
 bidder_params_sha256: e814426953d0dea7abac9ef9618600fa48a72c934381465a238863384228649c
 
 params:
@@ -318,7 +306,3 @@ cross_language:
     - "Tilde-inherit alias form (152media: ~) means zero behavioral divergence from adkernel: same endpoint, same compression, same capabilities, same gvl-vendor-id (14), same usersync — yet 7 files still ship for the alias (1 IT class + 4 fixtures + 2 properties lines). Java-vs-Go test-fixture-cost asymmetry. Compare to Go where 152media is a single 2-line file."
     - "Java's adkernel.json bidder-params is byte-divergent from Go's adkernel.json (whitespace formatting differs). Java sha=e8144269 vs Go sha=388942de. Surfaces as Rule R5 cross-language structural parity violation if both specs are read; impact is at parent (adkernel) not alias (152media), but flagged here for cross-language port awareness."
     - "Go declares 152media gvlVendorID=1111 in static/bidder-info/152media.yaml; Java does NOT override gvl-vendor-id on the 152media alias (tilde_inherit), so Java's effective gvl_vendor_id for 152media inherits adkernel's value of 14. CROSS-LANGUAGE GVL-ID DIVERGENCE — surfaces as a port fidelity violation. The Go alias is overriding while the Java alias is not."
-  reviewer_cohort:
-    go: []                                       # Alias-only; no per-alias review cohort. Parent (adkernel) cohort applies.
-    java: []
-    cross_language_coordinator: bretg

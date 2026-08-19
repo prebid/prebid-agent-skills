@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -57,6 +58,7 @@ GOLDEN_DIRS = {
     "go": REPO_ROOT / "prebid-server-go" / "read" / "test-fixtures",
     "java": REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures",
 }
+TARGET_VERSION = "2.0.0"
 PARAMS_PATH = {
     "go": "static/bidder-params/{name}.json",
     "java": "src/main/resources/static/bidder-params/{name}.json",
@@ -81,6 +83,8 @@ def declared_params_path(spec: dict, language: str, name: str) -> str:
     cross = spec.get("cross_language") or {}
     for key in (f"{language}_artifacts",):
         art = cross.get(key) or {}
+        # bidder_params_path on BOTH sides since 2.0.0; bidder_params_file is a
+        # pre-1.3.0 spelling kept for goldens that were written with it.
         for field in ("bidder_params_path", "bidder_params_file"):
             if isinstance(art.get(field), str) and art[field].strip():
                 return art[field].strip()
@@ -93,9 +97,20 @@ def migrate_one(golden: Path, language: str, checkout: Path,
     spec = yaml.safe_load(raw)
     name = (spec.get("meta") or {}).get("bidder_name") or golden.name.split(".")[0]
 
-    if (spec.get("meta") or {}).get("is_alias"):
-        # An alias inherits its parent's params; it has no upstream file of its own.
-        return {"golden": golden.name, "status": "skipped-alias", "detail": "inherits parent params"}
+    is_alias = bool((spec.get("meta") or {}).get("is_alias"))
+    if is_alias:
+        # An alias has no upstream params file of its own -- it inherits the
+        # parent's. Point the ref at the PARENT's upstream path rather than
+        # leaving the alias with no params representation at all: both alias
+        # goldens' inline text is byte-identical to their parent's real upstream
+        # bytes, so the ref costs nothing and makes an inheritance that was
+        # implied into something R2 can verify. The parent golden does not have
+        # to exist in this repo -- the ref names upstream, not a sibling.
+        parent = ((spec.get("meta") or {}).get("alias_of") or "").strip()
+        if not parent:
+            raise Unmigratable("meta.is_alias is true but meta.alias_of is empty; "
+                               "the parent's params path cannot be derived")
+        name = parent
 
     commit = ((spec.get("provenance") or {}).get("source") or {}).get("resolved_commit")
     if not commit:
@@ -126,7 +141,6 @@ def migrate_one(golden: Path, language: str, checkout: Path,
         idx = new.index(marker)
         line_start = new.rfind("\n", 0, idx) + 1
         new = new[:line_start] + ref_block + new[line_start:]
-    import re
     new = re.sub(r"^bidder_params_sha256:.*$", f"bidder_params_sha256: {digest}", new,
                  count=1, flags=re.M)
     if drop_inline and isinstance(inline, str):
@@ -134,12 +148,23 @@ def migrate_one(golden: Path, language: str, checkout: Path,
                      count=1, flags=re.M)
         new = re.sub(r"^bidder_params_json:.*\n", "", new, count=1, flags=re.M)
 
+    if drop_inline:
+        # The version bump and the field removal are one step. A golden with no
+        # `bidder_params_json` that still declares 1.0.0 is claiming conformance
+        # to a schema whose required-field set it no longer satisfies.
+        before = spec.get("adapter_spec_version")
+        new = re.sub(r'^adapter_spec_version:.*$', f'adapter_spec_version: "{TARGET_VERSION}"',
+                     new, count=1, flags=re.M)
+        if f'adapter_spec_version: "{TARGET_VERSION}"' not in new:
+            raise Unmigratable(f"could not rewrite adapter_spec_version (was {before!r})")
+
     if not dry_run:
         golden.write_text(new, encoding="utf-8")
 
     return {
         "golden": golden.name, "status": "migrated", "path": path, "sha256": digest,
-        "bytes": len(data),
+        "bytes": len(data), "is_alias": is_alias,
+        "version_bumped": bool(drop_inline),
         "recorded_sha_was_correct": recorded == digest,
         "inline_matched_upstream": inline_digest == digest if inline_digest else None,
     }
@@ -172,11 +197,14 @@ def main(argv=None) -> int:
                 failures.append({"golden": f"{language}/{golden.name}", "reason": str(exc)})
 
     migrated = [r for r in results if r["status"] == "migrated"]
-    aliases = [r for r in results if r["status"] == "skipped-alias"]
+    aliases = [r for r in migrated if r.get("is_alias")]
     corrupt = [r for r in migrated if r["inline_matched_upstream"] is False]
     wrong_sha = [r for r in migrated if not r["recorded_sha_was_correct"]]
 
-    print(f"migrated {len(migrated)}   aliases skipped {len(aliases)}   unmigratable {len(failures)}"
+    bumped = [r for r in migrated if r.get("version_bumped")]
+    print(f"migrated {len(migrated)} (of which {len(aliases)} alias -> parent params)   "
+          f"unmigratable {len(failures)}"
+          f"{f'   adapter_spec_version -> {TARGET_VERSION} on {len(bumped)}' if bumped else ''}"
           f"{'   (dry run)' if args.dry_run else ''}")
     if corrupt:
         print(f"\ninline text did NOT match upstream in {len(corrupt)} golden(s) -- "

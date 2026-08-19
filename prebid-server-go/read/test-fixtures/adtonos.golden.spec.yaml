@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -72,8 +72,8 @@ bidder_info:
 # to preserve byte-fidelity. The original file has NO terminal newline AND carries trailing
 # whitespace on one blank line (line 5 = "  \n", two spaces). A `|` block would force a
 # terminal newline and risk clipping the indented blank line; the double-quoted form
-# makes sha256(bidder_params_json) == bidder_params_sha256 exactly (R2 contract).
-bidder_params_json: "{\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n  \"title\": \"AdTonos Adapter Params\",\n  \"description\": \"A schema which validates params accepted by the AdTonos adapter\",\n  \n  \"type\": \"object\",\n  \"properties\": {\n    \"supplierId\": {\n      \"type\": \"string\",\n      \"description\": \"ID of the supplier account in AdTonos platform\"\n    }\n  },\n  \"required\": [\"supplierId\"]\n}"
+# preserved the bytes exactly. Since 2.0.0 that is the blob store's job, not the
+# encoding's: R2 checks the blob against bidder_params_ref.
 bidder_params_ref:
   path: static/bidder-params/adtonos.json
   resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
@@ -315,7 +315,3 @@ cross_language:
     destination_language: java
     destination_pr: null
     fidelity_review_themes: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

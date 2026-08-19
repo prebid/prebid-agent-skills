@@ -52,7 +52,7 @@ Anchor a check to something checkable instead:
 
 Where an existing check quotes review discussion, keep the technical content and the PR anchor and drop the attribution. The evidence is the PR; the name adds nothing a contributor can verify.
 
-> **Spec-field note.** `cross_language.reviewer_cohort` still exists in `adapter-spec.schema.json` and is populated in older goldens. It is inert: no skill may read it to drive review behavior. It is slated for removal in the next schema major.
+> **Spec-field note.** `cross_language.reviewer_cohort` is gone. It held upstream maintainers' GitHub usernames, it was already inert, and `adapter_spec_version` 2.0.0 removed it from the schema and from all 42 goldens — a field that no check may read is a roster waiting to be misused.
 
 ---
 

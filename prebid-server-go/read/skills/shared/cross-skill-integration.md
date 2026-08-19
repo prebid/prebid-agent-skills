@@ -52,7 +52,7 @@ A `write/` skill MUST emit these files byte-identical to the bytes the spec refe
 
 | Spec field | Output file (Go target) | Output file (Java target) | Notes |
 |---|---|---|---|
-| `bidder_params_ref` → blob at `read/test-fixtures/blobs/<sha256>` (the deprecated inline `bidder_params_json` is a copy, not the source of truth) | `static/bidder-params/{xyz}.json` | `src/main/resources/static/bidder-params/{xyz}.json` | The cross-language contract — same bytes on both sides. R2 hard-error when the written file's digest differs from `bidder_params_ref.{sha256,bytes}`. |
+| `bidder_params_ref` → blob at `read/test-fixtures/blobs/<sha256>` | `static/bidder-params/{xyz}.json` | `src/main/resources/static/bidder-params/{xyz}.json` | The cross-language contract — same bytes on both sides. R2 hard-error when the written file's digest differs from `bidder_params_ref.{sha256,bytes}`. |
 | `bidder_info.*` (entire subtree) | `static/bidder-info/{xyz}.yaml` | (folded into the unified `bidder-config/{xyz}.yaml` — see §2.3) | Endpoint, capabilities, geoscope, gvl_vendor_id, user_sync, yaml_extra_fields. |
 
 Worked example — Optidigital. The golden at [`prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml) carries the JSON Schema in double-quoted form, which is what the V3 probe returns for that file (trailing whitespace on a blank line, no terminal newline). A `write/` skill must reconstruct exactly the bytes the golden's reference names; verify by digesting the written file and comparing against `bidder_params_ref.{sha256,bytes}`. A single-byte deviation breaks R2. Read the digest from the golden — do not copy a hash out of this document into a spec (V2).

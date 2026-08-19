@@ -95,11 +95,6 @@ assertions:
       - enabled-false-default
       - ortb-version-quoted
 
-  reviewer_cohort:
-    go_reviewers: [bsardo, ccorbo, przemkaczmarek]
-    java_reviewers: [CTMBNara]
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: divergent-byte-only
   blocker_count: 0
@@ -113,7 +108,7 @@ overall:
     captured as warnings: (1) the byte divergence itself, and (2) Java's enabled:false
     opt-in pattern (canonical Java edge case #30) which is intentional Java-side config
     hygiene, not a port bug. The Java port is the canonical Go-to-Java translation
-    (PR #4054); reviewer CTMBNara handled the parity verification on the Java side.
+    (PR #4054).
     Porter advice: when porting a new bidder Go->Java, mimic the Go bidder-params bytes
     exactly to avoid this byte-divergence; consider promoting the parity-restoration
     fix into a separate housekeeping PR on either side.

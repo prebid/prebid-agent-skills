@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -71,20 +71,6 @@ bidder_info:
 # Go bidder-params file uses 6-space indent for the properties block (compare Java's 4-space).
 # Encoded as YAML literal block via the `|` form to preserve byte fidelity. The Go file
 # terminates with a trailing newline after the closing brace.
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "ElementalTV Adapter Params",
-    "description": "A schema which validates params accepted by the ElementalTV adapter",
-    "type": "object",
-    "properties": {
-        "adunit": {
-          "type": "string",
-          "description": "AdUnit to bid against to."
-        }
-    },
-    "required": ["adunit"]
-  }
 bidder_params_ref:
   path: static/bidder-params/elementaltv.json
   resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
@@ -432,7 +418,3 @@ cross_language:
     - "No Currency overwrite in MakeBids (BidderResponse.Currency left at zero value). Framework default currency applies. Differs from optidigital (unguarded) and aax (unguarded-hardcoded USD)."
     - "Removed-bidder-warning registry: exchange/adapter_util.go line 135 carries the 'adoppler -> elementaltv' rename pointer; this is the Go-canonical pattern for bidder renames (preferred over the Java-canonical alias-back-via-tilde approach). The mechanism is durable runtime feedback to operators rather than transparent backward compatibility."
   java_specific_concerns: []                        # Sparse on a Go-source spec; the Java-source spec carries the dense list.
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

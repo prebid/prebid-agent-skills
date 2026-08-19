@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -72,24 +72,14 @@ bidder_info:
 
 # Alias short-circuit: 152media has NO own static/bidder-params/152media.json file. The parent's
 # static/bidder-params/adkernel.json applies byte-for-byte at validation time (PBS resolves
-# imp.ext.bidder against the parent's schema). bidder_params_json + sha are populated from the
+# imp.ext.bidder against the parent's schema). bidder_params_ref points at the PARENT's
+# upstream path -- an alias has no params file of its own -- and the sha mirrors it, from the
 # parent's file so the cross-language R2 / R5 contract holds.
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Adkernel Adapter Params",
-    "description": "A schema which validates params accepted by the Adkernel adapter",
-
-    "type": "object",
-    "properties": {
-        "zoneId": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Publisher Id to use."
-        }
-    },
-    "required": ["zoneId"]
-  }
+bidder_params_ref:
+  path: static/bidder-params/adkernel.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed
+  bytes: 373
 bidder_params_sha256: 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed
 
 # params interpretation also comes from the parent (adkernel.json) — same bytes, same shape.
@@ -199,7 +189,3 @@ cross_language:
     fidelity_review_themes:
       - aliases-inverted
       - identifier-rule-workaround
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

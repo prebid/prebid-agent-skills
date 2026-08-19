@@ -43,7 +43,7 @@ Top-to-bottom guidance for a reviewer reading an adapter spec YAML. Use the Opti
 6. **`code`** — the heaviest section. `file_layout` (single-file vs multi-file with role tags), `adapter_struct`, `builder` signature, `make_requests` (with `batching.rules[]` ordered list, `mutation.entity_strategies` per-entity map, `imp_ext_unmarshal`, `endpoint_resolution`), `make_bids` (with `bid_type_resolution.method_chain[]`, `http_status_handling.kind`, `currency_overwrite_safety`).
 7. **`tests`** — fixture inventory (`exemplary/`, `supplemental/`, `amp/`, `video/`, `videosupplemental/`), `test_root_directory` (canonical `<bidder>test/`), `uses_canonical_harness` (`RunJSONBidderTest`).
 8. **`quirks[]`** — free-text edge cases with optional `edge_case_taxon` from the closed registry in `behavior-taxonomy.md`. A `custom` value in any enumerated field REQUIRES a paired quirks entry.
-9. **`cross_language`** — port concerns (`aliases_inverted`, `yaml_unification`, `mutation_idiom_divergence`), `port_lineage` (source/destination PR numbers), `reviewer_cohort` (inert; slated for removal in the next schema major — no skill may key a check on reviewer identity).
+9. **`cross_language`** — port concerns (`aliases_inverted`, `yaml_unification`, `mutation_idiom_divergence`), `port_lineage` (source/destination PR numbers). `reviewer_cohort` was removed at `adapter_spec_version` 2.0.0 — no skill may key a check on reviewer identity, so the field had nothing to do.
 
 ## Test fixtures
 

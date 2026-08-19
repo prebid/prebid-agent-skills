@@ -125,7 +125,7 @@ None. All "New Adapter" PRs in this release were alias-only — see below.
 - [#4217](https://github.com/prebid/prebid-server/pull/4217)
 
 ### v3.16.0 — 2025-04-08
-- [#4211](https://github.com/prebid/prebid-server/pull/4211) — `naming-underscore-allowed-bretg-escalation`
+- [#4211](https://github.com/prebid/prebid-server/pull/4211) — `naming-underscore-allowed-after-escalation`
 
 ### v3.18.0 — 2025-06-05
 - [#4201](https://github.com/prebid/prebid-server/pull/4201)
@@ -239,7 +239,7 @@ Cross-reference of pattern tags to canonical exemplar PRs. Each tag is a short s
 | `1-line-alias` | Alias YAML containing only `aliasOf: parent` is valid (full inheritance) | #4216, #4357, #4116 |
 | `1-line-alias-foundation` | Earliest minimal alias example | #4116 |
 | `6-char-waived-siblings` | First-6-character uniqueness rule waived for sibling-family aliases (intentional collision) | #4216 |
-| `naming-underscore-allowed-bretg-escalation` | Underscore in bidder name allowed server-side after cross-team escalation | #4211 |
+| `naming-underscore-allowed-after-escalation` | Underscore in bidder name allowed server-side after cross-team escalation | #4211 |
 | `package-name-lowercase` | Go package/folder name must be all-lowercase | #4376 |
 | `endpoint-empty-body-fix` | SmartHub-family endpoints initially returned 404 on empty body; publisher fixed | #4164 |
 | `inherited-email-confirmation` | Alias maintainer.email matches parent's; reviewer confirms intentional | #4441 |

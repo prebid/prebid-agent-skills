@@ -172,11 +172,6 @@ assertions:
       - parent-rebrand-in-progress
       - first-imp-extraction-anti-pattern
 
-  reviewer_cohort:
-    go_reviewers: []                          # Pre-window establish PR; reviewer cohort not annotated
-    java_reviewers: []
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: aligned-with-known-divergence
   blocker_count: 0

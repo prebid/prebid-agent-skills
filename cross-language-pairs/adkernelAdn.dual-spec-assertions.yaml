@@ -194,11 +194,6 @@ assertions:
       - uid-macro-syntax-divergence
       - independent-bidder-shared-vendor-naming-coincidence
 
-  reviewer_cohort:
-    go_reviewers: []
-    java_reviewers: []
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: aligned-with-known-divergence
   blocker_count: 0

@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -62,29 +62,6 @@ bidder_info:
     extra_info: "https://aax.golang.pbs.com"
   yaml_field_name_quirks: []
 
-bidder_params_json: |-
-  {
-      "$schema": "http://json-schema.org/draft-04/schema#",
-      "title": "Aax Adapter Params",
-      "description": "A schema which validates params accepted by the Aax adapter",
-      "type": "object",
-      "properties": {
-          "cid": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The customer id provided by AAX."
-          },
-          "crid": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The placement id provided by AAX."
-          }
-      },
-      "required": [
-          "cid",
-          "crid"
-      ]
-  }
 bidder_params_ref:
   path: static/bidder-params/aax.json
   resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
@@ -340,7 +317,7 @@ cross_language:
     ext_struct_file: openrtb_ext/imp_aax.go
     ext_struct_type: ExtImpAax
     bidder_info_yaml: static/bidder-info/aax.yaml
-    bidder_params_json: static/bidder-params/aax.json
+    bidder_params_path: static/bidder-params/aax.json
     test_fixtures_dir: adapters/aax/aaxtest/
   java_artifacts:
     bidder_dir: src/main/java/org/prebid/server/bidder/aax/
@@ -374,9 +351,3 @@ cross_language:
     - "ExtImpAax struct is declared in openrtb_ext/imp_aax.go but is dead code from the adapter's perspective — it's referenced by neither aax.go nor params_test.go (which validates JSON schema only). Java side similarly has no proto_dir POJO; the symmetry holds for the unmarshal-skipped pattern but the Go side still pays the cost of the struct file."
     - "params_test.go validParams has only ONE entry ({\"cid\":\"123\", \"crid\":\"1234\"}) and invalidParams has 12 entries — much smaller test surface than Java's AaxBidderTest (14 hand-written test methods)."
     - "TestEndpointTemplateMalformed (aax_test.go lines 25-30) is a no-op assertion: it builds the bidder with Endpoint='{{Malformed}}' and asserts buildErr is nil — proves Builder doesn't validate the endpoint URL (no template parsing happens at build time, since aax doesn't use text/template). Mirrors java_specific_concern that Java's AaxBidder constructor validates the URL at bean construction."
-  reviewer_cohort:
-    go: []
-    java:
-      - CTMBNara
-      - AntoxaAntoxic
-    cross_language_coordinator: bretg

@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -59,29 +59,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Vungle Adapter Params",
-    "description": "A schema which validates params accepted by the Vungle adapter",
-    "type": "object",
-    "properties": {
-      "app_store_id": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Pub App Store ID"
-      },
-      "placement_reference_id": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Placement Reference ID"
-      }
-    },
-    "required": [
-      "app_store_id",
-      "placement_reference_id"
-    ]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/vungle.json
   resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
@@ -427,7 +404,3 @@ cross_language:
     - "ExtImpVungle.bidToken has no @JsonProperty annotation; relies on JacksonMapper's PROPERTY_NAMING_STRATEGY for snake_case conversion to bid_token. Potential cross-language fidelity gap if the global strategy isn't set."
     - "X-OpenRTB-Version: 2.5 header (line 130) — pinned to 2.5; Vungle's upstream may not yet support 2.6 features."
     - "liftoff alias is tilde_inherit + default-disabled (Rule 45 instance + alias-back-via-tilde for the phantom liftoff/vungle rename). Java's LiftoffTest IT class exercises this alias-back path (fixture dir openrtb2/liftoff/). Cross-language asymmetric alias-back: Java tilde-inherit vs Go removed-bidder warning map."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

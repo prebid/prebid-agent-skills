@@ -435,7 +435,7 @@ quirks_taxa:
     description: Imp ext struct uses legacy `ImpExt{Bidder}` pattern instead of canonical `ExtImp{Bidder}`. Canonical&#58; Optidigital `ImpExtOptidigital`.
     surfaces_in: ["quirks + params.ext_struct.type_name"]
   - id: cross-language-byte-divergence
-    description: '`bidder_params_json` bytes differ between Go and Java sides; sha256 mismatch breaks the port-fidelity contract (Rule 1). Canonical&#58; 4 Java goldens (elementaltv, mediasquare, appnexus, huaweiads) detect divergence vs Go.'
+    description: 'The upstream bidder-params bytes differ between the Go and Java sides &#8212; `bidder_params_ref.sha256` mismatch, which Rule 38 makes a port-fidelity concern. This is the NORMAL case, not the exception&#58; of the 16 bidders with a golden in both languages, 15 diverge and only `kobler` is byte-equal, so the taxon marks a divergence worth explaining rather than a defect to fix. Regenerate the split by comparing `bidder_params_ref.sha256` across the two test-fixtures trees.'
     surfaces_in: ["quirks + provenance.warnings"]
   - id: alias-yaml-only
     description: 'Java alias declared in a parent YAML''s `aliases:` block but with no dedicated bidder class or IT fixtures (yet). Canonical&#58; Appnexus parent''s tilde-aliases pre-IT-class.'

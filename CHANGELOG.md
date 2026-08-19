@@ -17,6 +17,95 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 2.0.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.3.0] · [port_report_version 0.2.0] — 2026-08-19
+
+First MAJOR. Two fields are removed and one is required in their place.
+
+### Breaking changes
+
+**`bidder_params_json` is removed; `bidder_params_ref` is required.**
+
+The inline field held the reader's own transcription of upstream
+`static/bidder-params/{bidder}.json`, and `bidder_params_sha256` hashed that
+transcription. So a lossy read produced a *self-consistent* digest and passed
+R2: the dropped bytes were missing from both the text and the hash of the text.
+Two beachfront goldens shipped exactly that — the Go one 2581 bytes against
+upstream's 2612, a ~30-byte span missing from inside the `videoResponseType`
+description plus a lost trailing space — and both were green. No hermetic check
+could see it, because the spec was its own witness.
+
+`bidder_params_ref` is `{path, resolved_commit, sha256, bytes}`. `sha256`
+describes bytes the reader did not author; `bytes` is a second, independent
+witness, because a byte count cannot be back-derived from text the reader wrote.
+The bytes themselves are stored whole in content-addressed blob stores at
+`prebid-server-{go,java}/read/test-fixtures/blobs/<sha256>`, so offline
+consumers keep byte access without a spec carrying a copy.
+
+R2 changed from `sha256(bidder_params_json) == bidder_params_sha256` to: the
+blob hashes to `ref.sha256` (R2a), its length equals `ref.bytes` (R2b), and
+`bidder_params_sha256` mirrors `ref.sha256`. A golden still carrying the removed
+field FAILs — a stale inline copy beside a ref is the ambiguity the ref exists
+to remove. R2c (ref vs upstream at `resolved_commit`) needs the network and runs
+in the weekly `upstream-sync` job.
+
+Aliases carry a ref to their **parent's** upstream path rather than nothing:
+both alias goldens' inline text was byte-identical to their parent's real
+upstream bytes, so the ref makes an inheritance that was implied into something
+R2 verifies. The ref names upstream, not a sibling golden, so the parent's
+golden need not exist in this repo.
+
+**`cross_language.reviewer_cohort` is removed.** It held upstream maintainers'
+GitHub usernames. `review-pattern-transfer-policy.md` already forbade keying any
+check on reviewer identity, which left the field inert and slated for removal at
+the next major — this is that major. Individual usernames are gone from the
+deployed surface entirely, including two dual-spec notes and two Go review
+references that named reviewers in prose; the technical requirement and the PR
+anchor stay, the name goes, because a name is an appeal the PR author cannot
+check and the person named never agreed to.
+
+**`cross_language.go_artifacts.bidder_params_json` is renamed to
+`bidder_params_path`.** Two schema fields shared one name: this one holds a
+path, the removed top-level one held bytes. The Java side already called the same
+thing `bidder_params_path`.
+
+### Migration
+
+`python3 scripts/migrate/1.3.0-to-2.0.0.py --go-checkout <go> --java-checkout <java> --drop-inline`
+
+Every ref is derived from upstream bytes at the golden's own
+`provenance.source.resolved_commit` via `git show`; a golden whose bytes cannot
+be fetched is reported as unmigratable rather than falling back to the inline
+copy, which would carry forward exactly the data this change exists to distrust.
+The version bump and the field removal happen together: a golden with no
+`bidder_params_json` that still declared 1.0.0 would be claiming conformance to
+a required-field set it no longer satisfies. Result on this corpus: 42 migrated
+(2 of them aliases pointing at parent params), 0 unmigratable, and the only
+inline/upstream mismatches were the two beachfront goldens.
+
+### Also in this entry
+
+- `port_translation_rules_version` 0.2.0 → 0.3.0. No new rule; Rule 38's
+  mechanism changed from comparing the inline field to materialising from the
+  ref and verifying both witnesses. Its two worked examples were invented — they
+  showed kobler params as minified JSON with a `placementId` string property,
+  where the real 431 bytes carry a single `test` boolean — and are now the real
+  bytes. The rendered reference states its own version, since a port skill
+  author reads the `.md` and `port_translation_rules_version` in a report is
+  unverifiable if the corpus never says which contract it is.
+- `port_engine.materialize_params()` resolves a ref through the blob store, then
+  `git cat-file blob <commit>:<path>`; it verifies digest and length and raises
+  rather than returning bytes it could not confirm.
+- The phantom-path detector's top-level filter is now read out of the schema
+  instead of restated in the test. The hand-maintained copy had drifted in the
+  direction that loses coverage: it still listed `bidder_params_json` and never
+  gained `bidder_params_ref`, so every `bidder_params_ref.*` path a skill cited
+  was filtered out and unchecked. Deriving it also gained `registry` and
+  `taxonomy_version`.
+- `NOTICE` names the blob stores as the location of redistributed upstream
+  Apache-2.0 bytes, and no longer claims the repo stores reviewer usernames.
+
+---
+
 ## [adapter_spec_version 1.3.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.2.0] · [port_report_version 0.2.0] — 2026-05-12 (F2: port-java2go SKILL 0.5.0 → 1.0.0 PRODUCTION PROMOTION)
 
 **port-java2go SKILL bumped 0.5.0 → 1.0.0**, the production-promotion

@@ -69,11 +69,6 @@ assertions:
       - mutation-idiom-tobuilder
       - dev-endpoint-config-promotion
 
-  reviewer_cohort:
-    go_reviewers: []
-    java_reviewers: [AntoxaAntoxic, osulzhenko]
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: aligned
   blocker_count: 0

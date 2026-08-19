@@ -211,7 +211,6 @@ R5_ADVISORY_DIVERGENT_KEYS: Tuple[Tuple[Optional[str], str], ...] = (
     ("meta.alias_metadata",                     "alias_metadata"),
     (None,                                      "lifecycle_rename"),
     (None,                                      "port_lineage"),
-    (None,                                      "reviewer_cohort"),
     (None,                                      "test_fixture_cost"),
 )
 

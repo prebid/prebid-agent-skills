@@ -164,7 +164,7 @@ The SKILL must NOT skip a prose-driven rule silently. If the rule's `spec_field_
 - `params.schema_interpretation.{required_fields, combinators_used, flexible_types}`
 - `bidder_params_ref` (the whole `{path, resolved_commit, sha256, bytes}` block, unchanged except that `path` is re-rooted to `src/main/resources/static/bidder-params/{bidder}.json` for Java's layout — `resolved_commit`, `sha256` and `bytes` are NEVER recomputed)
 
-`bidder_params_sha256` mirrors `bidder_params_ref.sha256`; set it from the ref, not by hashing anything. If `source_spec` also carries the deprecated `bidder_params_json`, copy it across verbatim so dual-spec consumers still validate, but treat it as non-normative: no field on `dest_spec` may be derived from it. When the source spec has no `bidder_params_json` at all, omit it — nothing downstream requires it.
+`bidder_params_sha256` mirrors `bidder_params_ref.sha256`; set it from the ref, not by hashing anything. `bidder_params_json` was removed at 2.0.0, so there is nothing inline to carry across; if a dual-spec consumers still validate, but treat it as non-normative: no field on `dest_spec` may be derived from it. When the source spec has no `bidder_params_json` at all, omit it — nothing downstream requires it.
 
 **Java-specific construction.** Build the Java-only spec blocks:
 
@@ -192,7 +192,7 @@ port_lineage:
     - <one entry per applied prose-driven rule, e.g., 'rule-46-naming-normalization'>
 ```
 
-**Rule 38 materialise-from-ref invariant.** Do NOT hash `bidder_params_json` — it is the reader's own transcription, so hashing it proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec that carries only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes, in this order:
+**Rule 38 materialise-from-ref invariant.** Never hash inline text to produce a ref — that is what `bidder_params_json` did before 2.0.0 removed it, and hashing the reader's own transcription proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec that carries only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes, in this order:
 
 1. `dest_spec.bidder_params_ref.{resolved_commit, sha256, bytes}` are identical to the source's, and `dest_spec.bidder_params_ref.path` is the Java path for this bidder. Otherwise abort with `ERROR: bidder_params_ref carried forward incorrectly — Rule 38 materialise-from-ref invariant violated`.
 2. `dest_spec.bidder_params_sha256 == dest_spec.bidder_params_ref.sha256` (the mirror, not a fresh hash). Otherwise abort with `ERROR: bidder_params_sha256 does not mirror bidder_params_ref.sha256 — Rule 38 materialise-from-ref invariant violated`.

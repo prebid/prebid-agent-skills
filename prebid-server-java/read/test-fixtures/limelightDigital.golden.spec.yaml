@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -81,34 +81,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Limelight Digital Adapter Params",
-    "description": "A schema which validates params accepted by the Limelight Digital adapter",
-    "type": "object",
-    "properties": {
-      "host": {
-        "type": "string",
-        "description": "Ad network's RTB host",
-        "format": "hostname",
-        "pattern": "^.+\\..+$"
-      },
-      "publisherId": {
-        "type": [
-          "integer",
-          "string"
-        ],
-        "description": "Publisher ID",
-        "minimum": 1,
-        "pattern": "^[1-9][0-9]*$"
-      }
-    },
-    "required": [
-      "host",
-      "publisherId"
-    ]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/limelightDigital.json
   resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
@@ -594,7 +566,3 @@ cross_language:
     - "Currency conversion uses 4-arg form with bidRequest for time-context (Rule 32 Java side). Go uses 3-arg form."
     - "BidderUtil.defaultRequest constructs the HttpRequest (Rule 8 Java side; Go expands the boilerplate inline)."
     - "15 aliases with various Java identifier-rule workarounds: AdtgorgTest (underscore stripped from adtg_org), AppStockSspTest (Ssp suffix added on appstock), GreedyGameTest + OrangeClickMediaTest (CamelCase from lowercase alias names). evtech alias (most-elaborated config) MISSING IT class. performist alias has truncated endpoint (no ?host= query)."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

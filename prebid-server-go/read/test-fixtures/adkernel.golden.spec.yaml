@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -72,22 +72,6 @@ bidder_info:
       canonical_value: gzip
       summary: "Value is uppercase 'GZIP' in YAML; PBS-Go normalizes case-insensitively to gzip. Same pattern observed in rubicon, triplelift, tpmn."
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Adkernel Adapter Params",
-    "description": "A schema which validates params accepted by the Adkernel adapter",
-
-    "type": "object",
-    "properties": {
-        "zoneId": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Publisher Id to use."
-        }
-    },
-    "required": ["zoneId"]
-  }
 bidder_params_ref:
   path: static/bidder-params/adkernel.json
   resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
@@ -369,7 +353,3 @@ cross_language:
     destination_language: java
     destination_pr: null
     fidelity_review_themes: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

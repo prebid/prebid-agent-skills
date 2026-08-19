@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -71,25 +71,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-      "$schema": "http://json-schema.org/draft-04/schema#",
-      "title": "Cadent Aperture MX Adapter Params",
-      "description": "A schema which validates params accepted by the Cadent Aperture MX adapter",
-      "type": "object",
-      "properties": {
-        "tagid" : {
-          "type": "string",
-          "description": "The id of an inventory target"
-        },
-        "bidfloor": {
-          "type": "string",
-          "description": "The minimum price acceptable for a bid"
-        }
-      },
-
-      "required": ["tagid"]
-    }
 bidder_params_ref:
   path: static/bidder-params/cadent_aperture_mx.json
   resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
@@ -439,7 +420,3 @@ cross_language:
     - "Test root directory `cadent_aperture_mxtest` KEEPS underscores even though the package `cadentaperturemx` and main file `cadentaperturemx.go` drop them. Tri-form Go naming within the same bidder."
     - "Builder signature accepts `bidderName openrtb_ext.BidderName` as the first parameter but does NOT branch on it — both BidderCadentApertureMX and BidderEmxDigital callers receive an identical adapter struct (only `endpoint` from config differs, but they share the same yaml content)."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

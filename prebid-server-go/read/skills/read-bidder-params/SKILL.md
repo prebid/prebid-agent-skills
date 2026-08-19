@@ -44,7 +44,7 @@ If any required file is missing for a non-alias bidder, the skill emits a hard e
 
 If the orchestrator passes `is_alias: true`, none of the three files should exist for this bidder (the alias inherits from its parent). The skill emits:
 
-- `bidder_params_ref: null` (and `bidder_params_json: null` / `bidder_params_sha256: null` when the deprecated pair is carried)
+- `bidder_params_ref: null` and `bidder_params_sha256: null`
 - `params: { schema_interpretation: null, ext_struct: null, params_test: null }`
 - `ext_pojo_construction: { framework_choice: go-struct, flexible_extension_used: false, custom_unmarshal: { kind: none, accepts_shapes: [], where_branched: null } }`
 
@@ -94,9 +94,11 @@ Two verifications that prove nothing, and are prohibited:
 - Hashing the value this skill emitted. A `sha256` over an emitted `bidder_params_json` (or over the blob re-encoded from it) compares the reader's output to itself: a span the reader dropped is missing from both sides, so the check passes on corrupt output. The corpus has already produced that outcome.
 - Copying a `sha256` or `bytes` from another spec, from a golden, from this SKILL, or from `../shared/adapter-spec.md`.
 
-#### Optional inline copy (`bidder_params_json`, deprecated)
+#### Encoding a verbatim scalar in YAML (V3)
 
-`bidder_params_json` remains schema-valid and older goldens carry it; new reads do not need it, and nothing in this skill depends on it. When a caller explicitly asks for the inline form, the encoding is decided mechanically, not from a list of triggers — run the V3 probe against the blob Step 1 staged:
+`bidder_params_json` was **removed at `adapter_spec_version` 2.0.0** — the params bytes are carried by `bidder_params_ref` and the blob store, so there is no inline params copy to encode. The probe below survives the removal because the trap it detects is not specific to that field: every verbatim scalar this skill emits inline (`properties[].description`, `user_sync`, fixture payloads) can lose a byte to the wrong YAML style, and `properties[].description` is the field class the corpus has already lost bytes in.
+
+Run the probe against whatever bytes are being embedded — here, the blob Step 1 staged:
 
 ```bash
 python3 -c 'import sys,yaml;s=sys.stdin.buffer.read().decode();e=yaml.dump(s,default_style="|");print("encoding:","literal" if e.lstrip().startswith("|") and yaml.safe_load(e)==s else "double-quoted")' < ../../test-fixtures/blobs/<sha256>
@@ -107,7 +109,7 @@ python3 -c 'import sys,yaml;s=sys.stdin.buffer.read().decode();e=yaml.dump(s,def
 
 The probe replaces the older trigger list ("trailing whitespace on blank lines, no terminal newline, non-LF newline"), which was too narrow: a trailing space on a **content** line also forces the double-quoted form, and a hand-written literal block silently drops it. `beachfront.json` line 29 at master is that case.
 
-An inline copy never becomes the digest's input. `bidder_params_sha256`, when emitted, repeats `bidder_params_ref.sha256` from Step 1.
+No inline text ever becomes a digest's input. `bidder_params_sha256` repeats `bidder_params_ref.sha256` from Step 1; it is a mirror, and R2 fails when it disagrees with the ref.
 
 ### Step 3: Parse the JSON schema for interpretation
 

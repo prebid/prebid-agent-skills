@@ -48,7 +48,7 @@ assertions:
   # bidder_info_geoscope, bidder_info_gvl_vendor_id, bidder_info_maintainer,
   # bidder_info_modifying_vast_xml_allowed, alias_metadata,
   # lifecycle_rename, params_schema_interpretation, port_lineage,
-  # reviewer_cohort, test_fixture_cost.
+  # test_fixture_cost.
 
 overall:
   cross_language_state: byte-equal | byte-only-divergent | divergent-semantic
@@ -57,7 +57,7 @@ overall:
   notes: ["..."]
 ```
 
-Consumed at runtime by `scripts/round-trip-ci.py` rule R5. The harness reads the strict-keys list at `R5_STRICT_KEYS` (semantic-equivalence-required: `bidder_info.capabilities`, `params.schema_interpretation.{required_fields, combinators_used, flexible_types}`, `bidder_info.{gvl_vendor_id, endpoint_compression, geoscope, maintainer, modifying_vast_xml_allowed}`) and the divergent-keys list at `R5_DIVERGENT_KEYS` (legitimate-language-idiom-divergence: `bidder_info.{endpoint, endpoint_construction, default_enabled}`, `meta.alias_metadata`). Phase D port skills will consume the remaining R5-DIVERGENT keys (`lifecycle_rename`, `port_lineage`, `reviewer_cohort`, `test_fixture_cost`).
+Consumed at runtime by `scripts/round-trip-ci.py` rule R5. The harness reads the strict-keys list at `R5_STRICT_KEYS` (semantic-equivalence-required: `bidder_info.capabilities`, `params.schema_interpretation.{required_fields, combinators_used, flexible_types}`, `bidder_info.{gvl_vendor_id, endpoint_compression, geoscope, maintainer, modifying_vast_xml_allowed}`) and the divergent-keys list at `R5_DIVERGENT_KEYS` (legitimate-language-idiom-divergence: `bidder_info.{endpoint, endpoint_construction, default_enabled}`, `meta.alias_metadata`). The remaining R5-DIVERGENT keys are `lifecycle_rename`, `port_lineage`, and `test_fixture_cost`. `reviewer_cohort` was removed at adapter_spec_version 2.0.0 — it held upstream maintainers' GitHub usernames, and no check may key on reviewer identity.
 
 ## Adding a new pair
 

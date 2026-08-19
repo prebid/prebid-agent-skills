@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -74,33 +74,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Attekmi (formerly SmartHub) Adapter Params",
-    "description": "A schema which validates params accepted by the Attekmi (formerly SmartHub) adapter",
-    "type": "object",
-    "properties": {
-      "partnerName": {
-        "type": "string",
-        "description": "Attekmi (formerly SmartHub) unique partner name"
-      },
-      "seat": {
-        "type": "string",
-        "description": "Seat",
-        "minLength": 1
-      },
-      "token": {
-        "type": "string",
-        "description": "Token",
-        "minLength": 1
-      }
-    },
-    "required": [
-      "seat",
-      "token"
-    ]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/smarthub.json
   resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
@@ -488,9 +461,4 @@ cross_language:
     - "Custom HTTP header `Prebid-Adapter-Ver: 1.0.0` is hardcoded in resolveHeaders (line 76). Go side uses the same constant value but as a top-level package const (ADAPTER_VER) at line 21."
     - "9 aliases declare full_block config_form (each ships its own endpoint URL; vs tilde_inherit which would inherit all parent fields). White-label-saas empire flavor canonical (ADR-003 Rule 44)."
     - "Alias inconsistency: jdpmedia has fixture dir but NO IT class. radianfusion alias name spelled without the `t` but endpoint URL is `radiantfusion-prebid.attekmi.co`. Both upstream artifacts; not introduced by this read."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg
-
 registry: {}

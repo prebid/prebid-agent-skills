@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -69,37 +69,6 @@ bidder_info:
       supported-vendors: null
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Optidigital Adapter Params",
-    "description": "A schema which validates params accepted by the Optidigital adapter",
-    "type": "object",
-    "properties": {
-      "publisherId": {
-        "type": "string",
-        "minLength": 2,
-        "description": "Publisher ID"
-      },
-      "placementId": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Placement ID"
-      },
-      "divId": {
-        "type": "string",
-        "description": "Div ID"
-      },
-      "pageTemplate": {
-        "type": "string",
-        "description": "Page Template"
-      }
-    },
-    "required": [
-      "publisherId",
-      "placementId"
-    ]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/optidigital.json
   resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
@@ -397,8 +366,3 @@ cross_language:
     - "Hardcoded BidType.banner inside the per-bid map closure (line 62) means BidType resolution does NOT consult bid.mtype, bid.ext.prebid.type, or imp.banner/video/native discrimination — every bid is unconditionally tagged banner. Go-side optidigital has the same hardcoded behavior; surfaces as quirk hardcoded-bid-type on both sides."
     - "Test class OptidigitalBidderTest extends VertxTest (canonical Java unit-test harness) with 6 hand-written @Test methods covering: invalid-endpoint-construction, request-passthrough, bad-response-decode, null-bidresponse, empty-seatbid, and a happy-path with USD currency assertion (BidderBid.of(..., BidType.banner, \"USD\"))."
     - "Integration test OptidigitalTest extends IntegrationTest with a single @Test method openrtb2AuctionShouldRespondWithBidsFromOptidigital. WireMock stubs POST /optidigital-exchange (the local mock URL) with the test-optidigital-bid-request.json body match and the test-optidigital-bid-response.json mock response. The 4 IT fixtures sum 2392 bytes."
-  reviewer_cohort:
-    go: []
-    java:
-      - CTMBNara
-    cross_language_coordinator: bretg

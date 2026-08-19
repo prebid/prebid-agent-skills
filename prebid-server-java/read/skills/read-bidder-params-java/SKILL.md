@@ -75,9 +75,11 @@ Two verifications that prove nothing, and are prohibited:
 - Hashing the value this skill emitted. A `sha256` over an emitted `bidder_params_json` compares the reader's output to itself: a span the reader dropped is missing from both sides, so the check passes on corrupt output.
 - Copying a `sha256` or `bytes` from the Go-side spec, from a golden, from this SKILL, or from `adapter-spec.md`.
 
-#### Optional inline copy (`bidder_params_json`, deprecated)
+#### Encoding a verbatim scalar in YAML (V3)
 
-`bidder_params_json` remains schema-valid and older goldens carry it; no step in this skill depends on it. When a caller explicitly asks for the inline form, the YAML encoding is decided by a round-trip, NOT by defaulting to the literal block. Run the V3 probe against the blob Step 1 staged:
+`bidder_params_json` was **removed at `adapter_spec_version` 2.0.0** — `bidder_params_ref` plus the blob store carry the params bytes, so there is no inline params copy to encode. The probe below outlives the field because the trap is not specific to it: any verbatim scalar emitted inline (`properties[].description`, `user_sync`, fixture payloads) can lose a byte to the wrong YAML style, and the encoding is decided by a round-trip, NOT by defaulting to the literal block.
+
+Run the probe against the bytes being embedded — here, the blob Step 1 staged:
 
 ```bash
 python3 -c 'import sys,yaml;s=sys.stdin.buffer.read().decode();e=yaml.dump(s,default_style="|");print("encoding:","literal" if e.lstrip().startswith("|") and yaml.safe_load(e)==s else "double-quoted")' < ../../test-fixtures/blobs/<sha256>

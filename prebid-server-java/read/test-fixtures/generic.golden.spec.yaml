@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -65,20 +65,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |-
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Generic Adapter Params",
-    "description": "A schema which validates params accepted by the Generic adapter",
-    "type": "object",
-    "properties": {
-      "exampleProperty": {
-        "type": "string",
-        "description": "Example property",
-        "minLength": 1
-      }
-    }
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/generic.json
   resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
@@ -390,7 +376,3 @@ cross_language:
     - "test-application.properties contains 16 lines registering the generic adapter and 7 aliases (genericAlias, adrino, blue, ccx, cwire, infytv, zeta_global_ssp) — each with .enabled=true and .endpoint=http://localhost:8090/{name}-exchange. test_application_properties_entries_added: 16 (largest of any bidder)."
     - "bidder-config/generic.yaml endpoint is 'https://' literal (line 3) — placeholder value for the disabled-by-default parent. The 7 aliases each carry their own real endpoint URLs and meta-info. Generic-as-overload pattern: the parent is a registration shell, the aliases are the working bidders."
     - "BidderUtil class import at line 15 is the shared utility — generic uses TWO of its functions: defaultRequest (request shaping) and getBidType (response shaping). Together these two helpers ARE the entire adapter behaviour. Counts as a degenerate case for port-fidelity comparison."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

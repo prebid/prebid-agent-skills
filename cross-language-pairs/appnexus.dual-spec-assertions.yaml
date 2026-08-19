@@ -133,11 +133,6 @@ assertions:
       - iab-category-storage-divergence
       - configuration-properties-subclass
 
-  reviewer_cohort:
-    go_reviewers: [bsardo, SyntaxNode, hhhjort]
-    java_reviewers: [CTMBNara, AntoxaAntoxic, EmilNadimanov]
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: divergent-byte-only
   blocker_count: 0
@@ -171,5 +166,4 @@ overall:
     branching in the bidder class vs separate JsonDeserializer) per the local
     conventions; appnexus chose the former. Also, the Java side declares the
     `mediafuse` parent_alias; Go has no equivalent alias declaration (Java carries
-    aliases.mediafuse with maintainer override). Port pair has wide reviewer cohort
-    on both languages (bsardo/SyntaxNode/hhhjort + CTMBNara/AntoxaAntoxic/EmilNadimanov).
+    aliases.mediafuse with maintainer override).

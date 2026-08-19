@@ -200,7 +200,7 @@ Populate `cross_language.port_concerns`: `multi_file_layout` from Step 1; `packa
 
 Populate `cross_language.java_artifacts`: `bidder_dir: src/main/java/org/prebid/server/bidder/{xyz}/`, `bidder_class: <Name>Bidder`, `config_class: <Name>Configuration | <Name>BidderConfiguration` (#19), `yaml_path: src/main/resources/bidder-config/{xyz}.yaml`, `proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/{xyz}/`.
 
-Stub `cross_language.go_artifacts` with path hints (`bidder_dir: adapters/{xyz}/`, `package_name: {xyz}` lowercase, `bidder_constant: openrtb_ext.Bidder<X>` looked up verbatim from Go-side `bidders.go` when available — do NOT derive). Emit `reviewer_cohort: null` — the field is inert (no skill may key a check on reviewer identity, per [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md)) and is slated for removal in the next schema major.
+Stub `cross_language.go_artifacts` with path hints (`bidder_dir: adapters/{xyz}/`, `package_name: {xyz}` lowercase, `bidder_constant: openrtb_ext.Bidder<X>` looked up verbatim from Go-side `bidders.go` when available — do NOT derive). Do NOT emit `reviewer_cohort` — the field was removed at `adapter_spec_version` 2.0.0 and the schema now rejects it, because no skill may key a check on reviewer identity (see [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md)).
 
 ## Edge case mapping (Java cases #18–#34)
 
@@ -211,7 +211,7 @@ Full 17-case catalog with field mappings, master samples, and owner skills: [`..
 Review expectations do not carry between the two repos; the transfer ban is canonicalized at [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md). Two consequences for `read-bidder-class` output:
 
 1. Port-fidelity is a live review theme on Java adapter PRs that port from Go ("I don't see that in Go" is a common blocker), and it is structurally asymmetric — the Go side of the same port has nothing to be faithful to. Populate `cross_language.java_specific_concerns[]` densely; the Kobler Java golden's 9-entry list is the model.
-2. Review-pattern matchers MUST NOT auto-transfer between languages, and no output field may be used to key a check on reviewer identity. `cross_language.reviewer_cohort` is inert and slated for removal in the next schema major.
+2. Review-pattern matchers MUST NOT auto-transfer between languages, and no output field may be used to key a check on reviewer identity. The `reviewer_cohort` field under `cross_language` was removed at 2.0.0.
 
 ## Verification
 

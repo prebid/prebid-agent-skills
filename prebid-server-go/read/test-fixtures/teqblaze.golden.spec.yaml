@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -62,29 +62,6 @@ bidder_info:
     whiteLabelOnly: true                      # Go-only field — declares the parent as a registration anchor for alias-only operation
   yaml_field_name_quirks: []
 
-bidder_params_json: |-
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "TeqBlaze Adapter Params",
-    "description": "A schema which validates params accepted by the TeqBlaze adapter",
-    "type": "object",
-    "properties": {
-      "placementId": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Placement ID"
-      },
-      "endpointId": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Endpoint ID"
-      }
-    },
-    "oneOf": [
-      { "required": ["placementId"] },
-      { "required": ["endpointId"] }
-    ]
-  }
 bidder_params_ref:
   path: static/bidder-params/teqblaze.json
   resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
@@ -324,7 +301,3 @@ cross_language:
     - "Bid type resolution supports banner=1, video=2, native=3 (Go's openrtb2.MarkupNative is constant 4 but adapter code uses the canonical enum constants). Adapter does NOT support audio (no MarkupAudio case)."
     - "10 aliases declared via separate Go YAMLs (360playvid, pinkLion, rocketlab, appStockSSP, gravite, bidfuse, adsinteractive, progx, harion, mycodemedia). 360playvid is digit-leading — Java side has the same alias name, but Java's class-naming rules require `Threehundredsixtyplayvid`-style spellout for any class root (Rule 46 digit-leading-workaround case; appStockSSP also has Rule 15 deploy-time-token `#{REGION}#`)."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

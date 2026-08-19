@@ -554,14 +554,14 @@ def r2_check(spec: Spec) -> List[Finding]:
       R2c  ref.sha256 equals upstream at ref.resolved_commit  (NOT here: needs
            the network, so it runs in the weekly upstream-sync job)
 
-    While `bidder_params_json` survives the migration it is compared against the
-    blob as a WARN: it is deprecated and non-normative, so a mismatch is a golden
-    to refresh rather than a reason to fail the build.
+    `bidder_params_json` is gone at 2.0.0. While it survived the migration it was
+    compared against the blob as a WARN, and both beachfront goldens warned --
+    the two files whose inline text was never upstream. Removing the field
+    removed the category.
     """
     findings: List[Finding] = []
     ref = spec.raw.get("bidder_params_ref")
     declared = spec.raw.get("bidder_params_sha256")
-    inline = spec.raw.get("bidder_params_json")
 
     if ref is None:
         # Aliases legitimately have neither: they inherit the parent's params.
@@ -600,14 +600,14 @@ def r2_check(spec: Spec) -> List[Finding]:
                                 f"bidder_params_sha256 {declared} does not mirror "
                                 f"bidder_params_ref.sha256 {ref['sha256']}"))
 
-    if isinstance(inline, str):
-        inline_sha = hashlib.sha256(inline.encode("utf-8")).hexdigest()
-        if inline_sha != ref["sha256"]:
-            findings.append(Finding(
-                "R2", spec.label, SEV_WARN,
-                "deprecated bidder_params_json does not match the referenced bytes "
-                f"(inline {inline_sha[:12]} vs upstream {str(ref['sha256'])[:12]}); the "
-                "inline copy is non-normative and is dropped in 2.0.0"))
+    if "bidder_params_json" in spec.raw:
+        # Removed at 2.0.0. A golden that still carries it was not migrated, and
+        # a stale inline copy beside a ref is exactly the ambiguity the ref
+        # exists to remove -- so this is a failure, not a tolerated leftover.
+        findings.append(Finding(
+            "R2", spec.label, SEV_FAIL,
+            "bidder_params_json was removed at adapter_spec_version 2.0.0; run "
+            "scripts/migrate/1.3.0-to-2.0.0.py --drop-inline"))
     return findings
 
 

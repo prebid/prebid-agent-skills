@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -70,26 +70,6 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |-
-  {
-      "$schema": "http://json-schema.org/draft-04/schema#",
-      "title": "Adverxo Adapter Params",
-      "description": "A schema which validates params accepted by the Adverxo adapter",
-      "type": "object",
-      "properties": {
-        "adUnitId": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Unique identifier for the ad unit in Adverxo platform."
-        },
-        "auth": {
-          "type": "string",
-          "minLength": 6,
-          "description": "Authentication token provided by Adverxo platform for the AdUnit."
-        }
-      },
-      "required": ["adUnitId", "auth"]
-    }
 bidder_params_ref:
   path: static/bidder-params/adverxo.json
   resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
@@ -380,7 +360,3 @@ cross_language:
     - "Bid AdM macro replacement: resolveMacros() replaces `${AUCTION_PRICE}` after bid-type classification (line 121). For native bids, getNativeAdm() ALSO replaces `${AUCTION_PRICE}` defensively — double-replacement is benign but unusual."
     - "Range-with-shadowing pattern at line 116: `for _, bid := range seatBid.Bid { bid := bid; ... }` — explicit re-binding to capture pointer correctly inside the loop body. Modern Go (1.22+) loop-var semantics make the shadowing redundant but the code targets older versions."
   java_specific_concerns: []                  # populated on Java-source spec
-  reviewer_cohort:
-    go: []                                    # Go-side reviewer cohort to be filled when references PR #3705 is annotated
-    java: []
-    cross_language_coordinator: bretg

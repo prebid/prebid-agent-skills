@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -56,20 +56,6 @@ bidder_info:
     dev-endpoint: "https://bid-service.dev.essrtb.com/bid/prebid_server_rtb_call"
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Kobler Adapter Params",
-    "description": "A schema which validates params accepted by the Kobler adapter",
-    "type": "object",
-
-    "properties": {
-      "test": {
-        "type": "boolean",
-        "description": "Whether the request is for testing only. When multiple ad units are submitted together, it is enough to set this parameter on the first one."
-      }
-    }
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/kobler.json
   resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
@@ -419,9 +405,3 @@ cross_language:
     - "ExtImpKobler uses @Value(staticConstructor=of) yielding ExtImpKobler.of(true) factory (rare for params POJOs which more commonly use @Value @Builder)."
     - "Empty-seatbid shortcircuit at line 160-162 returns Collections.emptyList() before bidsFromResponse stream pipeline runs — paired with framework-default HTTP status handling."
     - "stream pipeline in bidsFromResponse uses three Objects::nonNull filters across SeatBid, SeatBid.Bid, and Bid (lines 167-174) — defensive against null entries; Go side does not need equivalent because Go ranges never iterate over nil-element slots."
-  reviewer_cohort:
-    go: []
-    java:
-      - AntoxaAntoxic
-      - osulzhenko
-    cross_language_coordinator: bretg

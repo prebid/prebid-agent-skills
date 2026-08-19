@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -73,23 +73,6 @@ bidder_info:
     supported_vendors: null                   # YAML key present but empty (`supported-vendors:` with no value)
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "AdkernelAdn Adapter Params",
-    "description": "A schema which validates params accepted by the AdkernelAdn adapter",
-    "type": "object",
-    "properties": {
-      "pubId": {
-        "type": "integer",
-        "minimum": 1,
-        "description": "Publisher Id to use."
-      }
-    },
-    "required": [
-      "pubId"
-    ]
-  }
 bidder_params_ref:
   path: src/main/resources/static/bidder-params/adkernelAdn.json
   resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
@@ -431,7 +414,3 @@ cross_language:
     - "ExtImpAdkernelAdn uses Lombok @Builder + @Value with EXPLICIT @JsonProperty(\"pubId\") annotation — distinct from the typical Lombok-only pattern (where @Value defaults to Jackson PROPERTY_NAMING_STRATEGY)."
     - "`uid-macro: '${UID}'` uses Spring placeholder syntax. Go uses plain `{UID}`. Cross-language uid-macro syntax divergence (consistent across the Java codebase)."
     - "X-OpenRTB-Version header is mixed-case via HttpUtil.X_OPENRTB_VERSION_HEADER constant. Go uses lowercase `x-openrtb-version`. Wire-level case-insensitive but byte comparison would diverge."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

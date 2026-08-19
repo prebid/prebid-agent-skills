@@ -141,14 +141,21 @@ KNOWN_PHANTOMS: dict[tuple[str, str], str] = {}
 # runs ONLY on dotted paths whose first segment matches one of these — that
 # filters out package paths (prebid/prebid-server.go), URLs (http.example.com),
 # and unrelated dotted tokens.
-SCHEMA_TOP_LEVEL_KEYS = frozenset({
-    "adapter_spec_version", "spec_kind", "source_language",
-    "provenance", "meta", "aliases", "lifecycle", "bidder_info",
-    "bidder_params_json", "bidder_params_sha256", "params",
-    "code", "tests", "spring_config", "bidder_class", "code_naming",
-    "iab_category_storage", "ext_pojo_construction", "currency_conversion",
-    "headers_constructed", "deploy_time_tokens", "quirks", "cross_language",
-})
+def _schema_top_level_keys() -> frozenset[str]:
+    """Read the gate's filter out of the schema instead of restating it.
+
+    This was a hand-maintained copy of the schema's top-level property names, and
+    it drifted in the direction that loses coverage: it still listed
+    `bidder_params_json` after 2.0.0 removed it, and never gained
+    `bidder_params_ref` -- so every `bidder_params_ref.*` path a skill cited was
+    filtered out of phantom detection and silently unchecked. A filter that has to
+    be updated by hand to keep covering new fields will always lag the fields.
+    """
+    with open(ADAPTER_SPEC_SCHEMA_JSON, "r", encoding="utf-8") as fh:
+        return frozenset(json.load(fh).get("properties", {}))
+
+
+SCHEMA_TOP_LEVEL_KEYS = _schema_top_level_keys()
 
 # Tokens that resemble schema paths but are noise. Add here as new false
 # positives surface; never silence a real phantom by adding to this list.

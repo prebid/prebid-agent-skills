@@ -232,7 +232,7 @@ port_lineage:
     - <one entry per applied prose-driven rule>
 ```
 
-**Rule 38 materialise-from-ref invariant.** Do NOT hash `dest_spec.bidder_params_json` — it is the reader's own transcription, so hashing it proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec carrying only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes:
+**Rule 38 materialise-from-ref invariant.** Never hash inline text to produce a ref — that is what `bidder_params_json` did before 2.0.0 removed it, and hashing the reader's own transcription proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec carrying only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes:
 
 1. `dest_spec.bidder_params_ref.{resolved_commit, sha256, bytes}` are identical to the source's, and `.path` is `static/bidder-params/{bidder}.json`.
 2. `dest_spec.bidder_params_sha256 == dest_spec.bidder_params_ref.sha256` (the mirror, not a fresh hash).
