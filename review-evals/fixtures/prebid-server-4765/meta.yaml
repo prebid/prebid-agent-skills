@@ -1,0 +1,28 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-4765
+repo: prebid/prebid-server
+pr_number: 4765
+title: 'New Adapter: Teal'
+language: go
+base_ref: master
+review_sha: 6367a39cc3118e21f57642a53912d9c096591ae8
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-07-20'
+merge_base_sha: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+head_sha: a470fee58c3582f8be8e642da7e3dc65150a692a
+merge_state: merged
+merged_at: '2026-07-20'
+review_decision: DISMISSED -> APPROVED -> APPROVED
+outcome: defective
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server/compare/master...6367a39cc3118e21f57642a53912d9c096591ae8
+file_count: 27
+truncation:
+  patch_char_limit: 20000
+  truncated_files:
+  - adapters/teal/teal_test.go
+  compare_file_limit_hit: false

@@ -1,6 +1,6 @@
 ---
 name: read-bidder-params
-description: Populate `bidder_params_json`, `bidder_params_sha256`, and `params` blocks of an Adapter Specification from `static/bidder-params/*.json`, `openrtb_ext/imp_*.go`, and `adapters/*/params_test.go`. USE WHEN read-adapter-orchestrator dispatches the bidder-params domain, or directly for a Go adapter's params section. Preserves JSON bytes verbatim (Rule R2), classifies the ext struct, counts test cases, surfaces bidder-constant-mismatch warnings. Do NOT use for `static/bidder-info/*.yaml` (read-bidder-info), adapter Go code (read-adapter-code), or Java sibling (read-bidder-params-java).
+description: Populate `bidder_params_ref` and the `params` blocks of an Adapter Specification from `static/bidder-params/*.json`, `openrtb_ext/imp_*.go`, and `adapters/*/params_test.go`. USE WHEN read-adapter-orchestrator dispatches the bidder-params domain, or directly for a Go adapter's params section. Digests the fetched JSON bytes in one command (Rule R2), classifies the ext struct, counts test cases, surfaces bidder-constant-mismatch warnings. Do NOT use for `static/bidder-info/*.yaml` (read-bidder-info), adapter Go code (read-adapter-code), or Java sibling (read-bidder-params-java).
 version: 1.0.0
 ---
 
@@ -12,7 +12,7 @@ The Go-side reader skill that owns three files for one adapter:
 2. `openrtb_ext/imp_{xyz}.go` — the Go struct backing the schema.
 3. `adapters/{xyz}/params_test.go` — the unit-test file that exercises the schema.
 
-Output goes into the Adapter Specification blocks `bidder_params_json:`, `bidder_params_sha256:`, `params:` (with three sub-blocks `schema_interpretation`, `ext_struct`, `params_test`), and `ext_pojo_construction:`. Optionally produces `provenance.warnings[]` entries when read-time anomalies are detected (R7 bidder-constant-mismatch is the canonical case).
+Output goes into the Adapter Specification blocks `bidder_params_ref:`, `params:` (with three sub-blocks `schema_interpretation`, `ext_struct`, `params_test`), and `ext_pojo_construction:`. The deprecated inline pair `bidder_params_json:` / `bidder_params_sha256:` is still schema-valid but no step here depends on it — see Step 2. Optionally produces `provenance.warnings[]` entries when read-time anomalies are detected (R7 bidder-constant-mismatch is the canonical case).
 
 The skill is third-person procedural — it tells the reader what to do, what to emit, and how to handle every edge case. The skill does NOT run static-analysis tools beyond regex / JSON parsing / the Go AST as listed in Step 4. No HTTP calls beyond the orchestrator-supplied source mode.
 
@@ -44,8 +44,7 @@ If any required file is missing for a non-alias bidder, the skill emits a hard e
 
 If the orchestrator passes `is_alias: true`, none of the three files should exist for this bidder (the alias inherits from its parent). The skill emits:
 
-- `bidder_params_json: null`
-- `bidder_params_sha256: null`
+- `bidder_params_ref: null` and `bidder_params_sha256: null`
 - `params: { schema_interpretation: null, ext_struct: null, params_test: null }`
 - `ext_pojo_construction: { framework_choice: go-struct, flexible_extension_used: false, custom_unmarshal: { kind: none, accepts_shapes: [], where_branched: null } }`
 
@@ -53,29 +52,70 @@ If any of the three files DOES exist for an alias, emit a `provenance.warnings[]
 
 ## Workflow
 
-### Step 1: Read the JSON schema verbatim
+### Step 1: Fetch and digest the JSON schema in ONE command
 
-Read `static/bidder-params/{bidder}.json` in **binary mode** (preserve every byte: trailing whitespace, BOM if any, terminal newline presence/absence, indentation). Do NOT round-trip through a JSON parser before emitting `bidder_params_json:`.
+Run exactly one command. It fetches `static/bidder-params/{bidder}.json` at the resolved commit, stages the fetched bytes in the content-addressed blob store, and prints the `sha256` and `bytes` lines. Both numbers come out of the same pipe that fetched the file, so neither can be a measurement of the reader's own text (V2 in [`../shared/adapter-spec.md`](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)).
 
-Emit the bytes:
+Pick the line matching the orchestrator-supplied `source_mode`, substitute `{bidder}` and the resolved commit, and record the stdout verbatim:
 
-- **Default**: YAML literal block scalar `bidder_params_json: |` followed by indented content. Preserves multi-line content while losing trailing-newline-presence and trailing whitespace on otherwise blank lines.
-- **When the file has trailing whitespace on blank lines, no terminal newline, or any non-LF newline that the literal-block scalar would normalize**: emit a YAML double-quoted scalar with explicit escapes (`\n`, `\t`, etc.). The `optidigital.golden.spec.yaml` golden uses this form because the source file has `"  \n"` on one blank line and no terminal newline. Add a YAML comment explaining the choice (the optidigital golden has a 4-line comment block above the field).
-- **Acceptance test**: re-read the field, decode the YAML scalar back to bytes, and confirm `sha256(decoded) == bidder_params_sha256` (R2). If R2 fails, the encoding choice was wrong — switch to double-quoted form and retry.
+```bash
+# source_mode: local-checkout  (run inside the local prebid-server clone)
+git show <commit>:static/bidder-params/{bidder}.json | python3 -c 'import sys,hashlib,pathlib;b=sys.stdin.buffer.read();h=hashlib.sha256(b).hexdigest();d=pathlib.Path(sys.argv[1]);d.mkdir(parents=True,exist_ok=True);(d/h).write_bytes(b);print(f"  sha256: {h}\n  bytes: {len(b)}")' prebid-server-go/read/test-fixtures/blobs
 
-### Step 2: Compute SHA-256
+# source_mode: github-raw
+curl -sS "https://raw.githubusercontent.com/prebid/prebid-server/<commit>/static/bidder-params/{bidder}.json" | python3 -c 'import sys,hashlib,pathlib;b=sys.stdin.buffer.read();h=hashlib.sha256(b).hexdigest();d=pathlib.Path(sys.argv[1]);d.mkdir(parents=True,exist_ok=True);(d/h).write_bytes(b);print(f"  sha256: {h}\n  bytes: {len(b)}")' prebid-server-go/read/test-fixtures/blobs
 
-Compute `sha256` of the raw bytes from Step 1 (NOT of the YAML-encoded form). Emit:
-
-```yaml
-bidder_params_sha256: <hex-sha256>
+# source_mode: gh-cli
+gh api "repos/prebid/prebid-server/contents/static/bidder-params/{bidder}.json?ref=<commit>" --jq .content | base64 -d | python3 -c 'import sys,hashlib,pathlib;b=sys.stdin.buffer.read();h=hashlib.sha256(b).hexdigest();d=pathlib.Path(sys.argv[1]);d.mkdir(parents=True,exist_ok=True);(d/h).write_bytes(b);print(f"  sha256: {h}\n  bytes: {len(b)}")' prebid-server-go/read/test-fixtures/blobs
 ```
 
-This is the cross-language byte-fidelity contract ([Rule 38](../shared/port-translation-rules.md)). The Java sibling skill `read-bidder-params-java` reads `src/main/resources/static/bidder-params/{bidder}.json` from the Java repo and MUST produce the same SHA. Mismatch surfaces as a port-fidelity violation in the cross-language test harness (R5). Verified canonical SHAs for corpus adapters live in the goldens at `../../test-fixtures/*.golden.spec.yaml`; if a re-read on master produces a different SHA, the orchestrator emits a `master-drift` warning.
+All three read the same Git object and print the same two numbers. Never fetch the file through `WebFetch` or any tool that summarizes — the bytes must arrive unaltered (see [`../read-adapter-orchestrator/references/source-modes.md`](../read-adapter-orchestrator/references/source-modes.md)).
+
+If the command fails (missing file at the commit), that is the R1 hard error — do not fall back to a remembered value.
+
+### Step 2: Emit `bidder_params_ref`
+
+Paste the two recorded lines under the reference block:
+
+```yaml
+bidder_params_ref:
+  path: static/bidder-params/{bidder}.json
+  resolved_commit: <commit>
+  sha256: <from Step 1 stdout>
+  bytes: <from Step 1 stdout>
+```
+
+The blob staged by Step 1 at `../../test-fixtures/blobs/<sha256>` is the spec's copy of the bytes. Downstream consumers (`write/`, `port-*`, the dual-spec assertions) read the blob; they do not need an inline copy.
+
+This is the cross-language byte-fidelity contract ([Rule 38](../shared/port-translation-rules.md)). The Java sibling skill `read-bidder-params-java` fetches `src/main/resources/static/bidder-params/{bidder}.json` from the Java repo and MUST print the same `sha256` and the same `bytes`. Mismatch surfaces as a port-fidelity violation in the cross-language test harness (R5). Comparing against the sibling spec, or against a golden, happens AFTER Step 1 has produced this reader's own numbers — a value read off another artifact is not a measurement (V2). If a re-read on master produces a different `sha256`, the orchestrator emits a `master-drift` warning.
+
+Two verifications that prove nothing, and are prohibited:
+
+- Hashing the value this skill emitted. A `sha256` over an emitted `bidder_params_json` (or over the blob re-encoded from it) compares the reader's output to itself: a span the reader dropped is missing from both sides, so the check passes on corrupt output. The corpus has already produced that outcome.
+- Copying a `sha256` or `bytes` from another spec, from a golden, from this SKILL, or from `../shared/adapter-spec.md`.
+
+#### Encoding a verbatim scalar in YAML (V3)
+
+`bidder_params_json` was **removed at `adapter_spec_version` 2.0.0** — the params bytes are carried by `bidder_params_ref` and the blob store, so there is no inline params copy to encode. The probe below survives the removal because the trap it detects is not specific to that field: every verbatim scalar this skill emits inline (`properties[].description`, `user_sync`, fixture payloads) can lose a byte to the wrong YAML style, and `properties[].description` is the field class the corpus has already lost bytes in.
+
+Run the probe against whatever bytes are being embedded — here, the blob Step 1 staged:
+
+```bash
+python3 -c 'import sys,yaml;s=sys.stdin.buffer.read().decode();e=yaml.dump(s,default_style="|");print("encoding:","literal" if e.lstrip().startswith("|") and yaml.safe_load(e)==s else "double-quoted")' < ../../test-fixtures/blobs/<sha256>
+```
+
+- `literal` — emit the YAML literal block scalar (`|`, or `|-` when the bytes do not end in a newline).
+- `double-quoted` — emit the double-quoted scalar with explicit escapes (`\n`, `\t`, `\r`, trailing spaces). Required, not preferred. Add a YAML comment naming the byte that forced it (the `optidigital.golden.spec.yaml` golden carries such a comment block).
+
+The probe replaces the older trigger list ("trailing whitespace on blank lines, no terminal newline, non-LF newline"), which was too narrow: a trailing space on a **content** line also forces the double-quoted form, and a hand-written literal block silently drops it. `beachfront.json` line 29 at master is that case.
+
+No inline text ever becomes a digest's input. `bidder_params_sha256` repeats `bidder_params_ref.sha256` from Step 1; it is a mirror, and R2 fails when it disagrees with the ref.
 
 ### Step 3: Parse the JSON schema for interpretation
 
-Parse the JSON (use `encoding/json` or any draft-04-aware parser) and produce `params.schema_interpretation`. The classification rules and JSON-Schema-draft-04 grounding live in [references/schema-interpretation.md](references/schema-interpretation.md) — that file is the source-of-truth for `$schema`, combinators, flexible types, and the `properties[]` normalization shape.
+Parse the blob Step 1 staged — `../../test-fixtures/blobs/<sha256>`, not a re-fetch and not the emitted YAML — with `encoding/json` or any draft-04-aware parser, and produce `params.schema_interpretation`. The classification rules and JSON-Schema-draft-04 grounding live in [references/schema-interpretation.md](references/schema-interpretation.md) — that file is the source-of-truth for `$schema`, combinators, flexible types, and the `properties[]` normalization shape.
+
+`properties[].description` is a **verbatim field** under V1 in [`../shared/adapter-spec.md`](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): extract each description string from the blob rather than retyping or summarizing it, and keep `bidder_params_ref` present so the value stays re-derivable. This is the field class the corpus has already lost bytes in — a description is long enough that a dropped clause survives every check except a comparison against the blob. The extraction command is in the reference under "`description` is a verbatim field".
 
 Concretely emit:
 
@@ -160,13 +200,19 @@ var invalidParams = []string{
 }
 ```
 
-Method (in order of preference):
+Both counts are computed values (V4 in [`../shared/adapter-spec.md`](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)): the number recorded is the stdout of a command run against the fetched bytes, never a count the reader arrived at by reading the literal. Default commands (substitute the source-mode fetch for `<fetch>`):
 
-1. **AST parse** the file, locate `*ast.GenDecl` for `validParams` and `invalidParams`, count elements in the `*ast.CompositeLit.Elts`.
-2. **Regex fallback**: count backtick-delimited strings inside the `[]string{...}` literal between `var validParams` and the next `var` declaration. Same for `invalidParams`.
-3. **Test-runner fallback**: when file has unusual structure, run `go test -run TestValidParams|TestInvalidParams -v -count=1` and count `--- PASS:` lines per subtest. This works only when the iteration is structured as table-driven subtests (rare for params_test.go — most use the `for _, validParam := range validParams` loop with a single t.Errorf per iteration). Use only as a last resort.
+```bash
+<fetch> | awk '/^var validParams/,/^}/'   | grep -c '^[[:space:]]*`'   # valid_cases_count
+<fetch> | awk '/^var invalidParams/,/^}/' | grep -c '^[[:space:]]*`'   # invalid_cases_count
+```
 
-Empty arrays count as 0. Comments inside the array do NOT count.
+Alternative instruments, when the file's shape defeats the default:
+
+1. **AST parse** the file, locate `*ast.GenDecl` for `validParams` and `invalidParams`, count elements in the `*ast.CompositeLit.Elts`. Report the count the parser returns.
+2. **Test-runner fallback**: run `go test -run TestValidParams|TestInvalidParams -v -count=1` and count `--- PASS:` lines per subtest. This works only when the iteration is structured as table-driven subtests (rare for params_test.go — most use the `for _, validParam := range validParams` loop with a single t.Errorf per iteration). Use only as a last resort.
+
+Empty arrays count as 0. Comments inside the array do NOT count — a comment line does not match the backtick pattern, and if it does (a commented-out case), switch to the AST instrument rather than adjusting the number by hand. When no instrument fits, emit `null` plus an `incomplete-classification` warning per the reference; never a hand count.
 
 #### Bidder-constant detection (R7)
 
@@ -221,7 +267,7 @@ This skill covers Go edge cases #6 (custom UnmarshalJSON), #7 (JSON key style mi
 
 ## Cross-language note
 
-`bidder_params_json` is **byte-identical** between Go and Java repos for the same bidder (port-translation [Rule 38](../shared/port-translation-rules.md) — the cross-language byte-fidelity contract). The Java sibling skill `read-bidder-params-java` emits the same `bidder_params_sha256`; mismatch is a port-fidelity violation surfaced by R5 in the round-trip CI harness.
+The bidder-params JSON file is **byte-identical** between Go and Java repos for the same bidder (port-translation [Rule 38](../shared/port-translation-rules.md) — the cross-language byte-fidelity contract). The Java sibling skill `read-bidder-params-java` measures the same `bidder_params_ref.sha256` and `bidder_params_ref.bytes` with its own Step 1 command; mismatch is a port-fidelity violation surfaced by R5 in the round-trip CI harness. Each side measures independently — neither side's numbers are read off the other's spec.
 
 Field-by-field cross-language equality (which fields are byte-identical, deep-equal, or per-language-divergent) is canonicalized in [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md) Rules 38, 39 (params), and 1 (imp.ext unmarshal). The dual-spec assertion files at `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` codify the must-match set; this skill does not duplicate it.
 
@@ -229,10 +275,12 @@ Field-by-field cross-language equality (which fields are byte-identical, deep-eq
 
 Correctness is anchored to two goldens:
 
-- `optidigital.golden.spec.yaml` — clean baseline with the trailing-whitespace + missing-terminal-newline edge that forces `bidder_params_json` into double-quoted YAML scalar form. Legacy `ImpExtOptidigital` naming.
+- `optidigital.golden.spec.yaml` — clean baseline whose bidder-params file returns `double-quoted` from the V3 probe (trailing whitespace on a blank line, no terminal newline). Legacy `ImpExtOptidigital` naming.
 - `kobler.golden.spec.yaml` — pins R7 `bidder-constant-mismatch` detection via `params_test.go:47` referencing `openrtb_ext.BidderKrushmedia`.
 
-Acceptance criteria: (1) `bidder_params_json` round-trips byte-equal under YAML scalar decode; (2) `bidder_params_sha256` matches the golden's value; (3) `combinators_used[]` is empty for kobler/optidigital, `["anyOf", "oneOf-of-oneOf"]` for appnexus; (4) `custom_unmarshal: false` for kobler/optidigital, `true` for appnexus; (5) kobler emits a `bidder-constant-mismatch` warning at line 47; (6) `bidder_constant_referenced: openrtb_ext.BidderKrushmedia` (wrong-on-purpose; last-observed wins).
+Acceptance criteria: (1) Step 1's command, re-run against the golden's `resolved_commit`, prints the `sha256` and `bytes` the golden's `bidder_params_ref` records — the comparison is reader-stdout against golden, never emitted-field against itself; (2) the blob at `../../test-fixtures/blobs/<sha256>` is byte-equal to the upstream file at that commit; (3) `combinators_used[]` is empty for kobler/optidigital, `["anyOf", "oneOf-of-oneOf"]` for appnexus; (4) `custom_unmarshal: false` for kobler/optidigital, `true` for appnexus; (5) kobler emits a `bidder-constant-mismatch` warning at line 47; (6) `bidder_constant_referenced: openrtb_ext.BidderKrushmedia` (wrong-on-purpose; last-observed wins).
+
+Criterion (1) is the check the earlier acceptance test could not perform: decoding an emitted `bidder_params_json` and re-hashing it compares the reader's output to itself, and passed on a Go golden whose inlined bytes were 31 bytes short of upstream (a dropped span inside a `properties[].description`, plus a trailing space on a content line).
 
 Custom-with-quirks contract: any `custom` value in an enumerated field MUST be paired with a `quirks[]` entry referencing the same field. This skill emits `provenance.warnings[]` candidates; the orchestrator promotes them into `quirks[]` per the registry in [`../shared/behavior-taxonomy.yaml`](../shared/behavior-taxonomy.yaml).
 

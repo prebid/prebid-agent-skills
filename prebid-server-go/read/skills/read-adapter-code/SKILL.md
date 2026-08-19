@@ -55,7 +55,7 @@ The orchestrator excludes `params_test.go` from `go_files` per `read-bidder-para
 For each path in `inputs.files.go_files`:
 
 1. Read the file at `provenance.source.resolved_commit` (orchestrator-provided; do not re-fetch).
-2. Compute `loc` (line count, including blank lines and the final newline if present).
+2. Compute `loc` as the stdout of `<fetch> | wc -l` — a computed value under V4 in [../shared/adapter-spec.md](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4). Blank lines and comments count; `wc -l` counts newlines, so a file with no terminal newline reports one less than its visible line count, and that is the recorded number. Never estimate from a viewer's last visible line.
 3. Skip the file if it is `params_test.go` (defensive — orchestrator should have already excluded it).
 4. Tag the file with a single `role` per the rule table in [references/file-role-heuristics.md](references/file-role-heuristics.md).
 
@@ -84,7 +84,7 @@ Parse the `import (...)` block of the implementation file. Populate booleans:
 | `imports.has_jsonutil` | `github.com/prebid/prebid-server/v4/util/jsonutil`. If absent AND `encoding/json.Marshal`/`Unmarshal` is invoked, emit a `legacy-encoding-json-direct-usage` quirk and a `provenance.warnings` entry (Validation Rule R9). |
 | `imports.third_party[]` | Any import path NOT under `github.com/prebid/prebid-server/v4/` and NOT a Go stdlib package. List each import alias-and-path. |
 
-The full helper registry (canonical helpers, `errortypes.*`, `macros.EndpointTemplateParams` 18 fields, `jsonutil.*` extras) lives at [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md). Do not re-list helpers here.
+The full helper registry (canonical helpers, `errortypes.*`, `macros.EndpointTemplateParams` 22 fields, `jsonutil.*` extras) lives at [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md). Do not re-list helpers here.
 
 ### Step 5 — Extract `code.adapter_struct.*`
 
@@ -112,8 +112,8 @@ Locate `func (a [*]adapter) MakeRequests(...)`. Apply rules from [../shared/beha
 3. **`mutation.entity_strategies`** — map per OpenRTB entity (`Site, App, Source, Imp, Banner, Device, User, Cur, ...`). Strategies: `none, copy-then-mutate, in-place, append-if-missing, immutable-rebuild` (immutable-rebuild appears only on Java). See the patterns reference's mutation table.
 4. **`mutation.go_idiom`** — `ptrutil.Clone, shallow-copy, direct-pointer-mutation, none`. `direct-pointer-mutation` is the danger case (mutates framework's request); flag with `provenance.warnings` if found. `mutation.java_idiom` is null on Go specs.
 5. **`imp_ext_unmarshal.kind`** — `standard-two-phase` (default — `jsonutil.Unmarshal(imp.Ext, &bidderExt)` then `jsonutil.Unmarshal(bidderExt.Bidder, &impExt)`), `direct` (skip framework wrapper), `none` (no params), or `custom`. Set `mechanism_go: jsonutil-two-phase` for the canonical case; `null` for `direct`/`none`. Set `target_type` to the imp ext struct (`openrtb_ext.ExtImpKobler`); set `wrapper_type` only on `direct`.
-6. **`endpoint_resolution.kind`** + **`mechanism_go`** — see the kind/mechanism cross-table in the patterns reference. Mechanism values: `text/template, macros.NewStringIndexBasedReplacer, net/url, string-concat, null`. Populate `macro_field_set[]` with the subset of `macros.EndpointTemplateParams` 18 fields (canonical list at [../../../review/skills/shared/framework-utilities.md#endpoint-template-macros](../../../review/skills/shared/framework-utilities.md#endpoint-template-macros)) actually substituted; `template_params_struct_field_count` records `len(macro_field_set)`.
-7. **`helpers[]`** — every unexported function defined alongside the adapter (excluding the implementation methods). Record `name` and `signature`.
+6. **`endpoint_resolution.kind`** + **`mechanism_go`** — see the kind/mechanism cross-table in the patterns reference. Mechanism values: `text/template, macros.NewStringIndexBasedReplacer, net/url, string-concat, null`. Populate `macro_field_set[]` with the subset of `macros.EndpointTemplateParams` 22 fields (canonical machine-readable list at [../shared/endpoint-macros.yaml](../shared/endpoint-macros.yaml) `go_template_macros`; annotated table at [../../../review/skills/shared/framework-utilities.md#endpoint-template-macros](../../../review/skills/shared/framework-utilities.md#endpoint-template-macros)) actually substituted; `template_params_struct_field_count` records `len(macro_field_set)`.
+7. **`helpers[]`** — every unexported function defined alongside the adapter (excluding the implementation methods). Record `name` and `signature`. `signature` is a **verbatim field** under V1 in [../shared/adapter-spec.md](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): copy the `func` declaration line out of the fetched bytes (`<fetch> | grep -n '^func .*<name>('`), against the file reference recorded in `code.file_layout.files[]`. Do not reconstruct it from a call site, drop a receiver, or normalize a parameter name.
 8. **`headers_constructed.*`** — when `MakeRequests` constructs headers beyond framework defaults. Set `pre_built_in_constructor: true` when a header is pre-computed in the constructor (rare on Go; Java pattern); else false. `per_request_dynamic: true` when headers are computed per-request. `custom_headers[]` lists the literal headers added. `authentication_kind: none | basic-auth | bearer-token | hmac-digest | custom`. `authentication_input[]` lists field paths the auth value derives from.
 
    **ADR-007 F2 (`language_stamped_headers[]`)**: set `language_stamped: true` and populate `language_stamped_headers[]` with `{ name, go_value, java_value, rationale }` per item when the adapter emits a header whose VALUE differs by language. Master sample: `freewheelssp` emits `Componentid: prebid-go` (Go) ↔ `prebid-java` (Java) — same header name, different value, byte-asymmetric outbound. Both sides record the same `language_stamped_headers[]` (per-side spec carries the full cross-language pair so cross-language consumers can diff). One-sided header additions (Go emits a header Java doesn't, or vice versa) are NOT F2 — record them as quirks instead per ADR-007's footnote on one-sided header mutations.
@@ -139,10 +139,10 @@ For each fixture path in `inputs.files.test_fixtures.*`:
    - `canonical` — root is `{xyz}test` (no separator).
    - `legacy-test` — root is `{xyz}/test` (separator).
    - `custom` — anything else (msft uses both `test/` and `test-extrainfo/`); REQUIRES a quirk entry.
-3. For each fixture file:
+3. For each fixture file, `sha256` and `bytes` are MANDATORY in ALL THREE modes — they are the fixture's digest under V1/V2 in [../shared/adapter-spec.md](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4), and `verbatim` mode inlines the most bytes, so it needs the digest most:
    - In `count-only` mode (default): `{ filename, sha256, bytes }`.
-   - In `summary` mode: + extracted media types per fixture (parse `mockBidRequest.imp[].{banner,video,native,audio}`) and HTTP status codes.
-   - In `verbatim` mode: + full JSON body inline.
+   - In `summary` mode: `{ filename, sha256, bytes }` + extracted media types per fixture (parse `mockBidRequest.imp[].{banner,video,native,audio}`) and HTTP status codes.
+   - In `verbatim` mode: `{ filename, sha256, bytes }` + the full JSON body inline. The digest comes from the fetch pipe (the same digest filter as `read-bidder-params` Step 1), NOT from the inlined copy — hashing the inlined text would compare this skill's output to itself. Choose the inline scalar's encoding with the V3 probe.
 4. Group by subdirectory: `exemplary, supplemental, amp, video, videosupplemental`. Set `integration: []` (Java-only field — empty on Go).
 5. Cross-check `_test.go` runner:
    - `uses_canonical_harness: true` if test runner calls `adapterstest.RunJSONBidderTest`. False if it imports `adapterstest.OrtbMockService`/`BidOnTags`/`SampleBid`/`VerifyStringValue` instead — emit `legacy-test-helpers-imported` quirk + `provenance.warnings` entry (Validation Rule R10).
@@ -210,7 +210,7 @@ The catalog covers every registered taxon; this skill emits quirks under: `hardc
 The two canonical golden specs serve as proof-of-concept outputs:
 
 - [../../test-fixtures/optidigital.golden.spec.yaml](../../test-fixtures/optidigital.golden.spec.yaml) — clean baseline, single-file, banner-only, hardcoded `BidTypeBanner`. This skill owns lines covering `code.*` (lines 128–202), `tests.*` (lines 203–234), `cross_language.go_artifacts/java_artifacts/port_concerns` (lines 286–303), and the `legacy-impext-naming, hardcoded-banner-bid-type, unguarded-currency-overwrite` quirks (lines 272–284).
-- [../../test-fixtures/kobler.golden.spec.yaml](../../test-fixtures/kobler.golden.spec.yaml) — currency conversion, dev-prod toggle, two test-side `bidder-constant-mismatch` warnings. This skill owns `code.*` (lines 108–196), `tests.*` (lines 198–250), `cross_language.go_artifacts/java_artifacts/port_concerns/go_specific_concerns/java_specific_concerns/reviewer_cohort.go` (lines 308–350 minus the orchestrator-owned `port_lineage` block), and the four quirks (lines 290–306) `bidder-constant-mismatch-test`, `bidder-constant-mismatch-params-test`, `hardcoded-dev-endpoint`, `dev-prod-toggle-via-imp-ext-test-flag`.
+- [../../test-fixtures/kobler.golden.spec.yaml](../../test-fixtures/kobler.golden.spec.yaml) — currency conversion, dev-prod toggle, two test-side `bidder-constant-mismatch` warnings. This skill owns `code.*` (lines 108–196), `tests.*` (lines 198–250), `cross_language.go_artifacts/java_artifacts/port_concerns/go_specific_concerns/java_specific_concerns` (minus the orchestrator-owned `port_lineage` block), and the four quirks (lines 290–306) `bidder-constant-mismatch-test`, `bidder-constant-mismatch-params-test`, `hardcoded-dev-endpoint`, `dev-prod-toggle-via-imp-ext-test-flag`.
 
 A reader following this SKILL.md should produce a spec that matches these goldens byte-for-byte modulo `provenance.read.timestamp_utc`. Validation Rule R4 (round-trip determinism) is enforced by the orchestrator's CI harness.
 
@@ -218,7 +218,7 @@ A reader following this SKILL.md should produce a spec that matches these golden
 
 This skill links to the existing review/ master-truth references rather than re-listing canonical helpers:
 
-- **[../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md)** — module path, `EndpointTemplateParams` 18-field list, `errortypes.*` constructors, `jsonutil.*` helpers, `adapters.*` canonical helpers, anti-pattern list, test harness contract. This skill's classification rules cite it; do not copy.
+- **[../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md)** — module path, `EndpointTemplateParams` 22-field list, `errortypes.*` constructors, `jsonutil.*` helpers, `adapters.*` canonical helpers, anti-pattern list, test harness contract. This skill's classification rules cite it; do not copy.
 - **[../../../review/skills/adapter-code-pr-review/SKILL.md](../../../review/skills/adapter-code-pr-review/SKILL.md)** — review-time workflows for the same code (Builder, MakeRequests, MakeBids, etc.). The review skill prescribes; this skill describes.
 - **[../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md](../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md)** — adapter code patterns (Builder, MakeRequests, MakeBids, helpers). This skill's [adapter-code-patterns.md](references/adapter-code-patterns.md) adds READ-TIME classification rules on top.
 - **[../shared/adapter-spec.md](../shared/adapter-spec.md)** — canonical schema + Kobler worked example (Go and Java side by side).

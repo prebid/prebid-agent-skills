@@ -8,7 +8,7 @@ Complete YAML schema mapping for `src/main/resources/bidder-config/{x}.yaml` PLU
 - Usersync POJO: https://github.com/prebid/prebid-server-java/blob/master/src/main/java/org/prebid/server/spring/config/bidder/model/usersync/UsersyncConfigurationProperties.java
 - Canonical Spring config: https://github.com/prebid/prebid-server-java/blob/master/src/main/java/org/prebid/server/spring/config/bidder/KoblerConfiguration.java
 
-> **Sync policy:** Local snapshot. `pr-triage-java`'s Step 2 runs centralized drift checks against `bidder-config` (the base POJO) and `framework-spring-di` (`BidderDepsAssembler` + `UsersyncerCreator`); SKILL.md Step 1b reads those results. If the base class gains fields, update Part A; if assembler signatures change, update Part B.
+> **Sync policy:** Local snapshot pinned to upstream master `e3ffd57` (verified 2026-08-18). `pr-triage-java`'s Step 2 runs centralized drift checks against `bidder-config` (the base POJO) and `framework-spring-di` (`BidderDepsAssembler` + `UsersyncerUtil` + `BidderInfoCreator`); SKILL.md Step 1b reads those results. If the base class gains fields, update Part A; if assembler signatures change, update Part B.
 
 For framework-wide concerns (Spring DI conventions in detail, Lombok semantics, mvn-checkstyle ruleset, F-new trap catalog) see [../../shared/framework-utilities-java.md](../../shared/framework-utilities-java.md) — do NOT duplicate.
 
@@ -32,11 +32,11 @@ The `adapters` root is the Spring property prefix for the `BidderCatalog`. The `
 
 ### A.2 Top-level adapter fields (under `adapters.{x}`)
 
-These bind to `BidderConfigurationProperties` (the base class — **13 YAML-bindable fields** verified at SHA `a1fe64e123d6`) via Spring relaxed-binding. The base class also declares 2 non-binding internal fields (`defaultProperties` autowired, `selfClass` runtime-class reference) that are not part of the YAML surface.
+These bind to `BidderConfigurationProperties` (the base class — **13 YAML-bindable fields**: `enabled`, `ortbVersion`, `endpoint`, `pbsEnforcesCcpa`, `modifyingVastXmlAllowed`, `deprecatedNames`, `aliases`, `debug`, `metaInfo`, `usersync`, `endpointCompression`, `ortb`, `tmaxDeductionMs`; re-verified at SHA `e3ffd57`) via Spring relaxed-binding. The base class also declares 2 non-binding internal fields (`defaultProperties` autowired, `selfClass` runtime-class reference) that are not part of the YAML surface.
 
 | YAML Path | Java Field (base class) | Type | Required | Validation / Constraint | Reviewer Concerns |
 |-----------|-------------------------|------|----------|-------------------------|-------------------|
-| `endpoint` | `endpoint` | `String` | **Yes** | `@NotBlank` | URL well-formed; HTTPS preferred (HTTP permitted, INFO); macros `{{PREBID_SERVER_ENDPOINT}}` (framework-resolved via `resolveEndpoint` helper) or per-bidder tokens `{{adUnitId}}` (resolved in `{X}Bidder`). Non-template placeholders (`#{REGION}#`, `${X}`) require `enabled: false` + comment block (Rule 11 LANDED). See SKILL.md "Workflow: Endpoint Changed". |
+| `endpoint` | `endpoint` | `String` | **Yes** | `@NotBlank` | URL well-formed; HTTPS preferred (HTTP permitted, INFO); single-brace RFC 6570 macros `{PREBID_SERVER_ENDPOINT}` (framework-resolved via the `resolveEndpoint` helper) or per-bidder tokens `{adUnitId}` (resolved in `{X}Bidder` via `Uri.replaceMacro(...).expand()`). Double-braced macros are **FAIL** — `UriTemplate` will not expand them. Non-template placeholders (`#{REGION}#`, `${X}`) require `enabled: false` + comment block (Rule 11 LANDED). See SKILL.md "Workflow: Endpoint Changed". |
 | `enabled` | `enabled` | `Boolean` | No | — | Defaults to value in `DefaultBidderConfigurationProperties.enabled` (typically `true`). **Rule 45**: new bidder ships with `enabled: false` when region placeholders exist; aliases routinely ship with `enabled: false` (canonical Adverxo pattern). See SKILL.md "Workflow: Bidder Disabled". |
 | `ortb-version` | `ortbVersion` | `OrtbVersion` (enum) | No | — | Enum values: `ORTB_2_5`, `ORTB_2_6`. YAML accepts string `"2.6"` per Java edge case #29 quoting rule. Defaults to `DefaultBidderConfigurationProperties.ortbVersion`. |
 | `pbs-enforces-ccpa` | `pbsEnforcesCcpa` | `Boolean` | No | — | Rarely set per-bidder; framework default `true`. |
@@ -49,8 +49,8 @@ These bind to `BidderConfigurationProperties` (the base class — **13 YAML-bind
 | `endpoint-compression` | `endpointCompression` | `CompressionType` (enum) | No | — | Enum values: `NONE`, `GZIP`. Spring relaxed-binding accepts lowercase `gzip` or uppercase `GZIP` (both bind to `CompressionType.GZIP`). Value casing is case-insensitive on BOTH sides — Go `strings.ToUpper`s the value (`exchange/bidder.go:850`), Java uses relaxed enum binding. The strict requirement on each side is the field-NAME casing (Java kebab `endpoint-compression`; Go camelCase `endpointCompression`) — a field-name typo silently disables compression (FAIL). See SKILL.md "Workflow: Endpoint Compression Changed". |
 | `ortb` | `ortb` | `Ortb` (POJO) | No | see A.4 below | F-new-44 zone. Java's key is `ortb` (Go's is `openrtb`). |
 | `tmax-deduction-ms` | `tmaxDeductionMs` | `long` | No | — | Per-bidder timeout buffer subtracted from tmax. Operator-controlled. |
-| `geoscope` | `geoscope` | (NOT bound in current upstream — silently dropped by Spring relaxed-binding) | No | — | List of ISO 3166-1 alpha-3 country codes, `GLOBAL`, `EEA`, or `!`-prefix exclusions. **Verified at SHA `a1fe64e123d6`: `BidderConfigurationProperties` has NO `geoscope` field and `BidderInfoCreator` has NO `getGeoscope()` reference** — the key parses as YAML but Spring relaxed-binding finds no target setter, so it is silently discarded. Operators should treat the field as documentation-only until upstream binds it. The bare empty `geoscope:` line is the F-new-67/69/72 trap — **INFO**; omit the field entirely or supply a list. Reviewers flagging "geoscope changes" should note that the field is currently unbound. See SKILL.md "Workflow: Geoscope Changed". |
-| `white-label-only` | (custom property — consumed downstream) | `Boolean` | No | — | Marks the bidder as available only as a white-label parent (aliases reference it). Does NOT preclude Java adapter code on the parent. See SKILL.md "Workflow: White-Label Policy" + framework-utilities-java.md §1. |
+| `geoscope` | `geoscope` | (NOT bound in current upstream — silently dropped by Spring relaxed-binding) | No | — | List of ISO 3166-1 alpha-3 country codes, `GLOBAL`, `EEA`, or `!`-prefix exclusions. **Re-verified at SHA `e3ffd57`: `geoscope` appears in 26 `bidder-config/*.yaml` files but has ZERO occurrences anywhere under `src/main/java` — `BidderConfigurationProperties` has no `geoscope` field and `BidderInfoCreator` has no `getGeoscope()` reference** — the key parses as YAML but Spring relaxed-binding finds no target setter, so it is silently discarded. Operators should treat the field as documentation-only until upstream binds it. The bare empty `geoscope:` line is the F-new-67/69/72 trap — **INFO**; omit the field entirely or supply a list. Reviewers flagging "geoscope changes" should note that the field is currently unbound. See SKILL.md "Workflow: Geoscope Changed". |
+| `white-label-only` | **(no Java binding — key does not exist)** | — | No | — | **Go-only key** (`whiteLabelOnly` in `static/bidder-info/*.yaml`). Zero occurrences of `whiteLabelOnly` or `white-label-only` anywhere under `prebid-server-java/src/` at `e3ffd57`; `BidderConfigurationProperties` has no such field, so Spring relaxed-binding would silently drop it. Do not look for it, and do not ask for it. If a PR adds it: **INFO** — unbound key. See SKILL.md "Workflow: White-Label Policy" step 2. |
 | `extra-info` | (custom property) | `String` (JSON) | No | Must be valid JSON if present | Rarely used in Java; legacy of Go-side `extra_info`. |
 | custom keys, e.g. `dev-endpoint` | (declared on Rule 35 typed-subclass) | varies | No | typed-subclass `@NotBlank` etc. | Rule 35 typed-config — operator-defined fields that extend `BidderConfigurationProperties`. Canonical: Kobler's `dev-endpoint: ...` → `private String devEndpoint` in `KoblerConfigurationProperties extends BidderConfigurationProperties`. See SKILL.md "Workflow: Typed-Config Subclass" + Part C.5 below. |
 
@@ -92,7 +92,7 @@ adapters:
 |-----------|-----------|------|----------|------------|-------------------|
 | `ortb.multiformat-supported` | `multiFormatSupported` | `Boolean` | **Yes** when `ortb:` block present | `@NotNull` + `@JsonProperty("multiformat-supported")` | The `@JsonProperty` rename is required because relaxed-binding would otherwise map to `multiformatSupported` (one word). F-new-44 trap zone. Cross-language: Go's `openrtb.multiformat-supported`. |
 
-**Note**: `ortb.version` and `ortb.gpp-supported` are **NOT** in the Java `Ortb` POJO. The `ortb-version` field lives at adapter top-level (`adapters.{x}.ortb-version`, binding to `BidderConfigurationProperties.ortbVersion`). GPP support is signaled implicitly via the presence of `{{gpp}}` / `{{gpp_sid}}` macros in usersync URLs — there is no `gpp-supported` boolean in Java. SKILL.md cross-field rule #10 covers the macro-presence check.
+**Note**: `ortb.version` and `ortb.gpp-supported` are **NOT** in the Java `Ortb` POJO. The `ortb-version` field lives at adapter top-level (`adapters.{x}.ortb-version`, binding to `BidderConfigurationProperties.ortbVersion`). GPP support is signaled implicitly via the presence of `{gpp}` / `{gpp_sid}` macros (single brace) in usersync URLs — there is no `gpp-supported` boolean in Java. SKILL.md cross-field rule #10 covers the macro-presence check.
 
 ### A.5 `usersync` block (binds to `UsersyncConfigurationProperties` POJO)
 
@@ -103,7 +103,7 @@ adapters:
       enabled: true
       cookie-family-name: {x}
       iframe:
-        url: https://{host}/sync?gdpr={{gdpr}}&consent={{gdpr_consent}}&us_privacy={{us_privacy}}&redirect={{redirect_url}}
+        url: https://{host}/sync?gdpr={gdpr}&consent={gdpr_consent}&us_privacy={us_privacy}&redirect={redirect_url}
         uid-macro: '$UID'
         support-cors: false
       redirect:
@@ -126,8 +126,8 @@ adapters:
 
 | YAML Suffix | Java Field | Type | Required | Validation | Notes |
 |-------------|-----------|------|----------|------------|-------|
-| `.url` | `url` | `String` | **Yes** | `@NotBlank` | Required macros: `{{gdpr}}`, `{{gdpr_consent}}`, `{{us_privacy}}`, `{{redirect_url}}`. Optional: `{{gpp}}`, `{{gpp_sid}}`. **Java uses lowercase + underscore** (Port Translation Rule 12; Go uses `{{.GDPR}}`, `{{.GDPRConsent}}`). HTTPS required — HTTP usersync URLs are **FAIL**. |
-| `.uid-macro` | `uidMacro` | `String` | No | — | Bidder-specific token, e.g., `$UID`, `<vsid>`, `[USER_ID]`. |
+| `.url` | `url` | `String` | **Yes** | `@NotBlank` | Required macros, **single brace**: `{gdpr}`, `{gdpr_consent}`, `{us_privacy}`, `{redirect_url}`. Optional: `{gpp}`, `{gpp_sid}`. **Java uses lowercase + underscore + ONE brace** (Port Translation Rule 12; Go uses `{{.GDPR}}`, `{{.GDPRConsent}}` — the brace count differs too, not just the casing). Expanded by Vert.x `UriTemplate` since `bc0409271` (PR #4444); zero double-brace occurrences of these names exist under `src/` at `e3ffd57`. A `{{gdpr}}` here is **FAIL**. HTTPS required — HTTP usersync URLs are **FAIL**. |
+| `.uid-macro` | `uidMacro` | `String` | No | — | Bidder-specific opaque token — **exempt from the single-brace rule above**, because the bidder (not the framework) substitutes it. Valid shapes include `$UID`, `<vsid>`, `[USER_ID]`, `[UID]`, and double-braced forms. 7 upstream values are double-braced at `e3ffd57` (`tappx` `{{TPPXUID}}`, `frvradn` `{{UID}}`, `lockerdome` `{{uid}}`, `vidoomy` `{{VID}}`, `ogury` `{{OGURY_UID}}` ×2, `avocet` `{{UUID}}`). Flagging these is a **false positive**. |
 | `.support-cors` | `supportCors` | `Boolean` | **Yes** when method block present | `@NotNull` | Boolean. |
 | `.format-override` | `formatOverride` | `UsersyncFormat` (enum) | No | — | Enum: `BLANK`, `IMAGE`. |
 
@@ -142,7 +142,7 @@ aliases:
 aliases:
   adport:
     enabled: false
-    endpoint: https://adport.pbsadverxo.com/auction?id={{adUnitId}}&auth={{auth}}
+    endpoint: https://adport.pbsadverxo.com/auction?id={adUnitId}&auth={auth}
     usersync:
       enabled: false
       cookie-family-name: adport
@@ -180,7 +180,7 @@ The `{X}Configuration.java` / `{X}BidderConfiguration.java` file (filename varia
 |------------|----------|---------|-------------------|
 | `@Configuration` | **Yes** | Marks class as a Spring singleton bean factory | Missing is **FAIL** — Spring will not instantiate. |
 | `@PropertySource(value = "classpath:/bidder-config/{x}.yaml", factory = YamlPropertySourceFactory.class)` | **Yes** | Wires the per-bidder YAML into Spring's property environment | The `value` path MUST match the actual YAML filename; the `factory` MUST be `YamlPropertySourceFactory.class` (Spring's default factory is .properties-only). See SKILL.md "Workflow: PropertySource Wiring". |
-| `@ConditionalOnProperty(prefix = "adapters.{x}", name = "enabled", havingValue = "true")` | No | Conditional activation; skips bean instantiation when `adapters.{x}.enabled=false` | Used by some bidders for env-toggled activation; not part of the canonical Kobler template. When present, must reference the same `adapters.{x}` prefix as `@ConfigurationProperties`. |
+| `@ConditionalOnProperty(...)` | **Never used here** | (would gate bean instantiation on a property) | **Zero** occurrences under `src/main/java/org/prebid/server/spring/config/bidder/` at `e3ffd57`. Per-bidder enablement is handled by `BidderConfigurationProperties.enabled` — the assembler's private `bidder(CFG)` substitutes a `DisabledBidder` when `getEnabled()` is false. Do not expect, require, or pattern-match this annotation on a bidder Configuration class. |
 
 ### B.2 Method-level annotations + signatures
 
@@ -199,7 +199,7 @@ The `{X}Configuration.java` / `{X}BidderConfiguration.java` file (filename varia
 | `@Bean("{x}ConfigurationProperties")` | **Yes** | Bean name MUST match Spring autowire-by-name pattern (lowercase + suffix `ConfigurationProperties`) | Mismatch with the `bidderDeps` parameter name breaks autowiring → **FAIL**. SKILL.md cross-field rule #3. |
 | `@ConfigurationProperties("adapters.{x}")` | **Yes** | Prefix MUST equal the YAML wrapper key (`adapters.{x}`) | Mismatch produces silent zero-field binding → **FAIL**. SKILL.md cross-field rule #4. |
 | Return type | **Yes** | When no Rule 35 subclass: `BidderConfigurationProperties`. When Rule 35: `{X}ConfigurationProperties extends BidderConfigurationProperties` | If a Rule 35 subclass is declared but the bean returns the base class, the typed fields are unreachable → **FAIL**. SKILL.md cross-field rule #6. |
-| `@Validated` (on subclass) | When Rule 35 | Triggers jakarta validation at startup | Without `@Validated`, `@NotBlank`/`@NotNull` on subclass fields are inert. See framework-utilities-java.md §1.7. |
+| `@Validated` (on subclass) | No — redundant | Nothing the parent does not already do | The parent `BidderConfigurationProperties` is `@Validated` and spring resolves it up the type hierarchy, so subclass constraints fire without it. 8 of 255 repeat it. Not a blocker. See framework-utilities-java.md §1.7. |
 
 #### B.2.2 The `BidderDeps` bean factory (canonical Kobler signature)
 
@@ -211,8 +211,7 @@ BidderDeps {x}BidderDeps({X}ConfigurationProperties config,
                           JacksonMapper mapper) {
     return BidderDepsAssembler.<{X}ConfigurationProperties>forBidder(BIDDER_NAME)
             .withConfig(config)
-            .usersyncerCreator(UsersyncerCreator.create(externalUrl))
-            .bidderCreator(cfg -> new {X}Bidder(
+                        .bidderCreator(cfg -> new {X}Bidder(
                     cfg.getEndpoint(),
                     // ... other constructor args from cfg + injected deps
                     mapper))
@@ -226,7 +225,7 @@ BidderDeps {x}BidderDeps({X}ConfigurationProperties config,
 | Method name `{x}BidderDeps` | **Yes** | Spring autowire-by-name. Bean parameter name MUST match the `@Bean("{x}ConfigurationProperties")` name. SKILL.md cross-field rule #3. |
 | Return type `BidderDeps` | **Yes** | The terminal type returned by `BidderDepsAssembler.assemble()`. |
 | Parameter `{X}ConfigurationProperties config` | **Yes** | Type must match the Rule 35 subclass (when declared) — NOT the base class. SKILL.md cross-field rule #6. |
-| `@NotBlank @Value("${external-url}") String externalUrl` | **Yes** when usersync present | Spring property; the `external-url` is the prebid-server's externally-reachable host. Used by `UsersyncerCreator`. |
+| `@NotBlank @Value("${external-url}") String externalUrl` | **Yes** when the endpoint carries `{PREBID_SERVER_ENDPOINT}` | Spring property; the prebid-server's externally-reachable host. Consumed by the `resolveEndpoint(...)` helper. **NOT** related to usersync — a bidder with usersync but no endpoint macro takes no `externalUrl` (`AdprimeConfiguration`, `KoblerConfiguration`). |
 | `JacksonMapper mapper` | Common | Inject when `{X}Bidder` does any JSON serialization (almost all do). |
 | Bidder-specific deps (e.g., `CurrencyConversionService`, `BidderAliases`, `Clock`) | varies | Injected based on `{X}Bidder` constructor needs. Order doesn't matter (Spring resolves by type). Each must be a real Spring bean — pr-triage-java's framework-spring-di drift check guards the well-known deps. |
 
@@ -236,23 +235,27 @@ BidderDeps {x}BidderDeps({X}ConfigurationProperties config,
 |--------|----------|-------------------|
 | `BidderDepsAssembler.<{X}ConfigurationProperties>forBidder(BIDDER_NAME)` | **Yes** | Static factory. **The generic type parameter MUST match the `@Bean` return type** (the Rule 35 subclass, or base class). Missing the generic causes raw-type warnings; mismatched generic is a compile error. SKILL.md "Workflow: BidderDepsAssembler Generic". |
 | `.withConfig(config)` | **Yes** | Binds the `@ConfigurationProperties` instance into the assembler. SKILL.md "Workflow: withConfig Binding". |
-| `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` | When usersync declared | If YAML declares `usersync:` block, this line MUST appear; otherwise omit. Inconsistency: **FAIL**. SKILL.md "Workflow: UsersyncerCreator URL". |
+| `.usersyncerCreator(...)` | **NEVER** | **FAIL — HIGH BLOCKING (compile error).** Neither the method nor the `UsersyncerCreator` class exists at `e3ffd57`; both were deleted in `2880782f` (PR #4464, merged 2026-07-09). The assembler derives the `Usersyncer` in its private `usersyncer(CFG)` method from `configProperties.getUsersync()` via `UsersyncerUtil.create(usersync)`. **A YAML `usersync:` block requires NO line in the chain** — canonical: `AdprimeConfiguration.java` (full iframe + redirect usersync, four-link chain). SKILL.md "Workflow: Assembler Chain Surface". |
 | `.bidderCreator(cfg -> new {X}Bidder(...))` | **Yes** | The lambda constructs the bidder. **HIGH PRIORITY F-new-57 trap zone**: each constructor arg must match `{X}Bidder.java`'s declared constructor signature (arg count, order, type). Cross-skill READ verifies against `{X}Bidder.java`. SKILL.md "Workflow: bidderCreator Lambda". |
-| `.bidderInfo(...)` | **NEVER** | **F-new-57b trap (HIGH BLOCKING FAIL — compile error)**: spurious `.bidderInfo(...)` call inserted by port-go2java template. Verified against `BidderDepsAssembler.java` at SHA `a1fe64e123d6`: there is NO public `.bidderInfo(...)` method on the assembler — the public surface is `forBidder`, `withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`. The assembler auto-creates `BidderInfo` internally inside `coreDeps()` from the `@ConfigurationProperties`'d YAML. Any `.bidderInfo(...)` call will NOT COMPILE. **FAIL** when present. Provenance: NEW finding from the F4 review-skill-suite framework-doc audit (not in the D2.8 cross-canary catalog; surfaced when grep-verifying upstream confirmed the method is absent). See framework-utilities-java.md §1.5. |
+| `.bidderInfo(...)` | **NEVER** | **F-new-57b trap (HIGH BLOCKING FAIL — compile error)**: spurious `.bidderInfo(...)` call inserted by port-go2java template. Verified against `BidderDepsAssembler.java` at SHA `e3ffd57`: there is NO public `.bidderInfo(...)` method — the complete public surface is `forBidder`, `withConfig`, `bidderCreator`, `assemble`. The assembler builds `BidderInfo` internally in `coreDeps()` via `BidderInfoCreator.create(configProperties)`. Any `.bidderInfo(...)` call will NOT COMPILE. **FAIL** when present. See framework-utilities-java.md §1.1a + §1.5. |
 | `.assemble()` | **Yes** | Terminal call returning `BidderDeps`. Missing is a compile error. |
 
 #### B.2.4 The `resolveEndpoint(...)` helper (when present)
 
 ```java
-private static String resolveEndpoint(String externalUrl) {
-    return "https://prebid.aaxads.com/rtb/pb/aax-prebid?src=" + externalUrl;
+private static final String EXTERNAL_URL_MACRO = "PREBID_SERVER_ENDPOINT";   // BARE name, no braces
+
+private String resolveEndpoint(String configEndpoint, String externalUrl) {
+    return Uri.of(configEndpoint).replaceMacro(EXTERNAL_URL_MACRO, externalUrl).expand();
 }
 ```
 
-Used by bidders whose endpoint embeds the framework-level macro `{{PREBID_SERVER_ENDPOINT}}` (canonical: AAX). The helper resolves the macro at bean-construction time using the injected `external-url` Spring property. SKILL.md "Workflow: resolveEndpoint Helper".
+Verbatim from `AaxConfiguration.java:42-44` at `e3ffd57`. It is a **2-arg private instance method**, not a 1-arg static one. Only two Configuration classes declare it — `AaxConfiguration` and `MedianetConfiguration` — and both use this exact shape. SKILL.md "Workflow: resolveEndpoint Helper".
 
-- When the YAML endpoint contains `{{PREBID_SERVER_ENDPOINT}}`, this helper MUST exist AND be called from the `bidderCreator` lambda (`cfg -> new {X}Bidder(resolveEndpoint(cfg.getEndpoint()), ...)`). SKILL.md cross-field rule #5.
-- Per-bidder template tokens (`{{adUnitId}}`) are NOT resolved here — they pass through to `{X}Bidder`'s `makeHttpRequests(...)`.
+- When the YAML endpoint contains `{PREBID_SERVER_ENDPOINT}`, this helper MUST exist AND be called from the `bidderCreator` lambda as `config -> new {X}Bidder(resolveEndpoint(config.getEndpoint(), externalUrl), mapper)`. SKILL.md cross-field rule #5.
+- The macro constant is the **bare** variable name. `replaceMacro` keys on the name, so a braced constant never matches and `expand()` throws `NoSuchElementException`. **FAIL** on a braced constant.
+- **No `HttpUtil.encodeUrl(...)`.** `UriTemplate` handles escaping, and zero files under `spring/config/bidder/` call `encodeUrl` at `e3ffd57`. An added `encodeUrl` double-encodes — **WARN**.
+- Per-bidder template tokens (`{adUnitId}`) are NOT resolved here — they pass through to `{X}Bidder`'s `makeHttpRequests(...)`.
 
 ### B.3 Rule 35 typed-config subclass
 
@@ -270,17 +273,17 @@ private static class KoblerConfigurationProperties extends BidderConfigurationPr
 }
 ```
 
-Located at the bottom of `{X}Configuration.java`. Canonical: Kobler, Rubicon, Appnexus, Adnuntius.
+Located at the bottom of `{X}Configuration.java`. **This is the only form upstream ships** — 16 of 16 at `e3ffd57`. Canonical: Kobler, Magnite (renamed from Rubicon in PR #4573), Appnexus, Adnuntius. One instance is `public static class` rather than `private static class` (`TripleliftNativeConfiguration.java`); both modifiers are accepted.
 
 #### B.3.2 Separate-file form
 
-Same class shape but lives at `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java`. **No upstream example exists at SHA `a1fe64e123d6`** — all currently-shipped Rule 35 subclasses are inner classes (Kobler, TheTradeDesk, Adnuntius). The separate-file form remains design-permitted and reviewer-accepted (the activation table in SKILL.md routes it to this skill), but reviewers should NOT cite a non-existent upstream example. When a PR introduces the separate-file form, the typed-subclass workflow applies verbatim.
+Same class shape but lives at `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java`. **No upstream example exists at SHA `e3ffd57`** — all 16 currently-shipped Rule 35 subclasses are nested classes (Kobler, Magnite, Appnexus, Adnuntius, TheTradeDesk, …), and the only files whose names end in `BidderConfigurationProperties.java` are the framework's own `model/BidderConfigurationProperties.java` and `model/DefaultBidderConfigurationProperties.java`. **Rule 35 detection must key on the nested `class {X}ConfigurationProperties extends BidderConfigurationProperties` declaration, not on a filename.** A PR may still ship the separate-file form — the activation table in SKILL.md routes it here and the typed-subclass workflow applies verbatim — but there is no upstream precedent to cite for or against it, so a review must not present either shape as required. This repo's own `port-go2java` used to emit the separate form and now emits the nested one, for the same reason: 16 of 16 upstream.
 
 #### B.3.3 Required annotations (subclass)
 
 | Annotation | Required | Purpose | Reviewer Concerns |
 |------------|----------|---------|-------------------|
-| `@Validated` | **Yes** | Triggers jakarta validation on the subclass fields | Without it, `@NotBlank`/`@NotNull` are inert. See framework-utilities-java.md §1.7 + §2.5. |
+| `@Validated` | No — redundant | Nothing the parent does not already do | Inherited in effect from `BidderConfigurationProperties`; subclass constraints fire without it. Conventional on 8 of 255. See framework-utilities-java.md §1.7. |
 | `@Data` | **Yes** | Lombok-generates getters + setters + toString + equals + hashCode | Required because Spring relaxed-binding uses setters. |
 | `@EqualsAndHashCode(callSuper = true)` | **Yes** | Lombok delegates to base class's equals/hashCode | `callSuper = true` is mandatory; without it, two instances with different parent-field values compare equal. See framework-utilities-java.md §2.5. (F-new-59 is specifically the `lombok.Data` *import-ordering* trap — see §B.4 / framework-utilities-java.md §6.3 — not this annotation's `callSuper` parameter.) |
 | `@NoArgsConstructor` | **Yes** | Lombok-generates no-arg constructor | Spring requires no-arg constructor for `@ConfigurationProperties` instantiation. |
@@ -314,7 +317,6 @@ import org.prebid.server.currency.CurrencyConversionService;
 import org.prebid.server.json.JacksonMapper;
 import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;
 import org.prebid.server.spring.config.bidder.util.BidderDepsAssembler;
-import org.prebid.server.spring.config.bidder.util.UsersyncerCreator;
 import org.prebid.server.spring.env.YamlPropertySourceFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -349,19 +351,19 @@ Apply ONLY when both sides are touched in the same PR OR when one side is being 
 | # | Rule | Sides | Severity on Mismatch |
 |---|------|-------|---------------------|
 | C.1 | YAML `adapters.{x}` key ↔ `BIDDER_NAME` constant in `{X}Configuration.java` (case-sensitive lowercase) | YAML ↔ Java | **FAIL** |
-| C.2 | YAML `endpoint:` framework macro `{{PREBID_SERVER_ENDPOINT}}` ↔ `resolveEndpoint(...)` helper presence | YAML ↔ Java | **FAIL** when macro present and helper missing |
+| C.2 | YAML `endpoint:` framework macro `{PREBID_SERVER_ENDPOINT}` (single brace) ↔ `resolveEndpoint(...)` helper presence | YAML ↔ Java | **FAIL** when macro present and helper missing; **FAIL** independently if the macro is double-braced |
 | C.3 | `@Bean("{x}ConfigurationProperties")` bean name ↔ `bidderDeps(...)` first-parameter name | Java ↔ Java | **FAIL** |
 | C.4 | `@ConfigurationProperties("adapters.{x}")` prefix ↔ YAML wrapper key | YAML ↔ Java | **FAIL** (silent zero-field binding) |
 | C.5 | Rule 35 subclass declared ↔ `@Bean` return type ↔ `.withConfig(...)` arg type ↔ `BidderDepsAssembler.<T>` generic | Java ↔ Java | **FAIL** |
 | C.6 | Rule 35 subclass `@NotBlank` field ↔ YAML field present + non-empty | YAML ↔ Java | **FAIL** (startup `BeanCreationException`) |
-| C.7 | YAML `aliases.{alias}.endpoint` macros ↔ parent's `resolveEndpoint` + parent's `{X}Bidder` macro consumers (cross-skill 5a) | YAML ↔ Java/cross-skill | **FAIL** when literal `{{TOKEN}}` would leak at runtime |
-| C.8 | YAML `usersync:` block declared ↔ `.usersyncerCreator(...)` line present in `bidderDeps(...)` | YAML ↔ Java | **FAIL** |
-| C.9 | YAML usersync URL contains `{{gpp}}` / `{{gpp_sid}}` ↔ implicit GPP support claim | YAML internal | **WARN** when macros absent but bidder claims GPP elsewhere |
+| C.7 | YAML `aliases.{alias}.endpoint` macros ↔ parent's `resolveEndpoint` + parent's `{X}Bidder` macro consumers (cross-skill 5a) | YAML ↔ Java/cross-skill | **FAIL** when an unresolved `{Token}` would make `Uri.expand()` throw at request time |
+| C.8 | Any method on the `BidderDepsAssembler` chain outside `forBidder` / `withConfig` / `bidderCreator` / `assemble` (e.g. `.usersyncerCreator(...)`, `.bidderInfo(...)`) | Java internal | **FAIL — HIGH BLOCKING** (compile error). A YAML `usersync:` block requires **no** chain line; the assembler derives the `Usersyncer` internally. |
+| C.9 | YAML usersync URL contains `{gpp}` / `{gpp_sid}` (single brace) ↔ implicit GPP support claim | YAML internal | **WARN** when macros absent but bidder claims GPP elsewhere |
 | C.10 | YAML `meta-info.{app,site,dooh}-media-types` ↔ `{X}Bidder.java` `makeHttpRequests(...)` handles each declared type | YAML ↔ Java/cross-skill | **WARN** (deferred to bidder-class-pr-review for definitive code-side check) |
 | C.11 | YAML `aliases.{alias}.cookie-family-name` (when full-block) ↔ alias name | YAML internal | **FAIL** |
-| C.12 | YAML `aliases:` non-empty ↔ `white-label-only: true` (when claimed) | YAML internal | **WARN** on empty aliases for whitelabel parent |
+| C.12 | White-label parent claimed in the PR description ↔ `aliases:` block non-empty | YAML ↔ PR text | **WARN** on empty aliases. Judge the claim from the PR description and diff shape — there is no `white-label-only` key to read on the Java side. |
 | C.13 | `bidderCreator` lambda arg list (count + order + types) ↔ `{X}Bidder.java` constructor signature | Java ↔ cross-skill | **FAIL** — the F-new-57 trap |
-| C.14 | Java-side `.bidderInfo(...)` call presence on `BidderDepsAssembler` | Java internal | **FAIL — HIGH BLOCKING** (F-new-57b: method does not exist on the assembler at SHA `a1fe64e123d6`; will not compile) |
+| C.14 | Java-side `.bidderInfo(...)` call presence on `BidderDepsAssembler` | Java internal | **FAIL — HIGH BLOCKING** (F-new-57b: method does not exist on the assembler at `e3ffd57`; will not compile) |
 | C.15 | Imports in canonical 3-group order | Java internal | **FAIL** — F-new-58/59 + CI annotation |
 | C.16 | `public class {Name}` matches filename root | Java internal | **FAIL** — F-new-79 OuterTypeFilename |
 | C.17 | YAML alias added ↔ `test-application.properties` registry entry (cross-skill 5i) | YAML ↔ cross-skill | **FAIL** when registry entry absent |

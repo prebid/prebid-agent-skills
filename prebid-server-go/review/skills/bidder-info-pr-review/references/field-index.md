@@ -54,7 +54,7 @@ type BidderInfo struct {
 | `capabilities` | Capabilities | *CapabilitiesInfo | Yes | `validateCapabilities()` |
 | `modifyingVastXmlAllowed` | ModifyingVastXmlAllowed | bool | No | Default: true |
 | `debug` | Debug | *DebugInfo | No | — |
-| `geoscope` | Geoscope | []string | No | `validateGeoscope()` |
+| `geoscope` | Geoscope | []string | No | `validateGeoscope()` — **case-insensitive**: each entry is `strings.ToUpper(strings.TrimSpace(...))`-ed before every comparison, so lowercase entries pass. Uppercase is conventional; lowercase `global` is the dominant master form (27 files vs 1 `GLOBAL`). Casing is not a defect — do not FAIL or WARN on it. |
 | `gvlVendorID` | GVLVendorID | uint16 | No | Must be > 0 if present |
 | `userSync` | Syncer | *Syncer | No | `validateSyncer()` |
 | `experiment` | Experiment | BidderInfoExperiment | No | — |
@@ -249,14 +249,15 @@ Patterns surfaced from review of the 89 reference adapter PRs (`prebid-server-go
 - **Standard alias** (2 lines): `endpoint:` + `aliasOf: parent` — most SmartHub/Limelight/Adkernel family aliases.
 - **Alias with override**: `aliasOf:` + override fields (`gvlVendorID`, `endpoint`, `maintainer`, `userSync`).
 - **Disabled-by-default + region placeholder**: when `endpoint` contains a non-Go-template placeholder (e.g., `#{REGION}#`, `${X}`), the YAML MUST set `disabled: true` and include a comment block listing valid values (PR #4502 appStockSSP).
-- **White-label parent**: parent has full Go adapter + `whiteLabelOnly: true` (TeqBlaze, SmartHub). Aliases reference the parent's name. The Go code of the parent serves the aliases — `whiteLabelOnly: true` does NOT preclude Go code.
-- **HTTP endpoint tolerated**: HTTPS preferred but HTTP permitted per `bsardo` PR #4211 quote. Limelight family adapters routinely use HTTP.
-- **GVL inheritance quirk**: aliases cannot effectively override the parent's GVL vendor ID — `config/bidderinfo.go` deliberately inherits whether the alias sets `gvlVendorID: 0` or omits the field. Setting `gvlVendorID: 0` adds confusion; reviewers ask to remove it (PR #4329).
+- **Alias parent**: a parent with many aliases keeps its own Go adapter, which serves the aliases. At @0ba3523 the largest are `teqblaze` (25 aliases), `limelightDigital` (23), `smarthub` (11). `whiteLabelOnly: true` does NOT preclude Go code — but it is also NOT the alias-parent marker: `teqblaze.yaml` is the only upstream file that sets it, and `smarthub.yaml` serves 11 aliases without it. Key alias-parent reasoning on alias count, not on the flag.
+- **`whiteLabelOnly` + `aliasOf` is a startup abort**: `validateAliases` (`config/bidderinfo.go:461-463`) returns `bidder '%s' is an alias and cannot be set as white label only`, reaching `logger.Fatalf` through `processBidderAliases` → `LoadBidderInfoFromDisk`. **FAIL**.
+- **HTTP endpoint tolerated**: HTTPS preferred but HTTP permitted per PR #4211. Limelight family adapters routinely use HTTP.
+- **GVL vendor ID is NEVER inherited by an alias**: `config/bidderinfo.go:371-373` states the alias's `GVLVendorID` is intentionally never set from the parent, "as inheriting from the parent is not safe for legal reasons"; the merge block below it copies nine other fields and omits this one. `ToGVLVendorIDMap` (`:428-436`) then drops any bidder with `GVLVendorID == 0`, so an alias omitting the field gets no GDPR vendor registration. A non-zero declaration on an alias is the required form (**PASS**); omission where the parent has a GVL is **WARN**; `gvlVendorID: 0` is **WARN** for removal (PR #4329). 44 of 113 upstream alias YAMLs declare their own.
 - **GVL name tolerance**: GVL ID 377 = "AddApptr GmbH" but PR #4547 (Gravite) was accepted because privacy URL is gravite.net — corporate restructure case. GVL name mismatches are tolerated when there's a credible relationship.
-- **modifyingVastXmlAllowed**: rare; only seen in #4522 alliance_gravity. Set deliberately when video adapter wants to opt-in/opt-out of VAST modification tracking.
-- **endpointCompression: GZIP** is increasingly common (4+ PRs in 2025–2026). Suggest as INFO when adapter handles large requests. Uppercase `"GZIP"` is the convention, but the runtime `strings.ToUpper`s the value (`exchange/bidder.go:850`) so any value casing works — flag a non-uppercase value as INFO, not FAIL. The FAIL case is a field-NAME typo (`endpoint-compression`), not value casing.
+- **modifyingVastXmlAllowed**: common — 61 `static/bidder-info/*.yaml` files carry the key at @0ba3523. Do not flag its presence as unusual; verify the value is deliberate for a video adapter opting in or out of VAST modification tracking.
+- **endpointCompression**: the runtime `strings.ToUpper`s the value before comparing it to the `Gzip = "GZIP"` constant (`exchange/bidder.go:849-850`; constant at `:100`), so any casing works and there is no uppercase convention to enforce — lowercase `gzip` is in fact the majority upstream (58 vs 16 at @0ba3523). Emit no finding on value casing. The FAIL case is a field-NAME typo (`endpoint-compression` / `endpoint_compression`), which does not bind and silently disables compression.
 - **userSync.supports list**: declares which sync types (`iframe`, `redirect`) the bidder supports without providing default URLs (host configures URLs). Common when bidder requires onboarding before sync activation.
-- **Bidder rename for major version**: rename PRs (e.g., `progx` → `programmaticX` PR #4456) are deferred to the next major release (v3 → v4) due to breaking-change semantics. Flag rename intent as INFO.
+- **Bidder rename for major version**: rename PRs (e.g., `adoppler` → `elementaltv` PR #4639) are deferred to the next major release due to breaking-change semantics. Flag rename intent as INFO.
 
 ---
 
@@ -268,7 +269,7 @@ Patterns surfaced from review of the 89 reference adapter PRs (`prebid-server-go
 | `validateAdapterEndpoint()` | Endpoint URL validity, template macro resolution |
 | `validateInfo()` | Maintainer, geoscope, capabilities |
 | `validateMaintainer()` | `maintainer.email` must exist |
-| `validateGeoscope()` | ISO 3166-1 alpha-3, `GLOBAL`, `EEA`, `!` prefix |
+| `validateGeoscope()` | ISO 3166-1 alpha-3, `GLOBAL`, `EEA`, `!` prefix. Upper-cases and trims each entry before every comparison (`config/bidderinfo.go:645-675`), so the check is case-insensitive and lowercase entries validate — casing is never a defect. |
 | `validateCapabilities()` | At least one platform with valid media types |
 | `validatePlatformInfo()` | Media types: `banner`, `video`, `native`, `audio` |
 | `validateAliasCapabilities()` | Alias capabilities subset of parent |
@@ -322,23 +323,90 @@ xapi.password
 xapi.tracker
 ```
 
----
+## Regeneration commands
 
-## Pattern Catalog
+Commands behind the counts quoted in `SKILL.md`. They live here rather than in the SKILL body because that body is loaded into context on every review; the numbers belong in the check, the shell does not.
 
-Patterns extracted from periodic review of the 89 reference adapter PRs. Stable schema; cap 8 entries per skill.
+**Command 1** — run in a `prebid/prebid-server` checkout at the pinned SHA.
 
-### Schema
-
+```bash
+     # in a prebid-server checkout
+     python3 - <<'EOF'
+     import glob, os, json, yaml
+     d = {os.path.basename(f)[:-5]: yaml.safe_load(open(f)) or {} for f in glob.glob('static/bidder-info/*.yaml')}
+     a = {n: v for n, v in d.items() if v.get('aliasOf')}
+     for k in ('capabilities', 'userSync', 'gvlVendorID'):
+         dec = [n for n in a if k in a[n]]
+         same = [n for n in dec if k in d.get(a[n]['aliasOf'], {})
+                 and json.dumps(d[a[n]['aliasOf']][k], sort_keys=True) == json.dumps(a[n][k], sort_keys=True)]
+         print(k, len(a), len(dec), len(same))   # capabilities 113 12 11 | userSync 113 55 20 | gvlVendorID 113 44 18
+     EOF
 ```
-### Pattern P-{NN}: {short title}
-- Symptom in diff: {what the diff looks like}
-- Frequency observed: {N of total reference PRs}
-- Affected workflow: {Workflow link}
-- Severity: FAIL | WARN | INFO
-- Action: {what the skill does when it sees this}
+
+**Command 2** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+   # in a prebid-server checkout — regenerate the 115/349 split
+   python3 - <<'EOF'
+   import glob, os, re, yaml
+   from urllib.parse import urlparse
+   tot = un = 0
+   for p in glob.glob('static/bidder-info/*.yaml'):
+       b = os.path.basename(p)[:-5]
+       ep = (yaml.safe_load(open(p)) or {}).get('endpoint')
+       if not isinstance(ep, str): continue
+       h = urlparse(ep).netloc.lower()
+       if not h: continue
+       tot += 1
+       nb, nh = re.sub(r'[^a-z0-9]', '', b.lower()), re.sub(r'[^a-z0-9]', '', h)
+       if not any(nb[i:i + 5] in nh for i in range(max(1, len(nb) - 4))): un += 1
+   print(tot, un)   # 349 115
+   EOF
 ```
 
-### Entries
+**Command 3** — run in a `prebid/prebid-server` checkout at the pinned SHA.
 
-(Populated by current refresh — see SKILL.md for the active rule list.)
+```bash
+  # in a prebid-server checkout — counted at master @0ba3523
+  grep -lE '^ +- *"?!?global"?$' static/bidder-info/*.yaml | wc -l   # 27
+  grep -lE '^ +- *"?!?GLOBAL"?$' static/bidder-info/*.yaml | wc -l   # 1
+  grep -lE '^geoscope:' static/bidder-info/*.yaml | wc -l            # 47 files declare the field
+```
+
+**Command 4** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+    python3 - <<'EOF'
+    import glob, json, yaml
+    m = f = both = 0
+    for p in glob.glob('static/bidder-info/*.yaml'):
+        d = yaml.safe_load(open(p)) or {}
+        macro = any(x in json.dumps(d.get('userSync') or {}) for x in ('{{.GPP}}', '{{.GPPSID}}'))
+        flag = bool((d.get('openrtb') or {}).get('gpp-supported'))
+        m += macro; f += flag; both += macro and flag
+    print(m, f, both)   # 90 26 16  -> 74 macro-without-flag
+    EOF
+```
+
+**Command 5** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+    # in a prebid-server checkout — adapters sending a 2.6 header, vs what their YAML declares
+    python3 - <<'EOF'
+    import glob, os, re, yaml
+    send26 = set()
+    for f in glob.glob('adapters/*/*.go'):
+        if f.endswith('_test.go'):
+            continue
+        t = open(f, errors='ignore').read()
+        if not re.search(r'(?i)x-openrtb-version', t):
+            continue                                  # header sent inline, or via a named constant:
+        if re.search(r'(?i)x-openrtb-version[^\n]{0,60}2\.6', t) or re.search(r'(?i)\w*openrtbversion\w*\s*=\s*"2\.6"', t):
+            send26.add(f.split('/')[1])
+    for b in sorted(send26):
+        p = 'static/bidder-info/%s.yaml' % b
+        v = ((yaml.safe_load(open(p)) or {}).get('openrtb') or {}).get('version') if os.path.exists(p) else None
+        print('%-14s %s' % (b, v or 'NO openrtb.version -> request is down-converted to 2.5'))
+    EOF
+    # at master @0ba3523: 7 senders; madsense / resetdigital / trustx declare no openrtb.version
+```

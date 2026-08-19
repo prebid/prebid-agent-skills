@@ -23,7 +23,7 @@ Less standardized; the port skill emits this shape and operators may adjust.
 
 ## 3. PR body convention
 
-Distilled from real merged PRs (notably `kobler` PR #3904, `adverxo` PR #3921, recent zero-config adapters in 2026). The port skill emits:
+Distilled from real merged PRs (notably `kobler` PR #3904, `adverxo` PR #4018, recent zero-config adapters in 2026). The port skill emits:
 
 ```markdown
 ## Summary

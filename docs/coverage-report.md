@@ -127,7 +127,7 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 
 | # | Title | Mentioned bidders | Covered | Uncovered |
 |---|---|---|---|---|
-| Rule 38 | bidder_params_json byte-fidelity contract | (generic) | 0 | 0 |
+| Rule 38 | bidder_params_ref byte-fidelity contract | `kobler` | 1 | 0 |
 | Rule 39 | params.schema_interpretation is a derived view, not translated | (generic) | 0 | 0 |
 | Rule  1 | Standard ExtPrebid two-phase wrapper | (generic) | 0 | 0 |
 | Rule  2 | Direct unmarshal to custom wrapper | (generic) | 0 | 0 |
@@ -184,7 +184,7 @@ _No port-report.json files discovered yet — the table below renders all-zero c
 
 | # | Title | Exercised | Applied | Applied⚠ | Skipped (N/A) | Skipped (src-only) |
 |---|---|---|---|---|---|---|
-| Rule 38 | bidder_params_json byte-fidelity contract | 0 | 0 | 0 | 0 | 0 |
+| Rule 38 | bidder_params_ref byte-fidelity contract | 0 | 0 | 0 | 0 | 0 |
 | Rule 39 | params.schema_interpretation is a derived view, not translated | 0 | 0 | 0 | 0 | 0 |
 | Rule  1 | Standard ExtPrebid two-phase wrapper | 0 | 0 | 0 | 0 | 0 |
 | Rule  2 | Direct unmarshal to custom wrapper | 0 | 0 | 0 | 0 | 0 |

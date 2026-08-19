@@ -7,7 +7,7 @@ Phase D1.3 deliverable — alphabetical insertion-position rules for Go-side fil
 | File | Edit kind | Sort | Helper |
 |---|---|---|---|
 | `static/bidder-info/{bidder}.yaml` | Create | N/A (one file per bidder) | direct write |
-| `static/bidder-params/{bidder}.json` | Create | N/A (one file per bidder) | `byte_copy` |
+| `static/bidder-params/{bidder}.json` | Create | N/A (one file per bidder) | `materialize_params` + binary write |
 | `adapters/{bidder}/{bidder}.go` | Create | N/A | direct write + `gofmt -s -w` |
 | `adapters/{bidder}/{bidder}_test.go` | Create | N/A | direct write + `gofmt -s -w` |
 | `adapters/{bidder}/{bidder}test/exemplary/*.json` | Create | N/A | direct write |
@@ -116,7 +116,7 @@ Examples:
 
 ## Connection to other rules
 
-- Rule 38 (`byte_copy`): drives the `bidder-params/{bidder}.json` create step.
+- Rule 38 (`materialize_params`): drives the `bidder-params/{bidder}.json` create step. Bytes come from the blob store named by `bidder_params_ref.sha256`, else the Java clone pinned to `ref.resolved_commit`; the emitted file's sha256 must equal `ref.sha256` and its length `ref.bytes`.
 - Rule 46 inverse (per `port-translation-rules.yaml`): resolves the camelCase Go bidder name from Java's lowercase yaml_name (requires dual-spec assertion lookup; not fully mechanical).
 - Rule 33 inverse (`alias_graph_invert`): produces per-alias `static/bidder-info/{alias}.yaml` files.
 - `TestBidderUniquenessGatekeeping`: enforced upstream; the port skill's pre-emit `prefix_uniqueness_check` prevents the test from failing.

@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -41,7 +41,12 @@ bidder_info:
   endpoint_construction:
     kind: single-token-substitution
     macros_used:
-      - "{{AdUnit}}"                              # Custom Java macro (NOT the Go-template-style {{.AdUnit}}); resolved via String.replace at request time using imp.ext.bidder.adunit.
+      # BARE identifier per the rule: the wrapper belongs to the endpoint string,
+      # not to the name. ElementalTVBidder substitutes it with an inline literal
+      # -- `endpoint.replaceMacro("AdUnit", extImp.getAdunit())` -- so there is no
+      # class constant for static_fields[] to record, which is why this field is
+      # the one R8 relies on.
+      - AdUnit
     placeholders_unresolved: []
   endpoint_compression: null
   ortb_version: "2.6"
@@ -68,20 +73,11 @@ bidder_info:
       adoppler: ~                                 # Backward-compat alias to retain pre-rename name. Tilde-inherit form (Edge case #33 + alias-back-via-tilde tag).
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "ElementalTV Adapter Params",
-    "description": "A schema which validates params accepted by the ElementalTV adapter",
-    "type": "object",
-    "properties": {
-      "adunit": {
-        "type": "string",
-        "description": "AdUnit to bid against to."
-      }
-    },
-    "required": ["adunit"]
-  }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/elementaltv.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: 2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0
+  bytes: 352
 bidder_params_sha256: 2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0
 
 params:
@@ -167,7 +163,9 @@ code:
       mechanism_go: null
       mechanism_java: string-replace              # endpointTemplate.replace("{{AdUnit}}", HttpUtil.encodeUrl(extImp.getAdunit())) at lines 88-89.
       macro_field_set:
-        - "{{AdUnit}}"                            # Bidder-defined macro form (custom-Java-style); not part of the canonical macros.EndpointTemplateParams set.
+        # Bidder-defined, so not a member of macros.EndpointTemplateParams. Bare
+        # identifier, matching bidder_info.endpoint_construction.macros_used.
+        - AdUnit
       template_params_struct_field_count: null
     helpers:
       - name: parseAndValidateImpExt
@@ -497,7 +495,3 @@ cross_language:
     - "ExtImpElementalTV uses @Value(staticConstructor=of) yielding ExtImpElementalTV.of('adunit') factory (rare for params POJOs which more commonly use @Value @Builder)."
     - "Class root case-preservation surfaces in seven artifacts: ElementalTVBidder, ElementalTVConfiguration, ElementalTVTest, ElementalTVBidderTest, ExtImpElementalTV, ElementalTVResponseExt, ElementalTVResponseAdsExt, ElementalTVResponseVideoAdsExt — eight including the SCREAMING_SNAKE constant ELEMENTALTV_EXT_TYPE_REFERENCE."
     - "Naming-convention asymmetry inside ElementalTVConfiguration.java: bean qualifier 'elementalTVConfigurationProperties' (camelCase preserving TV uppercase) co-exists with factory method 'elementaltvBidderDeps' (all lowercase yaml_name form). The same configuration class uses two different conventions for the same bidder."
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -65,27 +65,11 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Aax Adapter Params",
-    "description": "A schema which validates params accepted by the Aax adapter",
-    "type": "object",
-    "properties": {
-      "cid": {
-        "type": "string",
-        "description": "The customer id provided by AAX."
-      },
-      "crid": {
-        "type": "string",
-        "description": "The placement id provided by AAX."
-      }
-    },
-    "required": [
-      "cid",
-      "crid"
-    ]
-  }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/aax.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: c71febfe0778ea8b7e522fe04afa4bae0c76e6dbe3cc0e4c5ca2a07889004200
+  bytes: 459
 bidder_params_sha256: c71febfe0778ea8b7e522fe04afa4bae0c76e6dbe3cc0e4c5ca2a07889004200
 
 params:
@@ -392,9 +376,3 @@ cross_language:
     - "bidsFromResponse (lines 68-81) uses defensive Stream pipeline with three Objects::nonNull filters across SeatBid, SeatBid.Bid, and Bid — flattens via Collection::stream + flatMap; bid_pointer_pattern: flatten-streams."
     - "extractBids (lines 61-66) early-returns Collections.emptyList() when bidResponse is null OR seatbid is empty — pairs with framework-default HTTP status validation."
     - "AaxBidderTest.makeBidsShouldReturnErrorIfBidExtContainUnsupportedMediaType (lines 224-239) covers the case where bid.ext.adCodeType='audio' (unsupported in switch -> null), causing the chain to fall through to bidTypeFromImp; the imp has no media type set, counter==0, throws — concrete witness for step 3 of the method_chain."
-  reviewer_cohort:
-    go: []
-    java:
-      - CTMBNara
-      - AntoxaAntoxic
-    cross_language_coordinator: bretg

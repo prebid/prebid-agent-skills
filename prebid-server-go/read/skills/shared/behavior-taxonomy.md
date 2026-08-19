@@ -388,7 +388,7 @@ Sibling field `where_branched`:
 
 | Value | What it means | Example |
 |---|---|---|
-| `yaml-inlined` | The IAB-category lookup map is inlined directly in `bidder-config/{xyz}.yaml`. Java-only pattern. | appnexus (Java) — 120-entry `iabCategories` map. |
+| `yaml-inlined` | The IAB-category lookup map is inlined directly in `bidder-config/{xyz}.yaml`. Java-only pattern. | appnexus (Java) — 95-entry `iabCategories` map, counted at master. |
 | `go-data-table` | The lookup is a Go data file (e.g., `iab_categories.go`) co-located in the adapter directory. | msft (Go) |
 | `dynamic-fetched` | The lookup is fetched at runtime from an upstream service. Rare. | n/a in master sample. |
 | `none` | Adapter does not perform IAB-category lookup. | kobler, optidigital |
@@ -429,7 +429,7 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `unguarded-currency-overwrite` | **[anti-pattern]** Adapter sets `bidResponse.Currency = response.Cur` without guarding against empty string. Canonical: Optidigital. | quirks + code.make_bids.currency_overwrite_safety |
 | `hardcoded-bid-type` | **[anti-pattern]** `MakeBids` returns a fixed BidType regardless of upstream response. Canonical: Optidigital always returns BidTypeBanner. | quirks + code.make_bids.bid_type_resolution.method_chain |
 | `legacy-impext-naming` | Imp ext struct uses legacy `ImpExt{Bidder}` pattern instead of canonical `ExtImp{Bidder}`. Canonical: Optidigital `ImpExtOptidigital`. | quirks + params.ext_struct.type_name |
-| `cross-language-byte-divergence` | `bidder_params_json` bytes differ between Go and Java sides; sha256 mismatch breaks the port-fidelity contract (Rule 1). Canonical: 4 Java goldens (elementaltv, mediasquare, appnexus, huaweiads) detect divergence vs Go. | quirks + provenance.warnings |
+| `cross-language-byte-divergence` | The upstream bidder-params bytes differ between the Go and Java sides &#8212; `bidder_params_ref.sha256` mismatch, which Rule 38 makes a port-fidelity concern. This is the NORMAL case, not the exception: of the 16 bidders with a golden in both languages, 15 diverge and only `kobler` is byte-equal, so the taxon marks a divergence worth explaining rather than a defect to fix. Regenerate the split by comparing `bidder_params_ref.sha256` across the two test-fixtures trees. | quirks + provenance.warnings |
 | `alias-yaml-only` | Java alias declared in a parent YAML's `aliases:` block but with no dedicated bidder class or IT fixtures (yet). Canonical: Appnexus parent's tilde-aliases pre-IT-class. | quirks + aliases[] |
 | `application-status-code` | Adapter checks an application-level status field in the response body (e.g., `retcode`) rather than (or in addition to) HTTP status. Pairs with `application_status_handling.kind`. Canonical: huaweiads `retcode` field. | quirks + code.make_bids.application_status_handling |
 | `country-code-resolution-fallback-chain` | Country code resolved through an ordered chain (e.g., `device.geo.country` → `user.geo.country` → MCC-MNC mapping → hardcoded default). Canonical: huaweiads `CountryCodeResolver`. | quirks |
@@ -449,7 +449,7 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `vendor-specific-protocol-quirk` | Bidder protocol carries a vendor-specific encoding quirk that doesn't map to OpenRTB cleanly. Canonical: huaweiads `creativeType > 100 ? type - 100 : type` offset, `nativeVersion: "1.1"` default. | quirks |
 | `vendor-to-iab-mapping` | Adapter maps vendor-specific category codes to IAB categories at request or response time. Canonical: huaweiads + appnexus IAB lookups. | quirks + iab_category_storage |
 | `yaml-configuration-rewrite-table` | YAML config carries a list of rewriting rules consumed at runtime. Canonical: huaweiads `extra-info.pkgNameConvert` (app-bundle rewrite rules). | quirks |
-| `yaml-inlined-data-table` | YAML config inlines a large lookup data table (>50 entries) consumed at runtime. Canonical: appnexus 120-entry IAB-category inline map. Pairs with `iab_category_storage.storage_kind: yaml-inlined`. | quirks + iab_category_storage |
+| `yaml-inlined-data-table` | YAML config inlines a large lookup data table (>50 entries) consumed at runtime. Canonical: appnexus 95-entry IAB-category inline map (counted at master, not asserted). Pairs with `iab_category_storage.storage_kind: yaml-inlined`. | quirks + iab_category_storage |
 | `multi-endpoint-by-mediatype` | Adapter routes requests to multiple distinct endpoints based on mediatype. ADR-007 F1. Canonical: beachfront (banner endpoint vs video endpoint). | quirks + code.make_requests.endpoint_resolution.endpoints[] |
 | `language-stamped-header-divergence` | Header value differs by language (e.g., `Componentid: prebid-go` vs `prebid-java`). Breaks byte-equality of outgoing requests across languages. ADR-007 F2. Canonical: freewheelssp. | quirks + headers_constructed.language_stamped_headers |
 | `mediatype-context-rewrite-site-to-app` | Adapter destructively converts request shape (deletes `request.Site`, synthesizes `App{}`) to coerce mediatype context. ADR-007 F3. Canonical: vungle. | quirks + code.make_requests.mutation.entity_strategies.Site |

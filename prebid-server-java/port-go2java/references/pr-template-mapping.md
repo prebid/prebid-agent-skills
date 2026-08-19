@@ -58,7 +58,7 @@ The `[x]` marks must be FACTUALLY accurate — reviewers reading the PR see the 
 |---|---|
 | `verify email contact works` | `[x]` iff source spec's `bidder_info.maintainer.email` is non-null AND syntactically a valid email. The port skill emits the email verbatim into the Java `bidder-config/{bidder}.yaml`; the box claims maintainer-email-presence, not deliverability (which is a manual reviewer step). |
 | `NO fully dynamic hostnames` | `[x]` iff source spec's `bidder_info.endpoint_construction.kind` is one of `static`, `single-token-substitution`, `dev-prod-toggle`, `query-parameter-augmentation`. Box stays `[ ]` if `kind: fully-dynamic-hostname` (the port skill rejects emit in that case anyway — Rule 11 prohibits). |
-| `geographic host parameters are NOT required` | `[x]` iff source spec's `bidder_info.geoscope` does NOT include geographic-host substitution macros AND `bidder_info.endpoint_construction.macros[]` does not reference `${region}` / `{{Region}}`. Box stays `[ ]` if a geo-host macro is detected (per Rule 12 prose). |
+| `geographic host parameters are NOT required` | `[x]` iff source spec's `bidder_info.geoscope` does NOT include geographic-host substitution macros AND `bidder_info.endpoint_construction.macros_used[]` does not reference `${region}` / `{{Region}}`. Box stays `[ ]` if a geo-host macro is detected (per Rule 12 prose). |
 | `direct use of HTTP is prohibited - implement an existing Bidder interface that will do all the job` | Always `[x]` for ports. The port skill emits a `Bidder<BidRequest>` implementation; direct `HttpClient` use does not appear in templated output. |
 | `if the ORTB is just forwarded to the endpoint, use the generic adapter - define the new adapter as the alias of the generic adapter` | `[x]` iff the source spec is a pure-forwarding adapter (`code.make_requests.batching.rules == [{kind: single-batched}]` AND `code.make_requests.endpoint_resolution.kind: static` AND no imp-mutation). For most ports the source already had its own bidder code, so the box is `[ ]` — the port emits a real adapter. The template line is informational. |
 | `cover an adapter configuration with an integration test` | `[x]` iff the port skill emitted at least one IT-test fixture pair under `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/` AND `src/test/java/org/prebid/server/it/{Bidder}Test.java` exists. |
@@ -110,7 +110,7 @@ states).
 - `mvn -B compile --file extra/pom.xml`: passes
 - `mvn -B checkstyle:check`: passes
 - `mvn -B test -Dtest={Bidder}BidderTest`: passes
-- Jacoco line-coverage on `{Bidder}Bidder.java`: {N}% (≥ 90% required by upstream Quality check)
+- Jacoco line-coverage on `{Bidder}Bidder.java`: {N}% (≥ 90%, the level upstream asks contributors to self-certify — `docs/developers/contributing.md:17` and the PR-template checkbox; measured locally, since no CI job checks it)
 - `{Bidder}Test` integration test scenarios: {list of fixture pair names}
 - Pre-submit rebase against `master` at `{pre_submit_rebase.base_sha_at_submit}`: clean (no conflicts)
 
@@ -134,11 +134,13 @@ The upstream template's checks above are necessary but not sufficient — the po
   HttpUtil) per [`framework-utilities-java.md`](../../read/skills/shared/framework-utilities-java.md);
   no direct Vert.x JSON usage; no direct HttpClient usage.
 - Specific rules and tips per the porting guide: bidder-params byte-fidelity
-  (Rule 38 verified via `port_engine.byte_copy` SHA-256 check); naming
+  (Rule 38 — bytes materialised from `bidder_params_ref` and the emitted file
+  re-checked against `ref.sha256` + `ref.bytes` via
+  `port_engine.materialize_params`); naming
   normalization (Rule 46 + ADR-005); alias-empire flavor coherence (Rule 44
   if applicable); IAB-cat translation (Rule 42 if applicable).
 - Companion docs PR drafted at `prebid/prebid.github.io::dev-docs/bidders/{bidder}.md`
-  (mandatory per BeOp #4660 review pattern); see `companion_docs_pr_draft`
+  (recommended; see §6 for the evidence base); see `companion_docs_pr_draft`
   in port-report.json.
 ```
 
@@ -146,7 +148,13 @@ This sub-section is NOT part of the upstream template. The operator pastes it be
 
 ## 6. Companion docs PR (`prebid/prebid.github.io`)
 
-Maintainer-mandatory per BeOp #4660 review pattern. The port skill emits `port-report.json::companion_docs_pr_draft` populated against the source spec:
+Recommended companion artifact. Evidence base: the request is a **Go-repo**
+review pattern (`prebid/prebid-server#4660`, BeOp, merged 2026-03-03 — a reviewer
+asked for a documentation PR linked from the description). `prebid/prebid-server-java#4660`
+does not exist, and no equivalent request appears on recent merged Java new-adapter PRs
+(#4476 BeOp, #4502, #4428, #4310), so this is NOT a verified Java maintainer requirement.
+Emit the draft as a courtesy and let the operator decide; do not assert it as mandatory in
+the PR body. The port skill emits `port-report.json::companion_docs_pr_draft` populated against the source spec:
 
 ```yaml
 companion_docs_pr_draft:
@@ -188,7 +196,7 @@ pre_submit_rebase:
   conflicts_summary: null
 ```
 
-If conflicts surface (e.g., upstream PR #4126 URL validation lands between port-emit and PR-open), abort with operator notification and let the operator resolve before submit. See [`../../../docs/methodology/repo-rules.md`](../../../docs/methodology/repo-rules.md) "In-flight upstream changes" for current PRs in flight.
+If conflicts surface (an upstream PR touching bidder-config shape landing between port-emit and PR-open), abort with operator notification and let the operator resolve before submit. See [`../../../docs/methodology/repo-rules.md`](../../../docs/methodology/repo-rules.md) "In-flight upstream changes" for current PRs in flight.
 
 ## See also
 

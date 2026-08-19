@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -67,7 +67,11 @@ bidder_info:
 # block emitter would normalize the terminating newline (and we lose round-trip
 # determinism). The double-quoted form satisfies R2: sha256(decoded scalar) ==
 # bidder_params_sha256 exactly.
-bidder_params_json: "{\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n  \"title\": \"Mediasquare Adapter Params\",\n  \"description\": \"A schema which validates params accepted by the Mediasquare adapter\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"owner\": {\n      \"type\": \"string\",\n      \"minLength\": 1,\n      \"description\": \"The owner provided for mediasquare.\"\n    },\n    \"code\": {\n      \"type\": \"string\",\n      \"minLength\": 1,\n      \"description\": \"The code provided for mediasquare.\"\n    }\n  },\n  \"required\": [\"owner\", \"code\"]\n}\n"
+bidder_params_ref:
+  path: static/bidder-params/mediasquare.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 798a251b3a6b11aa42036a129f8f61b3f0a13335babe539a96658b01ddd44f4d
+  bytes: 515
 bidder_params_sha256: 798a251b3a6b11aa42036a129f8f61b3f0a13335babe539a96658b01ddd44f4d
 
 params:
@@ -392,7 +396,3 @@ cross_language:
     destination_language: java
     destination_pr: null
     fidelity_review_themes: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

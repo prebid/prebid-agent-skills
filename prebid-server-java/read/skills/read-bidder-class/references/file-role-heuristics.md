@@ -31,17 +31,16 @@ For each `*.java` file under the bidder package (`src/main/java/org/prebid/serve
 
 ## LOC counting
 
-For each file, `loc` is computed as the byte-count line count of the file at `provenance.source.resolved_commit`:
+`loc` is a computed value under V4 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): it is the stdout of one command run against the bytes at `provenance.source.resolved_commit`.
 
-1. Read the file as bytes.
-2. Count occurrences of `\n` in the bytes.
-3. If the file does NOT end with `\n`, increment by 1 (count the last unterminated line).
-4. Blank lines, comments, license headers, and import blocks all count.
+```bash
+<fetch> | wc -l
+```
 
-This matches the conventional `wc -l` output. Record as `code.file_layout.files[].loc`. Examples:
+Blank lines, comments, license headers, and import blocks all count. `wc -l` counts `\n` occurrences, so a file with no terminal newline reports one less than its visible line count — record what the command prints, without a correction term, and leave the terminal-newline question to the `bytes` witness on that file's reference. Record as `code.file_layout.files[].loc`. Examples (each reproducible with the command above):
 
 - `src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java:561` (appnexus golden spec).
-- `src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java` LOC matches the Java-side counterpart of the Go `kobler.go:177`.
+- `src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java` — run the command; the Go-side counterpart `kobler.go` prints 177. LOC is per-file, so the two languages are not expected to agree, and neither number may be copied from the other spec.
 
 ---
 

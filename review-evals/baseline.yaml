@@ -1,0 +1,84 @@
+# REGRESSION FLOOR, NOT A CERTIFICATION.
+#
+# These numbers say only "no worse than the last recorded run". They are not a
+# statement that the review skills are good enough, that the corpus is
+# representative, or that a green run means a PR is safe to merge. Nothing here
+# should ever be quoted as a quality score.
+#
+# Two of the four gates are live from day one because they need no measurement:
+#   max_forbidden_hits    a named non-finding is a verdict the maintainers
+#                         already ruled out. Zero tolerance, always.
+#   max_unexpected        a per-fixture cap on findings that match neither the
+#                         expected nor the forbidden list. Generous, because an
+#                         extra INFO note is not automatically wrong -- it is a
+#                         drift alarm, not a correctness claim.
+#
+# The other two are marked `status: unmeasured` and sit at 0.0 until a real
+# review-skill run has been scored:
+#   min_recall            proportion of maintainer findings the run reproduced
+#   min_severity_agreement  proportion of matched findings rated the same
+#
+# An unmeasured floor cannot fail, and the scorer prints a loud banner saying
+# so, precisely so a green run is not mistaken for evidence. Record real floors
+# with:
+#
+#   python3 scripts/score_review_evals.py --actual review-evals/actual \
+#       --record-baseline --margin 0.05
+#
+# Raise a floor only from a run you are prepared to defend; never lower one to
+# make a red build green. Lowering a floor is a decision to accept a
+# regression, and it belongs in the PR description that lowers it.
+
+version: 1
+
+global:
+  status: unmeasured
+  min_recall: 0.0
+  min_severity_agreement: 0.0
+  max_forbidden_hits: 0
+  max_unexpected: 6
+
+fixtures:
+  prebid-server-4765:
+    status: unmeasured
+    min_recall: 0.0
+    max_forbidden_hits: 0
+    max_unexpected: 8
+  prebid-server-java-4552:
+    status: unmeasured
+    min_recall: 0.0
+    max_forbidden_hits: 0
+    max_unexpected: 4
+  prebid-server-4211:
+    status: unmeasured
+    max_forbidden_hits: 0
+    max_unexpected: 2
+  prebid-server-4216:
+    status: unmeasured
+    min_recall: 0.0
+    max_forbidden_hits: 0
+    max_unexpected: 2
+  prebid-server-4651:
+    status: unmeasured
+    max_forbidden_hits: 0
+    max_unexpected: 3
+  prebid-server-4502:
+    status: unmeasured
+    min_recall: 0.0
+    max_forbidden_hits: 0
+    max_unexpected: 3
+  prebid-server-4287:
+    status: unmeasured
+    min_recall: 0.0
+    max_forbidden_hits: 0
+    max_unexpected: 5
+  prebid-server-4614:
+    status: unmeasured
+    min_recall: 0.0
+    max_forbidden_hits: 0
+    max_unexpected: 6
+  prebid-server-java-4428:
+    status: unmeasured
+    min_recall: 0.0
+    max_forbidden_hits: 0
+    max_unexpected: 5

@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -58,53 +58,12 @@ bidder_info:
     extra_info: '{"video_endpoint":"https://reachms.bfmio.com/bid.json?exchange_id"}'
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Beachfront Adapter Params",
-    "description": "A schema which validates params accepted by the Beachfront adapter",
-    "type": "object",
-    "properties": {
-      "appId": {
-        "type": "string",
-        "description": "The id of an inventory target. This can only be used in requests that contain one media type. It will be applied to all imps in the request."
-      },
-      "appIds": {
-        "type" : "object",
-        "description": "An object that specifies appIds for specific media types. This can be used for either single media type requests or multiple.",
-        "properties": {
-          "video" : {
-            "type": "string",
-            "title": "Video appId",
-            "description": "An appId string that will be applied to video requests in this imp."
-          },
-          "banner" : {
-            "type": "string",
-            "title": "Banner appId",
-            "description": "An appId string that will be applied to banner requests in this imp."
-          }
-        },
-        "anyOf":[
-          {"required":["video"]},
-          {"required":["banner"]}
-        ]
-      },
-      "bidfloor": {
-        "type": "number",
-        "description": "The price floor for the bid. Will override the bidfloor set for the impression. Always in USD, regardless of the value of the currency set for the impression."
-      },
-      "videoResponseType": {
-        "type": "string",
-        "description": "By default the video response will be an AdM element containing VAST 3.0 markup including tracking, click through, and mediafile elements pointing to mp4, webm or other playable media files or Vpaid media as configured for the exchange at beachfront.io. Optionally, set this to 'nurl' to receive a URI pointing to VAST 3.0 markup which will contain a mediafile pointing to a beachfront neptune javascript video player which will load your video and take care of tracking, etc. Regardless of which format is selected, the id of the returned impression will be the provided impression id (imp[{'id'...},...] in the request) with the format appended. The impression id will be returned unchanged as 'impid'. So if you indicate 'nurl', and an impression id 'someImp', the returned impression will have an 'impid' value of 'someImpNurlVideo'. This is to differentiate the object in the case that a request includes both video and banner elements. Setting videoResponseType to any other string will have no effect and the default format (AdM) will be returned."
-      }
-    },
-
-    "oneOf": [
-      { "required": ["appIds"] },
-      { "required": ["appId"] }
-    ]
-  }
-bidder_params_sha256: 8bb5485afd62744d46625253b49058a58dcdbb00f43b9f04c6ef9b06c1a46311
+bidder_params_ref:
+  path: static/bidder-params/beachfront.json
+  resolved_commit: 615e5dfa5fd9a9925a607e1f0e80591f21d41778
+  sha256: daacf0dfb115173e0d3c43d3777c85568995eade6151bbcab16d4f578491a11d
+  bytes: 2612
+bidder_params_sha256: daacf0dfb115173e0d3c43d3777c85568995eade6151bbcab16d4f578491a11d
 
 params:
   schema_interpretation:
@@ -402,7 +361,3 @@ cross_language:
     - "BeachfrontAdapterName + BeachfrontAdapterVersion constants are stamped into the banner request payload (adapterName + adapterVersion fields) — bidder-side identification not present in OpenRTB."
     - "BidCapacity = 5 — apparently a per-request bid limit on response parsing (only the first 5 bids per seatbid are processed)."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: null

@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -63,20 +63,11 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Kobler Adapter Params",
-    "description": "A schema which validates params accepted by the Kobler adapter",
-    "type": "object",
-
-    "properties": {
-      "test": {
-        "type": "boolean",
-        "description": "Whether the request is for testing only. When multiple ad units are submitted together, it is enough to set this parameter on the first one."
-      }
-    }
-  }
+bidder_params_ref:
+  path: static/bidder-params/kobler.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+  bytes: 431
 bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
 
 params:
@@ -343,9 +334,3 @@ cross_language:
     - "devBidderEndpoint is a package-level const (line 23) — should live in static/bidder-info/kobler.yaml as extra_info or be promoted to YAML config field."
     - "MakeBids uses legacy raw status checks (StatusCode == http.StatusNoContent / != http.StatusOK at lines 104-112) instead of canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors helpers."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java:
-      - AntoxaAntoxic
-      - osulzhenko
-    cross_language_coordinator: bretg

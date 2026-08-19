@@ -16,5 +16,23 @@
 # - The upstream divergence has been resolved (e.g., a future PR fixes
 #   the schema gap) and the assertion file's severity drops to warn or
 #   pass
+#
+# EVERY entry needs an expiry. Exclusions here downgrade a hard failure to
+# informational, so without one a downgrade added for a specific reason
+# outlives the reason and nobody notices. Immediately above each bidder
+# line, add a directive:
+#
+#     # review-by: YYYY-MM-DD <bidder> — <what has to be true to remove it>
+#
+# `scripts/tests/test_accepted_warnings.py` (TestKnownBrokenPairs) fails
+# once the date passes, and fails if an entry has no directive at all. On
+# expiry: re-check whether the divergence still exists. If it is fixed,
+# delete the entry; if it is not, push the date out and say what changed.
+# Directives are comments, so the `grep -vE '^\s*(#|$)'` that builds the
+# --allow-known-broken-pairs list is unaffected.
 
+# review-by: 2027-02-18 aax — remove once the Java bidder-params schema
+# gains `minLength: 1` on cid/crid, which is the divergence the dual-spec
+# assertion declares severity:fail. Re-check against upstream
+# prebid-server-java at that date; extend with a note if still open.
 aax

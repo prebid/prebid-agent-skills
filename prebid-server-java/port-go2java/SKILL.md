@@ -6,7 +6,7 @@ version: 0.5.0
 
 # port-go2java (Go → Java)
 
-> **Status: D2.8 operator validation complete (2026-05-11).** All 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) demonstrably portable Go → Java end-to-end via a 6-canary batch run (`feat/d2.8-port-go2java-validation`). Final state: **4/7 D2.3 gates green for every MVP pair** (Gate 1 mvn compile, Gate 4 mvn checkstyle:check, Gate 6 port-report.json schema v0.2.0, Gate 7 r5_check.state matches per-pair expectation). Gates 2 (mvn test) + 3 (Jacoco ≥ 90%) blocked on operator-fillable test scaffolds; Gate 5 has a doc gap in execution-plan-phase-d.md §183 (referenced schema files don't exist in upstream Java; F-new-62). Pipeline prose (D2.1); 11 Jinja templates (D2.1-D2.7); F2 SKILL fixes landed Tier 0 (universal checkstyle), Tier 1 (universal javac), Tier 3 (entity-mutation scaffold per Rule 5 + 4 endpoint-resolution scaffolds per Rule 11/12/13 + F3/F4/imp.ext single-canary scaffolds); `extract_entity_strategies` port_engine helper. Traces under `docs/runs/d2.8-*-canary-2026-05-11.md`; cross-canary findings at `docs/runs/d2.8-cross-canary-summary.md`. Frontmatter bumps to 1.0.0 once Gates 2 + 3 are routinely cleared by operator-completed scaffolds AND a green-field validation canary lands (D3.8-canary-8 analog).
+> **Status: D2.8 operator validation complete (2026-05-11).** All 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) demonstrably portable Go → Java end-to-end via a 6-canary batch run (`feat/d2.8-port-go2java-validation`). Final state: **4/7 D2.3 gates green for every MVP pair** (Gate 1 mvn compile, Gate 4 mvn checkstyle:check, Gate 6 port-report.json schema v0.2.0, Gate 7 r5_check.state matches per-pair expectation). Gates 2 (mvn test) + 3 (Jacoco ≥ 90%) blocked on operator-fillable test scaffolds; Gate 5 has a doc gap in execution-plan-phase-d.md §183 (referenced schema files don't exist in upstream Java; F-new-62). Pipeline prose (D2.1); 10 Jinja templates (D2.1-D2.7; `configuration-properties.java.j2` since removed, its subclass emitted nested by `configuration.java.j2`); F2 SKILL fixes landed Tier 0 (universal checkstyle), Tier 1 (universal javac), Tier 3 (entity-mutation scaffold per Rule 5 + 4 endpoint-resolution scaffolds per Rule 11/12/13 + F3/F4/imp.ext single-canary scaffolds); `extract_entity_strategies` port_engine helper. Traces under `docs/runs/d2.8-*-canary-2026-05-11.md`; cross-canary findings at `docs/runs/d2.8-cross-canary-summary.md`. Frontmatter bumps to 1.0.0 once Gates 2 + 3 are routinely cleared by operator-completed scaffolds AND a green-field validation canary lands (D3.8-canary-8 analog).
 
 ## What this skill does
 
@@ -20,7 +20,7 @@ Takes a structured Go-source Adapter Spec (read by `prebid-server-go/read/skills
 - `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java`
 - `src/main/java/org/prebid/server/proto/openrtb/ext/request/{bidder}/ExtImp{Bidder}.java`
 - `src/main/resources/bidder-config/{bidder}.yaml`
-- `src/main/resources/static/bidder-params/{bidder}.json` (byte-copy from Go per Rule 38)
+- `src/main/resources/static/bidder-params/{bidder}.json` (materialised from the source spec's `bidder_params_ref` per Rule 38)
 - `src/test/java/org/prebid/server/bidder/{bidder}/{Bidder}BidderTest.java`
 - `src/test/java/org/prebid/server/it/{Bidder}Test.java`
 - `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-auction-{bidder}-{request,response}.json`
@@ -111,13 +111,13 @@ For alias-child shapes, the SKILL loads the parent spec (the alias inherits pare
 
 | # | Rule | Helper | Output |
 |---|---|---|---|
-| 1 | Rule 38 — bidder-params byte-fidelity | `port_engine.byte_copy(source_path, dest_path)` | Java `static/bidder-params/{bidder}.json` is byte-identical to Go's. SHA-256 verified post-copy. |
+| 1 | Rule 38 — bidder-params byte-fidelity | `port_engine.materialize_params(source_spec['bidder_params_ref'], blobs_dir=…, checkout=…)` | Returns the exact params bytes the ref names — blob store at `prebid-server-go/read/test-fixtures/blobs/<sha256>` first, else the Go clone pinned to `ref.resolved_commit`. The helper hashes what it returns against `ref.sha256` and checks its length against `ref.bytes`, raising rather than returning suspect bytes; a missing blob with no checkout is an error, never an empty return. Step 5 writes those bytes to `src/main/resources/static/bidder-params/{bidder}.json` and re-hashes the emitted file. |
 | 2 | Rule 46 — naming-convention normalization | `port_engine.normalize_bidder_name(go_name, target_lang='java')` | Java YAML name (lowercase + drop non-`[a-z0-9]`); allow-list overrides for rebrands like `cadent_aperture_mx → emxdigital`. Stored at `dest_spec.meta.bidder_name`. |
 | 3 | Rule 33 — alias-graph invert | `port_engine.alias_graph_invert(parent_spec, alias_specs, direction='go-to-java')` | Java `aliases:` block content for the parent's bidder-config YAML. Per-child overrides for diverging fields only. |
 | 4 | Rule 44 — alias-empire flavor coherence | inline check (no helper) | Verify each empire child's `bidder_info` flavor matches parent's. Divergences emit `quirks[]: alias-empire-flavor-divergence`. |
 | 5 | Rule 36 — fixture-inventory parity → semantic-coverage parity | inline + Jinja template | Re-author Java IT 4-file split from Go's flat fixtures. Document unreachable-error-paths exclusions per the porting guide. |
 | 6 | Rule 42 — IAB-cat storage translation | `port_engine.iab_table_translate(direction='go-to-java', source_artifact=<go_iab_file_contents>)` | Java YAML `adapters.{bidder}.iab-cat-mapping` dict. Only invoked when `source_spec.iab_category_storage.storage_kind == "go-data-table"`. |
-| 7 | Rule 35 — config-properties subclass scaffolding | inline + Jinja template | Emit `{Bidder}BidderConfigurationProperties` Java class when source has `cross_language.go_specific_concerns[]: hardcoded-dev-endpoint` (Kobler-style). The class promotes Go's hardcoded constant to a Spring-config typed field. |
+| 7 | Rule 35 — config-properties subclass scaffolding | `configuration.java.j2` (`ctx.typed_fields`) | Emit a nested `private static class {Bidder}ConfigurationProperties extends BidderConfigurationProperties` inside `{Bidder}Configuration.java` when the source has `cross_language.go_specific_concerns[]: hardcoded-dev-endpoint` (Kobler-style). The class promotes Go's hardcoded constant to a Spring-config typed field. Set `ctx.has_typed_config_props` **and** `ctx.typed_fields` together — the template refuses to render if they disagree, because a subclass with an empty body binds none of the properties Rule 35 exists to bind. |
 | 8 | Rule 39 — derived-view | no-op | The rule is read-side-only — no port-side action. Always emits `verdict: skipped-source-side-only`. |
 | 9 | Rule 19 — standard headers (`HttpUtil.headers()` collapse) | inline | When source's `headers_constructed.has_only_standard_headers == true`, the Java template uses `HttpUtil.headers()` shorthand instead of explicit `MultiMap.add(...)` calls. |
 | 10 | Rule 30 — canonical Go status helpers ↔ Java framework default | inline | Source's `code.make_bids.http_status_handling.kind` ∈ {`canonical-go-helpers`, `legacy-raw-go`} maps to Java's framework-default behavior (no explicit status-check code in `MakeBids`). Quirk emitted if source uses `legacy-raw-go` (suggests upstream-Go cleanup opportunity). |
@@ -162,7 +162,9 @@ The SKILL must NOT skip a prose-driven rule silently. If the rule's `spec_field_
 - `bidder_info.modifying_vast_xml_allowed`
 - `bidder_info.endpoint` (form-divergent per language; Step 3 Rule 11 already normalized)
 - `params.schema_interpretation.{required_fields, combinators_used, flexible_types}`
-- `bidder_params_json` (verbatim string)
+- `bidder_params_ref` (the whole `{path, resolved_commit, sha256, bytes}` block, unchanged except that `path` is re-rooted to `src/main/resources/static/bidder-params/{bidder}.json` for Java's layout — `resolved_commit`, `sha256` and `bytes` are NEVER recomputed)
+
+`bidder_params_sha256` mirrors `bidder_params_ref.sha256`; set it from the ref, not by hashing anything. `bidder_params_json` was removed at 2.0.0, so there is nothing inline to carry across; if a dual-spec consumers still validate, but treat it as non-normative: no field on `dest_spec` may be derived from it. When the source spec has no `bidder_params_json` at all, omit it — nothing downstream requires it.
 
 **Java-specific construction.** Build the Java-only spec blocks:
 
@@ -190,7 +192,13 @@ port_lineage:
     - <one entry per applied prose-driven rule, e.g., 'rule-46-naming-normalization'>
 ```
 
-**bidder_params_sha256 re-compute.** SHA-256 of `dest_spec.bidder_params_json`. Since Rule 38's byte-copy produced byte-identical JSON, this MUST equal `source_spec.bidder_params_sha256`. If they differ, the SKILL has bug; abort with `ERROR: bidder_params_sha256 mismatch — Rule 38 byte-copy invariant violated`.
+**Rule 38 materialise-from-ref invariant.** Never hash inline text to produce a ref — that is what `bidder_params_json` did before 2.0.0 removed it, and hashing the reader's own transcription proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec that carries only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes, in this order:
+
+1. `dest_spec.bidder_params_ref.{resolved_commit, sha256, bytes}` are identical to the source's, and `dest_spec.bidder_params_ref.path` is the Java path for this bidder. Otherwise abort with `ERROR: bidder_params_ref carried forward incorrectly — Rule 38 materialise-from-ref invariant violated`.
+2. `dest_spec.bidder_params_sha256 == dest_spec.bidder_params_ref.sha256` (the mirror, not a fresh hash). Otherwise abort with `ERROR: bidder_params_sha256 does not mirror bidder_params_ref.sha256 — Rule 38 materialise-from-ref invariant violated`.
+3. The bytes Step 5 will emit are exactly the bytes `port_engine.materialize_params` returned. **The emitted file's sha256 MUST equal `bidder_params_ref.sha256` and its length MUST equal `bidder_params_ref.bytes`.** Step 5 re-hashes the file on disk after writing it; on mismatch abort with `ERROR: emitted bidder-params sha256 {actual} != bidder_params_ref.sha256 {expected} — Rule 38 materialise-from-ref invariant violated`.
+
+`materialize_params` already raises on either witness before returning, so a mismatch surfacing here means the write path corrupted the bytes (text-mode write, newline translation, a re-serialising template) rather than the read path.
 
 **Provenance pinning.** `dest_spec.provenance.source.resolved_commit = source_spec.provenance.source.resolved_commit` — the Java port is point-in-time relative to the source. `dest_spec.provenance.read.timestamp_utc` is fresh (the moment the Step ran).
 
@@ -207,11 +215,10 @@ port_lineage:
 | File | Template | Notes |
 |---|---|---|
 | `src/main/resources/bidder-config/{bidder}.yaml` | `bidder-config.yaml.j2` | Kebab-case YAML keys per `references/java-artifact-shapes.md` §11. |
-| `src/main/resources/static/bidder-params/{bidder}.json` | `byte_copy` (no template) | Byte-identical to Go's per Rule 38; SHA-256 verified. |
+| `src/main/resources/static/bidder-params/{bidder}.json` | `materialize_params` (no template) | Write the bytes the helper returned in **binary** mode (`Path.write_bytes`) — never a text write, never a re-serialised dict. Then re-read the file and assert its sha256 equals `bidder_params_ref.sha256` and its length equals `bidder_params_ref.bytes`; that makes the emitted file byte-identical to Go's by construction rather than by assumption. |
 | `src/main/java/org/prebid/server/proto/openrtb/ext/request/{bidder}/ExtImp{Bidder}.java` | `ext-imp-pojo.java.j2` | Lombok @Builder + @Value + @JsonProperty annotations. |
 | `src/main/java/org/prebid/server/bidder/{bidder}/{Bidder}Bidder.java` | `bidder.java.j2` | Implements `Bidder<BidRequest>`; Rule-specific control flow per `rules_consumed`. |
-| `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java` | `configuration.java.j2` | Spring DI; `BidderDepsAssembler` factory bean. |
-| `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}BidderConfigurationProperties.java` | `configuration-properties.java.j2` | Rule 35 only; emitted when typed-config promotion applies. |
+| `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java` | `configuration.java.j2` | Spring DI; `BidderDepsAssembler` factory bean. Under Rule 35 this file also carries the typed config subclass, nested. It is **not** a separate file: all 16 Rule-35 subclasses upstream are nested in their `{Bidder}Configuration.java`, 15 of them `private static`, and the name is `{Bidder}ConfigurationProperties` — the `{Bidder}BidderConfigurationProperties` form has no upstream instance and its suffix names two framework classes. So the emitted file count does not change when Rule 35 fires. |
 | `src/test/java/org/prebid/server/bidder/{bidder}/{Bidder}BidderTest.java` | `bidder-test.java.j2` | JUnit 5; ≥90% line-coverage target. |
 | `src/test/java/org/prebid/server/it/{Bidder}Test.java` | `it-test.java.j2` | IT class; one `@Test` per fixture pair. |
 | `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-auction-{bidder}-{request,response}.json` | `it-fixture-auction-{request,response}.json.j2` | Per-call fixtures; populated from `tests.fixture_inventory.exemplary[]`. |
@@ -282,7 +289,7 @@ report = {
     "pre_submit_rebase": pre_submit_rebase_result_or_null,
     "human_todos": human_todos,                 # accumulated across Steps 3, 5, 6
     "unresolved_translations": unresolved_translations,
-    "port_translation_rules_version": "0.2.0",
+    "port_translation_rules_version": "0.3.0",
 }
 ```
 
@@ -314,7 +321,7 @@ D2 considers the skill production-ready only when, for each MVP pair:
 
 1. Emitted Java compiles cleanly via `mvn -B compile --file extra/pom.xml`.
 2. Emitted unit tests pass via `mvn -B test -Dtest={Bidder}BidderTest`.
-3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90%.
+3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90%. This is OUR acceptance bar, measured from a local `mvn` run. It matches the level upstream asks contributors to self-certify (`docs/developers/contributing.md:17`; PR-template checkbox), but upstream declares Jacoco `prepare-agent` + `report` only (`extra/pom.xml:325-344`) with no `check` goal and no coverage step in `pr-java-ci.yml` — so a green upstream CI run is not evidence for this gate.
 4. `mvn -B checkstyle:check` exits 0.
 5. Runtime validation via Java's `BidderParamValidator.java` accepts the emitted bidder-params JSON. NOTE: the literal schema files `bidder-info-schema.json` and `static/bidder-params/_schema.json` referenced in earlier drafts of `docs/execution-plan-phase-d.md` §183 do NOT exist in upstream `prebid-server-java`; Java validates via runtime code, not JSON schema files. Tracked as F-new-62 (LOW; doc gap, not a SKILL defect). For D2.8 this gate is N/A pending an execution-plan rewrite to invoke `BidderParamValidator` at mvn-test time.
 6. `port-report.json` schema-validates against `port-report.schema.json` v0.2.0.
@@ -335,4 +342,4 @@ D2 considers the skill production-ready only when, for each MVP pair:
 ### Per-skill subdirectories
 
 - [`references/`](references/) — Java-target emission references (D1.3 fills): `java-artifact-shapes.md`, `pr-template-mapping.md`, `registration-rules.md`, `porting-guide.md` (pinned to upstream SHA).
-- [`templates/`](templates/) — Jinja templates for Java artifact emission (D2 fills): `configuration-properties.java.j2`, `bidder.java.j2`, `bidder-test.java.j2`, etc.
+- [`templates/`](templates/) — 10 Jinja templates for Java artifact emission: `configuration.java.j2`, `bidder.java.j2`, `bidder-test.java.j2`, etc.

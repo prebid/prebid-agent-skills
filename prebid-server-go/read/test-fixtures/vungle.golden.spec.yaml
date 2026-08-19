@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -62,29 +62,11 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |-
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Vungle Adapter Params",
-    "description": "A schema which validates params accepted by the Vungle adapter",
-    "type": "object",
-    "properties": {
-      "app_store_id": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Pub App Store ID"
-      },
-      "placement_reference_id": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Placement Reference ID"
-      }
-    },
-    "required": [
-      "app_store_id",
-      "placement_reference_id"
-    ]
-  }
+bidder_params_ref:
+  path: static/bidder-params/vungle.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: 437c5b5b81115bca701113d4324392e04a539b2119919d4f33b8e1a13dfb6308
+  bytes: 535
 bidder_params_sha256: 437c5b5b81115bca701113d4324392e04a539b2119919d4f33b8e1a13dfb6308
 
 params:
@@ -363,7 +345,3 @@ cross_language:
     - "X-OpenRTB-Version: 2.5 header (line 116). Pinned to 2.5 — distinct from adapters that pin to 2.6 or omit the header. Vungle's upstream may not yet support 2.6 features."
     - "Liftoff/Vungle phantom rename: `liftoff` appears in exchange/adapter_util.go's removed-bidder warning map redirecting to `vungle`. Backward-compat for operators configuring liftoff based on the 2021 acquisition. The bidder name was never actually renamed in code — vungle stayed canonical."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

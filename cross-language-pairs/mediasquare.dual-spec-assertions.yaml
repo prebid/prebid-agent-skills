@@ -96,11 +96,6 @@ assertions:
     destination_pr: null
     fidelity_review_themes: []
 
-  reviewer_cohort:
-    go_reviewers: []
-    java_reviewers: []
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: divergent-byte-only
   blocker_count: 0

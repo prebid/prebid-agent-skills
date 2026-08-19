@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -71,22 +71,11 @@ bidder_info:
       gpp_supported: true                     # Top-level `openrtb.gpp-supported: true` field — declares GPP support at the bidder-info level (Java side does not surface this in its bidder-config)
   yaml_field_name_quirks: []
 
-bidder_params_json: |-
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "FreewheelSSP Adapter Params",
-    "description": "A schema which validates params accepted by the FreewheelSSP adapter",
-    "type": "object",
-
-    "properties": {
-      "zoneId": {
-        "type": ["integer", "string"],
-        "description": "Zone ID"
-      }
-    },
-
-    "required": ["zoneId"]
-  }
+bidder_params_ref:
+  path: static/bidder-params/freewheelssp.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: 7e00f86526faa029f892c0190cc9612df400044dd0d141ecbe39afe6c681f0ed
+  bytes: 350
 bidder_params_sha256: 7e00f86526faa029f892c0190cc9612df400044dd0d141ecbe39afe6c681f0ed
 
 params:
@@ -377,7 +366,3 @@ cross_language:
     - "fwssp is a separate top-level Go bidder (BidderFWSSP=\"fwssp\") with its own Builder at adapters/fwssp/. Cross-language asymmetric topology — Java treats fwssp as a YAML-internal alias under freewheelssp."
     - "Misspelled `Infomation` (sic) in error message — preserved verbatim cross-language. Useful for golden-test message-equality assertions."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

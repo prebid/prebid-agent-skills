@@ -2,7 +2,7 @@
 
 Deep-dive lookup index for `bidder-class-pr-review` covering the per-bidder Java surface: the `{X}Bidder.java` implementation class, its co-located helpers, the `{X}BidderTest.java` unit test, and the `it/{X}Test.java` integration test class. This file is the analog of the Go-side `adapter-code-index.md` but targets Java's narrower, more uniform surface.
 
-**Upstream pin:** `prebid/prebid-server-java` master at SHA `a1fe64e123d6` (verified 2026-05-04). Java toolchain: **Java 21**. Vert.x `4.5.20`, Spring Boot `3.5.10`, checkstyle `10.17.0`, Jacoco `0.8.13`.
+**Upstream pin:** `prebid/prebid-server-java` master at SHA `e3ffd57` (verified 2026-08-18). Aggregator version `4.1.0-SNAPSHOT`. Java toolchain: **Java 25**. Vert.x `5.0.12`, Spring Boot `4.0.6`, checkstyle `10.17.0` (plugin `3.6.0`), Jacoco `0.8.13` (report-only — no coverage gate; see `framework-utilities-java.md` §5.1).
 
 **Canonical reference adapter** (referenced throughout): `src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java` (Rule 35 typed-config + currency conversion + bid-type-via-ext.prebid + dev/prod endpoint toggle — the most representative single-adapter example).
 
@@ -32,7 +32,7 @@ package org.prebid.server.bidder.{x};
 Canonical 27-import set per `KoblerBidder.java:3-39`. Reviewer-relevant import-source families (`com.fasterxml.jackson.*`, `com.iab.openrtb.{request,response}`, `org.apache.commons.{collections4,lang3}`, `org.prebid.server.bidder.{model,Bidder}`, `org.prebid.server.{currency,exception,json}`, `org.prebid.server.proto.openrtb.ext.{request,response}.*`, `org.prebid.server.util.{BidderUtil,HttpUtil}`) live in the **TOP** `ImportOrder` group; `java.*` and `jakarta.*` live in the **BOTTOM** group with a blank-line separator. See `framework-utilities-java.md` §6.3 for the full `ImportOrder` rule.
 
 Banned import surface (each triggers checkstyle `IllegalImport`):
-- `io.vertx.core.json.Json` — use `JacksonMapper` (F-new-56). Suppressed only for `ObjectMapperProvider.java`.
+- `io.vertx.core.json.Json` — use `JacksonMapper`. Banned by checkstyle `IllegalImport id="BanVertxJsonImport"`; suppressed only for `ObjectMapperProvider.java`. (Cite the checkstyle rule id, not F-new-56 — `framework-utilities-java.md` §8 defines F-new-56 as the unreachable `JsonProcessingException` multi-catch.)
 - `org.apache.commons.lang` (without `lang3`) — use `org.apache.commons.lang3.*`.
 - `org.junit.Test` (JUnit 4) — use `org.junit.jupiter.api.Test`.
 - `autovalue.shaded.com.google.*`, `org.inferred.freebuilder.shaded.com.google.*` — shadowed deps.
@@ -60,9 +60,11 @@ private static final String EXT_PREBID = "prebid";
 ```
 
 Reviewer rules:
-- **`TypeReference` constant** — class-level, `private static final`, name `{X}_EXT_TYPE_REFERENCE`. Diamond `new TypeReference<>() { }` (Java 21 anonymous-class diamond) preferred over the explicit-generic form.
+- **`TypeReference` constant** — class-level, `private static final`, name `{X}_EXT_TYPE_REFERENCE`. Diamond `new TypeReference<>() { }` (anonymous-class diamond, Java 9+) preferred over the explicit-generic form.
 - **SCREAMING_SNAKE_CASE** per `ConstantName` rule. `DEFAULT_BID_CURRENCY = "USD"` is conventional for currency-conversion guards.
-- **Template-macro constants** (when applicable): `URL_PUBLISHER_ID_MACRO = "{{PublisherID}}"` (AdkernelAdn), `ADUNIT_MACROS_ENDPOINT = "{{adUnitId}}"` (Adverxo), `EXT_PREBID = "prebid"` (Kobler). Inline string literals in `String.replace(...)` are **WARN** — extract to a named constant.
+- **URL template-macro constants hold the BARE variable name — no braces.** Verified at `e3ffd57`: `URL_PUBLISHER_ID_MACRO = "PublisherID"` (`AdkernelAdnBidder.java:44`), `ADUNIT_MACROS_ENDPOINT = "adUnitId"` + `AUTH_MACROS_ENDPOINT = "auth"` (`AdverxoBidder.java:42-43`), `ACCOUNT_ID_MACRO = "AccountId"` (`AceexBidder.java:36`). The adapter stores the endpoint as a `Uri` (`this.endpointUrl = Uri.of(endpointUrl);`) and substitutes with `endpointUrl.replaceMacro(NAME, value).expand()` (`AdkernelAdnBidder.java:201`, `AdverxoBidder.java:90-91`). A braced constant (`"{{PublisherID}}"` or `"{PublisherID}"`) is **FAIL** — `replaceMacro` keys on the bare name, so it never matches and `expand()` throws `NoSuchElementException`. Likewise `String.replace("{{TOKEN}}", …)` on an endpoint is **FAIL**: zero files under `src/main/java` do this at `e3ffd57`, versus `Uri.of(` in 125 and `replaceMacro` in 94. See `framework-utilities-java.md` §3.0.
+- **Bid-post-processing macros are the exception and DO keep their delimiters**: `PRICE_MACRO = "${AUCTION_PRICE}"` (`AdverxoBidder.java:44`) is substituted into `adm` / `nurl` / `burl` with plain `String.replace(...)` (`AdverxoBidder.java:177-178`). This is not URL templating — do not "fix" it to a bare name.
+- Other named constants: `EXT_PREBID = "prebid"` (Kobler). Inline string literals in `replaceMacro(...)` / `String.replace(...)` are **WARN** — extract to a named constant.
 
 ### 1.4 Adapter fields
 
@@ -166,7 +168,7 @@ When the typed-config subclass lives in `{X}BidderConfigurationProperties.java` 
 
 ### 2.6 Multi-token / `EndpointTemplate` (F-new-2 LANDED)
 
-When the endpoint URL contains MULTIPLE `{{TOKEN}}` macros with non-trivial substitution (per-imp lookups, side-channel data flows), the adapter holds a parsed `EndpointTemplate`-like helper built once in the constructor (`this.template = EndpointTemplate.parse(HttpUtil.validateUrl(endpointUrl));`). Simple single-token substitutions use inline `String.replace("{{TOKEN}}", value)`. Java's analog of Go's `text/template`: `String.replace(...)` / `String.format(...)` / `URIBuilder`. Custom resolver classes (e.g., `HuaweiEndpointResolver` in the huaweiads package) appear only when complexity demands it.
+When the endpoint URL contains MULTIPLE single-brace `{Token}` macros, the adapter holds one `Uri` field built in the constructor (`this.endpointUrl = Uri.of(endpointUrl);`) and chains a `replaceMacro` per token before `expand()` — canonical `AdverxoBidder.java:89-92`, which chains `.replaceMacro(ADUNIT_MACROS_ENDPOINT, ...).replaceMacro(AUTH_MACROS_ENDPOINT, ...).expand()`. Java's analog of Go's `text/template` is `org.prebid.server.util.Uri` (Vert.x `UriTemplate`, RFC 6570), not `String.replace` / `String.format` / `URIBuilder`. Custom resolver classes (e.g. `HuaweiEndpointResolver` in the huaweiads package) appear only when complexity demands it.
 
 ---
 
@@ -230,11 +232,11 @@ Each of these has the same cross-cutting rules as §3.1–§3.5 (`toBuilder()` m
 ### 3.7 Cross-cutting reviewer rules for all modes
 
 - **Mutation via `toBuilder()`**: `BidRequest`, `Imp`, `Device`, `User`, `Site`, `App` mutations use the Lombok-generated `toBuilder()...build()` chain (Rule 5). Direct setters don't compile on `@Value` POJOs — see `framework-utilities-java.md` §2.2.
-- **No `io.vertx.core.json.Json` usage**: Banned by checkstyle `BanVertxJsonImport` (F-new-56). Use `mapper.encodeToBytes(...)`.
+- **No `io.vertx.core.json.Json` usage**: Banned by checkstyle `IllegalImport id="BanVertxJsonImport"`. Use `mapper.encodeToBytes(...)`. (Not F-new-56 — see `framework-utilities-java.md` §8.)
 - **`Result.of(values, errors)`** for mixed; `Result.withValues(...)` for no errors; `Result.withErrors(...)` for no values. NEVER `new Result(...)`.
 - **Headers**: `HttpUtil.headers()` for the default 2-header set (`Content-Type: application/json;charset=utf-8` + `Accept: application/json`). Compose additional headers via `.add(...)`. When using `BidderUtil.defaultRequest`, headers are framework-defaulted.
 - **`payload(outgoingRequest)`**: include the `BidRequest` payload when downstream `makeBids` reads `httpCall.getRequest().getPayload()` (canonical AdkernelAdn pattern).
-- **Endpoint resolution**: Java's analog of Go's `text/template` is `String.replace(...)` / `String.format(...)` / `URIBuilder`. Verify every `{{TOKEN}}` macro in the URL has a corresponding `.replace("{{TOKEN}}", ...)` call. Unresolved macros leave the literal in the URL at runtime — a common `port-go2java` trap (F-new-50 family).
+- **Endpoint resolution**: Java's analog of Go's `text/template` is `org.prebid.server.util.Uri` — `Uri.of(url).replaceMacro(BARE_NAME, value).expand()`. Verify every single-brace `{Token}` in the URL has a matching `replaceMacro` keyed on the bare name; an unsupplied variable makes `expand()` throw `NoSuchElementException` at request time — a common `port-go2java` trap (F-new-50 family). `String.replace("{{TOKEN}}", ...)` on an endpoint is **FAIL**.
 - **No redundant PBS-core filtering**: The framework filters empty imp lists, endpoint emptiness (Spring `@NotBlank`), media-type capability routing, site/app presence. Re-implementing those checks is **WARN**. Specific-field defensive checks (e.g., `imp.banner.format[0]` for an adapter requiring explicit dimensions) are valid.
 
 ---
@@ -245,7 +247,7 @@ Each of these has the same cross-cutting rules as §3.1–§3.5 (`toBuilder()` m
 
 ### 4.1 `framework-default` (the default — Rule 30)
 
-The Java framework's `HttpBidderRequester` handles 204 / 4xx / 5xx BEFORE invoking the adapter's `makeBids`. The actual upstream mechanism (verified at SHA `a1fe64e123d6`): `errorOrNull(int statusCode)` (line 279) attaches a `BidderError` when status ≠ 200 ∧ ≠ 204, and the private static `makeBids(...)` dispatcher (line 302) short-circuits on 204 → `CompositeBidderResponse.empty()`, returns null on 4xx/5xx, and only on 200 invokes the adapter's `bidder.makeBidderResponse(...)`. There is no method named `validateResponse` on `HttpBidderRequester`. The adapter's `makeBids` is invoked only for successful responses. **No explicit status checks in adapter code.** This is the Java analog of Go's `canonical-go-helpers` (`adapters.IsResponseStatusCodeNoContent` / `adapters.CheckResponseStatusCodeForErrors`).
+The Java framework's `HttpBidderRequester` handles 204 / 4xx / 5xx BEFORE invoking the adapter's `makeBids`. The actual upstream mechanism (verified at SHA `e3ffd57`): `errorOrNull(int statusCode)` (line 274) returns a `BidderError` when status ≠ 200 ∧ ≠ 204, and the private static `makeBids(...)` dispatcher (line 294) short-circuits on 204 (line 303), returns null on 4xx/5xx (line 306), and only on 200 invokes the adapter's `bidder.makeBidderResponse(...)`. There is no method named `validateResponse` on `HttpBidderRequester`. The adapter's `makeBids` is invoked only for successful responses. **No explicit status checks in adapter code.** This is the Java analog of Go's `canonical-go-helpers` (`adapters.IsResponseStatusCodeNoContent` / `adapters.CheckResponseStatusCodeForErrors`).
 
 Canonical Kobler pattern (`KoblerBidder.java:149-157`):
 
@@ -341,7 +343,12 @@ The bid-type resolution chain in `getBidType(Bid)` / `resolveBidType(Bid, BidReq
 
 Loop over `bidRequest.getImp()`, find the imp where `imp.getId().equals(bid.getImpid())`, return whichever media-type field is non-null (priority: banner, video, native, audio).
 
-Available as a framework helper: `BidderUtil.getBidType(bid, impIdToImpMap)` (`BidderUtil.java:112-129`) — same logic with `BidType.banner` fallback for missing imps. Prefer the framework helper for new adapters; flag manual reimplementation as **WARN**.
+Available as a framework helper: `BidderUtil.getBidType(bid, impIdToImpMap)` (`BidderUtil.java:112-129`).
+
+**Scope the recommendation — SINGLE-FORMAT adapters only.** The helper returns `BidType.banner` in two places: when `impIdToImpMap.get(bid.getImpid())` is null (line 115), and as the terminal `else` after checking banner → video → xNative → audio in fixed priority (line 127). That is exactly the shape [`../SKILL.md`](../SKILL.md) §"Workflow: makeBids Changed" step 5 calls **FAIL** for a multiformat adapter: when one imp carries co-present formats, fixed-priority imp-lookup mis-types every bid that is not the first-priority format, and the missing-imp branch silently mislabels rather than erroring.
+
+- **Single-format adapter** (YAML `meta-info.{app,site,dooh}-media-types` declares exactly one type across all platforms): imp lookup is unambiguous. Prefer `BidderUtil.getBidType`; flag manual reimplementation as **WARN**.
+- **Multiformat adapter** (more than one declared media type): do NOT recommend `BidderUtil.getBidType` as the primary resolver. Require `bid.getMtype()` first (§5.3) with imp lookup as fallback. Recommending the helper here would ask the author to introduce the defect the SKILL blocks on — see [`../SKILL.md`](../SKILL.md) §"Workflow: makeBids Changed" step 5, "Multiformat adapters MUST resolve from `bid.getMtype()` first".
 
 ### 5.3 `by-bid-mtype` — OpenRTB 2.6 markup-type switch
 
@@ -500,7 +507,7 @@ public class {X}Test extends IntegrationTest {
 - **`extends IntegrationTest`** — base class provides `WIRE_MOCK_RULE`, `responseFor`, `assertJsonEquals`, `jsonFrom` helpers. Deviation is **FAIL**.
 - **`@TestPropertySource` URL override** — when the IT class needs to override defaults beyond `test-application.properties`, add: `@TestPropertySource(locations = "test-application.properties", properties = { "auction.host.skip-validation=true" })`. Most adapters don't need this; presence is **INFO** unless justified.
 - **`@Test public void openrtb2AuctionShouldRespondWithBidsFromThe{X}Bidder() throws IOException, JSONException`** — canonical method name + signature. The `openrtb2AuctionShouldRespondWith*` prefix is for happy-path; other prefixes for error paths.
-- **`urlPathEqualTo("/{x}-exchange")`** — MUST match the `test-application.properties` `adapters.{x}.endpoint=http://localhost:8090/{x}-exchange` value. Mismatch is the F-new-96 trap. **Cross-skill with `pr-triage-java`** (owns the properties file).
+- **`urlPathEqualTo("/{x}-exchange")`** — MUST match the `test-application.properties` `adapters.{x}.endpoint=http://localhost:8090/{x}-exchange` value. On mismatch WireMock never serves the stub and the IT fails on an empty response. This is the **IT-registry misalignment** concern (pr-triage-java cross-skill code 5i), not F-new-96 — `framework-utilities-java.md` §8 defines F-new-96 as the checkstyle `UnusedImports` violation. **Cross-skill with `pr-triage-java`** (owns the properties file).
 - **`equalToJson(...)`** for strict JSON equality. Deviations (`urlEqualTo` instead of `urlPathEqualTo`, `containing` instead of `equalToJson`) are **WARN** unless special-cased.
 - **`responseFor(...)` + `assertJsonEquals(...)`** — canonical close. The `singletonList("{x}")` is the bidder name for ID-stripping in the comparison. For per-alias IT classes, this is the alias name, NOT the parent.
 
@@ -523,7 +530,7 @@ One scenario is sufficient for basic coverage. Multi-scenario IT classes (e.g., 
 
 ### 7.5 Per-alias IT classes (empire-parents)
 
-When the parent bidder has aliases (canonical: Adverxo's empire — `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java`), each alias gets its own per-alias IT class. Per-alias verifications layered on top of §7.2-7.3:
+When the parent bidder has aliases (canonical: Adverxo's empire — the `adport`, `bidsmind`, `harrenmedia` alias keys in `bidder-config/adverxo.yaml` at `e3ffd57`), each alias gets its own per-alias IT class. Per-alias verifications layered on top of §7.2-7.3:
 
 1. **Class name matches alias slug**: `{Alias}Test` where `Alias` is TitleCase of the alias slug. Mismatch is **FAIL** (checkstyle `OuterTypeFilename`).
 2. **WireMock URL matches alias endpoint**: When the parent YAML's `aliases.{alias}.endpoint` declares a distinct endpoint, `urlPathEqualTo(...)` must match the corresponding `test-application.properties` `adapters.{parent}.aliases.{alias}.endpoint=...` entry.
@@ -589,13 +596,13 @@ When `bidder/{x}/` contains additional `.java` files beyond `{X}Bidder.java`, th
 - **Necessity**: Helper must serve a clear purpose. Flag duplication of `BidderUtil` / `HttpUtil` / `JacksonMapper` logic as **WARN**.
 - **Package statement**: MUST be `package org.prebid.server.bidder.{x};` (lowercase, no underscores). The F-new-50-adjacent trap caught by checkstyle `PackageName`.
 - **Visibility**: Default to package-private (Java idiom for "internal to this package"). `public` requires justification.
-- **Lombok on DTOs**: `@Value @Builder @Jacksonized` for immutable POJOs (the default). `@Data` on bidder-package DTOs is **WARN** — they should be immutable. See `framework-utilities-java.md` §2.
+- **Lombok on DTOs**: `@Value` for immutable POJOs (the default; `@Value @Builder` is an accepted variant). **`@Jacksonized` is not an upstream convention** — zero occurrences across the 226 ExtImp POJOs at `e3ffd57` — so do NOT flag its absence alongside `@Builder`. `@Data` on bidder-package DTOs is **WARN** — they should be immutable. See `framework-utilities-java.md` §2.0 / §2.8.
 - **No mutable static state**: Static fields holding mutable collections / counters are **FAIL**.
 - **Filename ↔ class name match**: `OuterTypeFilename` checkstyle rule (F-new-79).
 
 ### 10.3 Test colocation
 
-A `{X}Util.java` typically has a `{X}UtilTest.java` sibling in the test tree (`bidder/{x}/{X}UtilTest.java`). When the helper has non-trivial logic, flag missing test coverage as **WARN** — Jacoco enforces 90% line coverage, so untested helpers tank coverage. See `framework-utilities-java.md` §5.
+A `{X}Util.java` typically has a `{X}UtilTest.java` sibling in the test tree (`bidder/{x}/{X}UtilTest.java`). When the helper has non-trivial logic and no test exercises it, flag as **INFO / NOTE** naming the untested branch, citing the PR-template checkbox "Does your test coverage exceed 90%?". **Jacoco enforces nothing** — no `check` goal, no `<rules>`, and no workflow reads the report, so coverage cannot fail CI. Escalate to **WARN / ASK** only for a specific demonstrably-unexercised changed branch. See `framework-utilities-java.md` §5.1-§5.2.
 
 ### 10.4 Activation scope
 
@@ -620,13 +627,13 @@ This skill activates for ANY `*.java` file under `src/main/java/org/prebid/serve
 
 ## Sources
 
-- `prebid/prebid-server-java` master @ SHA `a1fe64e123d6` (verified 2026-05-04)
+- `prebid/prebid-server-java` master @ SHA `e3ffd57` (verified 2026-08-18)
 - `src/main/java/org/prebid/server/bidder/Bidder.java` (the interface)
 - `src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java` (canonical reference adapter — Rule 35 + currency + ext-prebid bid-type)
 - `src/main/java/org/prebid/server/bidder/adkerneladn/AdkernelAdnBidder.java` (bare constructor + per-key dispatch)
 - `src/main/java/org/prebid/server/bidder/adverxo/AdverxoBidder.java` (currency-converting constructor)
 - `src/main/java/org/prebid/server/bidder/mediasquare/MediasquareBidder.java` (custom request type — `Bidder<MediasquareRequest>`)
 - `src/main/java/org/prebid/server/bidder/huaweiads/HuaweiAdsBidder.java` (custom request type + co-located helper package)
-- `src/main/java/org/prebid/server/util/BidderUtil.java` (`defaultRequest`, `impIds`, `shouldConvertBidFloor`, `getBidType`)
+- `src/main/java/org/prebid/server/util/BidderUtil.java` (`defaultRequest`, `impIds`, `shouldConvertBidFloor`, `getBidType` at lines 112-129)
 - `src/main/java/org/prebid/server/util/HttpUtil.java` (`validateUrl`, `headers`)
 - `src/test/java/org/prebid/server/it/KoblerTest.java` (canonical IT test class shape)

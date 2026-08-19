@@ -30,7 +30,7 @@ Each entry in `params.schema_interpretation.properties[]` has:
 ```yaml
 - name: <string>          # The JSON property name verbatim.
   type: <string>          # See "Type field encoding" below.
-  description: <string>   # The JSON Schema "description" verbatim, or null if absent.
+  description: <string>   # The JSON Schema "description" verbatim, or null if absent. Verbatim field — see below.
   constraints:            # OPTIONAL — present only when the schema declares constraints.
     minLength: <int>      # Per "minLength".
     maxLength: <int>      # Per "maxLength".
@@ -43,6 +43,16 @@ Each entry in `params.schema_interpretation.properties[]` has:
 ```
 
 Property emission order: source order (the order properties appear in the JSON file). NOT alphabetical. Determinism (R4) requires this.
+
+### `description` is a verbatim field
+
+`description` carries upstream bytes, so V1 in [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4) applies: extract it from the blob the SKILL's Step 1 staged, and rely on `bidder_params_ref` as the reference that makes the extraction re-derivable. Extract, do not retype:
+
+```bash
+python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));[print(repr(k),repr(v.get("description"))) for k,v in d["properties"].items()]' ../../test-fixtures/blobs/<sha256>
+```
+
+A description is long prose and the only thing that catches a dropped clause is a comparison against the blob. Never summarize, shorten, normalize whitespace, or "clean up" the text; a paraphrase in this field is an invented upstream fact. Nested `properties` (an object-typed property's sub-fields) follow the same rule.
 
 ### Type field encoding
 
@@ -340,7 +350,16 @@ func TestInvalidParams(t *testing.T) {
 `valid_cases_count` = number of elements in the `validParams` slice literal.
 `invalid_cases_count` = number of elements in the `invalidParams` slice literal.
 
-Method (in order of preference):
+Both are computed values under V4 in [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): the value recorded is the stdout of one of the instruments below, run against the bytes at `resolved_commit`. A number the reader arrived at by eye is not admissible even when it is right, because nothing downstream can re-derive it.
+
+Default (shell):
+
+```bash
+<fetch> | awk '/^var validParams/,/^}/'   | grep -c '^[[:space:]]*`'
+<fetch> | awk '/^var invalidParams/,/^}/' | grep -c '^[[:space:]]*`'
+```
+
+Other instruments (in order of preference when the default's assumptions do not hold):
 
 1. **Go AST** — find `*ast.GenDecl` for `Tok == token.VAR`, walk to find names `validParams` and `invalidParams`, count the `*ast.CompositeLit.Elts` length.
 2. **Regex fallback** — find `var validParams = []string{` and the matching `}`, count backtick-delimited strings between (regex `` `[^`]*` `` matched non-greedily). Same for `invalidParams`.

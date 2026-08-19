@@ -43,7 +43,7 @@ This plan supersedes the conversation-prep punch list. Two parallel research pas
 | R6 | Official porting guide at `prebid/prebid-server-java/docs/developers/bid-adapter-porting-guide.md` (PR #3768) mandates `Port <Bidder>: New Adapter` title and `do not port` label. | Port skill version-pins to the guide's SHA; auto-emits compliant title/label. |
 | R7 | "Orchestrator" CLI is fully aspirational; no code exists. `.tmp/full-loop/{run-id}/` and `${FULL_LOOP_RUN_ID}` are conventions only. | D1 establishes the convention: read-orchestrator gains `--output=`; port skill writes destination spec + port-report at canonical paths. Phase D does NOT build a "full-loop" orchestrator CLI; manual sequencing per `end-to-end-flow.md` §1.2 is documented. |
 | R8 | Upstream Go has zero `.golangci.yml`; lone style gate is `gofmt -s`. CI also runs `go vet`, semgrep adapter rules, 30% coverage warning. `TestBidderUniquenessGatekeeping` enforces first-6-letter uniqueness. Alphabetical insert into `bidders.go`/`adapter_builders.go`. | D1's port-engine includes `gofmt -s -w` post-processor + alphabetical-insert + prefix-uniqueness pre-check. |
-| R9 | Upstream Java has hard-fail checkstyle (LineLength≤120, EmptyLineSeparator, ImportOrder strict 3-group, ban `io.vertx.core.json.Json`, FinalLocalVariable, ≥90% Jacoco coverage expected). Mandatory PR template. | D1's emission templates are checkstyle-compliant by construction; D4 adds local `mvn checkstyle:check` dry-run. |
+| R9 | Upstream Java has hard-fail checkstyle (LineLength≤120, EmptyLineSeparator, ImportOrder strict 3-group, ban `io.vertx.core.json.Json`, FinalLocalVariable) — `<goal>check</goal>` is bound at `extra/pom.xml:302`. Coverage is NOT in that set: upstream asks contributors to self-certify ≥90% on changed code (`docs/developers/contributing.md:17`; PR-template checkbox) but declares Jacoco `prepare-agent` + `report` only (`extra/pom.xml:325-344`), so it cannot fail CI. Mandatory PR template. | D1's emission templates are checkstyle-compliant by construction; D4 adds local `mvn checkstyle:check` dry-run. |
 | R10 | Upstream Java PR #4126 (URL validation) is in-flight; could land between port-emit and PR-open. | D0 sync-from-upstream + D2 pre-submit rebase to current `master`. |
 | R11 | Connatix Java port ADDED `minimum:0, maximum:1` constraints absent in Go (target strengthens source). aax R5-fail goes the other way. | Schema `r5_check.state` distinguishes `warn-target-strengthens-source` and `fail-source-omits-target-constraint`; D2 handler routes accordingly. |
 
@@ -146,7 +146,7 @@ The 10 mechanical-ready rules (priority order):
 4. **Rule 44** — alias-empire flavor coherence
 5. **Rule 36** — fixture-inventory parity → semantic-coverage parity (re-author Java IT 4-file split from Go's flat fixtures; document unreachable-error-paths exclusion per porting guide)
 6. **Rule 42** — IAB-cat storage translation (`iab_table_translate`)
-7. **Rule 35** — config-properties subclass scaffolding (Jinja template at `templates/configuration-properties.java.j2`)
+7. **Rule 35** — config-properties subclass scaffolding (nested subclass emitted by `templates/configuration.java.j2`; the separate-file `configuration-properties.java.j2` was removed — no upstream bidder ships that shape)
 8. **Rule 39** — derived-view (no-op on porter)
 9. **Rule 19** — standard headers (`HttpUtil.headers()` collapse)
 10. **Rule 30** — canonical Go status helpers ↔ Java framework default
@@ -178,7 +178,7 @@ Six pairs covering distinct pipeline paths. Per-pair acceptance criteria (ALL mu
 
 1. Emitted Java compiles cleanly via `mvn -B compile --file extra/pom.xml`.
 2. Emitted unit tests pass via `mvn -B test -Dtest={Bidder}BidderTest --file extra/pom.xml`.
-3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90%.
+3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90% — this repo's own acceptance bar, measured locally. It matches the level upstream asks contributors to self-certify (`docs/developers/contributing.md:17`; PR-template checkbox), which upstream CI does not check.
 4. `mvn -B checkstyle:check` exits 0.
 5. Emitted YAML validates against Java's `bidder-info-schema.json`; emitted JSON validates against `static/bidder-params/_schema.json`.
 6. `port-report.json` schema-validates against `port-report.schema.json` v0.2.0.

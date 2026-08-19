@@ -17,6 +17,7 @@ Public API
 ----------
 
 - ``byte_copy(source_path, dest_path) -> bool``
+- ``materialize_params(ref, blobs_dir=None, checkout=None) -> bytes``
 - ``normalize_bidder_name(go_name, *, target_lang='java', allow_list=None) -> str``
 - ``alias_graph_invert(parent_spec, alias_specs, *, direction) -> Dict[str, dict]``
 - ``iab_table_translate(direction, source_artifact) -> Union[str, Dict[str, Any]]``
@@ -46,7 +47,7 @@ import hashlib
 import json
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 try:
@@ -101,6 +102,220 @@ def byte_copy(source_path: Union[str, Path], dest_path: Union[str, Path]) -> boo
     dst_bytes = dst.read_bytes()
     dst_sha = hashlib.sha256(dst_bytes).hexdigest()
     return src_sha == dst_sha and len(src_bytes) == len(dst_bytes)
+
+
+# ---------------------------------------------------------------------------
+# Helper 1b — materialize_params (Rule 38, ref-based)
+# ---------------------------------------------------------------------------
+
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def materialize_params(
+    ref: Dict[str, Any],
+    blobs_dir: Optional[Union[str, Path]] = None,
+    checkout: Optional[Union[str, Path]] = None,
+    *,
+    runner: Optional[Callable[[List[str], Path], Tuple[int, bytes]]] = None,
+) -> bytes:
+    """Return the exact bidder-params bytes a ``bidder_params_ref`` names.
+
+    Rule 38 in its ref-based form. The Adapter Specification no longer
+    inlines the params text; it carries a content-addressed reference::
+
+        bidder_params_ref:
+          path: static/bidder-params/kobler.json   # upstream-relative
+          resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+          sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+          bytes: 431
+
+    The port carries that block forward unchanged and calls this helper to
+    obtain the bytes it must write at the destination path.
+
+    Why this is verifiable where the inline copy was not: ``sha256`` and
+    ``bytes`` describe bytes the reader did *not* author. The superseded
+    contract hashed ``bidder_params_json`` — the reader's own output — so a
+    lossy transcription produced a self-consistent hash and cleared every
+    check. ``bytes`` is a second, independent witness: a byte count cannot
+    be back-derived from text the reader wrote.
+
+    Resolution order
+    ----------------
+    1. ``blobs_dir/<ref.sha256>`` — the content-addressed blob store at
+       ``prebid-server-{go,java}/read/test-fixtures/blobs/``. Offline and
+       self-naming: a blob is filed under the digest of its own content.
+    2. ``checkout`` — a local upstream clone. Read is pinned to
+       ``ref.resolved_commit`` via ``git cat-file blob <commit>:<path>``
+       so a clone fetched past the spec's commit still yields the bytes
+       the ref attests to. If the pinned read fails (not a git work tree,
+       shallow clone missing the commit), the helper falls back to
+       ``checkout/<ref.path>`` on disk — verification below still governs,
+       so a drifted working tree raises rather than returning wrong bytes.
+
+    Parameters
+    ----------
+    ref : dict
+        The spec's ``bidder_params_ref`` block. ``path``, ``sha256`` and
+        ``bytes`` are always required; ``resolved_commit`` is required only
+        when resolution reaches the ``checkout`` branch.
+    blobs_dir : str | Path | None
+        Blob-store directory. A directory that exists but holds no blob for
+        this digest is not an error on its own — resolution falls through.
+    checkout : str | Path | None
+        Local upstream clone root.
+    runner : callable | None
+        Dependency-injection hook for the pinned git read; receives
+        ``(argv, cwd)`` and returns ``(returncode, stdout_bytes)``. Must
+        return raw bytes — decoding to ``str`` would defeat the contract.
+
+    Returns
+    -------
+    bytes
+        The verified params bytes. Never a partial or unverified read: the
+        return value hashes to ``ref.sha256`` and is ``ref.bytes`` long.
+        An empty return is possible only when the ref itself attests to
+        zero bytes.
+
+    Raises
+    ------
+    ValueError
+        If ``ref`` is malformed; if no source resolves (a missing blob and
+        no usable checkout is an error, never an empty return); or if the
+        resolved bytes fail either witness. The message names the source
+        that produced the bytes so blob-store corruption is distinguishable
+        from checkout drift.
+    """
+    path, sha256_expected, bytes_expected = _validate_params_ref(ref)
+
+    data: Optional[bytes] = None
+    source = ""
+    attempts: List[str] = []
+
+    if blobs_dir is not None:
+        blob = Path(blobs_dir) / sha256_expected
+        if blob.is_file():
+            data = blob.read_bytes()
+            source = f"blob store {blob}"
+        else:
+            attempts.append(f"blob store miss at {blob}")
+
+    if data is None and checkout is not None:
+        data, source, checkout_attempts = _read_params_from_checkout(
+            Path(checkout), path, ref, runner
+        )
+        attempts.extend(checkout_attempts)
+
+    if data is None:
+        if blobs_dir is None and checkout is None:
+            attempts.append("no blobs_dir and no checkout supplied")
+        raise ValueError(
+            f"materialize_params: cannot resolve bidder_params_ref for {path!r} "
+            f"(sha256={sha256_expected}) — " + "; ".join(attempts)
+        )
+
+    sha256_actual = hashlib.sha256(data).hexdigest()
+    problems: List[str] = []
+    if sha256_actual != sha256_expected:
+        problems.append(
+            f"sha256 mismatch: ref says {sha256_expected}, bytes hash to {sha256_actual}"
+        )
+    if len(data) != bytes_expected:
+        problems.append(
+            f"byte-count mismatch: ref says {bytes_expected}, got {len(data)}"
+        )
+    if problems:
+        raise ValueError(
+            f"materialize_params: {path!r} read from {source} failed verification — "
+            + "; ".join(problems)
+        )
+    return data
+
+
+def _validate_params_ref(ref: Any) -> Tuple[str, str, int]:
+    """Check the always-required keys on a ``bidder_params_ref``.
+
+    Returns ``(path, sha256, bytes)``. Raises ``ValueError`` naming the
+    offending key. ``resolved_commit`` is validated lazily by the checkout
+    branch — a blob-store hit does not need it.
+    """
+    if not isinstance(ref, dict):
+        raise ValueError(
+            f"materialize_params: ref must be a bidder_params_ref mapping; got {type(ref).__name__}"
+        )
+    path = ref.get("path")
+    if not path or not isinstance(path, str):
+        raise ValueError(
+            f"materialize_params: bidder_params_ref.path must be a non-empty "
+            f"upstream-relative string; got {path!r}"
+        )
+    # The path is joined onto a checkout root, so an absolute path or a `..`
+    # component would read outside the clone. Verification would still refuse
+    # to return foreign bytes, but the read itself should not happen.
+    pure = PurePosixPath(path)
+    if pure.is_absolute() or ".." in pure.parts:
+        raise ValueError(
+            f"materialize_params: bidder_params_ref.path must be relative to the "
+            f"upstream root with no '..' components; got {path!r}"
+        )
+    sha256_expected = ref.get("sha256")
+    if not isinstance(sha256_expected, str) or not _SHA256_HEX_RE.match(sha256_expected):
+        raise ValueError(
+            f"materialize_params: bidder_params_ref.sha256 must be 64 lowercase hex "
+            f"chars; got {sha256_expected!r}"
+        )
+    bytes_expected = ref.get("bytes")
+    # bool is an int subclass; reject it so `bytes: true` cannot pass as 1.
+    if isinstance(bytes_expected, bool) or not isinstance(bytes_expected, int) or bytes_expected < 0:
+        raise ValueError(
+            f"materialize_params: bidder_params_ref.bytes must be a non-negative "
+            f"integer (the second witness; without it a sha-only check is a "
+            f"single-witness check); got {bytes_expected!r}"
+        )
+    return path, sha256_expected, bytes_expected
+
+
+def _read_params_from_checkout(
+    checkout: Path,
+    path: str,
+    ref: Dict[str, Any],
+    runner: Optional[Callable[[List[str], Path], Tuple[int, bytes]]],
+) -> Tuple[Optional[bytes], str, List[str]]:
+    """Read ``path`` out of ``checkout``, pinned to ``ref.resolved_commit``.
+
+    Returns ``(data_or_None, source_label, attempt_notes)``.
+    """
+    commit = ref.get("resolved_commit")
+    if not commit or not isinstance(commit, str):
+        raise ValueError(
+            f"materialize_params: resolving {path!r} from a checkout requires "
+            f"bidder_params_ref.resolved_commit; got {commit!r}"
+        )
+    attempts: List[str] = []
+    argv = ["git", "-C", str(checkout), "cat-file", "blob", f"{commit}:{path}"]
+    rc, stdout = -1, b""
+    if runner is not None:
+        rc, stdout = runner(argv, checkout)
+    else:
+        try:
+            result = subprocess.run(argv, capture_output=True, check=False, timeout=60)
+            rc, stdout = result.returncode, result.stdout
+        except FileNotFoundError:
+            attempts.append("git not found on PATH")
+        except subprocess.TimeoutExpired:
+            attempts.append(f"git cat-file {commit}:{path} exceeded 60s")
+    if rc == 0:
+        return stdout, f"checkout {checkout} pinned at {commit}", attempts
+    if rc != -1:
+        attempts.append(f"git cat-file blob {commit}:{path} in {checkout} exited {rc}")
+
+    # Unpinned fallback. Verification is what makes this safe: a working
+    # tree that has moved past `resolved_commit` fails the sha256/bytes
+    # witnesses instead of yielding the wrong bytes.
+    on_disk = checkout / path
+    if on_disk.is_file():
+        return on_disk.read_bytes(), f"checkout working tree {on_disk} (unpinned)", attempts
+    attempts.append(f"no file at {on_disk}")
+    return None, "", attempts
 
 
 # ---------------------------------------------------------------------------

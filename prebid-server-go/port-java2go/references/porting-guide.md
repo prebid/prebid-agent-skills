@@ -181,7 +181,7 @@ For each port-translation rule the inverse direction triggers, see:
 - Rule 33 (alias inversion): Java parent → Go child YAMLs (covered in [`registration-rules.md`](registration-rules.md)).
 - Rule 35 (covered above).
 - Rule 36 (test-fixture re-authoring; covered above).
-- Rule 38 (bidder-params byte-fidelity): byte-copy via `port_engine.byte_copy`.
+- Rule 38 (bidder-params byte-fidelity): materialise from `bidder_params_ref` via `port_engine.materialize_params`, then binary-write and re-hash the emitted file against `ref.sha256` / `ref.bytes`. Never re-serialise, and never rebuild the file from the deprecated `bidder_params_json` string.
 - Rule 42 (IAB-cat translation): Java YAML inline → Go data file (`port_engine.iab_table_translate(direction='java-to-go')`).
 - Rule 44 (alias-empire flavor coherence): per-alias overrides recorded in Go aliases' `bidder-info` YAMLs.
 - Rule 46 inverse (naming normalization): not fully mechanical; requires dual-spec assertion lookup.

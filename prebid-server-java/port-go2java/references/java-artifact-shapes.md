@@ -175,8 +175,8 @@ Before D2 considers an emission complete, every emitted file passes:
 1. `mvn -B compile --file extra/pom.xml` exits 0
 2. `mvn -B checkstyle:check` exits 0 (covers all rules in this doc)
 3. `mvn -B test -Dtest={Bidder}BidderTest` exits 0
-4. Jacoco line-coverage on `{Bidder}Bidder.java` ≥ 90%
-5. The emitted `bidder-params/{bidder}.json` byte-matches the Go-side source per Rule 38 (`scripts/lib/port_engine.byte_copy` SHA verify)
+4. Jacoco line-coverage on `{Bidder}Bidder.java` ≥ 90% — a local measurement, not a CI verdict. Upstream asks contributors to self-certify this level (`docs/developers/contributing.md:17`; `.github/pull_request_template.md:34`) but wires Jacoco for `prepare-agent` + `report` only (`extra/pom.xml:325-344`), with no `check` goal and no coverage step in `pr-java-ci.yml`.
+5. The emitted `bidder-params/{bidder}.json` byte-matches the Go-side source per Rule 38 — its sha256 equals `bidder_params_ref.sha256` and its length equals `bidder_params_ref.bytes` (`scripts/lib/port_engine.materialize_params` verifies both before returning the bytes; re-check the file after writing it)
 
 The skill's Step 6 R5 check at port time runs after these gates pass.
 

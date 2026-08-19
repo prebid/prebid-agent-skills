@@ -1,0 +1,60 @@
+fixture: prebid-server-4211
+
+# 1 changed file in the fixture; all 1 examined (static/bidder-info/adtg_org.yaml).
+files_scanned: 1
+
+run:
+  skills: [pr-triage, bidder-info-pr-review]
+  skills_commit: c72e1f4042fcffd15e0fa57f6e03d2eea1b085c4
+  model: claude-opus-5
+  date: 2026-08-18
+
+# pr-triage: PR type = alias-only (only static/bidder-info/*.yaml, aliasOf on an
+# added line). Step 5a macro check PASS -- {{.PublisherID}} and {{.Host}} are both
+# in the canonical macros.EndpointTemplateParams allow-list. One-alias-per-PR rule
+# not triggered (single alias). bidder-info-pr-review activated on 1 file, 2
+# changed fields (endpoint, aliasOf) -> 2 field-level tasks, NOT bulk mode
+# (single alias, the 5+-of-same-parent exception does not apply).
+#
+# Verified upstream at prebid/prebid-server @0ba3523:
+#   - parent static/bidder-info/limelightDigital.yaml exists and is not itself an
+#     alias (Alias Adapter Added steps 1-2 PASS)
+#   - parent has 23 aliases -> aliasing is the established pattern (step 4c PASS)
+#   - parent declares no gvlVendorID -> step 8 "omitted, parent has none" PASS
+#   - bidder name adtg_org: underscore permitted (PR #4211 policy), 6-char prefix
+#     "adtg_o" unique across the 385 static/bidder-info names -> Bidder Naming
+#     Convention workflow PASS
+#   - endpoint POST returned HTTP 204 -> reachability PASS
+findings:
+  - path: static/bidder-info/adtg_org.yaml
+    anchor: 'endpoint: "http://ads-pbs.rtb.adtarget.org/openrtb/{{.PublisherID}}?host={{.Host}}"'
+    symbol: null
+    severity: INFO
+    family: endpoint-config
+    note: >-
+      bidder-info-pr-review Workflow: Endpoint Changed step 3 ("Scheme
+      tolerance") directs: "Flag HTTP as INFO with recommendation to upgrade to
+      HTTPS -- never FAIL." Endpoint is live (HTTP 204 to a bare POST), domain
+      plausibly belongs to AdTarget.org, macros valid, no credentials in URL.
+      Emitted because the check is unconditional on an http:// scheme; the same
+      workflow step records that http remains permitted, so this is a note only.
+
+  - path: static/bidder-info/adtg_org.yaml
+    anchor: 'aliasOf: "limelightDigital"'
+    symbol: null
+    severity: WARN
+    family: maintainer-metadata
+    note: >-
+      bidder-info-pr-review Workflow: Alias Adapter Added step 6 ("Alias
+      completeness -- maintainer.email"). The alias omits maintainer.email while
+      the parent declares engineering@project-limelight.com. The INFO branch
+      requires a bulk-mode bundle, a common-stem domain with the parent, or an
+      internal rename; none hold here (single-alias PR; alias registrable domain
+      adtarget.org vs parent ortb.net). The WARN branch ("distinct endpoint
+      domain that doesn't share a stem with the parent's") is what fires.
+      Doubt recorded: the alias endpoint reuses the parent's exact
+      ads-pbs.<domain>/openrtb/{{.PublisherID}}?host={{.Host}} shape, and all 23
+      limelightDigital aliases upstream @0ba3523 omit maintainer.email, so the
+      family-inheritance reading is defensible; step 9 of the same workflow also
+      calls the 2-line alias form fully valid and says not to flag missing
+      fields on it.

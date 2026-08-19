@@ -274,16 +274,17 @@ class TestConfigurationJ2(unittest.TestCase):
         self.assertIn("new KoblerBidder(config.getEndpoint(), mapper)", rendered)
 
     def test_typed_config_props_uses_subclass(self):
-        ctx = _kobler_configuration_ctx()
-        ctx["has_typed_config_props"] = True
-        ctx["typed_config_class_name"] = "KoblerBidderConfigurationProperties"
-        rendered = _render("configuration.java.j2", ctx)
-        self.assertIn("KoblerBidderConfigurationProperties configurationProperties()", rendered)
-        self.assertIn("return new KoblerBidderConfigurationProperties();", rendered)
-        self.assertIn(
-            "KoblerBidderConfigurationProperties koblerConfigurationProperties,",
-            rendered,
-        )
+        """The factory and the deps bean both take the typed subclass.
+
+        Renamed from the *BidderConfigurationProperties form the old separate-file
+        template used: no upstream bidder uses that suffix, which names the two
+        framework classes `model/BidderConfigurationProperties` and
+        `model/DefaultBidderConfigurationProperties`.
+        """
+        rendered = _render("configuration.java.j2", _adverxo_typed_config_ctx())
+        self.assertIn("AdverxoConfigurationProperties configurationProperties()", rendered)
+        self.assertIn("return new AdverxoConfigurationProperties();", rendered)
+        self.assertIn("AdverxoConfigurationProperties adverxoConfigurationProperties,", rendered)
 
     def test_property_source_matches_bidder_config_path(self):
         rendered = _render("configuration.java.j2", _kobler_configuration_ctx())
@@ -292,31 +293,109 @@ class TestConfigurationJ2(unittest.TestCase):
             rendered,
         )
 
-    def test_typed_config_props_drops_bidderconfigurationproperties_import(self):
-        """When the typed subclass replaces the generic
-        BidderConfigurationProperties, the latter import would be unused —
-        checkstyle UnusedImports rule would flag it. Template must drop it."""
-        ctx = _kobler_configuration_ctx()
-        ctx["has_typed_config_props"] = True
-        ctx["typed_config_class_name"] = "KoblerBidderConfigurationProperties"
-        rendered = _render("configuration.java.j2", ctx)
-        self.assertNotIn(
-            "import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;",
-            rendered,
-        )
+    def test_bidderconfigurationproperties_import_is_always_used(self):
+        """Guards the same thing the old drop-it rule guarded: no unused import.
 
-    def test_validated_only_when_typed_config_props(self):
-        """@Validated annotation appears only with typed config subclass
-        (Bean Validation activation); standard form omits it AND its import."""
+        The rule inverted when the Rule 35 subclass moved from a separate file
+        into this one. It used to be dropped under Rule 35 because nothing here
+        referenced it and checkstyle UnusedImports would flag it. Now the nested
+        subclass `extends BidderConfigurationProperties`, and without Rule 35 the
+        factory method returns it -- so it is referenced in BOTH arms and must be
+        imported in both. Dropping it now would not compile.
+        """
+        IMPORT = "import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;"
+        plain = _render("configuration.java.j2", _kobler_configuration_ctx())
+        self.assertIn(IMPORT, plain)
+        self.assertIn("BidderConfigurationProperties configurationProperties()", plain)
+
+        typed = _render("configuration.java.j2", _adverxo_typed_config_ctx())
+        self.assertIn(IMPORT, typed)
+        self.assertIn("extends BidderConfigurationProperties", typed)
+
+    def test_validated_tracks_constraints_not_rule_35(self):
+        """The trigger changed, and the old one over-emitted.
+
+        @Validated used to be emitted whenever Rule 35 fired, and onto the @Bean
+        factory method. Upstream puts it on the CLASS and only where a field
+        carries a jakarta constraint: 7 of the 16 Rule-35 subclasses have it and
+        every one of those has a constraint; none has it without one. It is
+        redundant either way -- the parent BidderConfigurationProperties is
+        @Validated and spring resolves it up the type hierarchy -- so emitting it
+        on an unconstrained subclass is noise no upstream file carries.
+        """
         std = _render("configuration.java.j2", _kobler_configuration_ctx())
         self.assertNotIn("@Validated", std)
         self.assertNotIn("import org.springframework.validation.annotation.Validated;", std)
+
+        ctx = _adverxo_typed_config_ctx()
+        ctx["typed_fields"] = [dict(f, validation_annotations=None) for f in ctx["typed_fields"]]
+        ctx["typed_config_constraint_imports"] = None
+        unconstrained = _render("configuration.java.j2", ctx)
+        self.assertIn("private static class", unconstrained)
+        self.assertNotIn("@Validated", unconstrained)
+
+    def test_rule_35_without_typed_fields_fails_loudly(self):
+        """A ctx claiming Rule 35 fired but carrying no fields is a caller bug.
+
+        Before the guard this rendered a subclass with an empty body -- a Rule 35
+        class binding none of the properties Rule 35 exists to bind -- and
+        reported success.
+        """
         ctx = _kobler_configuration_ctx()
         ctx["has_typed_config_props"] = True
-        ctx["typed_config_class_name"] = "X"
-        typed = _render("configuration.java.j2", ctx)
-        self.assertIn("@Validated", typed)
-        self.assertIn("import org.springframework.validation.annotation.Validated;", typed)
+        ctx["typed_config_class_name"] = "KoblerConfigurationProperties"
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("configuration.java.j2", ctx)
+        self.assertIn("typed_fields_is_empty", str(cm.exception))
+
+    def test_typed_fields_without_the_flag_fails_loudly(self):
+        """The other direction: fields supplied, flag false, fields dropped."""
+        ctx = _adverxo_typed_config_ctx()
+        ctx["has_typed_config_props"] = False
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("configuration.java.j2", ctx)
+        self.assertIn("would_be_dropped", str(cm.exception))
+
+    def test_never_emits_deleted_usersyncer_creator(self):
+        """`UsersyncerCreator` was deleted upstream in 2880782f (#4464,
+        2026-07-09); `BidderDepsAssembler` never had a `usersyncerCreator`
+        method. Emitting either does not compile. The Usersyncer is derived
+        internally from the bound properties, so a bidder WITH usersync still
+        gets no argument for it — canonical: AdprimeConfiguration.java, whose
+        bidder-config declares iframe+redirect usersync."""
+        ctx = _kobler_configuration_ctx()
+        ctx["user_sync"] = {
+            "cookie_family_name": "kobler",
+            "iframe": {"url": "https://sync.example.com?redir={redirect_url}"},
+        }
+        rendered = _render("configuration.java.j2", ctx)
+        self.assertNotIn("UsersyncerCreator", rendered)
+        self.assertNotIn("usersyncerCreator", rendered)
+        self.assertIn(".withConfig(koblerConfigurationProperties)", rendered)
+        self.assertIn(".bidderCreator(", rendered)
+
+    def test_external_url_param_gated_on_endpoint_macro(self):
+        """`external-url` is an endpoint-macro concern, not a usersync one:
+        4 of 255 upstream configs take it, all to resolve
+        {PREBID_SERVER_ENDPOINT} (canonical: AaxConfiguration.java). Absent the
+        flag, the parameter and BOTH of its imports must be omitted, or
+        checkstyle UnusedImports fails the build."""
+        without = _render("configuration.java.j2", _kobler_configuration_ctx())
+        self.assertNotIn("externalUrl", without)
+        self.assertNotIn("import org.springframework.beans.factory.annotation.Value;", without)
+        self.assertNotIn("jakarta", without)
+
+        ctx = _kobler_configuration_ctx()
+        ctx["endpoint_external_url_macro"] = True
+        with_macro = _render("configuration.java.j2", ctx)
+        self.assertIn('@NotBlank @Value("${external-url}") String externalUrl,', with_macro)
+        self.assertIn("import org.springframework.beans.factory.annotation.Value;", with_macro)
+        # ImportOrder groups="*,/^java|^jakarta/" — jakarta sits in the LAST group.
+        lines = with_macro.splitlines()
+        jakarta_at = next(i for i, l in enumerate(lines) if l.startswith("import jakarta."))
+        last_star_at = max(i for i, l in enumerate(lines) if l.startswith("import org."))
+        self.assertGreater(jakarta_at, last_star_at)
+        self.assertEqual("", lines[jakarta_at - 1], "jakarta group must be blank-line separated")
 
 
 def _kobler_bidder_ctx() -> Dict[str, Any]:
@@ -457,12 +536,18 @@ def _kobler_auction_response_ctx() -> Dict[str, Any]:
 
 
 def _adverxo_typed_config_ctx() -> Dict[str, Any]:
-    """Synthetic adverxo-equivalent context for configuration-properties.java.j2.
-    Adverxo (Rule 35 master sample) has a typed config subclass with
-    bidder-specific fields beyond the standard endpoint/enabled/usersync set.
+    """Rule 35 context for configuration.java.j2's nested-subclass arm.
+
+    Was the input to configuration-properties.java.j2, which emitted a separate
+    file. Same field data; the subclass is now nested, so the context also
+    carries the Configuration class's own inputs.
     """
     return {
+        "bidder_name": "adverxo",
         "bidder_class_root": "Adverxo",
+        "uses_currency_conversion": False,
+        "has_typed_config_props": True,
+        "typed_config_class_name": "AdverxoConfigurationProperties",
         "typed_fields": [
             {
                 "java_name": "auctionEndpoint",
@@ -479,56 +564,103 @@ def _adverxo_typed_config_ctx() -> Dict[str, Any]:
                 "default_value": None,
             },
         ],
-        "imports_extra": ["jakarta.validation.constraints.NotBlank"],
-        "javadoc_summary": "Typed configuration properties for the Adverxo bidder.",
+        "typed_config_constraint_imports": ["jakarta.validation.constraints.NotBlank"],
+        "typed_config_javadoc": "Typed configuration properties for the Adverxo bidder.",
+        "config_class_name": None,
+        "extra_constructor_args": None,
+        "bidder_creator_extra_args": None,
+        "user_sync": None,
+        "endpoint_external_url_macro": False,
+        "javadoc_summary": None,
     }
 
 
-class TestConfigurationPropertiesJ2(unittest.TestCase):
-    """Tests for templates/configuration-properties.java.j2."""
+class TestRule35NestedSubclass(unittest.TestCase):
+    """The Rule 35 subclass is emitted NESTED, in the upstream shape.
 
-    def test_renders_adverxo_typed_subclass(self):
-        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
-        self.assertIn("public class AdverxoBidderConfigurationProperties extends BidderConfigurationProperties", rendered)
-        self.assertIn("@Data", rendered)
-        self.assertIn("@NoArgsConstructor", rendered)
-        self.assertIn("@EqualsAndHashCode(callSuper = true)", rendered)
+    It used to be a separate {Bidder}BidderConfigurationProperties.java. All 16
+    Rule-35 subclasses at e3ffd57 are nested inside their {Bidder}Configuration
+    (15 of them `private static`), none is a separate file, and no bidder uses
+    the *BidderConfigurationProperties suffix -- that names two framework
+    classes. A PR shipping the separate form would arrive in a shape the Java
+    reviewer has no upstream precedent for.
+    """
 
-    def test_validation_annotations_emitted(self):
-        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
-        # Both fields carry @NotBlank.
+    def _render_typed(self, **overrides):
+        ctx = _adverxo_typed_config_ctx()
+        ctx.update(overrides)
+        return _render("configuration.java.j2", ctx)
+
+    def test_subclass_is_nested_private_static_in_the_configuration_class(self):
+        rendered = self._render_typed()
+        self.assertIn(
+            "    private static class AdverxoConfigurationProperties extends BidderConfigurationProperties {",
+            rendered)
+        self.assertIn("public class AdverxoConfiguration {", rendered)
+        # Nested: the subclass opens after the Configuration class does.
+        self.assertLess(rendered.index("public class AdverxoConfiguration {"),
+                        rendered.index("private static class AdverxoConfigurationProperties"))
+
+    def test_no_separate_file_suffix_is_emitted(self):
+        """The suffix that collides with model/BidderConfigurationProperties."""
+        self.assertNotIn("AdverxoBidderConfigurationProperties", self._render_typed())
+
+    def test_annotation_order_matches_all_sixteen_upstream_subclasses(self):
+        rendered = self._render_typed()
+        order = [rendered.index(a) for a in
+                 ("@Validated", "@Data", "@EqualsAndHashCode(callSuper = true)", "@NoArgsConstructor")]
+        self.assertEqual(order, sorted(order), "expected @Validated @Data @EqualsAndHashCode @NoArgsConstructor")
+
+    def test_validated_only_when_a_field_carries_a_constraint(self):
+        """Redundant with the parent's @Validated, but the house form on a
+        constrained subclass: 7 of 16 carry it and all 7 have a constraint."""
+        constrained = self._render_typed()
+        self.assertIn("@Validated", constrained)
+        self.assertIn("import org.springframework.validation.annotation.Validated;", constrained)
+
+        fields = [dict(f, validation_annotations=None)
+                  for f in _adverxo_typed_config_ctx()["typed_fields"]]
+        plain = self._render_typed(typed_fields=fields, typed_config_constraint_imports=None)
+        self.assertNotIn("@Validated", plain)
+        self.assertNotIn("import org.springframework.validation.annotation.Validated;", plain)
+
+    def test_validation_annotations_and_fields_emitted(self):
+        rendered = self._render_typed()
         self.assertEqual(rendered.count("@NotBlank"), 2)
-        self.assertIn("private String auctionEndpoint;", rendered)
-        self.assertIn("private String registrationEndpoint;", rendered)
+        self.assertIn("        private String auctionEndpoint;", rendered)
+        self.assertIn("        private String registrationEndpoint;", rendered)
 
     def test_field_notes_emit_as_comment(self):
-        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
-        self.assertIn("// Endpoint for the auction call", rendered)
+        self.assertIn("// Endpoint for the auction call", self._render_typed())
 
     def test_default_value_emits_initializer(self):
-        ctx = _adverxo_typed_config_ctx()
-        ctx["typed_fields"][0]["default_value"] = '"https://default.example.com/auction"'
-        rendered = _render("configuration-properties.java.j2", ctx)
-        self.assertIn(
-            'private String auctionEndpoint = "https://default.example.com/auction";',
-            rendered,
-        )
+        fields = _adverxo_typed_config_ctx()["typed_fields"]
+        fields[0] = dict(fields[0], default_value='"https://default.example.com/auction"')
+        self.assertIn('private String auctionEndpoint = "https://default.example.com/auction";',
+                      self._render_typed(typed_fields=fields))
 
-    def test_no_validation_annotations_when_absent(self):
-        ctx = _adverxo_typed_config_ctx()
-        ctx["typed_fields"][0]["validation_annotations"] = None
-        ctx["typed_fields"][1]["validation_annotations"] = None
-        ctx["imports_extra"] = []
-        rendered = _render("configuration-properties.java.j2", ctx)
-        self.assertNotIn("@NotBlank", rendered)
-        self.assertNotIn("import jakarta.validation.constraints.NotBlank;", rendered)
+    def test_lombok_and_parent_imported_only_when_the_subclass_exists(self):
+        rendered = self._render_typed()
+        for imp in ("import lombok.Data;", "import lombok.EqualsAndHashCode;",
+                    "import lombok.NoArgsConstructor;",
+                    "import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;"):
+            self.assertIn(imp, rendered)
+        plain = self._render_typed(has_typed_config_props=False, typed_config_class_name=None,
+                                   typed_fields=None, typed_config_constraint_imports=None,
+                                   typed_config_javadoc=None)
+        self.assertNotIn("import lombok.", plain)
+        self.assertNotIn("private static class", plain)
 
-    def test_extends_bidderconfigurationproperties_imported(self):
-        rendered = _render("configuration-properties.java.j2", _adverxo_typed_config_ctx())
-        self.assertIn(
-            "import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;",
-            rendered,
-        )
+    def test_jakarta_import_is_not_duplicated_with_the_external_url_macro(self):
+        """Both the macro parameter and a constrained field want @NotBlank."""
+        rendered = self._render_typed(endpoint_external_url_macro=True)
+        self.assertEqual(1, rendered.count("import jakarta.validation.constraints.NotBlank;"))
+
+    def test_configuration_properties_prefix_is_a_literal(self):
+        """0 of 255 upstream files concatenate the constant into the prefix."""
+        rendered = self._render_typed()
+        self.assertIn('@ConfigurationProperties("adapters.adverxo")', rendered)
+        self.assertNotIn('"adapters." + BIDDER_NAME', rendered)
 
 
 class TestBidderJ2(unittest.TestCase):
@@ -866,8 +998,10 @@ class TestRequiredArtifacts(unittest.TestCase):
     EXPECTED_TEMPLATES = (
         "bidder-config.yaml.j2",                 # D2.1 commit
         "ext-imp-pojo.java.j2",                  # D2.2 commit
-        "configuration.java.j2",                 # D2.2 commit
-        "configuration-properties.java.j2",      # D2.3 commit
+        "configuration.java.j2",                 # D2.2 commit; also carries the
+                                                 # Rule 35 nested subclass since
+                                                 # configuration-properties.java.j2
+                                                 # was removed
         "bidder.java.j2",                        # D2.4 commit (heaviest template)
         "bidder-test.java.j2",                   # D2.5 commit
         "it-test.java.j2",                       # D2.6 commit
@@ -875,7 +1009,13 @@ class TestRequiredArtifacts(unittest.TestCase):
         "it-fixture-auction-response.json.j2",   # D2.7 commit
         "it-fixture-bid-request.json.j2",        # D2.7 commit
         "it-fixture-bid-response.json.j2",       # D2.7 commit
-        # All 11 templates shipped after D2.7.
+        # 10 templates. configuration-properties.java.j2 is gone: it emitted the
+        # typed config subclass as a SEPARATE
+        # src/main/java/.../{Bidder}BidderConfigurationProperties.java file, a shape
+        # no upstream bidder uses -- all 16 Rule-35 subclasses are nested inside
+        # their {Bidder}Configuration.java, and the *BidderConfigurationProperties
+        # suffix belongs to two framework classes. The subclass is now emitted
+        # nested by configuration.java.j2.
         # "it-fixture-auction-request.json.j2",
         # "it-fixture-auction-response.json.j2",
         # "it-fixture-bid-request.json.j2",

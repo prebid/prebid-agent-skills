@@ -88,7 +88,8 @@ _TAXONOMY_CONSUMED_KEYS = frozenset({
     "sources",
 })
 _TAXONOMY_KNOWN_UNCONSUMED_KEYS = frozenset({
-    "adapter_spec_version_min",  # used by tooling, not rendered
+    "adapter_spec_version_min",  # not rendered; enforced by
+                                 # test_schema_jsonschema.TestTaxonomyVersionFloor
     "taxonomy_version",          # used by tooling, not rendered
 })
 

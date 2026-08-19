@@ -1,0 +1,70 @@
+# Transcribed from a run of the prebid-server-go review skills against
+# review-evals/fixtures/prebid-server-4502/files.json (the review-SHA snapshot).
+# pr-triage: PR type alias-only; single file routed to bidder-info-pr-review.
+
+fixture: prebid-server-4502
+
+files_scanned: 1
+
+run:
+  skills: [pr-triage, bidder-info-pr-review]
+  skills_commit: 232855b
+  model: claude-opus-5
+  date: 2026-08-18
+
+findings:
+  - path: static/bidder-info/appStockSSP.yaml
+    anchor: 'endpoint: "https://#{REGION}#.al-ad.com/pserver"'
+    symbol: null
+    severity: FAIL
+    family: endpoint-config
+    skill: bidder-info-pr-review
+    note: >-
+      Workflow: Disabled-By-Default Region Endpoint step 1. `#{REGION}#` is not
+      a Go template macro (macros.EndpointTemplateParams has no such field and
+      the `#{}#` form is not template syntax at all), so it is a deploy-time
+      placeholder the host must substitute per datacenter. An endpoint carrying
+      a non-Go-template placeholder MUST ship `disabled: true`; the file does
+      not set it. Stated severity: FAIL.
+
+  - path: static/bidder-info/appStockSSP.yaml
+    anchor: 'endpoint: "https://#{REGION}#.al-ad.com/pserver"'
+    symbol: null
+    severity: WARN
+    family: endpoint-config
+    skill: bidder-info-pr-review
+    note: >-
+      Workflow: Disabled-By-Default Region Endpoint step 2. No comment block
+      enumerating the valid REGION replacement values accompanies the
+      placeholder, so a host operator has no list of substitutions to deploy.
+      Stated severity: WARN.
+
+  - path: static/bidder-info/appStockSSP.yaml
+    anchor: 'capabilities:'
+    symbol: null
+    severity: WARN
+    family: alias-inheritance
+    skill: bidder-info-pr-review
+    note: >-
+      Workflow: Alias Adapter Added step 7 (redundant inherited fields). The
+      alias declares site+app mediaTypes [banner, video, native], byte-identical
+      to parent static/bidder-info/teqblaze.yaml at merge-base c48d94d9;
+      processBidderAliases copies Capabilities, so the block is inherited if
+      omitted. Skill directs WARN with a recommendation to remove. Flagged in
+      the run report as a likely misfire — the merged PR kept the block and no
+      maintainer objected.
+
+  - path: static/bidder-info/appStockSSP.yaml
+    anchor: 'url: "https://csync.al-ad.com/pbserver?gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&ccpa={{.USPrivacy}}&gpp={{.GPP}}&gpp_sid={{.GPPSID}}&redirect={{.RedirectURL}}"'
+    symbol: null
+    severity: INFO
+    family: usersync-config
+    skill: bidder-info-pr-review
+    note: >-
+      Cross-Field Validation rule 9 (GPP consistency): both sync URLs carry
+      {{.GPP}} / {{.GPPSID}} but neither this file nor the parent teqblaze.yaml
+      declares openrtb.gpp-supported: true, and OpenRTB is an inherited field
+      with nothing to inherit. The rule states the constraint but assigns no
+      severity; recorded at the lowest non-blocking rung and noted in the run
+      report as an under-specified check. Both sync URLs are live
+      (csync.al-ad.com returned HTTP 204).

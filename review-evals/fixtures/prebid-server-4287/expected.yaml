@@ -1,0 +1,52 @@
+# prebid/prebid-server#4287 "New Adapter: Optidigital" -- net-new Go adapter.
+#
+# Captured at c27f8bd200cf, the state @ccorbo reviewed on 2025-04-11. The
+# bid-type finding was raised later by @przemkaczmarek (2025-05-20) against a
+# newer commit, but the hardcoded constant it is about is already present here
+# and survived to the merged head.
+#
+# Family coverage this fixture carries that #4765 does not: framework-idiom
+# (use the helpers the repo already has) and test-coverage expressed through
+# the JSON fixture framework rather than Go unit tests.
+
+pr: prebid/prebid-server#4287
+review_sha: c27f8bd200cfa8b9995a39d50d92ff24bd97efeb
+
+expected:
+  - id: optidigital-http-method-string-literal
+    path: adapters/optidigital/optidigital.go
+    anchor: 'Method: "POST"'
+    symbol: MakeRequests
+    family: framework-idiom
+    severity: INFO
+    source: https://github.com/prebid/prebid-server/pull/4287#discussion_r2039693713
+    why_it_matters: The repo spells the verb http.MethodPost; a bare string is the one form a grep for the constant will miss.
+
+  - id: optidigital-manual-status-code-checks
+    path: adapters/optidigital/optidigital.go
+    anchor: "if responseData.StatusCode == http.StatusNoContent {"
+    symbol: MakeBids
+    family: framework-idiom
+    severity: INFO
+    source: https://github.com/prebid/prebid-server/pull/4287#discussion_r2039696302
+    why_it_matters: adapters/response.go already provides the status-code helpers; open-coding them means this adapter does not follow core changes to the contract.
+
+  - id: optidigital-unmarshal-error-path-untested
+    path: adapters/optidigital/optidigital.go
+    anchor: "if err := jsonutil.Unmarshal(responseData.Body, &response); err != nil {"
+    symbol: MakeBids
+    family: test-coverage
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4287#discussion_r2039697392
+    why_it_matters: The reviewer required coverage for this error path through the JSON test framework, not a Go unit test; the author added a bad_response supplemental case.
+
+  - id: optidigital-hardcoded-banner-bid-type
+    path: adapters/optidigital/optidigital.go
+    anchor: "BidType: openrtb_ext.BidTypeBanner,"
+    symbol: MakeBids
+    family: bid-type-resolution
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4287#discussion_r2097716439
+    why_it_matters: Every bid is stamped banner with no reference to the bid or its imp; the reviewer asked for a getMediaTypeForBid returning (BidType, error).
+
+forbidden: []

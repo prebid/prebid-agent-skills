@@ -37,30 +37,101 @@ def _spec(**overrides) -> dict:
     return base
 
 
+def _strategies(**entities) -> dict:
+    """Shorthand for a spec carrying `mutation.entity_strategies`."""
+    return {"make_requests": {"mutation": {"entity_strategies": dict(entities)}}}
+
+
 class TestRule5MutationStrategies(unittest.TestCase):
     """Rule 5: Site/App entity_strategies pairing."""
 
     def test_canonical_pair_passes(self):
-        go = _spec(code={"make_requests": {"mutation": {"entity_strategies": {"Site": "copy-then-mutate", "App": "copy-then-mutate"}}}})
-        java = _spec(code={"make_requests": {"mutation": {"entity_strategies": {"Site": "immutable-rebuild", "App": "immutable-rebuild"}}}})
+        go = _spec(code=_strategies(Site="copy-then-mutate", App="copy-then-mutate"))
+        java = _spec(code=_strategies(Site="immutable-rebuild", App="immutable-rebuild"))
         findings = lpr.rule_5_mutation_strategies(go, java)
         self.assertEqual(2, len(findings))
         self.assertTrue(all(f.severity == "pass" for f in findings))
 
     def test_in_place_to_immutable_rebuild_also_passes(self):
-        go = _spec(code={"make_requests": {"mutation": {"entity_strategies": {"Site": "in-place"}}}})
-        java = _spec(code={"make_requests": {"mutation": {"entity_strategies": {"Site": "immutable-rebuild"}}}})
+        go = _spec(code=_strategies(Site="in-place"))
+        java = _spec(code=_strategies(Site="immutable-rebuild"))
         findings = lpr.rule_5_mutation_strategies(go, java)
         self.assertEqual(1, len(findings))
         self.assertEqual("pass", findings[0].severity)
 
+    def test_deep_copy_then_mutate_to_immutable_rebuild_passes(self):
+        """thetradedesk's shipped pairing.
+
+        Declared valid by docs/methodology/port-skills-design.md ("Rule 5
+        mutation strategy pairing"). The pre-fix literal tuple set omitted
+        `deep-copy-then-mutate`, so this warned on a normalizer gap.
+        """
+        go = _spec(code=_strategies(Site="deep-copy-then-mutate", App="deep-copy-then-mutate"))
+        java = _spec(code=_strategies(Site="immutable-rebuild", App="immutable-rebuild"))
+        findings = lpr.rule_5_mutation_strategies(go, java)
+        self.assertEqual(2, len(findings))
+        self.assertTrue(all(f.severity == "pass" for f in findings),
+                        f"expected both pass; got {[f.message for f in findings]}")
+        self.assertIn("mutate-preserve", findings[0].message)
+
+    def test_adr_007_f3_app_synthesis_pair_passes(self):
+        """vungle's shipped pairing — ADR-007 F3, symmetric across languages."""
+        go = _spec(code=_strategies(Site="replace-with-app-synthesis", App="synthesize-app-replacement"))
+        java = _spec(code=_strategies(Site="replace-with-app-synthesis", App="synthesize-app-replacement"))
+        findings = lpr.rule_5_mutation_strategies(go, java)
+        self.assertEqual(2, len(findings))
+        self.assertTrue(all(f.severity == "pass" for f in findings),
+                        f"expected both pass; got {[f.message for f in findings]}")
+        self.assertIn("app-synthesis", findings[0].message)
+
     def test_unexpected_pair_warns(self):
-        go = _spec(code={"make_requests": {"mutation": {"entity_strategies": {"Site": "copy-then-mutate"}}}})
-        java = _spec(code={"make_requests": {"mutation": {"entity_strategies": {"Site": "in-place"}}}})  # Java should never use in-place
+        """Java never mutates in place — same class, wrong idiom."""
+        go = _spec(code=_strategies(Site="copy-then-mutate"))
+        java = _spec(code=_strategies(Site="in-place"))
         findings = lpr.rule_5_mutation_strategies(go, java)
         self.assertEqual(1, len(findings))
         self.assertEqual("warn", findings[0].severity)
         self.assertIn("entity_strategies.Site", findings[0].message)
+        self.assertIn("not a Java idiom", findings[0].message)
+
+    def test_go_side_java_only_idiom_warns(self):
+        """`immutable-rebuild` on the Go side is a modelling error."""
+        go = _spec(code=_strategies(Site="immutable-rebuild"))
+        java = _spec(code=_strategies(Site="immutable-rebuild"))
+        findings = lpr.rule_5_mutation_strategies(go, java)
+        self.assertEqual("warn", findings[0].severity)
+        self.assertIn("not a Go idiom", findings[0].message)
+
+    def test_one_sided_mutation_warns(self):
+        """Go scrubs the entity, Java leaves it alone — a real divergence."""
+        go = _spec(code=_strategies(Site="copy-then-mutate"))
+        java = _spec(code=_strategies(Site="none"))
+        findings = lpr.rule_5_mutation_strategies(go, java)
+        self.assertEqual(1, len(findings))
+        self.assertEqual("warn", findings[0].severity)
+        self.assertIn("class divergence", findings[0].message)
+
+    def test_mismatched_classes_warn(self):
+        """App synthesis on one side, ordinary scrubbing on the other."""
+        go = _spec(code=_strategies(App="synthesize-app-replacement"))
+        java = _spec(code=_strategies(App="immutable-rebuild"))
+        findings = lpr.rule_5_mutation_strategies(go, java)
+        self.assertEqual("warn", findings[0].severity)
+        self.assertIn("class divergence", findings[0].message)
+
+    def test_unmodelled_strategy_value_warns(self):
+        """A strategy outside the canonical vocabulary is surfaced, not silently paired.
+
+        `$defs.EntityStrategy` is not `$ref`-wired into the spec position, so
+        the JSON-Schema validator does not check these values; this is the
+        only gate on them.
+        """
+        go = _spec(code=_strategies(Site="teleport-then-pray"))
+        java = _spec(code=_strategies(Site="immutable-rebuild"))
+        findings = lpr.rule_5_mutation_strategies(go, java)
+        self.assertEqual(1, len(findings))
+        self.assertEqual("warn", findings[0].severity)
+        self.assertIn("unmodelled strategy value", findings[0].message)
 
     def test_none_on_both_sides_silent(self):
         go = _spec()
@@ -71,10 +142,90 @@ class TestRule5MutationStrategies(unittest.TestCase):
     def test_none_string_normalizes_to_none(self):
         # aax pattern: Java has 'none' string; Go has missing field
         go = _spec()
-        java = _spec(code={"make_requests": {"mutation": {"entity_strategies": {"Site": "none", "App": "none"}}}})
+        java = _spec(code=_strategies(Site="none", App="none"))
         findings = lpr.rule_5_mutation_strategies(go, java)
         # 'none' normalizes to None; both sides treated as null → silent
         self.assertEqual(0, len(findings))
+
+
+class TestRule5VocabularyDrift(unittest.TestCase):
+    """`STRATEGY_SEMANTICS` must cover every strategy its sources can produce.
+
+    The semantics table is hand-written because neither canonical source
+    encodes the Go-vs-Java idiom split: the JSON Schema lists the admitted
+    values with no language attribution, and the taxonomy's example columns
+    are prose. These tests are what stops the table drifting from those
+    sources — a new value in the schema, in the taxonomy, or in a shipped
+    golden fails here until it is modelled.
+    """
+
+    def test_schema_enum_values_are_all_modelled(self):
+        schema_values = lpr.load_schema_entity_strategy_values()
+        self.assertTrue(schema_values, "schema $defs.EntityStrategy produced no enum values")
+        missing = sorted(schema_values - set(lpr.STRATEGY_SEMANTICS))
+        self.assertEqual(
+            [], missing,
+            "adapter-spec.schema.json $defs.EntityStrategy admits strategy values "
+            "that STRATEGY_SEMANTICS does not model — Rule 5 would warn on them "
+            f"as unmodelled: {missing}",
+        )
+
+    def test_taxonomy_table_values_are_all_modelled(self):
+        taxonomy_values = lpr.load_taxonomy_entity_strategy_values()
+        self.assertTrue(taxonomy_values, "taxonomy entity_strategies table produced no values")
+        missing = sorted(taxonomy_values - set(lpr.STRATEGY_SEMANTICS))
+        self.assertEqual(
+            [], missing,
+            "behavior-taxonomy.yaml lists entity_strategies values that "
+            f"STRATEGY_SEMANTICS does not model: {missing}",
+        )
+
+    def test_every_shipped_golden_strategy_is_modelled(self):
+        """No golden may carry a strategy the lint cannot reason about."""
+        pairs, _ = lpr.discover_pairs()
+        seen: dict[str, list[str]] = {}
+        for bidder, go, java, _ in pairs:
+            for label, spec_dict in (("go", go), ("java", java)):
+                strategies = lpr._path(
+                    spec_dict, "code", "make_requests", "mutation", "entity_strategies") or {}
+                if not isinstance(strategies, dict):
+                    continue
+                for entity, value in strategies.items():
+                    if isinstance(value, str) and value not in lpr.STRATEGY_SEMANTICS:
+                        seen.setdefault(value, []).append(f"{label}/{bidder}.{entity}")
+        self.assertEqual(
+            {}, seen,
+            "shipped goldens use entity_strategies values absent from "
+            f"STRATEGY_SEMANTICS: {seen}",
+        )
+
+    def test_taxonomy_gaps_are_recorded(self):
+        """The taxonomy table lags the schema; the shortfall is pinned here.
+
+        `behavior-taxonomy.yaml`'s `entity_strategies` table is the doc a
+        skill author reads. It does not list every value the schema admits
+        and the goldens use. Pinning the shortfall means closing it fails
+        this test, so the constant shrinks with the fix rather than the gap
+        going unnoticed.
+        """
+        recorded = {
+            # In $defs.EntityStrategy and in shipped goldens (adkernelAdn,
+            # cadent_aperture_mx, thetradedesk), absent from the taxonomy table.
+            "deep-copy-then-mutate",
+            # In $defs.EntityStrategy and in the vungle goldens (both
+            # languages), absent from the taxonomy table.
+            "replace-with-app-synthesis",
+            # In $defs.EntityStrategy.App, used by no shipped golden, absent
+            # from the taxonomy table.
+            "synthesize-from-site",
+        }
+        actual = lpr.load_schema_entity_strategy_values() - lpr.load_taxonomy_entity_strategy_values()
+        self.assertEqual(
+            recorded, actual,
+            "the schema-vs-taxonomy entity_strategies shortfall changed. If the "
+            "taxonomy table gained a value, delete it from `recorded`; if the "
+            "schema gained one, model it in STRATEGY_SEMANTICS and add it here.",
+        )
 
 
 class TestRule9CustomRequestBody(unittest.TestCase):

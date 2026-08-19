@@ -162,9 +162,9 @@ Why it matters: most code-generation tools assume package == directory. The mism
 
 ### `endpoint-placeholder-unresolved`
 
-**Trigger**: `bidder_info.endpoint` contains a `{{.XYZ}}` template placeholder where `XYZ` is NOT in the canonical `macros.EndpointTemplateParams` 18-field list.
+**Trigger**: `bidder_info.endpoint` contains a `{{.XYZ}}` template placeholder where `XYZ` is NOT in the canonical `macros.EndpointTemplateParams` 22-field list.
 
-**Detection**: Step 6 assemble validates each macro in the endpoint string against the canonical list at [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section). Unrecognized macros silently resolve to empty string at runtime, breaking the URL.
+**Detection**: Step 6 assemble validates each macro in the endpoint string against the canonical machine-readable list at [`../../shared/endpoint-macros.yaml`](../../shared/endpoint-macros.yaml) (`go_template_macros`; annotated table at [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md)). An unrecognized macro is not a silent runtime degradation — `text/template` cannot resolve the field, so `config.validateAdapterEndpoint` (`config/bidderinfo.go:492-507`) records a config error and `TestBidderInfoFiles` fails.
 
 **Example**:
 
@@ -172,7 +172,7 @@ Why it matters: most code-generation tools assume package == directory. The mism
 - type: endpoint-placeholder-unresolved
   file: static/bidder-info/foo.yaml
   line: <line of endpoint declaration>
-  summary: "endpoint template macro {{.UnknownField}} is not in macros.EndpointTemplateParams 18-field list; will silently resolve to empty string at runtime"
+  summary: "endpoint template macro {{.UnknownField}} is not in macros.EndpointTemplateParams (22 fields); template execution fails, so config validation rejects this endpoint"
 ```
 
 Note: NON-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros — they are deploy-time tokens substituted by the operator pre-deployment. Those surface separately under `deploy_time_tokens[]` and require `disabled: true` on the YAML (per the [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) policy).
@@ -213,9 +213,9 @@ Note: NON-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros —
 
 ### `cross-language-byte-divergence`
 
-**Trigger**: `bidder_params_json` byte-content (or `bidder_params_sha256`) differs between the Go-side and Java-side specs for the same bidder. The byte-identity contract is per Rule 1 of [`../../shared/port-translation-rules.md`](../../shared/port-translation-rules.md): porters copy bytes verbatim; any whitespace or ordering divergence breaks port-fidelity.
+**Trigger**: the bidder-params file's digest differs between the Go-side and Java-side specs for the same bidder. The byte-identity contract is per Rule 1 of [`../../shared/port-translation-rules.md`](../../shared/port-translation-rules.md): porters copy bytes verbatim; any whitespace or ordering divergence breaks port-fidelity.
 
-**Detection**: Step 6 cross-check (R5 cross-language structural parity, when a sibling-language spec is locally available). If the orchestrator can resolve the sibling spec, it compares `bidder_params_sha256`; mismatch emits this warning AND a paired `quirks[]` entry.
+**Detection**: Step 6 cross-check (R5 cross-language structural parity, when a sibling-language spec is locally available). If the orchestrator can resolve the sibling spec, it compares `bidder_params_ref.sha256` and `bidder_params_ref.bytes`; mismatch emits this warning AND a paired `quirks[]` entry. Both sides' numbers must have been measured by their own reader's Step 1 — comparing two transcriptions of the same value proves nothing (V2 in [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)).
 
 **Real example** (Java side detecting divergence vs Go):
 
@@ -283,7 +283,8 @@ The orchestrator emits warnings using these rules:
 - Phase 2 reconnaissance findings ("Real bugs found during validation"): `kobler_test.go:12` calls `Builder` with `openrtb_ext.BidderKargo`; `params_test.go:47` references `openrtb_ext.BidderKrushmedia` — both pass tests; the spec's `provenance.warnings` block is load-bearing for surfacing these.
 - Spec schema: [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md) — `provenance.warnings[]` schema definition (Per-section field reference → `provenance` table → "Warnings schema" subsection); validation rules R1–R10 and which warnings they emit.
 - Behavior taxonomy: [`../../shared/behavior-taxonomy.md`](../../shared/behavior-taxonomy.md) — `quirks[].edge_case_taxon` registry (closed list of registered taxa); cross-reference for paired warning↔quirk taxa.
-- Framework utilities (Go): [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) — `EndpointTemplateParams` 18-field list (drives `endpoint-placeholder-unresolved` warning); module-path `v4` major-version reference (drives `module-major-drift`); `jsonutil` package and the recommendation against direct `encoding/json` (drives `legacy-encoding-json-direct-usage`); v3-import-in-PR-diff is NOT drift rule.
+- Endpoint macros (Go): [`../../shared/endpoint-macros.yaml`](../../shared/endpoint-macros.yaml) — canonical machine-readable `EndpointTemplateParams` field set, 22 entries (drives `endpoint-placeholder-unresolved` warning).
+- Framework utilities (Go): [`../../../../review/skills/shared/framework-utilities.md`](../../../../review/skills/shared/framework-utilities.md) — annotated `EndpointTemplateParams` table; module-path `v4` major-version reference (drives `module-major-drift`); `jsonutil` package and the recommendation against direct `encoding/json` (drives `legacy-encoding-json-direct-usage`); v3-import-in-PR-diff is NOT drift rule.
 - pr-triage routing rules (used to compute file paths cited in warnings): [`../../../../review/skills/pr-triage/references/routing-rules.md`](../../../../review/skills/pr-triage/references/routing-rules.md).
 - BidderInfo field index (drives `yaml-field-name-typo` near-canonical-name detection): [`../../../../review/skills/bidder-info-pr-review/references/field-index.md`](../../../../review/skills/bidder-info-pr-review/references/field-index.md).
 - Kobler golden (showing both `bidder-constant-mismatch` warnings AND paired quirks): [`../../../test-fixtures/kobler.golden.spec.yaml`](../../../test-fixtures/kobler.golden.spec.yaml).

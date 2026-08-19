@@ -229,21 +229,29 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, requestData *adapters.R
 }
 ```
 
-### Currency-overwrite hazard
+### Currency assignment — both forms are correct
 
-`bidResponse.Currency = response.Cur` is unsafe — if `response.Cur` is empty (some bidders send empty currency on no-bid or error responses), this overwrites the default `"USD"` with an empty string, which downstream rejects. Always guard:
+Both shapes below are correct and both are merged upstream. This is **not a finding**; do not raise the guard as a change request.
 
 ```go
-// CORRECT
+// Majority form — 86 of 140 assignment sites at master @0ba3523
+bidResponse.Currency = response.Cur
+
+// Also fine — 54 of 140
 if response.Cur != "" {
     bidResponse.Currency = response.Cur
 }
-
-// WRONG (overwrites default USD with empty string)
-bidResponse.Currency = response.Cur
 ```
 
-Found in PR #4287 (Optidigital) merged unfixed — skill should flag adapters that copy this pattern as **WARN**.
+An empty `response.Cur` does **not** survive: `adapters.NewBidderResponseWithBidsCapacity` seeds `Currency: "USD"` (`adapters/bidder.go:73-78`), and if an adapter overwrites that with `""`, PBS core restores it at `exchange/bidder.go:316-318` — `if bidResponse.Currency == "" { bidResponse.Currency = defaultCurrency }`, with `defaultCurrency := "USD"` declared at `:269` — before the value reaches `conversions.GetRate` or the seat bid. Nothing downstream sees or rejects the empty string.
+
+```bash
+# in a prebid-server checkout
+grep -rEn --include='*.go' '\.Currency = [A-Za-z]+\.Cur\b' adapters/ | grep -v '_test.go' | wc -l   # 140
+grep -rE  --include='*.go' -B3 '\.Currency = [A-Za-z]+\.Cur\b' adapters/ | grep -cE 'if .*\.Cur'    # 54
+```
+
+The currency finding worth raising is a *wrong* value — a hardcoded currency the bidder does not bid in, or dropping `response.Cur` when the bidder bids non-USD. `exchange/bidder_validate_bids.go:79` (`validateCurrency`) reconciles the declared currency against `request.Cur`.
 
 ### Bid Type Resolution
 
@@ -302,7 +310,7 @@ for _, bid := range seatBid.Bid {
 
 ## Framework Utilities
 
-The framework helper function table (`adapters.IsResponseStatusCodeNoContent`, `adapters.CheckResponseStatusCodeForErrors`, `adapters.NewBidderResponseWithBidsCapacity`, `openrtb_ext.GetImpIDs`, `jsonutil.Marshal/Unmarshal`, `errortypes.*`, `macros.NewStringIndexBasedReplacer`, `ptrutil.Clone`), the `EndpointTemplateParams` 18-field macro list, and the error-type taxonomy live in [../../shared/framework-utilities.md](../../shared/framework-utilities.md). Adapter-code-pr-review workflows reference those tables directly — do not duplicate them here.
+The framework helper function table (`adapters.IsResponseStatusCodeNoContent`, `adapters.CheckResponseStatusCodeForErrors`, `adapters.NewBidderResponseWithBidsCapacity`, `openrtb_ext.GetImpIDs`, `jsonutil.Marshal/Unmarshal`, `errortypes.*`, `macros.NewStringIndexBasedReplacer`, `ptrutil.Clone`), the canonical `EndpointTemplateParams` macro allow-list, and the error-type taxonomy live in [../../shared/framework-utilities.md](../../shared/framework-utilities.md). Adapter-code-pr-review workflows reference those tables directly — do not duplicate them here.
 
 ---
 
@@ -337,6 +345,8 @@ func TestJsonSamples(t *testing.T) {
     adapterstest.RunJSONBidderTest(t, "{bidder}test", bidder)
 }
 ```
+
+The `Endpoint` value above is illustrative only. **A test-runner endpoint is not a finding at any severity** — 134 adapters configure their real production domain here and the literal `fake.endpoint.test` appears in 0 upstream JSON fixtures. The only thing that must hold is that every fixture's `expectedRequest.uri` matches the URI the adapter builds from this value, and `adapters/adapterstest/test_json.go:341-342` already enforces that mechanically. See [../../shared/framework-utilities.md#test-fixture-conventions](../../shared/framework-utilities.md#test-fixture-conventions).
 
 Key points:
 - Function name: **exactly** `TestJsonSamples`
@@ -409,7 +419,9 @@ Post-PR-#4592 framework changes (v3.30.0, November 2025): `RunJSONBidderTest` no
 }
 ```
 
-### Required Test Coverage for New Adapters
+### Suggested Test Coverage for New Adapters
+
+**Disposition: advisory, not required.** The tables below are the scenarios reviewers look for; only the 204 row carries a **WARN** when absent (34 of the 37 adapters added in the last 18 months ship it). Every other row is **INFO**, reported as one note listing what is missing — 0 of those 37 adapters cover the full supplemental set, so no PR should be gated on it. Filenames are illustrative; naming is not a finding as long as the name matches the content. See `../SKILL.md` Workflow: Supplemental Test Data Changed step 3 for per-item rates and the regenerating command.
 
 **Exemplary tests should cover:**
 
@@ -546,23 +558,25 @@ for bidderName := range bidderInfos {
 
 This means adding `static/bidder-info/{bidder}.yaml` is sufficient for config — no `config.go` changes needed.
 
----
+## Regeneration commands
 
-## Pattern Catalog
+Commands behind the counts quoted in `SKILL.md`. They live here rather than in the SKILL body because that body is loaded into context on every review; the numbers belong in the check, the shell does not.
 
-Patterns extracted from periodic review of the 89 reference adapter PRs (`prebid-server-go/references/new-bid-adapter-prs.md`). Stable schema for each entry; cap 8 per skill to keep this file scannable. Phase-2 synthesis populates entries during refresh cycles.
+**Command 1** — run in a `prebid/prebid-server` checkout at the pinned SHA.
 
-### Schema
-
+```bash
+     # in a prebid-server checkout
+     python3 - <<'EOF'
+     import glob, json
+     tot = noerr = with400 = noerr400 = 0
+     for f in glob.glob('adapters/*/*test*/supplemental/*.json'):
+         d = json.load(open(f)); tot += 1
+         err = any(d.get(k) for k in ('expectedMakeRequestsErrors', 'expectedMakeBidsErrors'))
+         st = [h.get('mockResponse', {}).get('status', 200) for h in d.get('httpCalls', [])]
+         if not err: noerr += 1
+         if any(s >= 400 for s in st):
+             with400 += 1
+             if not err: noerr400 += 1
+     print(tot, noerr, with400, noerr400)   # 1986 623 401 4
+     EOF
 ```
-### Pattern P-{NN}: {short title}
-- Symptom in diff: {what the diff looks like}
-- Frequency observed: {N of total reference PRs}
-- Affected workflow: {Workflow link}
-- Severity: FAIL | WARN | INFO
-- Action: {what the skill does when it sees this}
-```
-
-### Entries
-
-(Populated by current refresh — see SKILL.md for the active rule list.)

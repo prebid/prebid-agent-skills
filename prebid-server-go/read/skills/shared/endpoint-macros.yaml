@@ -11,7 +11,9 @@
 # placeholder name when it appears in:
 #
 #   - go_template_macros (Go-source endpoint paths)
-#   - java_template_macros (Java-source endpoint paths)
+#   - java_conventional_macros (Java-source endpoint paths -- a HINT list, not a
+#     closed set; the Java arm also admits any macro the spec shows the bidder
+#     declaring in bidder_class.static_fields[])
 #   - user_sync_macros (any path containing 'user_sync')
 #   - openrtb_macros (any endpoint-bearing path)
 #   - the spec's own deploy_time_tokens[*].token names (extracted at runtime)
@@ -20,41 +22,89 @@
 # corresponding `provenance.warnings[].type: endpoint-placeholder-unresolved`
 # entry that documents the deviation.
 
-# Macros known to prebid-server-go's macros.EndpointTemplateParams (subset;
-# canonical). Used in URL strings as `{{.X}}` form (Go html/text template).
+# The COMPLETE field set of prebid-server-go's macros.EndpointTemplateParams,
+# used in URL strings as `{{.X}}` form (Go text/template). Not a subset: R8
+# admits a placeholder only if it appears here, so a missing field is a false
+# WARN on a legitimate endpoint and an extra name silently admits a macro that
+# aborts config.New at startup (template field lookup is case-sensitive).
+#
+# This list is claim-registered as `go.macros.endpoint-template-params` in
+# scripts/upstream-claims.yaml and pinned to it by
+# scripts/tests/test_endpoint_macro_registry.py. The manifest is checked against
+# upstream weekly; this file is checked against the manifest on every run.
+#
+# It previously carried seven names that are not fields upstream (BidderCode,
+# PartnerID, RegionID, SiteID, SourceID, TagID, Username -- zero uses in any
+# golden or any upstream bidder-info file) while omitting thirteen real ones,
+# which is why R8 warned on the genuine {{.TokenID}}, {{.SourceId}} and
+# {{.SupplyId}}.
 go_template_macros:
   - AccountID
   - AdUnit
-  - BidderCode
+  - AppDomain
+  - Bundle
   - GvlID
   - Host
+  - ImpID
   - MediaType
+  - NetworkId
   - PageID
-  - PartnerID
+  - PartnerId
   - PlacementID
   - PublisherID
-  - RegionID
-  - SiteID
-  - SourceID
-  - TagID
-  - Username
+  - Region
+  - SeatID
+  - SiteDomain
+  - SourceId
+  - SspID
+  - SspId
+  - SupplyId
+  - TokenID
   - ZoneID
 
-# Java template macros used in URL replacement. Form: `{{X}}` (no leading dot)
-# — Java's String.replace flow does not consume the Go-template `.` prefix.
-java_template_macros:
+# Java endpoint macros. NOT a closed set, and that is the point.
+#
+# Go's macros.EndpointTemplateParams is a struct, so its 22 fields ARE the
+# vocabulary: a Go adapter cannot invent a macro name, because `text/template`
+# resolves against struct fields. Java has no equivalent. Each bidder declares
+# its own name as a `private static final String` in its own bidder class (or,
+# for the external-url case, in its Configuration class) and calls
+# `Uri.of(...).replaceMacro(NAME, value)`. `Uri.java` is the substitution
+# engine; it holds no name registry. Two bidders spell the same concept
+# differently and both are correct -- `AceexBidder` uses "AccountId",
+# `AcuityadsBidder` uses "AccountID".
+#
+# So a closed Java list cannot exist. The previous 12-entry list read as one and
+# produced 12 R8 WARNs across 5 Java goldens, every one of them on a macro the
+# bidder does declare upstream: adkerneladn's URL_PUBLISHER_ID_MACRO
+# ("PublisherID"), adverxo's ADUNIT_MACROS_ENDPOINT / AUTH_MACROS_ENDPOINT,
+# limelightDigital's URL_PUBLISHER_ID_MACRO, thetradedesk's SUPPLY_ID_MACRO, and
+# smarthub's HOST/ACCOUNT_ID/SOURCE_ID macros. All 12 were then recorded in
+# .github/accepted-warnings.txt, which froze the misfire as a decision.
+#
+# R8's Java arm no longer asks "is this name on a list". It asks whether the
+# spec shows the bidder declaring it -- a `bidder_class.static_fields[]` entry
+# whose value is that macro. That is checkable from the spec alone, it catches
+# an endpoint referencing a macro nothing substitutes (which really would not
+# resolve), and it stops flagging the normal case.
+#
+# The names below are kept only as the conventional spellings, for a
+# "did you mean" hint in a review. They are NOT authority: a macro absent from
+# this list and present in the bidder's own constants is correct.
+#
+# Form: `{X}` since the Vert.x UriTemplate migration (#4444, 2026-07-20); the
+# older `{{X}}` double-brace form appears in goldens read before that date.
+java_conventional_macros:
   - PREBID_SERVER_ENDPOINT
-  - AdUnit
-  - Host
-  - PartnerId
-  - PageID
-  - PartnerCode
-  - PublisherId
-  - RegionId
-  - ZoneId
+  - AccountID
   - AccountId
-  - Source
-  - GvlId
+  - Host
+  - PublisherID
+  - PublisherId
+  - SourceId
+  - SupplyId
+  - ZoneID
+  - ZoneId
 
 # User-sync URL macros. Admitted on user_sync paths only (R8 walker scopes
 # this set to paths containing 'user_sync'). Both Go PascalCase and Java

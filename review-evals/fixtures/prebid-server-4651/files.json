@@ -1,0 +1,47 @@
+[
+  {
+    "filename": "static/bidder-info/altstar.yaml",
+    "status": "added",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,2 @@\n+endpoint: \"http://ads-pbs.ads-altstarmedia.com/openrtb/{{.PublisherID}}?host={{.Host}}\"\n+aliasOf: \"limelightDigital\"\n\\ No newline at end of file"
+  },
+  {
+    "filename": "static/bidder-info/anzuExchange.yaml",
+    "status": "added",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,2 @@\n+endpoint: \"http://ads-pbs.marketplace-anzu.io/openrtb/{{.PublisherID}}?host={{.Host}}\"\n+aliasOf: \"limelightDigital\"\n\\ No newline at end of file"
+  },
+  {
+    "filename": "static/bidder-info/oveeo.yaml",
+    "status": "added",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,2 @@\n+endpoint: \"http://ads-pbs.rtb-oveeo.com/openrtb/{{.PublisherID}}?host={{.Host}}\"\n+aliasOf: \"limelightDigital\"\n\\ No newline at end of file"
+  },
+  {
+    "filename": "static/bidder-info/rtbdemand.yaml",
+    "status": "added",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,2 @@\n+endpoint: \"http://ads-pbs.ads-rtbdemand.com/openrtb/{{.PublisherID}}?host={{.Host}}\"\n+aliasOf: \"limelightDigital\"\n\\ No newline at end of file"
+  },
+  {
+    "filename": "static/bidder-info/smootai.yaml",
+    "status": "added",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,2 @@\n+endpoint: \"http://ads-pbs.ads-smoot.com/openrtb/{{.PublisherID}}?host={{.Host}}\"\n+aliasOf: \"limelightDigital\"\n\\ No newline at end of file"
+  }
+]

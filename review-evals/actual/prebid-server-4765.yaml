@@ -1,0 +1,318 @@
+# Transcribed from a run of the prebid-server-go review skills against
+# review-evals/fixtures/prebid-server-4765/files.json (the review-SHA snapshot,
+# 6367a39c). pr-triage: PR type new-adapter (teal) with a bundled alias
+# (static/bidder-info/tealplus.yaml); all three downstream skills activated.
+# Registration completeness: all expected new-adapter files present.
+# Drift checks (master @0ba3523): bidder-info OK, bidder-params OK, adapter-code OK,
+# module-path OK (v4).
+# NOTE: adapters/teal/teal_test.go is truncated in the fixture (506 of 1005 added
+# lines captured); the finding on it rests on the captured portion plus the
+# recorded line count.
+
+fixture: prebid-server-4765
+
+files_scanned: 27
+
+run:
+  skills: [pr-triage, adapter-code-pr-review, bidder-info-pr-review, bidder-params-pr-review]
+  skills_commit: 232855b
+  model: claude-opus-5
+  date: 2026-08-18
+
+findings:
+  - path: static/bidder-info/tealplus.yaml
+    anchor: "<file>"
+    symbol: null
+    severity: WARN
+    family: pr-scope
+    skill: pr-triage
+    note: >-
+      One-Alias-Per-PR Rule. The bulk-mode exception in
+      pr-triage/references/routing-rules.md requires ALL files to target
+      static/bidder-info/*.yaml; this PR ships a complete new adapter (Go code,
+      params schema, fixtures) plus an alias of a parent that does not exist on
+      master yet, so the exception does not apply and the alias should be raised
+      separately once the parent lands. The alias also ships `disabled: true`
+      with no rationale available in the snapshot (Workflow: Bidder Disabled
+      step 1 cannot be satisfied from the diff). Stated severity: WARN.
+
+  - path: static/bidder-info/tealplus.yaml
+    anchor: 'aliasOf: teal'
+    symbol: null
+    severity: WARN
+    family: alias-inheritance
+    skill: bidder-info-pr-review
+    note: >-
+      Workflow: Alias Adapter Added step 8 / Cross-Field rule 10. The alias
+      declares no gvlVendorID while the parent teal.yaml in the same PR declares
+      1378 (verified as "Teal Digital Group Ltd" in the GVL). GVLVendorID is the
+      one field processBidderAliases never copies, so tealplus would receive no
+      GDPR vendor registration. Table disposition: WARN (ASK).
+
+  - path: static/bidder-info/tealplus.yaml
+    anchor: 'disabled: true'
+    symbol: null
+    severity: INFO
+    family: maintainer-metadata
+    skill: bidder-info-pr-review
+    note: >-
+      Workflow: Alias Adapter Added step 6. The alias declares no
+      maintainer.email. tealplus shares the parent's organizational stem, so the
+      skill's stated disposition is INFO rather than WARN — inheritance from
+      teal.yaml (prebid@teal.works) is acceptable, noted once.
+
+  - path: adapters/teal/doc.go
+    anchor: "<file>"
+    symbol: null
+    severity: FAIL
+    family: canonical-artifacts
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Additional Go File Changed step 1 — a package-doc file is not
+      part of the canonical adapter corpus (no upstream adapter ships one).
+      149 lines of Java-port narrative belong in the PR description, not the
+      package. Stated severity: FAIL; remove.
+
+  - path: adapters/teal/teal_fuzz_test.go
+    anchor: "<file>"
+    symbol: null
+    severity: FAIL
+    family: canonical-artifacts
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Additional Go File Changed step 1 — fuzzing is a dev-time tool.
+      The file's own header records that the fuzzers found a nil-map panic that
+      is already pinned by unit tests, which is exactly the "pin it with a normal
+      test and remove the harness" case. Stated severity: FAIL; remove.
+
+  - path: adapters/teal/teal_bench_test.go
+    anchor: "<file>"
+    symbol: null
+    severity: FAIL
+    family: canonical-artifacts
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Additional Go File Changed step 1 — benchmarks are dev-time.
+      Stated severity: FAIL; remove before the PR.
+
+  - path: adapters/teal/teal_test.go
+    anchor: "<file>"
+    symbol: null
+    severity: WARN
+    family: canonical-artifacts
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Additional Go File Changed step 1 (large stand-alone Go unit-test
+      file duplicating JSON-fixture coverage) and Workflow: Test Runner Changed
+      step 6 (the runner should be a ~20-line wrapper around
+      adapterstest.RunJSONBidderTest). 1005 added lines with testify-based unit
+      tests around MakeRequests/MakeBids paths the tealtest/ fixtures already
+      exercise; reviewer convention since PR #4533 is coverage via the JSON
+      framework wherever possible. Stated severity: WARN.
+
+  - path: adapters/teal/teal.go
+    anchor: 'func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {'
+    symbol: getBidType
+    severity: FAIL
+    family: bid-type-resolution
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 4, multiformat bullet. teal.yaml sets
+      `openrtb.multiformat-supported: true` and declares banner+video+native on
+      both app and site, so neither exemption holds. Bid type is resolved purely
+      by imp introspection in a fixed banner>video>audio>native priority, so on
+      an imp carrying co-present formats every bid takes the first-priority
+      branch and non-banner bids are mis-typed. The signature returns no error,
+      so there is no path to skip an unresolvable bid. Required shape: switch on
+      bid.MType first, imp lookup only as the omitted-mtype fallback, then error.
+      The source-fidelity defense recorded in the function comment ("Priority
+      order matches Java TealBidder.getBidType verbatim") does not lower this per
+      the disposition tie-breaker. Stated severity: FAIL.
+
+  - path: adapters/teal/teal.go
+    anchor: 'return openrtb_ext.BidTypeBanner }'
+    symbol: getBidType
+    severity: FAIL
+    family: bid-type-resolution
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 4, "Unresolved type should ERROR, not
+      silently default". The trailing bare `return openrtb_ext.BidTypeBanner`
+      fires whenever no imp matches bid.ImpID or the matched imp declares no
+      recognised media type, silently labelling a video or native bid as banner —
+      both are declared in capabilities, so this is the mis-typing case, not the
+      operator-vouched single-media-type carve-out (contrast adrino, which
+      declares native only and vouches inline). Stated severity: FAIL.
+
+  - path: adapters/teal/teal.go
+    anchor: 'case imps[i].Audio != nil:'
+    symbol: getBidType
+    severity: WARN
+    family: mediatype-config-drift
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 9 (dead-branch direction) and the shared
+      YAML-capabilities-to-Go-MType rule. teal.yaml declares only banner, video
+      and native on app and site, so infoawarebidder pruneImps strips audio imps
+      before MakeRequests and this branch is unreachable in production; the
+      exemplary fixture tealtest/exemplary/audio-imp.json asserts
+      `"type": "audio"` for a path PBS can never route. Resolve by removing the
+      branch and the fixture, or by adding audio to capabilities if the bidder
+      genuinely serves it. Stated severity: WARN pending that determination.
+
+  - path: adapters/teal/teal.go
+    anchor: 'if len(request.Imp) == 0 {'
+    symbol: MakeRequests
+    severity: WARN
+    family: framework-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 10, first listed anti-pattern — PBS
+      core rejects empty-imp requests before an adapter is called. Stated
+      severity: WARN.
+
+  - path: adapters/teal/teal.go
+    anchor: 'if cfg.Endpoint == "" {'
+    symbol: Builder
+    severity: WARN
+    family: framework-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 10, second listed anti-pattern —
+      `if config.Endpoint == "" { return error }` in Builder duplicates the YAML
+      loader's startup validation. The url.ParseRequestURI / scheme+host check on
+      the following lines is the same class: config.New already resolves and
+      validates the endpoint template at startup, so a bad endpoint never reaches
+      Builder. Stated severity: WARN.
+
+  - path: adapters/teal/teal.go
+    anchor: 'if isBlank(ext.Account) {'
+    symbol: validateImpExt
+    severity: WARN
+    family: framework-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 10 — "Re-validating bidder-params with
+      minLength/regex/required — schema validation runs upstream".
+      static/bidder-params/teal.json already marks account required with
+      minLength 1 and gives placement minLength 1, and
+      NewBidderParamsValidator enforces both before MakeRequests. The only
+      residue the Go check adds is rejecting whitespace-only values, which the
+      schema tolerates; if that matters, a schema pattern is the target-repo
+      shape. Stated severity: WARN.
+
+  - path: adapters/teal/teal.go
+    anchor: 'msgImpExtParseFmt      = "Error parsing imp.ext for impression %s"'
+    symbol: parseImpExt
+    severity: WARN
+    family: error-handling
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 2, "Distinct message per failure mode".
+      Both unmarshal sites inside parseImpExt — imp.ext to adapters.ExtImpBidder,
+      then bidderExt.Bidder to ExtImpTeal — return this one shared constant and
+      neither wraps the cause with %w, so production logs cannot separate a
+      malformed imp.ext from a wrong imp.ext.bidder structure. Both sites are in
+      the same function, so the INFO downgrade for call-stack disambiguation does
+      not apply. Stated severity: WARN.
+
+  - path: adapters/teal/teal.go
+    anchor: 'account = ext.Account'
+    symbol: MakeRequests
+    severity: WARN
+    family: request-mutation
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 11 (request-level key derived from
+      imps). The first valid imp's account is stamped onto Site.Publisher.ID and
+      App.Publisher.ID for the whole request; imps carrying a different account
+      are silently attributed to the first one, and
+      tealtest/exemplary/multi-imp-first-account-wins.json pins that behavior as
+      intended. The inline comment documents that Java does this, not why
+      first-wins is safe here, and the fidelity defense does not discharge the
+      check per the disposition tie-breaker. Expected: reject divergent accounts
+      with errortypes.BadInput, or justify first-wins. Stated default severity:
+      WARN (escalates to FAIL only where divergence routes to a different
+      account endpoint; the endpoint here is single and fixed).
+
+  - path: adapters/teal/teal.go
+    anchor: 'storedRequest["id"] = placementJSON'
+    symbol: modifyImp
+    severity: WARN
+    family: request-mutation
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 12 (destructive write to
+      caller-provided JSON). imp.ext.prebid.storedrequest.id is overwritten
+      unconditionally whenever placement is present, with no merge and no guard
+      for a value the publisher already set — and stored-request ids are a
+      first-class PBS feature with plausible legitimate upstream callers, which
+      is the clause that escalates this from INFO to WARN. The nearby comment
+      covers replacing non-object sub-keys, not clobbering an existing id.
+
+  - path: adapters/teal/teal.go
+    anchor: 'func isBlank(s string) bool {'
+    symbol: isBlank
+    severity: WARN
+    family: stdlib-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Helper Function Changed step 8 (stdlib duplication). The
+      unicode.IsSpace rune loop is exactly `strings.TrimSpace(s) == ""`, which
+      also lets the `unicode` import drop; TrimSpace itself uses unicode.IsSpace,
+      so even the NBSP behavior the port documents is preserved by the idiom.
+      The "mirrors StringUtils.isBlank" defense does not lower it under the
+      target-conformance tie-breaker. Stated severity: WARN.
+
+  - path: adapters/teal/teal.go
+    anchor: 'BidType: getBidType(bid, request.Imp),'
+    symbol: MakeBids
+    severity: INFO
+    family: perf
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 10. getBidType rescans request.Imp inside
+      the per-bid loop, so resolution is O(bids x imps); an impsByID map built
+      once before the loop removes the nesting. Stated severity: INFO (the map is
+      never required).
+
+  - path: adapters/teal/tealtest/supplemental/status-204.json
+    anchor: "<file>"
+    symbol: null
+    severity: WARN
+    family: test-coverage
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Supplemental Test Data Changed step 4 — the fixture declares
+      neither expectedMakeRequestsErrors nor expectedMakeBidsErrors. Recorded
+      because the check directs it; flagged in the run report as a probable
+      misfire, since a 204 fixture correctly produces no error and belongs in
+      supplemental/.
+
+  - path: openrtb_ext/imp_teal.go
+    anchor: 'Account   string  `json:"account"`'
+    symbol: ExtImpTeal
+    severity: INFO
+    family: cross-file-consistency
+    skill: bidder-params-pr-review
+    note: >-
+      Step 3 PR-level companion check, recorded UNCONDITIONALLY whenever
+      openrtb_ext/imp_{bidder}.go and adapters/{bidder}/ files are both in the
+      diff. Inbound tags (account, placement) match
+      static/bidder-params/teal.json; the outbound body is the re-marshalled
+      OpenRTB request, so there is no separate outbound struct to diverge.
+      Flagged in the run report as noise-by-design.
+
+  - path: adapters/teal/params_test.go
+    anchor: 'var invalidParams = []string{'
+    symbol: invalidParams
+    severity: INFO
+    family: test-coverage
+    skill: bidder-params-pr-review
+    note: >-
+      Workflow: Params Test Changed step 4 — invalidParams should cover "empty
+      strings for fields with minLength: 1". Both schema properties carry
+      minLength 1 and neither `{"account":""}` nor
+      `{"account":"abc","placement":""}` appears, so the minLength constraints
+      are unexercised. No severity is stated for the coverage list; recorded at
+      INFO.

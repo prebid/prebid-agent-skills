@@ -16,7 +16,9 @@ The canonical YAML schema for prebid-server adapter specifications. Language-neu
 
 A reader skill MUST emit the version it produced. A consumer (write, port) MUST refuse a version higher than its own and SHOULD warn on a lower version.
 
-The legacy form `adapter_spec_version: 1` (integer) is accepted by the schema during the Phase 2 migration window; Phase 2.7 migrates all goldens to the SemVer string form.
+The legacy integer form `adapter_spec_version: 1` is **rejected** — the property is `type: string` with pattern `^[0-9]+\.[0-9]+\.[0-9]+$`, so both `1` and `"1"` fail validation. The Phase 2 migration window it was accepted in is closed.
+
+A new read emits `"2.0.0"`. All 42 goldens declare it. Earlier versions stay documented in the schema because a spec produced by an older skill build declares one of them, but a spec that carries `bidder_params_ref` while declaring an earlier version is self-contradictory: the ref is what 2.0.0 requires.
 
 ---
 
@@ -117,7 +119,7 @@ When adding or changing a field:
 
 1. Edit `adapter-spec.schema.json` (the authoritative contract)
 2. If goldens need to change, edit them and verify with `make audit-goldens`
-3. Run `make ci` to confirm `test_schema_jsonschema.py` passes for all 40 goldens (21 Go + 19 Java post-Phase-5)
+3. Run `make ci` to confirm `test_schema_jsonschema.py` passes for all 42 goldens (22 Go + 20 Java)
 4. Document significant changes in `CHANGELOG.md` (Phase 2.7+)
 5. If the change is breaking, write an ADR and bump the schema version per the policy above
 
@@ -133,7 +135,7 @@ Phase 2.0 milestone fixture. The full Go and Java specs live in the goldens dire
 
 Notable Kobler-pair properties demonstrated:
 
-- **Byte-equal `bidder_params_json`**: both sides hash to `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685` (Rule R5-strict pass)
+- **Byte-equal bidder-params file**: both sides' `bidder_params_ref` carry the same `sha256` and `bytes` (Rule R5-strict pass). The pair each reader measures for kobler at the pinned commit is `sha256: 125fef34…` / `bytes: 431` — quoted here as illustration, not as a value to transcribe (V2)
 - **Cross-language port lineage**: `source_pr: prebid/prebid-server#3904`, `destination_pr: prebid/prebid-server-java#3684`
 - **Currency-conversion idiom divergence (Rule 32)**: Go uses `function-arg` injection (`reqInfo.ConvertCurrency`); Java uses `dependency` injection (`CurrencyConversionService`) — captured via `currency_conversion.injection`
 - **R7 documented bug**: kobler `params_test.go:47` calls `validator.Validate(openrtb_ext.BidderKrushmedia, ...)` (copy-paste artifact) — surfaces as `bidder-constant-mismatch` warning
@@ -155,6 +157,97 @@ The cross-language-pairs dual-spec assertions live at `cross-language-pairs/{bid
 
 ---
 
+## Verbatim capture and computed values (V1-V4)
+
+Four rules covering every field whose value is upstream bytes reproduced in the spec, and every field whose value is a count. Reader skills cite them by number at the emission site; do not restate the mechanics there.
+
+### V1 — A verbatim field carries a companion digest or is emitted as a reference
+
+A **verbatim field** is one whose value is upstream bytes reproduced in the spec, not a classification derived from them. The class:
+
+| Verbatim field | Owning skill |
+|---|---|
+| `bidder_params_ref` (+ `bidder_params_sha256`, a derived mirror of `bidder_params_ref.sha256`) | `read-bidder-params`, `read-bidder-params-java` |
+| `params.schema_interpretation.properties[].description` | same |
+| `bidder_info.user_sync` (whole subtree) | `read-bidder-info`, `read-bidder-config` |
+| `bidder_info.yaml_extra_fields` (whole subtree) | same |
+| `aliases[].overrides` (whole subtree) | `read-bidder-config` |
+| `spring_config.bidder_creator_lambda` | `read-bidder-class` |
+| `bidder_class.static_fields[]` values | `read-bidder-class` |
+| `code.make_requests.helpers[]` / `code.make_bids.helpers[]` signatures | `read-adapter-code`, `read-bidder-class` |
+| `tests.fixture_inventory.*[]` fixture payloads, in all three `--fixture-mode` values | `read-adapter-code`, `read-bidder-class` |
+
+Every one of them is emitted in exactly one of two forms:
+
+- **Reference form** (preferred): a `*_ref` block — `{ path, resolved_commit, sha256, bytes }` — with the fetched bytes staged at `read/test-fixtures/blobs/<sha256>`. Nothing about the value is retyped. Example shape:
+
+  ```yaml
+  bidder_params_ref:
+    path: static/bidder-params/kobler.json
+    resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+    sha256: 125fef34…        # 64 lowercase hex chars, from the command's stdout
+    bytes: 431
+  ```
+
+- **Inline-plus-digest form**: the bytes inline AND a `sha256` + `bytes` pair for the byte span they came from. A field extracted out of a larger file (a `description`, a lambda body, a method signature, a YAML subtree) meets this through the reference recorded for its **source file**: the reference is what makes the extraction re-derivable by a checker that re-parses the blob. A verbatim field whose source file has no reference anywhere in the spec is not re-derivable and is therefore not emittable in inline form — emit the reference instead.
+
+`bytes` is required next to `sha256` in both forms. A length cannot be reconstructed from text the reader wrote, the way a re-hash of a transcription can; the two witnesses fail differently, so both are recorded.
+
+`params.schema_interpretation.properties[].description` is the field class where this has already failed in the corpus: a description is long, prose-shaped, and the only thing that would catch a dropped or paraphrased span is a comparison against the blob. It is verbatim JSON-Schema text, never a summary of it.
+
+### V2 — A digest is derived from the fetch, never from the emitted text
+
+`sha256` and `bytes` MUST come from the stdout of the single command that fetched the bytes, recorded verbatim. Concretely, the fetch is piped straight into a digest filter and the two printed lines are pasted into the spec:
+
+```bash
+<fetch-command> | python3 -c 'import sys,hashlib,pathlib;b=sys.stdin.buffer.read();h=hashlib.sha256(b).hexdigest();d=pathlib.Path(sys.argv[1]);d.mkdir(parents=True,exist_ok=True);(d/h).write_bytes(b);print(f"  sha256: {h}\n  bytes: {len(b)}")' <repo>/read/test-fixtures/blobs
+```
+
+The per-source-mode `<fetch-command>` forms (local checkout, `github-raw`, `gh` CLI) are spelled out in `read-bidder-params` and `read-bidder-params-java` Step 1. All three return the same Git object, so all three produce the same two numbers.
+
+Two things are prohibited:
+
+- **Hashing your own output.** Re-reading an emitted field, decoding it, and hashing the result proves only that the field is self-consistent. It cannot detect a byte that never left the upstream file, because the byte is missing from both sides of the comparison. A digest whose input is anything other than the fetched bytes is not a digest of the source.
+- **Transcribing a digest or a byte count** from another spec, from a golden, from a review comment, or from this document. The values quoted here and in the goldens are illustrative; a reader that copies one has recorded a number it never measured. Run the command.
+
+Confirming a digest matches an independently-published value (the sibling-language spec, per R5-strict) is a comparison AFTER the command, never a substitute for it.
+
+### V3 — An inline verbatim scalar's YAML encoding is decided by a round-trip, not by a trigger list
+
+When bytes are carried inline — any multi-line verbatim scalar, such as `properties[].description` — the encoding is chosen mechanically, never by preference. Run this against the bytes being embedded:
+
+```bash
+python3 -c 'import sys,yaml;s=sys.stdin.buffer.read().decode();e=yaml.dump(s,default_style="|");print("encoding:","literal" if e.lstrip().startswith("|") and yaml.safe_load(e)==s else "double-quoted")' < read/test-fixtures/blobs/<sha256>
+```
+
+- `literal` — the YAML literal block scalar (`|`, or `|-` when the bytes do not end in a newline) carries these bytes and survives a dump/load cycle. Use it.
+- `double-quoted` — the literal block does not survive. The double-quoted scalar with explicit escapes (`\n`, `\t`, `\r`, trailing-space sequences) MUST be used. Add a YAML comment above the field naming the byte that forced it.
+
+This is a required step, not a judgement call, and it replaces every enumerated trigger list ("trailing whitespace on blank lines", "no terminal newline", "non-LF newline"). Those lists were incomplete: on real corpus files the probe returns `double-quoted` for cases outside them — a trailing space on a **content** line is one (`beachfront.json` line 29 at master), and a literal block written by hand for that file silently loses the space.
+
+If the bytes are not valid UTF-8, no YAML scalar is faithful; emit the reference only.
+
+### V4 — A computed value comes from a command's stdout
+
+Counts are measured, not asserted. Each of these fields is the stdout of the named command, run against the bytes at `provenance.source.resolved_commit`; record the command's number, and re-run it rather than adjusting a remembered value:
+
+| Field | Command (`<fetch>` is the source-mode fetch for that file) |
+|---|---|
+| `code.file_layout.files[].loc` | `<fetch> \| wc -l` |
+| `tests.unit_test_loc` | `<fetch> \| wc -l` |
+| `tests.unit_test_methods_count` | `<fetch> \| grep -c '^[[:space:]]*@Test'` |
+| `params.params_test.valid_cases_count` (Go) | ``<fetch> \| awk '/^var validParams/,/^}/' \| grep -c '^[[:space:]]*`'`` |
+| `params.params_test.invalid_cases_count` (Go) | same, with `/^var invalidParams/` |
+| `tests.test_application_properties_entries_added` | `<fetch> \| grep -c '^adapters\.<bidder>\.'` |
+| `iab_category_storage.table_size` (Go data table) | `<fetch> \| awk '/^var <mapVar>/,/^}/' \| grep -c ':[[:space:]]*"'` |
+| `iab_category_storage.table_size` (Java yaml-inlined) | `<fetch> \| awk '/^[[:space:]]*<yaml_field>:/{f=1;next} f&&/^[[:space:]]*[a-z-]+:[[:space:]]*$/{exit} f' \| grep -c ':'` |
+
+`wc -l` counts newlines: a file with no terminal newline reports one less than its visible line count. That is the recorded value — `loc` is defined as what `wc -l` prints, and the `bytes` witness in the file's reference covers the terminal-newline question separately.
+
+When the file's shape defeats the command (a non-standard `params_test.go` literal, a missing variable), emit `null` plus an `incomplete-classification` warning. Do not substitute a hand count.
+
+---
+
 ## Validation rules (R1-R10)
 
 The orchestrator enforces these rules at read time. Failures are emitted under `provenance.warnings` (non-blocking) or surface as hard errors that abort the read. The CI harness at `scripts/round-trip-ci.py` runs each rule against every golden on PR-time + post-merge.
@@ -162,10 +255,10 @@ The orchestrator enforces these rules at read time. Failures are emitted under `
 | Rule | Description | Enforcement |
 |---|---|---|
 | R1 | Spec must reference only files reachable at `provenance.source.resolved_commit`. A reference to a file that doesn't exist at that commit is a hard error. | Hard error |
-| R2 | `bidder_params_sha256` must match `sha256(bidder_params_json)`. The Go and Java reader for the same bidder MUST produce identical SHA. | Hard error |
+| R2 | `bidder_params_ref.sha256` and `bidder_params_ref.bytes` must match the bytes of `bidder_params_ref.path` at `bidder_params_ref.resolved_commit` — the upstream file, not any text in the spec — and the blob at `read/test-fixtures/blobs/<sha256>` must be those same bytes. When the deprecated inline `bidder_params_json` / `bidder_params_sha256` pair is also present, both must agree with the blob. The Go and Java reader for the same bidder MUST produce identical `sha256` and `bytes`. Per V2, a `sha256` computed over `bidder_params_json` satisfies nothing: it is the reader's own output on both sides of the comparison. | Hard error |
 | R3 | No invented fields. Every behavioral field has either a default flag (with structural evidence affirmatively matching the default) or a regex/AST/JSON-parse evidence pointer. A `custom` value REQUIRES a matching `quirks` entry. | Hard error |
 | R4 | Round-trip determinism. Re-running the read on the same commit produces a spec idempotent under `yaml.safe_load → safe_dump` (the test asserts dump2 == dump3). The orchestrator targets byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator`; R4 enforces idempotency rather than raw-byte equality against a stored golden. | Hard error in CI; warning interactively |
-| R5-strict | Cross-language structural parity for port pairs — STRICT fields. For any bidder present in both repos, the following MUST be byte-identical (after canonical normalization): `bidder_params_sha256`, `bidder_info.capabilities`, `params.schema_interpretation`, `bidder_info.gvl_vendor_id`, `bidder_info.maintainer.email`, `bidder_info.geoscope`. Divergence is a hard FAIL (port-fidelity violation). | Hard FAIL in dual-spec-assertion suite |
+| R5-strict | Cross-language structural parity for port pairs — STRICT fields. For any bidder present in both repos, the following MUST be byte-identical (after canonical normalization): `bidder_params_ref.sha256` AND `bidder_params_ref.bytes` (plus the deprecated `bidder_params_sha256` when present), `bidder_info.capabilities`, `params.schema_interpretation`, `bidder_info.gvl_vendor_id`, `bidder_info.maintainer.email`, `bidder_info.geoscope`. Divergence is a hard FAIL (port-fidelity violation). | Hard FAIL in dual-spec-assertion suite |
 | R5-divergent | Cross-language structural parity for port pairs — LEGITIMATE-DIVERGENCE fields. The following fields MAY diverge between Go and Java specs as a matter of language idiom; CI normalizes for comparison rather than failing: `bidder_info.user_sync` (Go camelCase keys vs Java kebab-case keys — semantically equivalent), `bidder_info.endpoint` (deploy-time tokens, dev-prod toggles, and per-language template syntax allowed), `bidder_info.endpoint_compression` (Java specs sometimes omit when the framework default applies), `bidder_info.ortb_version` (Java-only quoted-string `"2.6"`; Go always emits null). Divergence on these fields surfaces as INFO-level only — never a fail. | INFO-level dual-spec-assertion note |
 | R6 | `meta.bidder_name == cross_language.go_artifacts.package_name` AND `meta.bidder_name.toLowerCase() == directory_name(cross_language.java_artifacts.bidder_dir)`. Mismatch is a `package-directory-mismatch` warning. **Alias suppression** (Phase 1 commit `340d2a5`): when `meta.is_alias=true`, R6 compares against `meta.alias_of` (parent), not the alias's own bidder name. | `provenance.warnings` |
 | R7 | If `params.params_test.bidder_constant_referenced` does not match the constant declared in `openrtb_ext/bidders.go` for this bidder name (Go), or doesn't match the Java equivalent, emit `bidder-constant-mismatch` warning with `file:line`. **Important** (Phase 1 commit `592b7bb`): the canonical constant is looked up in `bidders.go`, NOT derived by PascalCase — 84 of 271 upstream constants don't match a mechanical PascalCase. | `provenance.warnings` |

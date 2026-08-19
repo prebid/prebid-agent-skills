@@ -1,0 +1,27 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-4211
+repo: prebid/prebid-server
+pr_number: 4211
+title: 'New Adapter: AdTarget.org - Limelight Alias'
+language: go
+base_ref: master
+review_sha: 6511cc2b91da507b3d827d266f88571ae9b5fc43
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2025-04-07'
+merge_base_sha: d82c99733d7f0a41e5f15af95c8a5e45ab60177c
+head_sha: 6511cc2b91da507b3d827d266f88571ae9b5fc43
+merge_state: merged
+merged_at: '2025-04-07'
+review_decision: CHANGES_REQUESTED -> APPROVED -> APPROVED
+outcome: clean
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server/compare/master...6511cc2b91da507b3d827d266f88571ae9b5fc43
+file_count: 1
+truncation:
+  patch_char_limit: 20000
+  truncated_files: []
+  compare_file_limit_hit: false

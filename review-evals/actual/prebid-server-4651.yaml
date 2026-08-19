@@ -1,0 +1,38 @@
+fixture: prebid-server-4651
+
+# 5 changed files in the fixture; all 5 examined.
+files_scanned: 5
+
+run:
+  skills: [pr-triage, bidder-info-pr-review]
+  skills_commit: c72e1f4042fcffd15e0fa57f6e03d2eea1b085c4
+  model: claude-opus-5
+  date: 2026-08-18
+
+# pr-triage Step 4 rule 1 "Multi-adapter alias bundle exception" applies: all 5
+# files are static/bidder-info/*.yaml, identical key set (endpoint + aliasOf),
+# all aliasOf: limelightDigital, all 2 lines, no diverging fields. PR type =
+# alias-only, NOT infrastructure, and the One-Alias-Per-PR rule's exception is
+# met -> no BULK-PR WARN.
+# Step 5a macro check PASS on all 5: {{.PublisherID}} and {{.Host}} are both in
+# the canonical macros.EndpointTemplateParams allow-list.
+#
+# bidder-info-pr-review Step 3 "Bulk-mode handling for multi-adapter alias
+# bundles" applies (5 aliases of the same parent, identical schema, <=5 lines):
+# 2 tasks, not per-alias field-level tasks.
+#   Task 1 (bulk pattern consistency):
+#     (a) all 5 reference limelightDigital, which exists at
+#         static/bidder-info/limelightDigital.yaml upstream @0ba3523 -- PASS
+#     (b) all 5 have identical field structure -- PASS
+#     (c) each endpoint domain plausibly belongs to that alias's organization,
+#         not the parent's (ads-altstarmedia.com / marketplace-anzu.io /
+#         rtb-oveeo.com / ads-rtbdemand.com / ads-smoot.com vs the parent's
+#         ortb.net) -- PASS
+#   Task 2 (parent existence): limelightDigital.yaml exists and carries no
+#     aliasOf of its own (no alias chain); it declares no gvlVendorID, so the
+#     aliases have nothing to inherit -- PASS
+#
+# No finding reached. Under bulk mode the skill replaces the per-field workflows
+# (Endpoint Changed, Alias Adapter Added) with the two tasks above, so neither
+# the http-scheme INFO nor the alias maintainer.email check runs per file.
+findings: []

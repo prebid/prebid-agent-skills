@@ -12,7 +12,7 @@ The skill extracts a canonical Adapter Specification (YAML) from any Go bid adap
 
 For a single bidder pinned to a single commit, the skill produces:
 
-1. **YAML Adapter Specification** — a language-neutral document conforming to [`../shared/adapter-spec.md`](../shared/adapter-spec.md) version 1. Sections include `provenance`, `meta`, `bidder_info`, `bidder_params_json` (verbatim) + `bidder_params_sha256`, `params`, `code`, `tests`, `quirks[]`, and `cross_language` (with Go-side dense + Java-side path-hint stubs).
+1. **YAML Adapter Specification** — a language-neutral document conforming to [`../shared/adapter-spec.md`](../shared/adapter-spec.md). Emit `adapter_spec_version: "2.0.0"`; that version is what requires `bidder_params_ref`, so a spec carrying the ref while declaring an earlier version contradicts itself. Sections include `provenance`, `meta`, `bidder_info`, `bidder_params_ref` (path + commit + `sha256` + `bytes`, with the bytes staged in the blob store) plus `bidder_params_sha256` as a derived mirror of `bidder_params_ref.sha256`, `params`, `code`, `tests`, `quirks[]`, and `cross_language` (with Go-side dense + Java-side path-hint stubs).
 2. **Markdown summary** — a human-friendly `.spec.md` companion that surfaces the load-bearing fields (endpoint, capabilities, batching rules, bid-type method chain, quirks, cross-language port concerns).
 
 The YAML is the contract; the Markdown is the dashboard. Both are emitted at the same `provenance.source.resolved_commit`. Re-running the skill on the same commit produces a YAML spec idempotent under round-trip (R4: `yaml.safe_load → safe_dump` on the emitted spec is byte-stable, dump2 == dump3). The orchestrator's encoding contract targets byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator`; R4 enforces idempotency, not raw-byte equality against a previously-stored golden.
@@ -32,7 +32,7 @@ The skill accepts one bidder per invocation. Flags:
 | `--persist` | no | off | Write to `prebid-server-go/read/specs/{bidder}/{shortsha}.{yaml,md}` and refresh `latest.yaml` symlink. The `read/specs/` directory is gitignored by default. |
 | `--run-id=<id>` | no | `${FULL_LOOP_RUN_ID}` env var if set | Teal-flow convention (Phase D1.5). When set (and neither `--persist` nor `--out` is given), output path defaults to `.tmp/full-loop/{run-id}/go/{bidder}.yaml` — the canonical handoff location the upcoming `port-go2java` / `port-java2go` skills look for the source spec. Format: ISO-like timestamp + short hash, e.g., `2026-05-04T1430Z-a3f9`. The `.tmp/` directory is `.gitignore`d (Wave 5). |
 | `--format=<fmt>` | no | `yaml,md` | `yaml`, `md`, or `yaml,md`. |
-| `--fixture-mode=<mode>` | no | `count` | `count` (filename + sha + bytes), `summary` (adds extracted media types per fixture), or `verbatim` (full JSON inlined). |
+| `--fixture-mode=<mode>` | no | `count` | `count` (filename + sha256 + bytes), `summary` (adds extracted media types per fixture), or `verbatim` (adds the full JSON inlined). `sha256` + `bytes` are mandatory in all three modes and always come from the fetch pipe, never from an inlined copy (V1/V2 in [`../shared/adapter-spec.md`](../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)). |
 
 See [Output](#output) below for destination precedence and YAML encoding contract.
 
@@ -78,7 +78,7 @@ If the major differs (e.g., `v5`), emit a `provenance.warnings[]` entry of type 
 
 Read `static/bidder-info/{bidder}.yaml` (the only file required for this check). If the YAML has a top-level `aliasOf: <parent>` field, the bidder is a pure alias — it has no Go implementation and no `static/bidder-params/{bidder}.json`. The orchestrator short-circuits:
 
-- Emit a minimal alias spec: `meta.is_alias: true`, `meta.alias_of: <parent>`, the verbatim YAML extra fields, `cross_language.go_artifacts.bidder_dir: null`, no `code:` section, no `params:` section, no `bidder_params_json`.
+- Emit a minimal alias spec: `meta.is_alias: true`, `meta.alias_of: <parent>`, the verbatim YAML extra fields, `cross_language.go_artifacts.bidder_dir: null`, no `code:` section, no `params:` section, `bidder_params_ref: null`.
 - Skip dispatch to `read-adapter-code` and `read-bidder-params`. Only `read-bidder-info` runs.
 - If `static/bidder-params/{bidder}.json` ALSO exists despite `aliasOf:`, emit a `provenance.warnings[]` entry of type `alias-resolution-circular` and continue to dispatch the params reader (best-effort; the parent's params usually apply).
 
@@ -106,7 +106,7 @@ The orchestrator merges fragments into the canonical schema and computes derived
 3. **Cross-bidder warnings**:
    - R6: Verify `meta.bidder_name == cross_language.go_artifacts.package_name`. Mismatch = `package-directory-mismatch` warning (33across-style — captured here AND in `code.package_directory_mismatch`).
    - R7: Verify `params.params_test.bidder_constant_referenced == openrtb_ext.Bidder<PascalCase(bidder)>`. Mismatch = `bidder-constant-mismatch` warning. Two real bugs at kobler_test.go:12 (BidderKargo) and params_test.go:47 (BidderKrushmedia) demonstrate this — see [`references/provenance-warnings.md`](references/provenance-warnings.md).
-   - R8: Endpoint placeholder validation against `macros.EndpointTemplateParams` (the canonical 18-field list at [`../../../review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md) Endpoint Template Macros section). Unrecognized `{{.XYZ}}` = `endpoint-placeholder-unresolved` warning.
+   - R8: Endpoint placeholder validation against `macros.EndpointTemplateParams` (the canonical 22-field list at [`../shared/endpoint-macros.yaml`](../shared/endpoint-macros.yaml) `go_template_macros`; annotated table at [`../../../review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md) Endpoint Template Macros section). Unrecognized `{{.XYZ}}` = `endpoint-placeholder-unresolved` warning.
    - R9: If `code.imports.has_jsonutil == false` AND any `Marshal`/`Unmarshal` import from `encoding/json` is used in adapter code, emit `legacy-encoding-json-direct-usage` warning.
    - R10: If `tests.uses_canonical_harness == false` (no `RunJSONBidderTest`), emit `legacy-test-helpers-imported` warning.
 4. **Schema validation R1–R3**: Reject hard if any spec field references a path that does NOT exist at `provenance.source.resolved_commit`. Reject hard if any enumerated field has value `custom` without a paired `quirks[]` entry referencing the same field.
@@ -127,7 +127,7 @@ Destination precedence (one per invocation):
 3. `--run-id=<id>` set (or `${FULL_LOOP_RUN_ID}` env var set, with neither `--persist` nor `--out` given) → write to `.tmp/full-loop/{run-id}/go/{bidder}.yaml` (and the matching `.spec.md` when `--format` includes `md`). The `.tmp/full-loop/` directory is `.gitignore`d. This is the **Teal-flow convention** — see [`../../../../docs/methodology/end-to-end-flow.md`](../../../../docs/methodology/end-to-end-flow.md) §1.2 for the read → port → review handoff. The `port-go2java` / `port-java2go` skills look for the source spec at this canonical path.
 4. (default) → stdout, with literal delimiters `--- yaml ---` and `--- markdown ---` separating the two halves.
 
-`--format=yaml` suppresses the Markdown half; `--format=md` suppresses the YAML half; `--format=yaml,md` (default) emits both. `--fixture-mode={count,summary,verbatim}` controls per-fixture payload in `tests.fixture_inventory.*`: `count` (filename + sha + bytes), `summary` (adds extracted media types), `verbatim` (inlines the JSON; 10–100× larger).
+`--format=yaml` suppresses the Markdown half; `--format=md` suppresses the YAML half; `--format=yaml,md` (default) emits both. `--fixture-mode={count,summary,verbatim}` controls per-fixture payload in `tests.fixture_inventory.*`: `count` (filename + sha256 + bytes), `summary` (adds extracted media types), `verbatim` (adds the inlined JSON; 10–100× larger). `sha256` and `bytes` are present in every mode — `verbatim` inlines the most bytes and so carries the same digest contract as every other verbatim field (V1), measured from the fetch, not from the inlined text (V2).
 
 YAML encoding contract (the canonical encoding R4's idempotency assumes): LF line endings, 2-space indent, exactly one trailing `\n`, fixture lists sorted alphabetically by `filename`. Header order matches `../shared/adapter-spec.schema.json` property order; Java-only blocks (`spring_config`, `bidder_class`) emit as `null` on Go specs to keep the schema shape complete. Goldens at `read/test-fixtures/*.golden.spec.yaml` demonstrate the canonical format. R4 verifies that emissions of THIS canonical encoding round-trip cleanly through `yaml.safe_load → safe_dump`; raw-vs-emission byte equality is the TARGET but is not directly enforced.
 
@@ -211,7 +211,7 @@ The skill is verified against the two Phase A acceptance-gate goldens:
 
 R4 round-trip determinism: re-running on the same `provenance.source.resolved_commit` produces a YAML spec idempotent under `yaml.safe_load → safe_dump` (the test asserts dump2 == dump3). The orchestrator targets byte-identical reproduction modulo `provenance.read.timestamp_utc` and `provenance.read.operator` — verify locally with `diff <(spec1.yaml) <(spec2.yaml)` and accept only the two excluded lines, but be aware R4 enforces idempotency rather than raw-byte equality.
 
-R5 cross-language structural parity: for any bidder also in `prebid-server-java`, the Go and Java specs MUST agree on `bidder_params_sha256`, `bidder_info.capabilities`, `bidder_info.maintainer.email`, `bidder_info.geoscope`, `bidder_info.gvl_vendor_id`, and `params.schema_interpretation`. The kobler dual-spec assertion at `cross-language-pairs/kobler.dual-spec-assertions.yaml` is the canonical round-trip test.
+R5 cross-language structural parity: for any bidder also in `prebid-server-java`, the Go and Java specs MUST agree on `bidder_params_ref.sha256` and `bidder_params_ref.bytes` (each side measured by its own reader, per V2), `bidder_info.capabilities`, `bidder_info.maintainer.email`, `bidder_info.geoscope`, `bidder_info.gvl_vendor_id`, and `params.schema_interpretation`. The kobler dual-spec assertion at `cross-language-pairs/kobler.dual-spec-assertions.yaml` is the canonical round-trip test.
 
 ## Sources
 
@@ -220,7 +220,7 @@ R5 cross-language structural parity: for any bidder also in `prebid-server-java`
 - Behavior taxonomy: [`../shared/behavior-taxonomy.md`](../shared/behavior-taxonomy.md) — enumerated values for all behavioral fields plus the closed `quirks[].edge_case_taxon` registry.
 - Port translation rules: [`../shared/port-translation-rules.md`](../shared/port-translation-rules.md) — 46 cross-language Go↔Java translation rules consumed by the future port-go2java skill.
 - Golden specs: [`../../test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml), [`../../test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml) — Phase A acceptance gate goldens.
-- Framework utilities (Go): [`../../../review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md) — canonical helpers, error types, `EndpointTemplateParams` 18-field list, module-path major-version reference.
+- Framework utilities (Go): [`../../../review/skills/shared/framework-utilities.md`](../../../review/skills/shared/framework-utilities.md) — canonical helpers, error types, `EndpointTemplateParams` 22-field list, module-path major-version reference.
 - Existing source-mode dispatch reused: [`../../../review/skills/pr-triage/SKILL.md`](../../../review/skills/pr-triage/SKILL.md) — Steps 1c (gh-cli + curl), 2 (drift checks), 3 (file categorization).
 - Existing file→domain mapping mirrored: [`../../../review/skills/pr-triage/references/routing-rules.md`](../../../review/skills/pr-triage/references/routing-rules.md) — file-to-skill routing table, priority rules for `params_test.go`, shared file resolution for `openrtb_ext/bidders.go`.
 - Suite README: [`../README.md`](../README.md) — directory layout, status of Phase A/B/C, what's NOT in scope.

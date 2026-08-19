@@ -19,7 +19,7 @@ Static helpers for common adapter operations:
 | Method | Purpose | Port-skill usage |
 |---|---|---|
 | `defaultRequest(BidRequest, URL, byte[], Map<String,String>)` | Construct an `HttpRequest<BidRequest>` with default `Content-Type: application/json` + `Accept: application/json` headers. | The most common call from `makeHttpRequests` — emit this when source spec's `code.make_requests.batching.rules` is `single-batched` and headers are standard. |
-| `headers(MultiMap)` | Convert Vert.x `MultiMap` to a flat `Map<String,String>`. | Rare; emitted when source spec's `headers_constructed.collapse_helper` is true. |
+| `headers(MultiMap)` | Convert Vert.x `MultiMap` to a flat `Map<String,String>`. | Rare; emitted when the source spec's `code.make_requests.headers_constructed.has_only_standard_headers` is true (Rule 19). `HeadersConstructed` is a closed object -- there is no `collapse_helper` field. |
 
 ### 2.2 `BidderDeps` + `BidderDepsAssembler`
 
@@ -27,15 +27,18 @@ Spring-DI container for per-bidder dependencies. Generated via `BidderDepsAssemb
 
 ```java
 @Bean
-public BidderDeps {bidder}BidderDeps(...) {
+BidderDeps {bidder}BidderDeps(...) {
     return BidderDepsAssembler.<{Bidder}BidderConfigurationProperties>forBidder(BIDDER_NAME)
         .withConfig(configurationProperties)
-        .bidderInfo(bidderInfoCreator()::create)
-        .usersyncerCreator(...)
         .bidderCreator(config -> new {Bidder}Bidder(config.getEndpoint(), mapper))
         .assemble();
 }
 ```
+
+`forBidder` / `withConfig` / `bidderCreator` / `assemble` is the assembler's COMPLETE public surface (`src/main/java/org/prebid/server/spring/config/bidder/util/BidderDepsAssembler.java:59,65,70,75`). Two chain links that older revisions of this file taught do not exist and will not compile:
+
+- `.bidderInfo(...)` — never existed as a public method. `BidderDepsAssembler` builds `BidderInfo` internally from the `@ConfigurationProperties`'d YAML.
+- `.usersyncerCreator(...)` — `UsersyncerCreator` was deleted upstream in `2880782f` (#4464). The assembler now derives the `Usersyncer` itself from the bidder's own YAML `usersync` block via a private helper (`BidderDepsAssembler.java:127,132-136`), so the factory class passes nothing and needs no `externalUrl` bean parameter.
 
 The `{Bidder}Configuration` template emits this assembly idiom. Variations the template handles:
 

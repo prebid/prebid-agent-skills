@@ -48,14 +48,14 @@ The `write/` skill is the symmetric inverse of `read/`: spec → adapter files. 
 
 ### 2.1 Verbatim file outputs (byte-for-byte)
 
-A `write/` skill MUST emit these files byte-identical to the spec's verbatim copies. Re-reading the written adapter MUST produce the same `bidder_params_sha256`.
+A `write/` skill MUST emit these files byte-identical to the bytes the spec references. The check is `sha256` of the written FILE against `bidder_params_ref.sha256` (and its `bytes`) — a digest taken over the spec's own inline text on both sides would compare the spec to itself and pass on a lossy write (V2 in [`adapter-spec.md`](adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)).
 
 | Spec field | Output file (Go target) | Output file (Java target) | Notes |
 |---|---|---|---|
-| `bidder_params_json` (verbatim string) | `static/bidder-params/{xyz}.json` | `src/main/resources/static/bidder-params/{xyz}.json` | The cross-language contract — same bytes on both sides. R2 hard-error if the SHA mismatches the verbatim. |
+| `bidder_params_ref` → blob at `read/test-fixtures/blobs/<sha256>` | `static/bidder-params/{xyz}.json` | `src/main/resources/static/bidder-params/{xyz}.json` | The cross-language contract — same bytes on both sides. R2 hard-error when the written file's digest differs from `bidder_params_ref.{sha256,bytes}`. |
 | `bidder_info.*` (entire subtree) | `static/bidder-info/{xyz}.yaml` | (folded into the unified `bidder-config/{xyz}.yaml` — see §2.3) | Endpoint, capabilities, geoscope, gvl_vendor_id, user_sync, yaml_extra_fields. |
 
-Worked example — Optidigital. The spec at [`prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml) line 68 carries the JSON Schema as a YAML double-quoted scalar (preserving the trailing `}` with no terminal newline). A `write/` skill must reconstruct those exact bytes — `bidder_params_sha256` is `6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31`, and a single-byte deviation breaks R2.
+Worked example — Optidigital. The golden at [`prebid-server-go/read/test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml) carries the JSON Schema in double-quoted form, which is what the V3 probe returns for that file (trailing whitespace on a blank line, no terminal newline). A `write/` skill must reconstruct exactly the bytes the golden's reference names; verify by digesting the written file and comparing against `bidder_params_ref.{sha256,bytes}`. A single-byte deviation breaks R2. Read the digest from the golden — do not copy a hash out of this document into a spec (V2).
 
 ### 2.2 Behavioral fields drive code generation
 
@@ -113,7 +113,7 @@ Translate a Go-source spec into Java adapter artifacts. The skill consumes the s
 
 The mapping below covers the SPEC-FIELD → JAVA-ARTIFACT relationship. For the operational emission contract (file shapes, checkstyle rules, PR-template auto-population, registration insertion), see the per-skill emission references at [`prebid-server-java/port-go2java/references/`](../../../../prebid-server-java/port-go2java/references/) — Phase D1.3 deliverables.
 
-- [`java-artifact-shapes.md`](../../../../prebid-server-java/port-go2java/references/java-artifact-shapes.md) — license headers, package decls, ImportOrder + EmptyLineSeparator + LineLength + ban-list checkstyle rules, test-application.properties append shape, IT-fixture pair shape, Jacoco coverage gate.
+- [`java-artifact-shapes.md`](../../../../prebid-server-java/port-go2java/references/java-artifact-shapes.md) — license headers, package decls, ImportOrder + EmptyLineSeparator + LineLength + ban-list checkstyle rules, test-application.properties append shape, IT-fixture pair shape, Jacoco coverage target (a contributor self-certification, not a CI gate).
 - [`pr-template-mapping.md`](../../../../prebid-server-java/port-go2java/references/pr-template-mapping.md) — `pull_request_template.md` checkbox auto-population from spec fields; companion docs PR draft; pre-submit rebase protocol.
 - [`registration-rules.md`](../../../../prebid-server-java/port-go2java/references/registration-rules.md) — file create/edit table; per-alias asymmetry; Spring auto-discovery (Java has no equivalent of Go's `bidders.go`/`adapter_builders.go` registry edits).
 - Java framework utilities (read-side companion): [`framework-utilities-java.md`](../../../../prebid-server-java/read/skills/shared/framework-utilities-java.md) — `BidderUtil`, `BidderDeps`, `JacksonMapper`, `CurrencyConversionService`, `HttpUtil.headers()`, `BidderInfoCreator`, `ImpUtil`.
@@ -282,7 +282,7 @@ When a user wants to port an adapter Go ↔ Java (or vice versa):
    → read/specs/kobler/{shortsha}.yaml (source_language: java)
 
 4. Verify with dual-spec assertion
-   diff <(yq '.bidder_params_sha256' go-spec) <(yq '.bidder_params_sha256' java-spec)
+   diff <(yq '.bidder_params_ref | {sha256, bytes}' go-spec) <(yq '.bidder_params_ref | {sha256, bytes}' java-spec)
    diff <(yq '.bidder_info.capabilities' go-spec) <(yq '.bidder_info.capabilities' java-spec)
    diff <(yq '.params.schema_interpretation' go-spec) <(yq '.params.schema_interpretation' java-spec)
    # All three MUST be byte-identical (R5).
@@ -312,7 +312,7 @@ Golden specs at `prebid-server-go/read/test-fixtures/{bidder}.golden.spec.yaml` 
 
 ### 8.3 R5 byte-equality is rare in practice
 
-The `bidder_params_sha256` cross-language equality (R5) is the ideal — same JSON Schema bytes on both sides. In practice, most port pairs have whitespace divergence:
+The `bidder_params_ref.sha256` cross-language equality (R5) is the ideal — same JSON Schema bytes on both sides, each side measuring its own. In practice, most port pairs have whitespace divergence:
 
 - Go writes 4-space indent with stray blank lines and no trailing newline (Optidigital, msft).
 - Java writes 2-space indent with trailing newlines (most adapters).
@@ -323,9 +323,9 @@ The Appnexus pair has the same divergence (Java spec line 21–24): Java raw SHA
 
 Consumers MUST treat R5 failures as port-fidelity warnings, not hard errors — most port pairs in the wild fail it.
 
-### 8.4 Reviewer cohort is per-language
+### 8.4 Review expectations are per-repo
 
-The Go and Java reviewer cohorts are wholly disjoint (only @bretg crosses both as cross-language coordinator). Review-pattern matchers (a hypothetical mechanism that "this reviewer always asks for X") MUST NOT be auto-transferred between languages. See [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) for the explicit ban. This affects a `pr-triage` style review skill but does NOT affect read/, write/, or port-{lang2lang}/ — those skills are language-aware by construction.
+An expectation derived from one repo's review history is evidence about that repo's merge bar only: the two servers differ in framework, test harness, style enforcement, and what CI blocks on. Review-pattern matchers (any encoding of "reviewers here always ask for X") MUST NOT be auto-transferred between languages, and review skills must not key checks on reviewer identity. Framework-agnostic defect classes DO transfer. See [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) for the explicit ban. This affects a `pr-triage` style review skill but does NOT affect read/, write/, or port-{lang2lang}/ — those skills are language-aware by construction.
 
 ### 8.5 Custom quirks may exceed the taxonomy
 
@@ -408,7 +408,7 @@ Don't translate the R-rules into per-skill `script_eval` entries. The result wou
 - Canonical schema: [`adapter-spec.md`](adapter-spec.md) — full Adapter Specification format with worked Kobler dual-spec example.
 - Port translation rules: [`port-translation-rules.md`](port-translation-rules.md) — 46 explicit Go ↔ Java rules indexed by spec field driver.
 - Behavior taxonomy: [`behavior-taxonomy.md`](behavior-taxonomy.md) — enumerated values for behavioral fields and the `quirks[].edge_case_taxon` registry.
-- Review-pattern transfer policy: [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) — disjoint reviewer-cohort finding and the transfer ban.
+- Review-pattern transfer policy: [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) — the per-repo transfer ban, what does and does not carry across languages, and the prohibition on encoding reviewer identity.
 - Sibling Go orchestrator: [`../read-adapter-orchestrator/SKILL.md`](../read-adapter-orchestrator/SKILL.md) — discovery, fetch, dispatch, assembly, validation, emission for prebid-server-go.
 - Sibling Java orchestrator: [`../../../../prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md`](../../../../prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md) — same role for prebid-server-java with Spring DI / unified YAML / inverted-alias / 4-file-split divergences.
 - Opt-in hook in pr-triage: [`../../../review/skills/pr-triage/SKILL.md`](../../../review/skills/pr-triage/SKILL.md) — `## Optional: Prior-Spec Comparison (read/ integration)` section.

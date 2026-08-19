@@ -37,7 +37,7 @@ Takes a structured Java-source Adapter Spec (read by `prebid-server-java/read/sk
 - `openrtb_ext/bidders.go` constant addition + `coreBidderNames` slice entry (alphabetical, lower-first)
 - `exchange/adapter_builders.go` import + map entry (alphabetical)
 - `static/bidder-info/{bidder}.yaml` (camelCase keys; converted from Java's kebab-case)
-- `static/bidder-params/{bidder}.json` (byte-copy from Java per Rule 38)
+- `static/bidder-params/{bidder}.json` (materialised from the source spec's `bidder_params_ref` per Rule 38)
 
 **Out of scope** (handled elsewhere or future): writing a Go adapter from scratch (`write/`, future); reviewing post-merge (`review/`, future composition); analytics modules / RTD modules / general modules / delta-ports (deferred per execution-plan-phase-d.md "Out of scope").
 
@@ -112,7 +112,7 @@ If multiple sources are present and they disagree, abort with `ERROR: source spe
 
 D3's mechanical-ready rules (priority order; same 10 as D2 in inverse direction):
 
-1. Rule 38 — bidder-params byte-fidelity (`byte_copy` Java → Go)
+1. Rule 38 — bidder-params byte-fidelity (`materialize_params(source_spec['bidder_params_ref'], blobs_dir=…, checkout=…)`; blob store at `prebid-server-java/read/test-fixtures/blobs/<sha256>` first, else the Java clone pinned to `ref.resolved_commit`. The helper verifies `sha256` + `bytes` before returning and raises rather than returning suspect bytes; a missing blob with no checkout is an error, never an empty return)
 2. Rule 46 inverse — name-normalization reversal (Java lowercase `adkerneladn` → Go camelCase `adkernelAdn`); requires the dual-spec assertion lookup since not fully mechanical in this direction
 3. Rule 33 inverse — Java parent → child YAML decomposes into Go child → parent YAMLs
 4. Rule 44 inverse — alias-empire flavor coherence (parent flavor inferred from Java aliases block, projected into Go child-yamls + alias entries)
@@ -131,7 +131,7 @@ The remaining 36 rules are handled prose-driven (the SKILL walks the rule's pros
 
 ### Step 4 — Author the destination spec
 
-**R5-strict-shared field carry-over.** Same nine fields as D2 §Step 4 carry verbatim from `source_spec` to `dest_spec` (the cross-language R5-strict invariant is symmetric).
+**R5-strict-shared field carry-over.** Same nine fields as D2 §Step 4 carry verbatim from `source_spec` to `dest_spec` (the cross-language R5-strict invariant is symmetric). The ninth is `bidder_params_ref`: carry the whole `{path, resolved_commit, sha256, bytes}` block unchanged except that `path` is re-rooted to Go's layout, `static/bidder-params/{bidder}.json` — `resolved_commit`, `sha256` and `bytes` are NEVER recomputed. `bidder_params_sha256` mirrors `bidder_params_ref.sha256`; set it from the ref rather than hashing anything. Carry the deprecated `bidder_params_json` across verbatim when the source has it, so dual-spec consumers still validate, but derive nothing from it.
 
 **Go-specific construction.** Build the Go-only spec blocks:
 
@@ -232,7 +232,13 @@ port_lineage:
     - <one entry per applied prose-driven rule>
 ```
 
-**bidder_params_sha256 invariant.** SHA-256 of `dest_spec.bidder_params_json`; MUST equal `source_spec.bidder_params_sha256` (Rule 38 byte-copy guarantees this). Mismatch aborts the SKILL.
+**Rule 38 materialise-from-ref invariant.** Never hash inline text to produce a ref — that is what `bidder_params_json` did before 2.0.0 removed it, and hashing the reader's own transcription proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec carrying only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes:
+
+1. `dest_spec.bidder_params_ref.{resolved_commit, sha256, bytes}` are identical to the source's, and `.path` is `static/bidder-params/{bidder}.json`.
+2. `dest_spec.bidder_params_sha256 == dest_spec.bidder_params_ref.sha256` (the mirror, not a fresh hash).
+3. **The emitted `static/bidder-params/{bidder}.json` MUST have sha256 equal to `bidder_params_ref.sha256` and length equal to `bidder_params_ref.bytes`.** Step 5 re-hashes the file on disk after writing it.
+
+Any of the three failing aborts the SKILL with `ERROR: Rule 38 materialise-from-ref invariant violated — {which assertion}`. Since `materialize_params` already raises on either witness before returning, a failure here means the write path corrupted the bytes (text-mode write, newline translation, a re-serialising template), not the read path.
 
 **Provenance pinning.** `dest_spec.provenance.source.resolved_commit = source_spec.provenance.source.resolved_commit`.
 
@@ -245,7 +251,7 @@ port_lineage:
 | File | Template | Notes |
 |---|---|---|
 | `static/bidder-info/{bidder}.yaml` | `bidder-info.yaml.j2` | camelCase keys per `references/go-artifact-shapes.md` §9. |
-| `static/bidder-params/{bidder}.json` | `byte_copy` (no template) | Byte-identical to Java's per Rule 38; SHA-256 verified. |
+| `static/bidder-params/{bidder}.json` | `materialize_params` (no template) | Write the bytes the helper returned in **binary** mode (`Path.write_bytes`) — never a text write, never a re-serialised dict. Then re-read the file and assert its sha256 equals `bidder_params_ref.sha256` and its length equals `bidder_params_ref.bytes`; that makes the emitted file byte-identical to Java's by construction rather than by assumption. |
 | `openrtb_ext/imp_{bidder}.go` | `imp-ext-pojo.go.j2` | Cross-package struct; PascalCase fields with `json:"X"` tags. |
 | `adapters/{bidder}/{bidder}.go` | `bidder.go.j2` | Builder + MakeRequests + MakeBids per Go canonical pattern. |
 | `adapters/{bidder}/{bidder}_test.go` | `bidder-test.go.j2` | Thin `adapters.RunJSONBidderTest` wrapper. |
@@ -302,7 +308,7 @@ These two states are direction-specific — a `fail-source-omits` in one directi
 ```json
 {
   "port_report_version": "0.2.0",
-  "port_translation_rules_version": "0.2.0",
+  "port_translation_rules_version": "0.3.0",
   "port_run": {
     "run_id": "2026-05-05T0426Z-9f2a",
     "source_lang": "java",
@@ -311,7 +317,7 @@ These two states are direction-specific — a `fail-source-omits` in one directi
     "target_branch": "feat/d3.8-kobler-canary"
   },
   "rules_consumed": [
-    { "rule_id": 38, "verdict": "applied", "summary": "bidder-params byte-copy Java→Go (sha256 matches)" },
+    { "rule_id": 38, "verdict": "applied", "summary": "bidder-params materialised from bidder_params_ref Java→Go (emitted sha256 == ref.sha256, 431 bytes)" },
     { "rule_id": 35, "verdict": "applied-with-warning", "summary": "Java config subclass devEndpoint not preserved — operator must hand-fill resolveEndpoint() for dev-prod toggle" }
   ],
   "quirks_emitted": [
@@ -369,7 +375,7 @@ D3 considers the skill production-ready only when, for each MVP pair:
 
 - **Design doc**: [`../../docs/methodology/port-skills-design.md`](../../docs/methodology/port-skills-design.md) — 7-step pipeline + conflict resolution + novel-pattern handling.
 - **Execution plan**: [`../../docs/execution-plan-phase-d.md`](../../docs/execution-plan-phase-d.md) — D3 acceptance criteria + per-pair expectations.
-- **Rules corpus**: [`../read/skills/shared/port-translation-rules.yaml`](../read/skills/shared/port-translation-rules.yaml) — 46 rules at v0.2.0; the SKILL pins to this version. Round-Trip Safety section pre-declares lossy-direction asymmetries.
+- **Rules corpus**: [`../read/skills/shared/port-translation-rules.yaml`](../read/skills/shared/port-translation-rules.yaml) — 46 rules at v0.3.0; the SKILL pins to this version. 0.3.0 restates Rule 38 as materialise-from-`bidder_params_ref`: a skill pinned at 0.2.0 would copy an inline string that is now non-normative. Round-Trip Safety section pre-declares lossy-direction asymmetries.
 - **Output schema**: [`../read/skills/shared/port-report.schema.json`](../read/skills/shared/port-report.schema.json) — port-report contract (v0.2.0).
 - **Source-spec schema**: [`../read/skills/shared/adapter-spec.schema.json`](../read/skills/shared/adapter-spec.schema.json) — what the source spec must satisfy.
 - **R5 lib**: [`../../scripts/lib/r5_check.py`](../../scripts/lib/r5_check.py) — R5 comparator (Phase D0.1).

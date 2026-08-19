@@ -1,0 +1,130 @@
+# prebid/prebid-server#4765 "New Adapter: Teal" -- Java -> Go port.
+#
+# Captured at 6367a39cc311, the original submission. All twelve findings below
+# were raised across three review rounds (2026-05-28, 2026-06-03, 2026-06-11,
+# 2026-06-30) and every anchor is present in this one snapshot -- the later
+# rounds surfaced defects that already existed here.
+#
+# This is the corpus's canonical CALIBRATION case. The review skills of the day
+# did not fail to *see* most of these; they saw them and dispositioned them
+# toward source-fidelity ("the Java original does it this way") and toward
+# "more artifacts = higher quality". Severities below are the target-repo
+# (Go) merge bar, which is what the maintainers actually applied.
+#
+# NOT included, deliberately: a "personal email in maintainer field" finding.
+# @ollyburns asked to remove personal details in a reply anchored on the
+# maintainer line (discussion_r3348214688), but the value in the diff is
+# `prebid@teal.works` -- a role address -- at both the review SHA and the
+# merged head. The request traces to a verification screenshot posted in the
+# thread, not to a fact in this diff. Encoding it as an expected finding would
+# require inventing one.
+
+pr: prebid/prebid-server#4765
+review_sha: 6367a39cc3118e21f57642a53912d9c096591ae8
+
+expected:
+  - id: teal-bidtype-silent-banner-default
+    path: adapters/teal/teal.go
+    anchor: "return openrtb_ext.BidTypeBanner"
+    symbol: getBidType
+    family: bid-type-resolution
+    severity: FAIL
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3346072604
+    why_it_matters: A constant banner fallback silently mis-types every bid whose imp declares no media type, so the defect never reaches a log.
+
+  - id: teal-bidtype-ignores-bid-mtype
+    path: adapters/teal/teal.go
+    anchor: "func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {"
+    symbol: getBidType
+    family: bid-type-resolution
+    severity: FAIL
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3499333304
+    why_it_matters: The YAML declares multiformat-supported, so one imp can carry banner+video and fixed imp priority mis-labels every non-first-priority bid.
+
+  - id: teal-audio-branch-not-in-yaml
+    path: adapters/teal/teal.go
+    anchor: "return openrtb_ext.BidTypeAudio"
+    symbol: getBidType
+    family: mediatype-config-drift
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3346058395
+    why_it_matters: teal.yaml declares banner/video/native only, so core prunes audio imps before MakeRequests and the branch is unreachable.
+
+  - id: teal-first-valid-imp-account-divergence
+    path: adapters/teal/teal.go
+    anchor: "// First valid imp's account wins"
+    symbol: MakeRequests
+    family: request-mutation
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3346076744
+    why_it_matters: A request mixing accounts routes every imp to the first imp's publisher.id with no error, so the wrong account is billed silently.
+
+  - id: teal-ext-bids-destructive-overwrite
+    path: adapters/teal/teal.go
+    anchor: 'ext["bids"] = json.RawMessage(`{"pbs":1}`)'
+    symbol: mergeBidsPBSFlag
+    family: request-mutation
+    severity: INFO
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3393375884
+    why_it_matters: An unconditional clobber of caller-provided ext.bids is a latent-bug surface even when the value is correct; the intent has to be stated.
+
+  - id: teal-duplicate-unmarshal-error-message
+    path: adapters/teal/teal.go
+    anchor: 'msgImpExtParseFmt      = "Error parsing imp.ext for impression %s"'
+    symbol: parseImpExt
+    family: error-handling
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3393377378
+    why_it_matters: Both unmarshal failures emit one message, so production logs cannot distinguish bad imp.ext JSON from a wrong imp.ext.bidder shape.
+
+  - id: teal-isblank-duplicates-strings-trimspace
+    path: adapters/teal/teal.go
+    anchor: "func isBlank(s string) bool {"
+    symbol: isBlank
+    family: stdlib-idiom
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3393374028
+    why_it_matters: A hand-rolled unicode.IsSpace loop ported from StringUtils.isBlank reproduces strings.TrimSpace(s) == "" exactly, including the NBSP case.
+
+  - id: teal-getbidtype-nested-imp-scan
+    path: adapters/teal/teal.go
+    anchor: "for i := range imps {"
+    symbol: getBidType
+    family: perf
+    severity: INFO
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3346075368
+    why_it_matters: A linear imp scan inside the per-bid loop makes bid typing O(seatbids x bids x imps); an impsByID map built once removes it.
+
+  - id: teal-noncanonical-doc-go
+    path: adapters/teal/doc.go
+    anchor: "<file>"
+    family: canonical-artifacts
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3317312581
+    why_it_matters: doc.go is not part of the canonical adapter corpus; shipping extra artifacts is off-spec, not premium.
+
+  - id: teal-noncanonical-bench-test
+    path: adapters/teal/teal_bench_test.go
+    anchor: "<file>"
+    family: canonical-artifacts
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3317321118
+    why_it_matters: Benchmarks are a dev-time aid; upstream adapters ship JSON fixtures, and the maintainer asked what files an adapter is supposed to add.
+
+  - id: teal-noncanonical-fuzz-test
+    path: adapters/teal/teal_fuzz_test.go
+    anchor: "<file>"
+    family: canonical-artifacts
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#issuecomment-4611841049
+    why_it_matters: Same non-canonical class as the benchmark file; the author deleted it in response and it is absent from the merged head a470fee58c35.
+
+  - id: teal-alias-shipped-with-new-adapter
+    path: static/bidder-info/tealplus.yaml
+    anchor: "<file>"
+    family: pr-scope
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4765#discussion_r3317316709
+    why_it_matters: An alias riding along with a brand-new adapter widens the PR's blast radius; the maintainer required it in its own PR after the parent merged.
+
+forbidden: []

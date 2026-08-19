@@ -1,0 +1,11 @@
+[
+  {
+    "filename": "static/bidder-info/adtg_org.yaml",
+    "status": "added",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,2 @@\n+endpoint: \"http://ads-pbs.rtb.adtarget.org/openrtb/{{.PublisherID}}?host={{.Host}}\"\n+aliasOf: \"limelightDigital\""
+  }
+]

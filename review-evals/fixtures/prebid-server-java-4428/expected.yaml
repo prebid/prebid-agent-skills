@@ -1,0 +1,52 @@
+# prebid/prebid-server-java#4428 "New Adapter: TrustX" -- net-new Java bidder.
+#
+# Captured at ec94fed0814d, the state @CTMBNara reviewed on 2026-03-17
+# (CHANGES_REQUESTED). Every finding is a target-repo idiom judgement rather
+# than a correctness bug, which is exactly the register a fidelity-biased
+# reviewer under-rates.
+#
+# This is the corpus's Java bidder-class fixture: it exercises the same
+# calibration question as #4765 in the opposite language, so a fix that only
+# hardens the Go skills cannot move both.
+
+pr: prebid/prebid-server-java#4428
+review_sha: ec94fed0814d6f794a7b4268f94da9a5068e8225
+
+expected:
+  - id: trustx-java-try-prefix-on-parse-helper
+    path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
+    anchor: "private ExtImpTrustx tryParseImpExt(Imp imp) {"
+    symbol: tryParseImpExt
+    family: naming-conventions
+    severity: INFO
+    source: https://github.com/prebid/prebid-server-java/pull/4428#discussion_r2947110659
+    why_it_matters: The repo names these parseImpExt; a try prefix is not the local convention for a helper that returns null on failure.
+
+  - id: trustx-java-modifyimpext-rebuilds-unchanged-ext
+    path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
+    anchor: ".gpid(adSlot != null ? adSlot : impExt.getGpid())"
+    symbol: modifyImpExt
+    family: framework-idiom
+    severity: INFO
+    source: https://github.com/prebid/prebid-server-java/pull/4428#discussion_r2947137202
+    why_it_matters: When adSlot is null the builder reconstructs an identical object; returning impExt unchanged lets the caller skip the imp rebuild entirely.
+
+  - id: trustx-java-dead-null-guard-on-bidresponse
+    path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
+    anchor: "Stream.ofNullable(bidResponse)"
+    symbol: bidsFromResponse
+    family: error-handling
+    severity: WARN
+    source: https://github.com/prebid/prebid-server-java/pull/4428#discussion_r2947256231
+    why_it_matters: "@CTMBNara: bidResponse cannot be null on this path, so the guard is dead code that hides which values the method really has to handle."
+
+  - id: trustx-java-redundant-device-locals
+    path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
+    anchor: "final Device device = request.getDevice();"
+    symbol: makeHeaders
+    family: framework-idiom
+    severity: INFO
+    source: https://github.com/prebid/prebid-server-java/pull/4428#discussion_r2947193008
+    why_it_matters: The repo reads these through ObjectUtil.getIfNotNull inline; the local plus null-safe accessor pair is a second spelling of the same thing.
+
+forbidden: []

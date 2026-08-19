@@ -4,9 +4,9 @@ This suite extracts a structured Adapter Specification from any Go bid adapter i
 
 ## Suite purpose
 
-An Adapter Specification is a YAML document that captures everything needed to reconstruct or analyze an adapter without re-parsing source: provenance, YAML metadata, the bidder-params JSON schema (verbatim + interpreted), code-level behavior (batching rules, mutation strategies, endpoint resolution, bid-type resolution), test fixture inventory, quirks, and cross-language port concerns. The schema is canonical at [`shared/adapter-spec.md`](shared/adapter-spec.md) and is shared with the Java-side suite — Go and Java readers MUST emit byte-identical `bidder_params_json`/SHA, identical `params.schema_interpretation`, and identical `bidder_info.capabilities` for the same bidder.
+An Adapter Specification is a YAML document that captures everything needed to reconstruct or analyze an adapter without re-parsing source: provenance, YAML metadata, the bidder-params JSON schema (verbatim + interpreted), code-level behavior (batching rules, mutation strategies, endpoint resolution, bid-type resolution), test fixture inventory, quirks, and cross-language port concerns. The schema is canonical at [`shared/adapter-spec.md`](shared/adapter-spec.md) and is shared with the Java-side suite — Go and Java readers MUST emit an identical `bidder_params_ref` digest (`sha256` + `bytes`), identical `params.schema_interpretation`, and identical `bidder_info.capabilities` for the same bidder.
 
-The dual representation matters: `bidder_params_json` is the cross-language byte-identical contract (a porter consumes the verbatim bytes); `params.schema_interpretation` is the normalized view (a write skill consumes the typed properties list). The `code.make_requests.batching.rules[]` and `code.make_bids.bid_type_resolution.method_chain[]` are ordered lists, not scalar enums — Appnexus emits `[max-imps-per-request: 10, pod-grouping]`; Aax emits a 3-step bid-type chain. Provenance (`resolved_commit`, `fetch_method`, `warnings[]`) is load-bearing — the spec is frozen at a specific commit and round-trip determinism (R4) is enforced via test-fixture goldens.
+The dual representation matters: `bidder_params_ref` is the cross-language byte-identical contract (a porter consumes the referenced blob's bytes); `params.schema_interpretation` is the normalized view (a write skill consumes the typed properties list). The `code.make_requests.batching.rules[]` and `code.make_bids.bid_type_resolution.method_chain[]` are ordered lists, not scalar enums — Appnexus emits `[max-imps-per-request: 10, pod-grouping]`; Aax emits a 3-step bid-type chain. Provenance (`resolved_commit`, `fetch_method`, `warnings[]`) is load-bearing — the spec is frozen at a specific commit and round-trip determinism (R4) is enforced via test-fixture goldens.
 
 In scope on the Go side: discovery, fetch, parse, dispatch, assembly. Out of scope: writing new adapters from a spec (future `write/`), porting Go-source spec to Java artifacts (future `port-go2java/`), and the symmetric inverse (`port-java2go/`). The 4 review skills at `prebid-server-go/review/skills/` produce review findings; the read suite produces structured specs they could compare against.
 
@@ -20,7 +20,7 @@ prebid-server-go/read/skills/
 │   ├── behavior-taxonomy.md                   Enumerated values for behavioral fields
 │   ├── port-translation-rules.md              46 cross-language Go↔Java translation rules
 │   ├── cross-skill-integration.md             How read/, review/, write/, port-* compose
-│   └── review-pattern-transfer-policy.md      Why review-skill findings do NOT cross languages
+│   └── review-pattern-transfer-policy.md      Which review findings cross languages, and which do not
 ├── read-adapter-orchestrator/                 Entry-point skill: discovery, fetch, dispatch, assembly
 │   └── references/
 ├── read-adapter-code/                         Parses adapters/{bidder}/*.go + test fixtures
@@ -38,12 +38,12 @@ Top-to-bottom guidance for a reviewer reading an adapter spec YAML. Use the Opti
 1. **`provenance`** — where the spec came from. `resolved_commit` pins the spec to a specific upstream SHA; `fetch_method` (`github-raw` / `local-checkout` / `gh-cli`) records how the orchestrator pulled the source. `warnings[]` carries non-blocking anomalies surfaced at read time (`bidder-constant-mismatch`, `yaml-field-name-typo`, `module-major-drift`).
 2. **`meta`** — what bidder this is. `bidder_name`, `is_alias` + `alias_of` (Go child→parent semantics), `parent_aliases[]`, `module_path_major` (currently `v4`).
 3. **`bidder_info`** — the YAML metadata: `endpoint`, `endpoint_construction.kind`, `endpoint_compression`, `maintainer`, `capabilities.{site,app,dooh}.mediaTypes`, `geoscope`, `gvl_vendor_id`, `user_sync` (verbatim subtree).
-4. **`bidder_params_json` + `bidder_params_sha256`** — the cross-language byte-identical contract. The exact bytes of `static/bidder-params/{bidder}.json`. Go and Java SHAs MUST match for the same bidder; a diff is a port-fidelity violation.
+4. **`bidder_params_ref`** — the cross-language byte-identical contract: `{ path, resolved_commit, sha256, bytes }` for `static/bidder-params/{bidder}.json`, with the bytes staged at `read/test-fixtures/blobs/<sha256>`. Both numbers come from the fetch pipe, never from a hash of the spec's own text (V1/V2 in [`shared/adapter-spec.md`](shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)). Go and Java digests MUST match for the same bidder; a diff is a port-fidelity violation. The inline `bidder_params_json` / `bidder_params_sha256` pair remains schema-valid but is deprecated.
 5. **`params`** — schema interpretation (`properties[]`, `required_fields`, `combinators_used[]`) plus the language-specific ext struct (Go: `openrtb_ext.ExtImp{Bidder}` in `openrtb_ext/imp_{bidder}.go`).
 6. **`code`** — the heaviest section. `file_layout` (single-file vs multi-file with role tags), `adapter_struct`, `builder` signature, `make_requests` (with `batching.rules[]` ordered list, `mutation.entity_strategies` per-entity map, `imp_ext_unmarshal`, `endpoint_resolution`), `make_bids` (with `bid_type_resolution.method_chain[]`, `http_status_handling.kind`, `currency_overwrite_safety`).
 7. **`tests`** — fixture inventory (`exemplary/`, `supplemental/`, `amp/`, `video/`, `videosupplemental/`), `test_root_directory` (canonical `<bidder>test/`), `uses_canonical_harness` (`RunJSONBidderTest`).
 8. **`quirks[]`** — free-text edge cases with optional `edge_case_taxon` from the closed registry in `behavior-taxonomy.md`. A `custom` value in any enumerated field REQUIRES a paired quirks entry.
-9. **`cross_language`** — port concerns (`aliases_inverted`, `yaml_unification`, `mutation_idiom_divergence`), `port_lineage` (source/destination PR numbers), `reviewer_cohort` (Go vs Java active humans, with `bretg` as cross-language coordinator).
+9. **`cross_language`** — port concerns (`aliases_inverted`, `yaml_unification`, `mutation_idiom_divergence`), `port_lineage` (source/destination PR numbers). `reviewer_cohort` was removed at `adapter_spec_version` 2.0.0 — no skill may key a check on reviewer identity, so the field had nothing to do.
 
 ## Test fixtures
 
@@ -68,7 +68,7 @@ Golden specs at `read/test-fixtures/{bidder}.golden.spec.yaml`. 10 fixtures pinn
 - `shared/behavior-taxonomy.md` (~440 lines) — closed enumerations
 - `shared/port-translation-rules.md` (~1594 lines, auto-generated from `port-translation-rules.yaml`) — 46 cross-language rules
 - `shared/cross-skill-integration.md` (~345 lines) — read/review/write/port composition
-- `shared/review-pattern-transfer-policy.md` (~191 lines) — review-pattern transfer ban
+- `shared/review-pattern-transfer-policy.md` (~96 lines) — review-pattern transfer ban
 - 10 goldens at `read/test-fixtures/` (Phase A `optidigital` + `kobler` plus 8 corpus fixtures)
 - All 4 per-skill SKILL.md files authored (`read-adapter-orchestrator`, `read-adapter-code`, `read-bidder-info`, `read-bidder-params`) with `references/` populated
 - Phase B Go read suite complete; see [`ROADMAP.md`](../../../ROADMAP.md) for next milestones

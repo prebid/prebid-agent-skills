@@ -106,7 +106,7 @@ There are two categories of tasks:
 **1. PR-level task (at most one):** A single task covering PR-wide checks that don't map to a specific property:
 - **Alias check**: If the bidder has `aliasOf` in its bidder-info YAML, it should NOT have its own params schema, imp ext struct, or params test — these inherit from the parent. Flag if present.
 - **Cross-file consistency**: If multiple file types changed for the same bidder, verify they are in sync (see [Cross-File Consistency](#workflow-cross-file-consistency) workflow)
-- **Adapter-code JSON tag consistency (companion check)**: When the PR includes both `openrtb_ext/imp_{bidder}.go` AND files under `adapters/{bidder}/`, this skill UNCONDITIONALLY records an **INFO** in its findings whenever both file types are present in the diff, cross-referencing the adapter-code-pr-review skill's primary FAIL check on JSON tag spelling consistency (e.g., `pubclick` vs `pub_click` per PR #4592). The bidder-params skill does NOT need to verify the actual mismatch — that verification is owned exclusively by adapter-code-pr-review. The companion INFO ensures a reviewer reading bidder-params findings sees the cross-skill connection without duplicate flags.
+The adapter-code JSON-tag cross-reference is **not** a PR-level task and produces **no finding** — see Step 5. Its trigger condition (`openrtb_ext/imp_{bidder}.go` and `adapters/{bidder}/` both in the diff) is satisfied by every new-adapter PR, so emitting it as an INFO put a guaranteed non-finding in the findings stream of every such review.
 
 **2. Item-level tasks (one per changed item):** For each changed property, struct field, or test case, look up the matching Verification Workflow:
 
@@ -145,6 +145,7 @@ After all tasks are complete, produce a review summary:
 - Verification steps executed
 - Issues found (critical / warning / info)
 - Recommendation (approve, request changes, or comment)
+- **Cross-skill note (summary text only — never a finding):** when the diff contains both `openrtb_ext/imp_{bidder}.go` and files under `adapters/{bidder}/`, close the summary with one line naming adapter-code-pr-review as the owner of the JSON-tag spelling-consistency check (`pubclick` vs `pub_click`, PR #4592), which is a **FAIL** there. This skill neither verifies the mismatch nor records a finding for it — the note exists so a reviewer reading only bidder-params findings knows where that check lives.
 
 ---
 
@@ -154,9 +155,12 @@ After all tasks are complete, produce a review summary:
 
 **Triggers when:** A property is added or modified in `static/bidder-params/{bidder}.json`.
 
-1. **Valid JSON Schema draft-04**: Property definition must use only draft-04 constructs (no `if`/`then`/`else`, `const`, `contentEncoding`)
+1. **No post-draft-04 keywords in use**: `if`/`then`/`else`, `const`, and `contentEncoding` are not draft-04 constructs. Flag actual *use* of one as **FAIL** — the validator loads each file under the draft its own `$schema` names, and a draft-04 file using a draft-07 keyword silently ignores that constraint, so the schema does not validate what the author thinks it does. (The `$schema` string itself is a separate, softer check — see Workflow: Schema Metadata Changed.)
 2. **Type correctness**: Property `type` must be a valid JSON Schema type (`string`, `integer`, `number`, `boolean`, `object`, `array`) or an array of types (e.g., `["integer", "string"]`)
-3. **Not a reserved OpenRTB field**: Property must not duplicate standard OpenRTB 2.x fields (bid floor, schain, video params, first party data, privacy consent, COPPA). See [params-type-index.md](references/params-type-index.md) for full list. For **new** properties, flag as FAIL. For **existing** properties being modified (e.g., relaxing type constraints on an existing `bidfloor` field), flag as WARN — the field is already established
+3. **Not a reserved OpenRTB field**: Property should not duplicate standard OpenRTB 2.x fields. The reserved list is **split by severity** — see [params-type-index.md](references/params-type-index.md#reserved-openrtb-fields-must-not-be-bidder-params):
+   - **FAIL** for the hard exclusions (`schain`, GDPR consent, US Privacy, COPPA, GPP) — zero upstream counterexamples.
+   - **WARN** (ASK) for the soft exclusions, notably `bidfloor`/`bidFloor`: 24 `static/bidder-params/*.json` declare it at master @0ba3523, so a FAIL here blocks a shape the repo routinely merges. Ask why the standard floor path is insufficient and accept a bidder-specific reason.
+   - For **existing** properties being modified (e.g., relaxing type constraints on an established `bidfloor`), stay at **WARN** or below — the field is already merged
 4. **Naming convention**: New property names should be lowercase. camelCase is tolerated for legacy fields but not encouraged for new ones
 5. **Description present**: New properties **MUST** have a `"description"` string explaining what the property is. Severity: **FAIL** for new properties without description. For existing properties being modified, missing description is tolerated (do not churn).
 6. **Constraints appropriate**: If `minLength`, `minimum`, `maximum`, `pattern`, `enum` are used, verify they match real-world values
@@ -198,7 +202,7 @@ See [../shared/framework-utilities.md](../shared/framework-utilities.md) for the
 
 **Triggers when:** `$schema`, `title`, `description`, or top-level `type` is changed.
 
-1. **$schema must be draft-04**: Value must be `"http://json-schema.org/draft-04/schema#"`
+1. **$schema draft string — WARN, not FAIL**: `"http://json-schema.org/draft-04/schema#"` is the overwhelming house style (271 of 272 files at master @0ba3523), but it is **not enforced by the loader**. `NewBidderParamsValidator` (`openrtb_ext/bidders.go:783-830`) hands each file to `gojsonschema` via `newReferenceLoader`/`newSchema` and pins no draft — the draft comes from each file's own `$schema`. `static/bidder-params/ogury.json` declares `https://json-schema.org/draft/2020-12/schema` and loads fine. Flag a non-draft-04 string as **WARN** (ASK: "house style is draft-04; confirm the newer draft is intentional"), never FAIL. Regenerate the distribution: `grep -ho '"\$schema": *"[^"]*"' static/bidder-params/*.json | sort | uniq -c`
 2. **type must be object**: Top-level `"type": "object"` is required
 3. **properties must exist**: Even adapters with no params must have `"properties": {}`
 4. **Title format**: Should follow `"{Bidder} Adapter Params"` convention
@@ -218,7 +222,7 @@ See [../shared/framework-utilities.md](../shared/framework-utilities.md) for the
 
 **Triggers when:** A new struct type is added to the file, OR an existing struct type name, package declaration, or import block changes.
 
-1. **Naming convention**: **Canonical type name is `ExtImp{Bidder}`** (e.g., `ExtImpAax`, `ExtImpAdkernel`, `ExtImp33across`) — dominant pattern (~160 of ~235 imp ext structs) in current master. The legacy `ImpExt{Bidder}` pattern (~75 files including `ImpExtMsft`) exists in older files but is NOT recommended for new adapters. When reviewing a NEW adapter that uses `ImpExt{Bidder}`, flag as **INFO** — recommend converting for consistency. When reviewing modifications to existing files, do not require renames. Helper types (e.g., `ExtImpGumGumBanner`) are acceptable if they support the main imp ext struct.
+1. **Naming convention**: **Canonical type name is `ExtImp{Bidder}`** (e.g., `ExtImpAax`, `ExtImpAdkernel`, `ExtImp33across`) — the majority pattern in current master. The legacy `ImpExt{Bidder}` pattern (including `ImpExtMsft`) is a substantial minority in older files and is NOT recommended for new adapters. When reviewing a NEW adapter that uses `ImpExt{Bidder}`, flag as **INFO** — recommend converting for consistency. When reviewing modifications to existing files, do not require renames. Helper types (e.g., `ExtImpGumGumBanner`) are acceptable if they support the main imp ext struct.
 2. **Package is openrtb_ext**: Must not be in a different package
 3. **No breaking rename**: If the type name changed, the adapter code must also be updated (this is an adapter-code-pr-review concern, but flag as cross-reference)
 4. **Helper type justification**: New types that don't directly map to schema properties should be used by the adapter code — flag as INFO if the type appears unused
@@ -229,16 +233,35 @@ See [../shared/framework-utilities.md](../shared/framework-utilities.md) for the
 
 1. **Correct bidder constant**: `openrtb_ext.Bidder{Name}` must match the bidder
 2. **Correct schema path**: Must use `"../../static/bidder-params"` relative path
-3. **validParams coverage**: Should cover at minimum:
+3. **validParams coverage** — **INFO** (NOTE) for anything missing; report the gaps as one note, never one finding per item, and never FAIL. Suggested cases:
    - Required-fields-only case
    - All-optional-fields populated (if applicable)
    - Edge cases for flexible types (e.g., both `int` and `string` for `["integer", "string"]` fields)
-4. **invalidParams coverage**: Should cover at minimum:
-   - Primitive type rejections: `""`, `null`, `true`, `5`, `4.2`, `[]`
+4. **invalidParams coverage** — **INFO** (NOTE) for anything missing, same reporting rule as step 3. Suggested cases:
+   - Primitive type rejections: empty string, `null`, `true`, `5`, `4.2`, `[]`
    - Empty object `{}` (if fields are required)
    - Missing each required field individually
    - Wrong type for each field
    - Empty strings for fields with `minLength: 1`
+
+   **Why INFO and not WARN**: the primitive-rejection list is a real house style but far from universal. At master @0ba3523, 72 of 235 `params_test.go` files (31%) contain all six primitives and 92 contain none; per-item rates are `null` 59%, empty string 56%, `[]` 54%, `true` 53%, `5` 36%, `4.2` 31%. Treating the list as a WARN gate would open a change request on roughly two thirds of merged adapters. The escalation that *is* a **FAIL** is unrelated to list length: a `required` schema field with no `TestInvalidParams` case omitting it, when that PR is the one adding the field (Workflow: Required Fields Changed step 4).
+   ```bash
+   # in a prebid-server checkout
+   python3 - <<'EOF'
+   import glob, re, collections
+   pats = {'empty': r'^\s*(``|"")\s*,', 'null': r'`null`', 'true': r'`true`',
+           '5': r'`5`', '4.2': r'`4\.2`', '[]': r'`\[\]`'}
+   have, full, files = collections.Counter(), 0, sorted(glob.glob('adapters/*/params_test.go'))
+   for f in files:
+       t = open(f, errors='ignore').read()
+       m = re.search(r'invalidParams\s*=\s*\[\]string\{(.*?)\n\}', t, re.S)
+       hits = [k for k, p in pats.items() if re.search(p, m.group(1) if m else t, re.M)]
+       have.update(hits)
+       full += len(hits) == len(pats)
+   print(len(files), full, dict(have))
+   # 235 72 {'empty': 131, 'null': 139, 'true': 124, '5': 84, '4.2': 72, '[]': 128}
+   EOF
+   ```
 5. **No duplicate test cases**: Each test case should exercise a distinct validation path
 6. **Test function names**: Must be `TestValidParams` and `TestInvalidParams`
 7. **Filename canonical**: The test file MUST be named `params_test.go` (plural). Flag the singular form `param_test.go` as **WARN** for new files (PR #4082 Ogury merged with the singular form — tolerated for that one but new adapters should use the plural). For modifications to an existing `param_test.go` file, do not request a rename.

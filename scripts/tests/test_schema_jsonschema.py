@@ -5,7 +5,7 @@ Test classes:
 
 - `TestSchemaSelfValidity` — schemas pass meta-schema check.
 - `TestKoblerGoldensAgainstSchema` — kobler Go+Java sanity validation.
-- `TestAllGoldensAgainstSchema` — all 40 goldens validate; if/then/else
+- `TestAllGoldensAgainstSchema` — all 42 goldens validate; if/then/else
   invariants enforced (source_language=go nulls Java-only blocks per
   ADR-001 + Wave 11b B4 C5; meta.is_alias=true Java specs null
   spring_config + bidder_class). Includes path-aware phantom-key
@@ -43,7 +43,7 @@ except ImportError as exc:
 # fix, the test ran a `_normalize()` step that converted Python datetime/
 # date objects to ISO strings before validation — papering over a real
 # issue: external consumers using stock JSON Schema validators would see
-# 40/40 goldens fail validation. The corpus is now stock-validator clean
+# every golden failed validation. The corpus is now stock-validator clean
 # (provenance.read.timestamp_utc and lifecycle.rename.merged_at are
 # quoted in every golden); _normalize() is removed to harden this
 # invariant — adding an unquoted date in a future fixture will now
@@ -618,6 +618,122 @@ class TestPortReportV020Invariants(unittest.TestCase):
         report["r5_check"] = {"state": "bogus-state"}
         with self.assertRaises(ValidationError):
             validate(report, self.schema)
+
+
+# ---------------------------------------------------------------------------
+# The version a reader is told to emit must be one the schema can validate.
+# ---------------------------------------------------------------------------
+
+CURRENT_SPEC_VERSION = "2.0.0"
+
+# Skills that instruct a reader to write adapter_spec_version. Both orchestrators
+# now do; before 2.0.0 only the Java one did, and it named a version whose
+# required-field set a new read no longer satisfies.
+VERSION_EMITTING_SKILLS = (
+    "prebid-server-go/read/skills/read-adapter-orchestrator/SKILL.md",
+    "prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md",
+)
+
+
+def _version_emit_findings() -> list[str]:
+    import re
+    bad = []
+    for rel in VERSION_EMITTING_SKILLS:
+        path = str(REPO_ROOT / rel)
+        if not Path(path).is_file():
+            bad.append(f"{rel}: missing")
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        emitted = set(re.findall(r'adapter_spec_version:\s*[`"]?"?(\d+\.\d+\.\d+)"?', text))
+        if not emitted:
+            bad.append(f"{rel}: does not state which adapter_spec_version to emit, "
+                       f"and it is a required property")
+        elif emitted != {CURRENT_SPEC_VERSION}:
+            bad.append(f"{rel}: instructs emitting {sorted(emitted)}, "
+                       f"current is {CURRENT_SPEC_VERSION}")
+    return bad
+
+
+class TestEmittedSpecVersion(unittest.TestCase):
+    """A reader told to emit an older version writes a spec that contradicts
+    itself: 2.0.0 is the version that REQUIRES bidder_params_ref, and the reader
+    emits a ref either way. Before this check the Java orchestrator said 1.0.0
+    and the Go one said nothing at all about a required field."""
+
+    def test_both_orchestrators_name_the_current_version(self):
+        bad = _version_emit_findings()
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+    def test_that_version_is_the_one_the_schema_admits(self):
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        pattern = schema["properties"]["adapter_spec_version"].get("pattern")
+        self.assertIsNotNone(pattern, "adapter_spec_version lost its pattern constraint")
+        self.assertRegex(CURRENT_SPEC_VERSION, pattern)  # noqa: the pattern IS the constraint
+        self.assertIn("bidder_params_ref", schema["required"],
+                      "CURRENT_SPEC_VERSION is 2.0.0 because the ref is required; "
+                      "if the ref stopped being required, this constant is stale")
+
+    def test_every_golden_declares_it(self):
+        wrong = []
+        goldens = sorted(
+            list((REPO_ROOT / "prebid-server-go" / "read" / "test-fixtures").glob("*.golden.spec.yaml"))
+            + list((REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures").glob("*.golden.spec.yaml")))
+        self.assertTrue(goldens, "no goldens discovered -- an empty scan is a setup error")
+        for f in goldens:
+            got = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("adapter_spec_version")
+            if got != CURRENT_SPEC_VERSION:
+                wrong.append(f"{f.relative_to(REPO_ROOT).as_posix()}: {got!r}")
+        self.assertEqual([], wrong, "\n  ".join(wrong))
+
+
+
+class TestTaxonomyVersionFloor(unittest.TestCase):
+    """`behavior-taxonomy.yaml`'s `adapter_spec_version_min` is a real floor.
+
+    It was carried as "used by tooling, not rendered" with nothing reading it --
+    the same shape as `rules_version` before the renderer started emitting it.
+    The value is correct: the taxonomy's enums are unaffected by the 2.0.0 params
+    change, so 1.0.0 is genuinely the floor. Only the claim was empty, so this
+    makes it true rather than deleting the field.
+    """
+
+    def _floor(self) -> tuple[int, int, int]:
+        doc = yaml.safe_load(
+            (SHARED_DIR / "behavior-taxonomy.yaml").read_text(encoding="utf-8"))
+        raw = doc.get("adapter_spec_version_min")
+        self.assertIsInstance(raw, str, "adapter_spec_version_min must be a SemVer string")
+        parts = raw.split(".")
+        self.assertEqual(3, len(parts), f"not SemVer: {raw!r}")
+        return tuple(int(x) for x in parts)
+
+    def test_the_floor_is_semver(self):
+        self._floor()
+
+    def test_no_golden_declares_a_version_below_the_floor(self):
+        floor = self._floor()
+        goldens = sorted(
+            list((REPO_ROOT / "prebid-server-go" / "read" / "test-fixtures").glob("*.golden.spec.yaml"))
+            + list((REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures").glob("*.golden.spec.yaml")))
+        self.assertTrue(goldens, "no goldens discovered -- an empty scan is a setup error")
+        below = []
+        for f in goldens:
+            raw = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("adapter_spec_version")
+            if not isinstance(raw, str):
+                below.append(f"{f.name}: adapter_spec_version is {raw!r}")
+                continue
+            got = tuple(int(x) for x in raw.split("."))
+            if got < floor:
+                below.append(f"{f.name}: {raw} < taxonomy floor {'.'.join(map(str, floor))}")
+        self.assertEqual([], below, "\n  ".join(below))
+
+    def test_the_floor_does_not_exceed_the_current_version(self):
+        """A floor above what readers emit would reject every new spec."""
+        floor = self._floor()
+        current = tuple(int(x) for x in CURRENT_SPEC_VERSION.split("."))
+        self.assertLessEqual(floor, current,
+                             f"taxonomy floor {floor} is above the version readers emit "
+                             f"({CURRENT_SPEC_VERSION})")
 
 
 if __name__ == "__main__":

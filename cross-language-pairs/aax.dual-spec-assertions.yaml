@@ -142,11 +142,6 @@ assertions:
       - hardcoded-usd-currency
       - bidder-params-schema-drift
 
-  reviewer_cohort:
-    go_reviewers: []
-    java_reviewers: [CTMBNara, AntoxaAntoxic]
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: divergent-semantic
   blocker_count: 1

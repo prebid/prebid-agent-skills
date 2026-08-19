@@ -25,7 +25,7 @@ This skill activates when `pr-triage-java`'s routing manifest routes ≥1 file i
 
 - `src/main/resources/static/bidder-params/{x}.json` — the draft-04 JSON Schema
 - `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/*.java` — Lombok `@Value @Builder` POJO `ExtImp{X}.java` plus helper protos co-located in the same package (e.g., `ExtImp{X}BidExt.java`, `ExtImp{X}Param.java`, `ExtImp{X}Banner.java`, `ExtImp{X}Deserializer.java`)
-- `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` — IT fixture set (the 4-file Rule 36 split per scenario: `test-auction-{x}-request.json` + `test-auction-{x}-response.json` + `test-{x}-bid-request.json` + `test-{x}-bid-response.json`; multi-scenario bidders ship N × 4 files with the scenario name embedded — see references/params-type-index.md §C.1 for the canonical pattern verified at SHA `a1fe64e123d6`)
+- `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` — IT fixture set (the 4-file Rule 36 split per scenario: `test-auction-{x}-request.json` + `test-auction-{x}-response.json` + `test-{x}-bid-request.json` + `test-{x}-bid-response.json`; multi-scenario bidders ship N × 4 files with the scenario name embedded — see references/params-type-index.md §C.1 for the canonical pattern verified at SHA `e3ffd57`)
 
 It does NOT activate on its own — `pr-triage-java` runs first and routes files here. The activation cases:
 
@@ -381,7 +381,7 @@ Helper protos typically support:
 
 **Triggers when:** A file under `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/` is added or modified.
 
-The 4-file Rule 36 fixture set per scenario (filenames are STRICT — the IT class' `@Test` methods reference them by exact path). Verified at SHA `a1fe64e123d6` against `src/test/resources/org/prebid/server/it/openrtb2/kobler/`:
+The 4-file Rule 36 fixture set per scenario (filenames are STRICT — the IT class' `@Test` methods reference them by exact path). Verified at SHA `e3ffd57` against `src/test/resources/org/prebid/server/it/openrtb2/kobler/` and `.../adprime/`:
 
 | File | Role |
 |---|---|
@@ -431,7 +431,7 @@ Verification steps:
 This skill may read files owned by sibling skills for context, but does NOT create tasks for them:
 
 - `bidder-config/{x}.yaml` (owned by `bidder-config-pr-review`) — to verify the bidder is NOT an alias of another bidder (aliases inherit the parent's params; their own `bidder-params/{x}.json` should not exist per `BidderParamValidator.createSchemaNode` fallback logic).
-- `bidder-config/{x}.yaml` `endpoint:` field — to verify endpoint-template macros (e.g., `{{adUnitId}}`) map to schema-declared params; cross-reference to ensure the template-token list aligns with `properties`.
+- `bidder-config/{x}.yaml` `endpoint:` field — to verify endpoint-template macros (e.g. `{adUnitId}` — single brace, RFC 6570) map to schema-declared params; cross-reference to ensure the template-token list aligns with `properties`.
 - `{X}Bidder.java` (owned by `bidder-class-pr-review`) — to verify the adapter code uses every field declared in `ExtImp{X}.java` (orphan fields are dead code).
 - `{X}BidderTest.java` (owned by `bidder-class-pr-review`) — to verify unit-test coverage exists for params parsing (catches missing test coverage for new schema fields).
 - `{X}Test.java` (the IT class, owned by `bidder-class-pr-review`) — to verify each IT fixture file is referenced by a `@Test` method (no orphan fixtures).

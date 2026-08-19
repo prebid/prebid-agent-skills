@@ -9,7 +9,7 @@ The `kind` field must be exactly one of (taxonomy mastered at [../../shared/beha
 | Kind | One-line semantics |
 |---|---|
 | `static` | Literal URL, no substitution at all. |
-| `template-macro` | Contains one or more `{{.X}}` Go-template macros from the canonical 18-field `EndpointTemplateParams` list. |
+| `template-macro` | Contains one or more `{{.X}}` Go-template macros from the canonical 22-field `EndpointTemplateParams` list. |
 | `url-with-query` | Static base URL with literal `?key=value&...` query string. No substitution. |
 | `dev-prod-toggle` | YAML signals a second URL (paired `dev-endpoint:` field, or `extra_info.dev_endpoint`) — adapter Go code toggles between primary and secondary. |
 | `hardcoded-toggle` | Adapter Go code toggles between `endpoint:` and a HARDCODED Go-source `const` (anti-pattern; canonical: Kobler). YAML alone cannot detect this — relies on incomplete-inference handoff to `read-adapter-code`. |
@@ -52,7 +52,7 @@ if endpoint_str matches /#{[A-Z_]+}#/   # Rubicon-style hash-curly
 # Step B: Go-template macros.
 captures = regex_findall(endpoint_str, /\{\{\.([A-Za-z]+)\}\}/g)
 if captures is non-empty:
-    canonical_set = EndpointTemplateParams 18-field list  # See shared/framework-utilities.md.
+    canonical_set = EndpointTemplateParams 22-field list  # See ../../shared/endpoint-macros.yaml.
     macros_used   = []
     placeholders  = []
     for ident in captures:
@@ -61,7 +61,7 @@ if captures is non-empty:
         else:
             placeholders.append(ident)
             emit warning type=endpoint-placeholder-unresolved severity=FAIL
-               "{{." + ident + "}} is NOT a known EndpointTemplateParams field — silently resolves to empty string"
+               "{{." + ident + "}} is NOT a known EndpointTemplateParams field — template execution fails, so config validation rejects this endpoint"
     if macros_used non-empty:
         -> kind = template-macro
            endpoint_construction.macros_used = macros_used
@@ -108,7 +108,7 @@ if extra_info is parseable JSON AND extra_info has key matching /(region|country
        emit warning type=endpoint-malformed-url severity=FAIL
    if endpoint_str begins with "http://":
        emit warning type=endpoint-http-not-https severity=INFO
-       # HTTP is permitted (per bsardo PR #4211) but HTTPS preferred.
+       # HTTP is permitted (PR #4211) but HTTPS preferred.
 STOP
 ```
 
@@ -145,7 +145,7 @@ endpoint_construction:
 Suppose YAML carries `endpoint: "https://{{.PublisherID}}.adagio.io/openrtb2/auction"`.
 
 - Step A: no non-Go-template placeholders.
-- Step B: captures = [`PublisherID`]. `PublisherID` IS in the canonical 18-field set. macros_used = [`PublisherID`]. -> kind = `template-macro`.
+- Step B: captures = [`PublisherID`]. `PublisherID` IS in the canonical 22-field set. macros_used = [`PublisherID`]. -> kind = `template-macro`.
 
 Output:
 ```yaml
@@ -248,15 +248,16 @@ yaml_field_name_quirks:
 
 The Go-template macro regex is `\{\{\s*\.([A-Za-z][A-Za-z0-9]*)\s*\}\}`. Whitespace inside the braces is allowed (`{{ .X }}`) per `text/template` parser behavior. Capture group 1 is the field identifier.
 
-For each captured identifier, perform a CASE-SENSITIVE membership check against the canonical 18-field set. Reference: [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section). The 18 fields in alphabetical order:
+For each captured identifier, perform a CASE-SENSITIVE membership check against the canonical 22-field set. The machine-readable copy this skill and R8 both consume is [../../shared/endpoint-macros.yaml](../../shared/endpoint-macros.yaml) (`go_template_macros`); the annotated table is at [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section). Both mirror `macros.EndpointTemplateParams` at `macros/macros.go:9-32`. The 22 fields in alphabetical order:
 
 ```
-AccountID, AdUnit, GvlID, Host, ImpID, MediaType,
-PageID, PartnerId, PlacementID, PublisherID, Region,
-SeatID, SourceId, SspID, SspId, SupplyId, TokenID, ZoneID
+AccountID, AdUnit, AppDomain, Bundle, GvlID, Host,
+ImpID, MediaType, NetworkId, PageID, PartnerId, PlacementID,
+PublisherID, Region, SeatID, SiteDomain, SourceId, SspID,
+SspId, SupplyId, TokenID, ZoneID
 ```
 
-(`SspId` and `SspID` are BOTH valid — distinct fields with different casing per `macros/macros.go`.)
+(`SspId` and `SspID` are BOTH valid — distinct fields with different casing per `macros/macros.go`. The same trap applies to `NetworkId`, `PartnerId`, and `SourceId`, which end in lowercase `d` while `AccountID`, `GvlID`, `ImpID`, `PlacementID`, `PublisherID`, `SeatID`, `TokenID`, and `ZoneID` end in uppercase `ID`.)
 
 Common mistakes to detect:
 
@@ -265,7 +266,7 @@ Common mistakes to detect:
 - `{{.AccountId}}` -> NOT in set (canonical is `AccountID` with uppercase D). Emit FAIL.
 - `{{.GVL_ID}}` -> NOT in set (canonical is `GvlID`). Emit FAIL.
 
-The case-sensitive check is intentional — Go templates ARE case-sensitive on field names, and a typo silently resolves to empty string.
+The case-sensitive check is intentional — Go templates ARE case-sensitive on field names. A typo does not degrade quietly: `text/template` cannot resolve the field, `Execute` returns `can't evaluate field <Typo> in type macros.EndpointTemplateParams`, and `config.validateAdapterEndpoint` (`config/bidderinfo.go:492-507`) turns that into a config error that fails `TestBidderInfoFiles`.
 
 ---
 
@@ -323,5 +324,6 @@ Typo pass-through: the FOUND key (verbatim, with its typo'd casing) is preserved
 - Taxonomy: [../../shared/behavior-taxonomy.md](../../shared/behavior-taxonomy.md) (the kind enum; the `quirks edge_case_taxon` registry).
 - Port translation rules: [../../shared/port-translation-rules.md](../../shared/port-translation-rules.md) (Rules 11–15 for endpoint resolution; Rule 33 for aliases inversion; Rule 34 for YAML unification).
 - Field index (master truth for canonical keys): [../../../../review/skills/bidder-info-pr-review/references/field-index.md](../../../../review/skills/bidder-info-pr-review/references/field-index.md).
-- Framework utilities (master truth for `EndpointTemplateParams` 18-field list and deploy-time token policy from PR #4502): [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md).
-- Reviewer practice: PR #4502 (appStockSSP `#{REGION}#`); PR #4211 (`bsardo`'s HTTP-tolerance quote); Ogury `endpointCompression` regression (Java edge case 34).
+- Endpoint macros (canonical machine-readable `EndpointTemplateParams` field set, 22 entries): [../../shared/endpoint-macros.yaml](../../shared/endpoint-macros.yaml) (`go_template_macros`).
+- Framework utilities (annotated `EndpointTemplateParams` table and deploy-time token policy from PR #4502): [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md).
+- Reviewer practice: PR #4502 (appStockSSP `#{REGION}#`); PR #4211 (HTTP-tolerance: "While https is strongly preferred, http is still permitted"); Ogury `endpointCompression` regression (Java edge case 34).

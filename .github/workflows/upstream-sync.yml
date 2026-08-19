@@ -1,8 +1,12 @@
 name: upstream-sync
 
 # Phase 4.1 drift detection. Runs Mondays at 09:00 UTC against upstream
-# `prebid/prebid-server` and `prebid/prebid-server-java` master HEADs and
-# uploads the drift report as an artifact.
+# `prebid/prebid-server` and `prebid/prebid-server-java` master HEADs.
+#
+# A run that finds drift files or updates ONE tracking issue whose body
+# carries the current drift report, and closes that issue on the first
+# clean run. Without `issues: write` the job could only emit a
+# `::warning::` and an artifact, which nothing reads.
 #
 # Manual trigger via workflow_dispatch supports ad-hoc runs (e.g., after a
 # merge of a major upstream PR).
@@ -16,15 +20,47 @@ on:
         description: 'Upstream ref to compare against (default: master)'
         type: string
         default: 'master'
+      scan-tier:
+        description: 'core | source | full (default: full)'
+        type: choice
+        options: ['full', 'source', 'core']
+        default: 'full'
+
+permissions:
+  contents: read
+
+env:
+  # The tracking issue is keyed on this exact title. Changing it orphans the
+  # existing issue and the next drifting run opens a second one.
+  TRACKING_TITLE: 'Upstream drift: pinned goldens need review'
+  REPORT_MD: scripts/output/drift-report.md
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write            # file/update/close the single drift tracking issue
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Shallow checkouts of both upstream repos so the claim verifier can
+      # re-derive every registered claim from source. This is the networked half
+      # of the upstream-claims gate; round-trip-ci.yml runs the hermetic half.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: prebid/prebid-server
+          ref: master
+          path: .upstream/go
+          fetch-depth: 1
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: prebid/prebid-server-java
+          ref: master
+          path: .upstream/java
+          fetch-depth: 1
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -36,17 +72,54 @@ jobs:
 
       - name: Run sync-from-upstream
         id: sync
+        env:
+          # Lifts the api.github.com rate limit for the one recursive tree
+          # call per upstream repo that makes presence checks free.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
           python3 scripts/sync-from-upstream.py \
             --source-mode=github-raw \
+            --scan-tier=${{ github.event.inputs.scan-tier || 'full' }} \
             --ref=${{ github.event.inputs.ref || 'master' }}
           EXIT=$?
           set -e
-          # Exit 0 = clean; 1 = fail (real drift requiring update); 2 = warn-only.
-          # Always upload the report; only block the workflow on EXIT=1.
+          # 0 = clean; 1 = fail (real drift); 2 = warn-only; 3 = instrument
+          # failure (empty scan set / unusable source). This step never fails;
+          # the exit code is enforced after the issue has been filed.
           echo "exit=$EXIT" >> $GITHUB_OUTPUT
-          if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
+
+      # A registered claim that no longer holds upstream is the same class of
+      # event as golden drift: the skills are asserting something false to
+      # reviewers. Non-blocking here so it cannot mask the drift report; the
+      # exit code is folded into the final enforcement step.
+      - name: Verify upstream claims against source
+        id: claims
+        continue-on-error: true
+        run: |
+          set +e
+          python3 scripts/verify-upstream-claims.py --upstream \
+            --go-checkout .upstream/go --java-checkout .upstream/java
+          echo "exit=$?" >> $GITHUB_OUTPUT
+
+      # R2c: the networked half of the params-fidelity check. `make ci` proves a
+      # blob hashes to its ref; only upstream proves the ref describes upstream. A
+      # forgery that edits blob, sha and byte count together is self-consistent
+      # and passes the entire hermetic gate -- verified against a Go-only golden,
+      # where `make ci` exited 0 without naming the bidder. Non-blocking here for
+      # the same reason as the claims check; the exit code is enforced below.
+      #
+      # The checkouts above are fetch-depth 1 and every golden pins an older
+      # commit, so the script fetches the specific commits it needs. Without a
+      # token it still works: these are public repos over https.
+      - name: Verify bidder-params refs against upstream (R2c)
+        id: refs
+        continue-on-error: true
+        run: |
+          set +e
+          python3 scripts/verify-params-refs.py \
+            --go-checkout .upstream/go --java-checkout .upstream/java
+          echo "exit=$?" >> $GITHUB_OUTPUT
 
       - name: Upload drift-report artifact
         if: always()
@@ -60,10 +133,112 @@ jobs:
       - name: Surface drift summary in workflow output
         if: always()
         run: |
-          if [ -f scripts/output/drift-report.md ]; then
+          if [ -f "$REPORT_MD" ]; then
             echo "## Drift report summary" >> $GITHUB_STEP_SUMMARY
-            cat scripts/output/drift-report.md >> $GITHUB_STEP_SUMMARY
+            cat "$REPORT_MD" >> $GITHUB_STEP_SUMMARY
           fi
-          if [ "${{ steps.sync.outputs.exit }}" = "1" ]; then
-            echo "::warning::Upstream drift detected — review scripts/output/drift-report.md and update goldens."
+
+      - name: File or update the drift tracking issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXIT: ${{ steps.sync.outputs.exit }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          # Locate the tracking issue by exact title over open AND closed
+          # issues. Deliberately not `gh issue list --search`: the search
+          # index lags issue creation by minutes, which is long enough for a
+          # second run to open a duplicate.
+          NUMBER="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" \
+            --jq ".[] | select(.pull_request == null) | select(.title == \"${TRACKING_TITLE}\") | .number" \
+            | head -n 1 || true)"
+          STATE=""
+          if [ -n "$NUMBER" ]; then
+            STATE="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${NUMBER}" --jq .state)"
           fi
+          echo "tracking issue: number='${NUMBER:-none}' state='${STATE:-n/a}' sync-exit='${EXIT}'"
+
+          if [ "$EXIT" = "0" ]; then
+            if [ -n "$NUMBER" ] && [ "$STATE" = "open" ]; then
+              gh issue comment "$NUMBER" --body \
+                "Clean run — the pinned goldens match upstream on the scanned surface. Closing. [Run](${RUN_URL})"
+              gh issue close "$NUMBER"
+            fi
+            exit 0
+          fi
+
+          BODY=body.md
+          {
+            echo "<!-- upstream-drift-tracker: this issue is rewritten in place by .github/workflows/upstream-sync.yml -->"
+            echo
+            if [ "$EXIT" = "3" ]; then
+              echo "**The last run could not scan.** Exit 3 means an empty scan set or an unusable upstream source — it is not an all-clear."
+            else
+              echo "Upstream has moved away from the pinned goldens. The report below is regenerated on every run; the issue closes automatically on the first clean run."
+            fi
+            echo
+            echo "- Last run: [\`${GITHUB_RUN_ID}\`](${RUN_URL}) (exit ${EXIT})"
+            echo "- Full \`drift-report.json\` is attached to that run as the \`drift-report\` artifact."
+            echo
+            echo "---"
+            echo
+            if [ -f "$REPORT_MD" ]; then
+              head -c 55000 "$REPORT_MD"
+              if [ "$(wc -c < "$REPORT_MD")" -gt 55000 ]; then
+                echo
+                echo "_… truncated; see the \`drift-report\` artifact for the full report._"
+              fi
+            else
+              echo "_No drift report was produced — the script did not reach its write step._"
+            fi
+          } > "$BODY"
+
+          if [ -z "$NUMBER" ]; then
+            gh issue create --title "$TRACKING_TITLE" --body-file "$BODY"
+          else
+            gh issue edit "$NUMBER" --body-file "$BODY"
+            if [ "$STATE" != "open" ]; then
+              gh issue reopen "$NUMBER"
+            fi
+            gh issue comment "$NUMBER" --body \
+              "Drift still present as of [run \`${GITHUB_RUN_ID}\`](${RUN_URL}) (exit ${EXIT}). Issue body updated with the current report."
+          fi
+
+      - name: Enforce sync exit code
+        if: always()
+        run: |
+          EXIT="${{ steps.sync.outputs.exit }}"
+          CLAIMS="${{ steps.claims.outputs.exit }}"
+          REFS="${{ steps.refs.outputs.exit }}"
+          echo "sync=$EXIT claims=$CLAIMS refs=$REFS"
+          STATUS=0
+          # An EMPTY output is not a pass: it means the step never reached its
+          # echo, so nothing was checked. Treated as a failure, because the whole
+          # point of this job is that a zero-input run is not a clean verdict.
+          if [ -z "$CLAIMS" ]; then
+            echo "::error::the upstream-claims step produced no exit code — it did not run to completion."
+            STATUS=1
+          elif [ "$CLAIMS" != "0" ]; then
+            echo "::error::A registered claim no longer holds upstream (exit $CLAIMS). The skills are asserting something false."
+            STATUS=1
+          fi
+          if [ -z "$REFS" ]; then
+            echo "::error::the R2c params-ref step produced no exit code — it did not run to completion."
+            STATUS=1
+          elif [ "$REFS" != "0" ]; then
+            echo "::error::A bidder_params_ref no longer matches upstream, or could not be verified (exit $REFS)."
+            STATUS=1
+          fi
+          case "$EXIT" in
+            0|2) ;;
+            3)
+              echo "::error::sync-from-upstream could not scan (exit 3). A zero-input run is not a clean verdict."
+              STATUS=1 ;;
+            *)
+              echo "::error::Upstream drift detected — see the tracking issue and the drift-report artifact."
+              STATUS=1 ;;
+          esac
+          exit $STATUS

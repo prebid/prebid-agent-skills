@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -75,80 +75,17 @@ bidder_info:
       version: 2.6
   yaml_field_name_quirks: []
 
-# Encoded as a YAML literal block with trailing-newline strip (`|-`) because
-# /tmp/prebid-server-go/static/bidder-params/msft.json has NO terminal newline
-# (last 5 bytes: "  ]\n}"). A bare `|` would inject a `\n` after `}` and break
-# the byte-for-byte sha256 contract (R2). With `|-`, sha256(bidder_params_json) ==
-# bidder_params_sha256 exactly.
-bidder_params_json: |-
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Microsoft Adapter Params",
-    "description": "A schema which validates params accepted by the Microsoft adapter",
-    "type": "object",
-    "properties": {
-      "placement_id": {
-        "type": "integer",
-        "description": "Placement ID from Microsoft Monetize. You may use inv_code with member instead of a placement_id."
-      },
-      "member": {
-        "type": "integer",
-        "description": "Member ID from Microsoft Monetize. Must be used with inv_code."
-      },
-      "inv_code": {
-        "type": "string",
-        "description": "Inventory code from Microsoft Monetize. Must be used with member."
-      },
-      "allow_smaller_sizes": {
-        "type": "boolean",
-        "description": "If true, ads smaller than your ad unit's size array will be allowed to serve."
-      },
-      "use_pmt_rule": {
-        "type": "boolean",
-        "description": "If true, Microsoft Monetize will return net price after publisher payment rules are applied."
-      },
-      "keywords": {
-        "type": "string",
-        "description": "Comma-delimited key-value pairs (max 100). Must be enabled by a Microsoft Monetize account manager."
-      },
-      "traffic_source_code": {
-        "type": "string",
-        "description": "Specifies the third-party source of this impression."
-      },
-      "pubclick": {
-        "type": "string",
-        "description": "Specifies a publisher supplied url for third-party click tracking."
-      },
-      "ext_inv_code": {
-        "type": "string",
-        "description": "Specifies predefined value passed on the query string that can be used in reporting. The value must be entered into Microsoft Monetize before it is logged.."
-      },
-      "ext_imp_id": {
-        "type": "string",
-        "description": "Specifies the unique identifier of an externally generated auction."
-      },
-      "banner_frameworks": {
-        "type": "array",
-        "items": {
-          "type": "integer"
-        },
-        "description": "List of supported API frameworks for banner ads supported by the publisher."
-      }
-    },
-    "oneOf": [
-      {
-        "required": [
-          "placement_id"
-        ]
-      },
-      {
-        "required": [
-          "inv_code",
-          "member"
-        ]
-      }
-    ]
-  }
+# static/bidder-params/msft.json has NO terminal newline (last 5 bytes: "  ]\n}").
+# That used to force a `|-` literal block here, because a bare `|` injects a `\n`
+# after `}` and the digest was taken over this file's own text. Since 2.0.0 the
+# bytes are in the blob store and R2 checks them against bidder_params_ref, so the
+# terminal newline is carried by the bytes rather than by a YAML style choice --
+# the ref's own `bytes` is what witnesses it.
+bidder_params_ref:
+  path: static/bidder-params/msft.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: f0f5e273bbe4598198aca62942e81de1290d3d111d9a22a9e059a08c1ee20999
+  bytes: 2193
 bidder_params_sha256: f0f5e273bbe4598198aca62942e81de1290d3d111d9a22a9e059a08c1ee20999
 
 params:
@@ -742,7 +679,7 @@ cross_language:
     # a new BidderConfigurationProperties subclass. The Go side chose option (a)
     # — a wholesale fork.
   go_specific_concerns:
-    - "Multi-file Go layout (msft.go + models.go + iab_categories.go) — a porter to Java must split the IAB lookup table into a separate resource (Java's appnexus inlines the iabCategories map directly in bidder-config/appnexus.yaml as a 120-entry block; msft Java would do similarly)."
+    - "Multi-file Go layout (msft.go + models.go + iab_categories.go) — a porter to Java must split the IAB lookup table into a separate resource (Java's appnexus inlines the iabCategories map directly in bidder-config/appnexus.yaml as a 95-entry block; msft Java would do similarly)."
     - "iabCategoryMap is a package-level static-init (storage_kind: go-data-table); the Java port would inline as yaml-inlined and inject via constructor-arg per the iab_category_storage taxonomy."
     - "Adapter struct holds url.URL by VALUE (not pointer). Builder dereferences the parsed *url.URL once and stores the value (msft.go:52); each MakeRequests call copies a.uri before potentially appending the member_id query param. Java equivalent would use String for the endpoint and URIBuilder per-request (Rule 12)."
     - "extraAdapterInfo (HBSource, HBSourceVideo) is parsed in the Builder via parseExtraInfo and applied directly to adapter struct fields. Java port should promote both fields to a MsftConfigurationProperties subclass with @NotBlank/@PositiveOrZero annotations (Rule 35)."
@@ -760,10 +697,3 @@ cross_language:
     - "MakeBids uses canonical adapters.IsResponseStatusCodeNoContent + adapters.CheckResponseStatusCodeForErrors (msft.go:330-336) — modern pattern, NOT legacy-raw-go. Java equivalent is the framework-default plus an empty-seatbid short-circuit (Rule 30)."
     - "Bid loop hybrid pattern: outer SeatBid loop is range-value (`for _, sb := range`); inner Bid loop is range-index (`for i := range sb.Bid`). The bid pointer is taken from a local copy `bid := sb.Bid[i]` then `&bid` (msft.go:347, 369) — Go-1.22-safe but pre-1.22 would have aliased the loop variable."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg
-    # No PR history exists yet for cross-language msft work — the Go-side msft is a
-    # fork of Appnexus that has not been mirrored in Java. Reviewer cohort is
-    # populated empty pending the first cross-language PR.

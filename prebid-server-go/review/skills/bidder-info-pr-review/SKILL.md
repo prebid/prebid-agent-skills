@@ -169,21 +169,33 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 4. **White-label compliance**: Confirm the alias approach is appropriate.
    - 4a: If the SAME PR also adds adapter Go code at `adapters/{alias}/`, flag as **FAIL** — alias should not have its own Go code; if it does, it's a full adapter not an alias.
    - 4b: If this is the FINAL state of a PR that historically contained Go code (per pr-triage `whitelabel-redirect-mid-review` sub-label), record as **PASS** with note "alias-only after white-label redirect (canonical pattern)."
-   - 4c: If parent has `whiteLabelOnly: true` (e.g., teqblaze, smarthub), aliasing is the correct pattern — **PASS**. The parent's flag automatically covers white-label compliance for the alias; the alias does NOT need to also set `whiteLabelOnly: true`.
+   - 4c: If the parent **already has aliases**, aliasing is the established pattern for that parent — **PASS**. Key this carve-out on alias count, NOT on `whiteLabelOnly:`. At master @0ba3523 the parents carrying multiple aliases include `teqblaze` (25), `limelightDigital` (23), and `smarthub` (11); regenerate with `grep -rh "aliasOf" static/bidder-info/ | sort | uniq -c | sort -rn`. Only `teqblaze.yaml` sets `whiteLabelOnly: true` — `smarthub.yaml` does not, so the flag is not a reliable alias-parent marker.
+   - 4d: If the alias file itself sets `whiteLabelOnly: true` alongside `aliasOf:` → **FAIL** (BLOCK). `config/bidderinfo.go:461-463` (`validateAliases`) returns `bidder '%s' is an alias and cannot be set as white label only`, which propagates through `processBidderAliases` → `LoadBidderInfoFromDisk` → `logger.Fatalf`. The server will not start. Do not route this to the redundant-inherited-field WARN in step 7 — it is a startup abort, not a style nit.
 5. **Endpoint domain**: The alias endpoint domain should belong to the alias organization, not reuse the parent's domain verbatim (unless intentionally shared infrastructure)
 6. **Alias completeness — maintainer.email**: Aliases MAY inherit `maintainer.email` from the parent.
    - Flag missing `maintainer.email` as **INFO** (not WARN) when the alias clearly belongs to the parent's organizational family. Heuristics: PR is part of a bulk-mode multi-adapter alias bundle (per pr-triage Step 4), OR alias and parent share a common-stem domain (e.g., both use the same brand-suffix), OR PR description indicates internal-rename rather than third-party alias.
    - Flag as **WARN** when the alias appears to be an independent organization from the parent. Heuristic: distinct endpoint domain that doesn't share a stem with the parent's. Reasoning: without alias-org-specific contact info, support escalation has no path.
    - Reference: PR #4651 (5 Limelight aliases) merged without per-alias `maintainer.email` and without reviewer objection — the parent's `engineering@project-limelight.com` was implicitly accepted as the contact for all 5 aliases. PR #4727 (AppMonstaMedia) DID provide its own `media.support@appmonsta.ai` because it's a distinct organization.
-7. **Remove redundant inherited fields**: If the alias declares fields that exactly match the parent (capabilities, openrtb version, userSync), recommend removal — they will be inherited. Severity: **WARN** (not FAIL — author may intend to be explicit).
-   - **Skip this check when the parent does NOT declare the field.** For example, `whiteLabelOnly: true` parents like teqblaze do not declare `endpoint:` themselves; the alias is providing the missing required value, not redundantly overriding. Same logic for any field absent on the parent.
-8. **GVL ID inheritance — severity tiering**:
-   - `gvlVendorID: 0` declared on alias → **WARN** asking for removal. The runtime ignores zero values anyway, so declaring `0` adds confusion. Reference: PR #4329 (Tagoras) reviewer convention.
-   - `gvlVendorID: N` (N > 0) declared on alias → **INFO**. Note: the runtime mechanism may inherit the parent's GVL despite the alias's explicit declaration — reviewer judgment whether to keep. Reference: PR #4727 (AppMonstaMedia / GVL 1283 = Appmonsta Ltd) — non-zero override accepted as valid alias-org GVL even though parent has no GVL declared.
-   - Field absent on alias (omitted) → **PASS**. Inherits parent's value (typically `0`/none for whitelabel parents like teqblaze).
+7. **Redundant inherited fields**: If the alias declares a field whose value is identical to the parent's (capabilities, `openrtb`, `userSync`, `gvlVendorID`, `endpointCompression`), the declaration is inherited anyway and may be dropped. Severity: **INFO** (NOTE) — mention once, never block, never open it as a change request.
+   - **A parent-identical block is what the repo routinely merges, not a defect.** At master @0ba3523, 43 of 113 alias files carry at least one field whose value is identical to the parent's. The pattern the earlier WARN targeted is the *norm* where it occurs: of the 12 aliases that declare `capabilities` at all, 11 declare a block semantically identical to the parent's; `userSync` is parent-identical on 20 of 55, `gvlVendorID` on 18 of 44. Byte-level comparison understates this — indentation and quoting differ freely — so compare parsed values, not raw text.
+     Regenerate: [`field-index.md` → Regeneration commands](references/field-index.md#regeneration-commands) command 1.
+   - **Skip this check entirely when the parent does NOT declare the field.** For example, `whiteLabelOnly: true` parents like teqblaze do not declare `endpoint:` themselves; the alias is supplying a missing required value, not redundantly overriding. Same logic for any field absent on the parent.
+   - Two adjacent cases keep a higher severity and are NOT reached by this step: `gvlVendorID: 0` on an alias (step 8 — a zero literal, not a parent-identical value), and an alias `endpoint` that reuses the parent's domain (step 5 — 0 of the 85 aliases declaring `endpoint` upstream copy the parent's value, so that one has no counterexample).
+8. **GVL ID on an alias — an alias NEVER inherits the parent's GVL vendor ID**:
+
+   `config/bidderinfo.go:371-373` carries an explicit comment that the alias's `GVLVendorID` is intentionally never set from the parent, "as inheriting from the parent is not safe for legal reasons". The alias-merge block immediately below it copies `AppSecret`/`Capabilities`/`Debug`/`Endpoint`/`EndpointCompression`/`ExtraAdapterInfo`/`Maintainer`/`OpenRTB`/`PlatformID` and deliberately excludes `GVLVendorID`. `ToGVLVendorIDMap` (`config/bidderinfo.go:428-436`) then keeps only bidders with `GVLVendorID != 0`, so an alias that omits the field is dropped from the GDPR vendor map — it receives **no** vendor registration at all.
+
+   | Alias YAML state | Disposition | Note to author |
+   |---|---|---|
+   | `gvlVendorID: N` (N > 0) | **PASS** (NOTE) | The required form. Verify N against the GVL per Workflow: GVL Vendor ID Changed; do not question the declaration itself or suggest it is redundant. |
+   | Omitted, parent declares a GVL | **WARN** (ASK) | "Aliases never inherit the parent's GVL vendor ID; declare your own, or confirm this bidder intentionally has no GVL registration." |
+   | Omitted, parent has none either | **PASS** (NOTE) | Nothing to inherit; unregistered by design. |
+   | `gvlVendorID: 0` | **WARN** (ASK) | Zero is dropped by `ToGVLVendorIDMap` and reads as a declaration. Ask for removal. Reference: PR #4329 (Tagoras) reviewer convention. |
+
+   Declaring one's own GVL is the norm, not an anomaly: 44 of the 113 upstream alias YAMLs do (regenerate per [../shared/framework-utilities.md#aliasing](../shared/framework-utilities.md#aliasing)). Reference: PR #4727 (AppMonstaMedia / GVL 1283 = Appmonsta Ltd) declared its own even though the parent has none — correct behavior, not an override to second-guess.
 9. **1-line alias acceptable**: A YAML containing only `aliasOf: parent` is fully valid (everything inherited). PR #4216 (admaticde) and PR #4357 (ttd) are canonical 1-liner examples. Do not flag as "missing fields".
-10. **Bidder rename held for major version**: if the PR description or commit messages indicate a bidder rename (e.g., `progx` → `programmaticX` per PR #4456), flag as **INFO** that the rename is a breaking change and is typically deferred to the next major release.
-11. **Reviewer-hypothesis vs chosen-parent**: If the PR comments include a reviewer asking "is this similar to the {X} adapter?" or "this looks like a copy of {X}" and the final `aliasOf:` value points to a DIFFERENT bidder name `{Y}`, flag as **INFO** with note: "Reviewer suspected resemblance to {X}; author chose `aliasOf: {Y}`. Verify {Y} is the correct technical parent (e.g., a white-label parent serving multiple aliases including {X})." Reference: PR #4565 Nuba — bsardo asked about Compass resemblance, author chose `aliasOf: teqblaze`.
+10. **Bidder rename held for major version**: if the PR description or commit messages indicate a bidder rename (e.g., `adoppler` → `elementaltv` per PR #4639), flag as **INFO** that the rename is a breaking change and is typically deferred to the next major release.
+11. **Reviewer-hypothesis vs chosen-parent**: If the PR comments include a reviewer asking "is this similar to the {X} adapter?" or "this looks like a copy of {X}" and the final `aliasOf:` value points to a DIFFERENT bidder name `{Y}`, flag as **INFO** with note: "Reviewer suspected resemblance to {X}; author chose `aliasOf: {Y}`. Verify {Y} is the correct technical parent (e.g., a white-label parent serving multiple aliases including {X})." Reference: PR #4565 Nuba — a reviewer asked about Compass resemblance, author chose `aliasOf: teqblaze`.
 
 12. **Smoke-test evidence (optional informational)**: If the reviewer or author posts a PBS bid-request/response trace in the PR comments (typical pattern: full request body + HTTP status + response body), parse the request URI and response status. A 204 response from the bidder endpoint to a debug-mode PBS request is positive evidence the alias is functional end-to-end. Severity: **INFO** (auxiliary). Reference: PR #4727 AppMonstaMedia included such a trace as final reviewer evidence.
 
@@ -191,7 +203,9 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 **Triggers when:** any change to `whiteLabelOnly` field, OR a new YAML file is added that resembles an existing adapter (heuristic: same endpoint domain or strikingly similar configuration), OR PR description / comments mention "white label".
 
-1. **`whiteLabelOnly: true` semantics**: Marks the bidder as available only as a white-label parent (aliases reference it). Does NOT preclude Go adapter code on the parent. Reference parents like TeqBlaze (PR #4480) and SmartHub have full Go code AND `whiteLabelOnly: true` — the Go code serves the aliases. **Severity: INFO** if the flag is set on a new file.
+1. **`whiteLabelOnly: true` semantics**: Marks the bidder as ineligible for direct auctions — `IsEnabled()` (`config/bidderinfo.go:249-251`) returns false for it. Does NOT preclude Go adapter code on the parent: `teqblaze` has a full Go adapter at `adapters/teqblaze/` AND the flag (PR #4480). **Severity: INFO** if the flag is set on a new file that is NOT an alias.
+   - **The flag is rare, and it is not the alias-parent marker.** `static/bidder-info/teqblaze.yaml` is the ONLY upstream file carrying `whiteLabelOnly: true` at master @0ba3523 (`grep -rl whiteLabelOnly static/bidder-info/`). `smarthub.yaml` does NOT set it despite serving 11 aliases. Do not describe a parent as white-label just because it has aliases, and do not expect an alias parent to carry the flag.
+   - **`whiteLabelOnly: true` on a file that also declares `aliasOf:` → FAIL** (BLOCK). See Workflow: Alias Adapter Added step 4d — `config/bidderinfo.go:461-463` makes this a startup abort.
 2. **Full adapter that looks like a copy**: If a new full Go adapter is being added but the PR description / discussion / file structure resembles an existing adapter (heuristic: identical endpoint domain, comparable parameter schema, copy-paste-style code organization), flag as **WARN** with the suggestion: "this may be a white-label scenario — consider using `aliasOf:` instead of duplicating Go code." Severity stays WARN (not FAIL) because the determination requires reviewer judgment.
 3. **Reviewer-redirect quotes**: see canonical examples in [../shared/framework-utilities.md#aliasing](../shared/framework-utilities.md#aliasing) — patterns from PRs #4329 (Tagoras), #4383 (RocketLab), #4391 (MediaYo), #4376 (PinkLion), #4565 (Nuba) where reviewers redirected full → alias-only. Code reduction quoted by reviewer: "1k+ to ~20".
 
@@ -204,11 +218,13 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 1. **URL format**: Verify the value is a well-formed URL (scheme + host at minimum)
 2. **Reachability check**: Use `curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s" -X POST {url}` to confirm the endpoint responds. Accept 200, 204, or 400 (bad request without proper body) as evidence of a live endpoint. Flag 404, 502, connection refused, or timeout as FAIL
-3. **Scheme tolerance**: HTTPS is strongly preferred but HTTP is still permitted (per `bsardo` PR #4211 quote: "While https is strongly preferred, http is still permitted."). Limelight-family adapters routinely use HTTP. Flag HTTP as **INFO** with recommendation to upgrade to HTTPS — never **FAIL**.
+3. **Scheme tolerance**: HTTPS is strongly preferred but HTTP is still permitted (per PR #4211: "While https is strongly preferred, http is still permitted."). Limelight-family adapters routinely use HTTP. Flag HTTP as **INFO** with recommendation to upgrade to HTTPS — never **FAIL**.
    - If the endpoint URL is HTTPS, also validate certificate per Workflow: SSL Certificate Validation (separate workflow below).
 4. **HTTP response behavior**: A bare POST to the endpoint should not return 404. Acceptable responses: 200, 204, 400 (invalid body expected). If the endpoint returns 404 for POST requests with bodies, flag for clarification from the bidder
-5. **Domain ownership**: Verify the endpoint domain plausibly belongs to the bidder organization (domain name should relate to bidder name)
-6. **Template macros**: If URL contains `{{...}}` patterns, cross-reference against the canonical 18-field list at [../shared/framework-utilities.md#endpoint-template-macros](../shared/framework-utilities.md#endpoint-template-macros). Any `{{.XYZ}}` macro NOT in that list will silently resolve to empty string at runtime — flag as **FAIL**. Non-Go-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros and require `disabled: true` plus a comment block listing valid values (PR #4502 appStockSSP convention).
+5. **Domain ownership** — **documented judgement call; no mechanical threshold, and name dissimilarity alone is never a finding.** Confirm the endpoint domain plausibly belongs to the bidder organization. A name-similarity threshold was considered and rejected against the corpus: at master @0ba3523, 115 of the 349 bidder-info files with a literal endpoint host (33%) have no 5-character run of the bidder slug anywhere in the host — `pulsepoint` → `bid.contextweb.com`, `conversant` → `api.hb.ad.cpe.dotomi.com`, `thetradedesk` → `direct.adsrvr.org`, `nativo` → `exchange.postrelease.com`, `triplelift_native` → `tlx.3lift.com`. Any similarity gate would flag a third of merged master.
+   - Dispose it on **corroboration, not spelling**: the domain is corroborated when the PR description, the `maintainer.email` domain, the bidder's `userSync` domain, the docs PR, or a WHOIS/site check ties it to the same organization. Corroborated → **PASS** (record which evidence corroborated it). Uncorroborated *and* unrelated to every other domain in the file → **WARN** (ASK the author to confirm ownership), never FAIL. Do not open a finding merely because the host string does not contain the bidder name.
+   Regenerate: [`field-index.md` → Regeneration commands](references/field-index.md#regeneration-commands) command 2.
+6. **Template macros**: If URL contains `{{...}}` patterns, cross-reference against the canonical allow-list at [../shared/framework-utilities.md#endpoint-template-macros](../shared/framework-utilities.md#endpoint-template-macros). Any `{{.XYZ}}` macro NOT in that list will silently resolve to empty string at runtime — flag as **FAIL**. Non-Go-template placeholders (`#{REGION}#`, `${X}`, `<X>`) are NOT macros and require `disabled: true` plus a comment block listing valid values (PR #4502 appStockSSP convention).
 7. **No hardcoded credentials**: Ensure the URL does not contain actual API keys, passwords, or secrets in plain text
 
 ### Workflow: SSL Certificate Validation
@@ -234,7 +250,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 1. **Value range**: Must be a positive integer (uint16, > 0)
 2. **Vendor list lookup**: Fetch the IAB vendor list and verify the ID maps to the correct company. Use `curl -sS "https://vendor-list.consensu.org/v3/vendor-list.json"` and parse with `python3 -c "import json,sys; v=json.load(sys.stdin)['vendors'].get('{id}',{}); print(v.get('name','NOT FOUND'))"` to confirm the vendor name matches the bidder
 3. **Company name match**: The vendor name in the GVL should normally match the bidder's organization. Flag mismatches as **WARN** (not FAIL) — corporate restructures are tolerated when there's a credible relationship. Example: PR #4547 (Gravite) declared GVL 377 = "AddApptr GmbH"; reviewer accepted because privacy URL is gravite.net (corporate parent). Example PR #4591 ID 354 = "Apester Ltd" not "PinkLion" was rejected — the determination is reviewer judgment, not a strict equality check.
-4. **Alias GVL limitation**: If this bidder is an alias (`aliasOf` is set), note that aliases currently cannot override the base adapter's GVL ID due to a known Prebid Server limitation
+4. **Alias context**: If this bidder is an alias (`aliasOf` is set), the declared value is the alias's *own* GVL ID — aliases never inherit the parent's (`config/bidderinfo.go:371-373`), so a declaration here is required, not an override. Apply Workflow: Alias Adapter Added step 8
 5. **Privacy declarations**: Verify the GVL entry contains appropriate purpose declarations and compliance information
 
 ### Workflow: User Sync URL Changed
@@ -250,7 +266,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
    - `{{.RedirectURL}}` for the callback
    - **Exception for shared sync key**: When `userSync.key` does NOT equal the bidder name (intentional cross-bidder syncer sharing — e.g., PR #4592 msft.yaml uses `userSync.key: "adnxs"` to share cookies with AppNexus), missing privacy macros are typically inherited via the shared syncer's parent and are **INFO**, not WARN. Severity escalates only if the shared key is itself missing the macros at the parent.
 4. **Both types declared**: If the file declares both `iframe` and `redirect` sync, verify both URLs are functional. It is common for only one type to work — flag if a declared type is unreachable (seen in PR #4597)
-5. **Domain ownership**: Sync URL domain should belong to the bidder organization
+5. **Domain ownership** — **documented judgement call; no mechanical threshold.** Same disposition rule as Workflow: Endpoint Changed step 5, and the same corpus reason it has no threshold. A sync domain that differs from both the bidder name and the endpoint domain is routine (sync infrastructure is frequently a separate host or a third-party CDN). Corroborated by the PR description, the `maintainer.email` domain, the endpoint domain, or the docs PR → **PASS**; uncorroborated and unrelated to every other domain in the file → **WARN** (ASK), never FAIL. A cross-bidder sync host is expected, not suspicious, when `userSync.key` differs from the bidder name (deliberate syncer sharing — see step 3's shared-key exception).
 6. **userMacro consistency**: If `userMacro` is declared alongside the URL, verify it follows the bidder's expected format (e.g., `$UID`, `[USER_ID]`, `{UID}`)
 
 ### Workflow: User Sync Added to Existing Adapter
@@ -273,7 +289,7 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 **Triggers when:** `endpointCompression` is added or modified.
 
-1. **Value casing is NOT case-sensitive (INFO, not FAIL)**: The runtime compares `strings.ToUpper(endpointCompression)` against the `Gzip = "GZIP"` constant (`exchange/bidder.go:850`; constant at `:100`), so `"gzip"`, `"GZIP"`, and `"Gzip"` ALL enable compression. Uppercase `"GZIP"` is the convention (all master examples use it) — flag a non-uppercase *value* as **INFO** ("functional; uppercase `GZIP` is the convention"), NOT FAIL.
+1. **Value casing is irrelevant — do NOT flag it at all**: The runtime compares `strings.ToUpper(endpointCompression)` against the `Gzip = "GZIP"` constant (`exchange/bidder.go:849-850`; constant at `:100`), so `"gzip"`, `"GZIP"`, and `"Gzip"` all enable compression. There is no uppercase convention to enforce: at master @0ba3523 lowercase `gzip` outnumbers uppercase `GZIP` 58 to 16 across `static/bidder-info/*.yaml`. Emit **no finding** on value casing in either direction. Regenerate: `grep -rh "endpointCompression" static/bidder-info/*.yaml | sed 's/.*endpointCompression: *//' | tr -d "\"'" | sort | uniq -c`
 2. **Field-NAME typo IS the silent-no-op bug (FAIL)**: The real regression is a misspelled YAML *key* — `endpoint-compression` / `endpoint_compression` (kebab/snake) instead of the camelCase `endpointCompression`. A typo'd key does not bind, so compression is silently never applied (canonical regression: Ogury). Flag a non-`endpointCompression` key as **FAIL** (read-side `endpoint-compression-typo` taxon).
 3. **Server support verification**: Confirm the bidder's endpoint actually accepts `Content-Encoding: gzip` requests. If possible, test with a gzip-compressed request
 
@@ -317,8 +333,8 @@ Concrete verification procedures derived from real Prebid Server reviewer practi
 
 **Triggers when:** a new bidder file is added at `static/bidder-info/{name}.yaml`.
 
-1. **Alphanumeric + underscore allowed**: Server-side accepts alphanumeric AND underscore (per `bretg` PR #4211 cross-team policy: "I guess we have to allow underscores server-side. The PBJS doc allows it and being in sync is preferred."). Snake_case names like `boldwin_rapid`, `alliance_gravity`, `ads_interactive` are valid. Flag special characters (hyphens, dots) as **FAIL**.
-2. **6-character unique prefix**: New bidder names typically must have first 6 characters unique among all registered bidders. Exception: sibling-family aliases (e.g., `admatic` + `admaticde`) are tolerated when the collision is intentional aliasing relationship (`bsardo` PR #4216 ruling).
+1. **Alphanumeric + underscore allowed**: Server-side accepts alphanumeric AND underscore (per PR #4211 cross-team policy: "I guess we have to allow underscores server-side. The PBJS doc allows it and being in sync is preferred."). Snake_case names like `boldwin_rapid`, `alliance_gravity`, `ads_interactive` are valid. Flag special characters (hyphens, dots) as **FAIL**.
+2. **6-character unique prefix**: New bidder names typically must have first 6 characters unique among all registered bidders. Exception: sibling-family aliases (e.g., `admatic` + `admaticde`) are tolerated when the collision is intentional aliasing relationship (PR #4216 ruling).
 3. **Naming collision with existing bidder**: If the new name matches an existing one with case-only difference (e.g., `ads_interactive` vs `adsinteractive`), defer the deprecation to the next major release per PR #3929 / issue #3861 convention.
 
 ---
@@ -338,7 +354,7 @@ Complete mapping of every BidderInfo field to its review criteria. Source: `conf
 
 ### `endpointCompression` (string)
 
-- **Value casing is NOT case-sensitive**: runtime compares `strings.ToUpper(endpointCompression)` to the `Gzip = "GZIP"` constant (`exchange/bidder.go:850`; constant at `:100`), so `"gzip"`/`"GZIP"`/`"Gzip"` all work. Uppercase `"GZIP"` is the convention — a non-uppercase *value* is **INFO**, not FAIL.
+- **Value casing is NOT case-sensitive and carries no convention**: runtime compares `strings.ToUpper(endpointCompression)` to the `Gzip = "GZIP"` constant (`exchange/bidder.go:849-850`; constant at `:100`), so `"gzip"`/`"GZIP"`/`"Gzip"` all work. Lowercase `gzip` is in fact the majority form upstream (58 vs 16 at @0ba3523). Emit no finding on casing.
 - **Field-NAME typo is the real FAIL**: a misspelled key (`endpoint-compression`/`endpoint_compression` instead of camelCase `endpointCompression`) does not bind → compression silently disabled (Ogury regression) → **FAIL**.
 - Omit entirely if bidder does not support compression
 - Verify bidder server actually accepts gzip-compressed bid requests
@@ -346,9 +362,9 @@ Complete mapping of every BidderInfo field to its review criteria. Source: `conf
 
 ### `maintainer.email` (string, REQUIRED)
 
-- Manual reviewer process. The reviewer (typically `bsardo`) sends a verification email and blocks merge until the maintainer replies "received". Skills cannot fully automate this gate.
+- Manual reviewer process. A reviewer sends a verification email and blocks merge until the maintainer replies "received". Skills cannot fully automate this gate.
 - Flag generic-domain emails (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `proton.me`, `icloud.com`) as **INFO** — historically these receive extra scrutiny because they don't establish organizational ownership.
-- Flag any `maintainer.email` whose **local-part is not a recognized role/group token** (`tech@`, `support@`, `prebid@`, `info@`, etc.) as **WARN** — a personal name or handle (`firstname.lastname@`, `firstname@`, `flast@`, initials, a nickname) is not a role token **even on the bidder's own corporate domain**. The corporate-domain-personal case is the one a name-pattern regex misses (the Teal #4765 class: a personal address on the corporate domain, caught only when the person asked in review to remove their details). Judge role-vs-person, not just the `firstname.lastname@` / `firstname@` regex. See [../shared/framework-utilities.md#maintainer-email-policy](../shared/framework-utilities.md#maintainer-email-policy) for the canonical rule.
+- Flag any `maintainer.email` whose **local-part is not a recognized role/group token** (`tech@`, `support@`, `prebid@`, `info@`, etc.) as **WARN** — a personal name or handle (`firstname.lastname@`, `firstname@`, `flast@`, initials, a nickname) is not a role token **even on the bidder's own corporate domain**. Judge role-vs-person rather than matching a regex: only 7 of 326 upstream maintainer emails use the `firstname.lastname@` shape, so a name-pattern deny-list misses nearly every personal address. Reviewer practice: PR #4321, PR #4441. See [../shared/framework-utilities.md#maintainer-email-policy](../shared/framework-utilities.md#maintainer-email-policy) for the canonical rule.
 - For aliases: `maintainer.email` MAY be inherited from the parent (omit the field). If declared on the alias, it should be the alias organization's email — not a copy of the parent's, unless they share infrastructure. Flag the parent-email-on-alias case as **INFO** asking for confirmation it was intentional (per PR #4441 reviewer practice).
 - If the PR comments include reviewer phrases like "please reply 'received'" or "I'll merge once you confirm via email", record `email-confirmation-pending` status in the review summary.
 
@@ -357,7 +373,8 @@ Complete mapping of every BidderInfo field to its review criteria. Source: `conf
 - Must be a valid GDPR Global Vendor List vendor ID
 - Omit if bidder is not IAB registered
 - Verify the ID matches the bidder at https://vendor-list.consensu.org/
-- Value must be > 0 if present
+- Value must be > 0 if present — `ToGVLVendorIDMap` (`config/bidderinfo.go:428-436`) drops any bidder with `GVLVendorID == 0`
+- **Never inherited by an alias** (`config/bidderinfo.go:371-373`). An alias omitting the field gets no GDPR vendor registration; it does not fall back to the parent's.
 - **Workflow**: [GVL Vendor ID Changed](#workflow-gvl-vendor-id-changed)
 
 ### `geoscope` ([]string)
@@ -365,7 +382,8 @@ Complete mapping of every BidderInfo field to its review criteria. Source: `conf
 - Valid values: 3-letter ISO 3166-1 alpha-3 country codes (e.g., `USA`, `CAN`, `GBR`)
 - Special values: `GLOBAL`, `EEA`
 - Negation prefix `!` (e.g., `!EEA` = "not in EEA")
-- Must be uppercase
+- **Casing is not a defect — the runtime is case-insensitive.** `validateGeoscope` (`config/bidderinfo.go:645-675`) applies `strings.ToUpper(strings.TrimSpace(code))` to every entry *before* every comparison, including the `GLOBAL`/`EEA` equality tests and the `char < 'A' || char > 'Z'` character loop. `global`, `Global`, and `GLOBAL` therefore validate identically. Uppercase is conventional for country codes, but lowercase is the dominant form for the special value on master: 27 bidder-info files write lowercase `global` against 1 writing `GLOBAL`. **Never emit FAIL or WARN on geoscope casing** — a merged-code false positive. INFO is appropriate only if one list mixes both forms.
+  Regenerate: [`field-index.md` → Regeneration commands](references/field-index.md#regeneration-commands) command 3.
 - Verify geographic claims are accurate for the bidder
 
 ### `disabled` (bool)
@@ -570,8 +588,9 @@ Complex object — review each sub-field individually.
 
 ### `whiteLabelOnly` (bool)
 
-- `true` means bidder is only available as a white-label and not directly
-- Combined with `aliasOf` for white-label configurations
+- `true` marks the bidder ineligible for direct auctions — `IsEnabled()` (`config/bidderinfo.go:249-251`) returns false
+- **MUST NOT be combined with `aliasOf` on the same file.** `validateAliases` (`config/bidderinfo.go:461-463`) returns `bidder '%s' is an alias and cannot be set as white label only`, aborting startup via `logger.Fatalf`. Flag the combination as **FAIL**.
+- Rare: `teqblaze.yaml` is the only upstream file that sets it at @0ba3523, and it is a core bidder with its own Go adapter
 
 ---
 
@@ -619,10 +638,13 @@ After reviewing individual fields, verify these cross-field constraints:
 6. **Disabled + other fields**: If `disabled: true`, question why other fields are being changed simultaneously
 7. **Platform + mediaType**: Each declared platform must have at least one media type
 8. **Geoscope + capabilities**: Geographic restrictions should align with platform support
-9. **GPP consistency**: If user sync URLs include `{{.GPP}}`/`{{.GPPSID}}` macros, `openrtb.gpp-supported` should be `true`
+9. **GPP consistency**: GPP macros in a user-sync URL and `openrtb.gpp-supported` are **independent settings — their disagreement is not a finding at any severity.** They drive different pipelines: `usersync/syncer.go` `GetSync` resolves the `macros.UserSyncPrivacy` fields (`{{.GPP}}`, `{{.GPPSID}}`, GDPR, USPrivacy) into the sync template unconditionally, with no reference to `OpenRTB.GPPSupported`; `openrtb.gpp-supported` is read only at `exchange/utils.go:424-431` (`shouldSetLegacyPrivacy`), which decides whether PBS down-converts GPP into legacy GDPR/USP fields on the **bid request**. Sync-URL macros keep working with the flag unset. The corpus agrees: at master @0ba3523, 90 bidder-info files carry a GPP macro in a sync URL, 26 set `gpp-supported: true`, and only 16 do both — so 74 files ship exactly the combination this rule flagged. Record it only when the review is *already* about GPP support, and then as **INFO**.
+    Regenerate: [`field-index.md` → Regeneration commands](references/field-index.md#regeneration-commands) command 4.
 10. **Alias GVL limitation**: Aliases cannot currently override the base adapter's GVL vendor ID
 11. **whiteLabelOnly + aliasOf relationship**: `whiteLabelOnly: true` is typically set on PARENT adapters (e.g., TeqBlaze, SmartHub) to mark them as alias-targets. Aliases inherit semantics. The flag does NOT preclude Go code on the parent. See Workflow: White-Label Policy Compliance.
-12. **openrtb 2.6 ↔ X-OpenRTB-Version header**: If the adapter sends `X-OpenRTB-Version: 2.6` HTTP header but `static/bidder-info/{bidder}.yaml` does not declare `openrtb: version: "2.6"`, the bidder will receive 2.5 requests despite the header. Cross-check is owned by adapter-code-pr-review but documented here. Flag YAML missing `openrtb.version` when adapter sends `2.6` header as **WARN**.
+12. **openrtb 2.6 ↔ X-OpenRTB-Version header**: If the adapter sends an `X-OpenRTB-Version: 2.6` HTTP header but `static/bidder-info/{bidder}.yaml` does not declare `openrtb: version: "2.6"`, the bidder receives a 2.5-downgraded request despite the header. The mechanism is real: `exchange/utils.go:222-228` runs `if !ok || info.OpenRTB == nil || info.OpenRTB.Version != "2.6" { ... openrtb_ext.ConvertDownTo25(reqWrapperCopy) }`. Cross-check is owned by adapter-code-pr-review but documented here. Severity: **INFO** (NOTE) by default — master ships the mismatch for 3 of the 7 adapters that send a 2.6 header (`madsense`, `resetdigital`, `trustx`; the other four — `elementaltv`, `msft`, `synapseHX`, `yahooAds` — declare `2.6`), so it is not a merge-blocking inconsistency and must not be raised as a change request on that basis alone.
+    - **Escalate to WARN** only when the adapter's own code depends on a field `ConvertDownTo25` moves or clears — the down-conversion relocates supply chain, GDPR, consent, US-privacy, and EIDs from their 2.6 homes into 2.5 ext locations and clears the 2.6-only fields (`openrtb_ext/convert_down.go`: `moveSupplyChainFrom26To25`, `moveGDPRFrom26To25`, `moveConsentFrom26To25`, `moveUSPrivacyFrom26To25`, `moveEIDFrom26To25`, `Clear26Fields`). An adapter reading `request.Source.SChain`, `request.Regs.GDPR`, `request.User.Consent`, or `request.User.EIDs` while its YAML omits `openrtb.version: "2.6"` has a functional bug, not a documentation mismatch. `bid.MType` on the *response* is unaffected — down-conversion only rewrites the outgoing request.
+    Regenerate: [`field-index.md` → Regeneration commands](references/field-index.md#regeneration-commands) command 5.
 13. **modifyingVastXmlAllowed**: Rare YAML field (only #4522 alliance_gravity uses it in 2025–2026). Set deliberately when video adapter wants to opt-in/opt-out of VAST modification tracking. Verify if declared.
 
 ## Detailed Documentation

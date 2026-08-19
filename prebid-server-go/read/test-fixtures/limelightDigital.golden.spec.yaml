@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -81,30 +81,11 @@ bidder_info:
   yaml_extra_fields: {}
   yaml_field_name_quirks: []
 
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Limelight Digital Adapter Params",
-    "description": "A schema which validates params accepted by the Limelight Digital adapter",
-    "type": "object",
-
-    "properties": {
-      "host": {
-        "type": "string",
-        "description": "Ad network's RTB host",
-        "format": "hostname",
-        "pattern": "^.+\\..+$"
-      },
-      "publisherId": {
-        "type": ["integer", "string"],
-        "description": "Publisher ID",
-        "minimum": 1,
-        "pattern": "^[1-9][0-9]*$"
-      }
-    },
-
-    "required": ["host", "publisherId"]
-  }
+bidder_params_ref:
+  path: static/bidder-params/limelightDigital.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: 98c86237505947407a1dc320630d8d92276ab70b14b04940f2b0e594283bae33
+  bytes: 586
 bidder_params_sha256: 98c86237505947407a1dc320630d8d92276ab70b14b04940f2b0e594283bae33
 
 params:
@@ -363,7 +344,3 @@ cross_language:
     - "Builder returns error \"Endpoint  adapter parameter is not provided\" with double-space (line 28). Upstream typo; preserved verbatim."
     - "15 aliases (filmzie, iionads, evtech, adsyield, greedygame, appstock, xtrmqb, embimedia, tgm, streamlyn, streamvision, orangeclickmedia, velonium, adtg_org, performist). adtg_org has UNDERSCORE — Go YAML accepts (per PR #4211). Java IT class name is `AdtgorgTest` (no underscore — Java identifier-rule workaround). performist alias has truncated endpoint (`/openrtb/{{PublisherID}}` only, NO `?host={{Host}}` query) — distinct from sibling aliases."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

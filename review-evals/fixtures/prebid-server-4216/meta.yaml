@@ -1,0 +1,27 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-4216
+repo: prebid/prebid-server
+pr_number: 4216
+title: 'New Adapter: Admatic GMBH - Admatic alias'
+language: go
+base_ref: master
+review_sha: d19d760113e2dc360008886422416d062e6251fd
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2025-03-13'
+merge_base_sha: 09006e7fee71342242755af541e74e49a717314b
+head_sha: a6eebd4791d70cdb84bee0561556287ea09feea8
+merge_state: merged
+merged_at: '2025-03-13'
+review_decision: APPROVED -> APPROVED
+outcome: clean
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server/compare/master...d19d760113e2dc360008886422416d062e6251fd
+file_count: 1
+truncation:
+  patch_char_limit: 20000
+  truncated_files: []
+  compare_file_limit_hit: false

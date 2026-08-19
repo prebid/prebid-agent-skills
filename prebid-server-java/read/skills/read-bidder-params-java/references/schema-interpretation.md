@@ -20,7 +20,13 @@ For each entry under top-level `"properties": { ... }`:
 
 - `name` — the JSON key.
 - `type` — the value of `"type":` field. Either a single string (`"string"`, `"integer"`, `"boolean"`, `"number"`, `"object"`, `"array"`) or an array (e.g., `["integer", "string"]`) for flexible-type fields.
-- `description` — the `"description":` value verbatim, or `null` if absent.
+- `description` — the `"description":` value verbatim, or `null` if absent. This is a **verbatim field** under V1 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): extract it out of the blob the SKILL's Step 1 staged rather than retyping it, and keep `bidder_params_ref` present so the value stays re-derivable.
+
+  ```bash
+  python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));[print(repr(k),repr(v.get("description"))) for k,v in d["properties"].items()]' ../../test-fixtures/blobs/<sha256>
+  ```
+
+  Never summarize, truncate, or normalize whitespace in a description — a paraphrase here is an invented upstream fact, and it is the field class where the corpus has already lost bytes undetected.
 
 Nested properties (under `properties[X].properties`) are NOT flattened into the top-level list — they are listed as sub-properties under their parent's entry only when the parent's `type` is `object` AND the schema author has elected to declare nested structure. Most bidder-params schemas keep nesting shallow (≤ 1 level of object nesting under top-level keys).
 
@@ -204,6 +210,17 @@ When a name does NOT match any pattern, count it under valid_cases_count by defa
 ### Total = valid + invalid
 
 The total method count should equal the sum (`valid_cases_count + invalid_cases_count`). If a method was unclassifiable, the totals will be off; the quirk records the discrepancy.
+
+### Every count is a command's stdout
+
+`valid_cases_count`, `invalid_cases_count`, and `tests.unit_test_methods_count` are computed values under V4 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4). Run the count; do not tally while reading:
+
+```bash
+<fetch> | grep -c '^[[:space:]]*@Test'                                 # total
+<fetch> | grep -oE 'void [A-Za-z0-9_]+' | grep -cE 'Error|Fail|Throw'  # invalid (default patterns)
+```
+
+When the pattern lists above are extended for a specific adapter, extend the `grep -E` alternation and record the new command's output. The border-case decisions in this section change which regex a method falls under — they never authorize adjusting a printed number by hand. If total ≠ valid + invalid, record what the commands returned and raise the `incomplete-classification` quirk.
 
 ### `bidder_constant_referenced` is null
 

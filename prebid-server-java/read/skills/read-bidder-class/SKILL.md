@@ -56,7 +56,7 @@ inputs:
       - src/test/resources/org/prebid/server/it/openrtb2/kobler/test-kobler-bid-response.json
       - src/test/resources/org/prebid/server/it/openrtb2/kobler/test-auction-kobler-request.json
       - src/test/resources/org/prebid/server/it/openrtb2/kobler/test-auction-kobler-response.json
-    test_application_properties: src/test/resources/test-application.properties
+    test_application_properties: src/test/resources/org/prebid/server/it/test-application.properties
   parent_aliases: []                             # Per-alias IT class set, populated by orchestrator from read-bidder-config.
   fixture_mode: count-only | summary | verbatim
 ```
@@ -68,7 +68,7 @@ inputs:
 For each file in the inputs:
 
 1. Read the file at `provenance.source.resolved_commit` (orchestrator-provided; do not re-fetch).
-2. Compute `loc`.
+2. Compute `loc` as the stdout of `<fetch> | wc -l` (V4 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)) — a command's number, never an estimate from a viewer's last line number.
 3. Tag the file with one role from this 5-value enum: `implementation, models, parsers, types, utils`. Deterministic filename → role mapping rules live in [references/file-role-heuristics.md](references/file-role-heuristics.md). Cross-language note: Go's enum is the same 5 values plus `data-table` (Go-only — Java records IAB-category tables as `iab_category_storage.storage_kind: yaml-inlined` per ADR-001 D2). The other references in this directory cover deeper Java extraction patterns referenced from later Steps, NOT role tagging: [references/spring-config-patterns.md](references/spring-config-patterns.md) (Step 3 — `spring_config.*` and Step 2 parameter-role classification), [references/proto-pojo-patterns.md](references/proto-pojo-patterns.md) (Step 7 — `ext_pojo_construction.*`), and [references/junit-it-patterns.md](references/junit-it-patterns.md) (Steps 10–12 — `tests.*`). The lint at `scripts/lib/lint-java-roles.py` gates the enum at CI time.
 
 Record the bidder-package files in `code.file_layout.files[]`. Set `code.file_layout.kind: multi-file` if more than one bidder-package `*.java` file (e.g., Mediasquare's `MediasquareBidder.java` + `MediasquareUtil.java` co-located helper); otherwise `single-file`. Counts apply only to bidder-package files — `proto/`, `spring/config/`, `test/` files do NOT inflate the layout count.
@@ -87,7 +87,7 @@ From the file with role=`implementation` (the `{Xyz}Bidder.java` file declaring 
    - `source` is FREE-TEXT carrying the lambda-binding expression verbatim. Common shapes observed in goldens: `"config.endpoint"`, `"config.xapi.username"`, `"config.devEndpoint"` (dotted path into a `BidderConfigurationProperties` getter), `"framework-injected"` (autowired Spring bean — `currencyConversionService`, `mapper`, `idGenerator`), `"@Value(${external-url})"` (Spring property injection), `"factory-constant"` (Rubicon `bidderName`), `"factory-instantiated (new UUIDIdGenerator())"` (factory creates fresh instance), `"config.generateBidId (defaults true)"` (annotated-with-default narrative). Round-trip preserves the verbatim string.
    - `role ∈ {properties, helper-collaborator, framework-injected, authentication-input}`. `properties` when the parameter is a config-derived String/primitive; `helper-collaborator` when it is a domain helper (`CurrencyConversionService`, `JacksonMapper`, `IdGenerator`, `Clock`, `BidderUtil`); `framework-injected` for everything else autowired but neither config nor a known helper; `authentication-input` for parameters whose sole purpose is to feed a pre-built basic-auth or HMAC-digest header (canonical: Rubicon `xapiUsername`, `xapiPassword`).
    - The standard collaborator catalog (`JacksonMapper`, `CurrencyConversionService`, `IdGenerator`, `Clock`, `BidderUtil`) lives in [references/spring-config-patterns.md](references/spring-config-patterns.md#standard-collaborators).
-5. `static_fields[]` — class-level constants: TypeReferences (`KOBLER_EXT_TYPE_REFERENCE`), default-currency strings (`DEFAULT_BID_CURRENCY`), ext-key strings (`EXT_PREBID`). Record `{ name, type, value? }`.
+5. `static_fields[]` — class-level constants: TypeReferences (`KOBLER_EXT_TYPE_REFERENCE`), default-currency strings (`DEFAULT_BID_CURRENCY`), ext-key strings (`EXT_PREBID`), and **endpoint macro constants** (`SUPPLY_ID_MACRO = "SupplyId"`, `URL_PUBLISHER_ID_MACRO = "PublisherID"`). The macro constants are load-bearing: R8 recognises an endpoint placeholder only when the spec records the code substituting it, so an omitted constant reads as a macro nothing resolves. Not every substitution has a constant to record — `ElementalTVBidder` calls `endpoint.replaceMacro("AdUnit", ...)` with an inline literal, and `AaxConfiguration` declares its `PREBID_SERVER_ENDPOINT` constant outside the bidder class entirely — which is why `endpoint_resolution.macros_used` (Step 4) is the primary record and this field is the secondary one. Record `{ name, type, value? }`. The `value` is a **verbatim field** under V1 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): copy the initializer text out of the fetched bytes (`<fetch> | sed -n '<start>,<end>p'`) and keep the source file's reference (`{ path, resolved_commit, sha256, bytes }`) so the value stays re-derivable. Do not normalize a currency literal, expand a generic parameter, or reconstruct a constant from its name.
 6. `helper_classes_co_located[]` — non-bidder classes co-located in `bidder/{xyz}/` (e.g., `MediasquareUtil`, `KueezExtractor`).
 7. `helper_classes_in_proto[]` — DTO classes in `proto/openrtb/ext/request/{xyz}/` (e.g., `ExtImpKobler`, plus any helper proto types like `MediasquareCode`, `HuaweiAdsRequestExt`).
 
@@ -100,7 +100,7 @@ Per-step output fields:
 1. `factory_class` — naming variance per edge case #19 (`<Name>Configuration` vs `<Name>BidderConfiguration`). Record verbatim.
 2. `factory_method` — `@Bean` method returning `BidderDeps` (e.g., `koblerBidderDeps`).
 3. `property_source_path` — `@PropertySource` value (canonical: `classpath:/bidder-config/{xyz}.yaml`).
-4. `bidder_creator_lambda` — verbatim lambda body from `BidderDepsAssembler.bidderCreator(...)`. Round-trip fidelity load-bearing for porters; preserve indentation, line breaks, and constructor argument order.
+4. `bidder_creator_lambda` — verbatim lambda body from `BidderDepsAssembler.bidderCreator(...)`. Round-trip fidelity load-bearing for porters; preserve indentation, line breaks, and constructor argument order. This is a **verbatim field** under V1 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): extract the byte span from the fetched `{Xyz}Configuration.java` (`<fetch> | sed -n '<start>,<end>p'`), keep that file's reference (`sha256` + `bytes`) in the spec so the span is re-derivable, and choose the YAML encoding with the V3 probe instead of defaulting to a literal block. Do not retype the lambda from the constructor signature.
 5. `configuration_properties_class.*` — populated when the factory declares a `BidderConfigurationProperties` subclass; `null` otherwise. See references doc for the full sub-field shape (name, extends, extra_fields[] with verbatim `@Validation` annotations, nested_classes[], lombok_annotations[]).
 6. `bean_dependencies[]` — every `@Autowired` constructor parameter or `@Value(${...})` injection on the factory method. Record `{ name, type, source }` per the [Bean dependencies extraction](references/spring-config-patterns.md#bean-dependencies-extraction) section.
 
@@ -113,7 +113,7 @@ Locate `makeHttpRequests(BidRequest bidRequest)`. Apply the cross-language taxon
 - **`mutation.entity_strategies`** — same enum as Go; Java adapters typically emit `immutable-rebuild` (Lombok `toBuilder().build()`) for OpenRTB entities. **`mutation.java_idiom`** — `lombok-tobuilder` default; `flexible-extension-fillExtension` for `FlexibleExtension` subclasses. `mutation.go_idiom` stays null.
 - **`imp_ext_unmarshal.kind`** — `standard-two-phase` default; **`mechanism_java`** — `typeref-extprebid` canonical (`TypeReference<ExtPrebid<?, ExtImp{Xyz}>>`), `typeref-custom-wrapper` (Appnexus's `AppnexusExtImp`), `direct-class`, or `null`.
 - **`endpoint_resolution.{kind, mechanism_java}`** — kinds match Go; Java mechanisms are `string-replace`, `URIBuilder`, `custom-resolver-class`, `null`. Populate `macro_field_set[]`.
-- **`helpers[]`** — every private method on the bidder class (excluding `makeHttpRequests`/`makeBids`); record `{ name, signature }` verbatim.
+- **`helpers[]`** — every private method on the bidder class (excluding `makeHttpRequests`/`makeBids`); record `{ name, signature }`. `signature` is a **verbatim field** under V1 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): copy the declaration line from the fetched bytes (`<fetch> | grep -n 'private .*<name>('`), against the file reference recorded in `code.file_layout.files[]`. Do not reconstruct a signature from the call site, drop a modifier, or shorten a generic type.
 
 ### Step 5 — Classify `code.make_bids.*`
 
@@ -128,7 +128,15 @@ Locate `makeBids(BidderCall<BidRequest> httpCall, BidRequest bidRequest)`:
 
 ### Step 6 — Extract `iab_category_storage.*`
 
-Set `storage_kind`: `yaml-inlined` (Java pattern, Appnexus 120-entry `iab-categories`, edge case #21), `none` (typical: Kobler, Optidigital), or `dynamic-fetched` (rare). `go-data-table` is Go-only. When `yaml-inlined`, populate `yaml_field`, `table_size`, and `delivery_mechanism: constructor-arg | static-init` (the field is `delivery_mechanism` per ADR-001 D2). The YAML evidence is provided by `read-bidder-config` via orchestrator-merged `bidder_info.yaml_extra_fields`.
+Set `storage_kind`: `yaml-inlined` (Java pattern, Appnexus `iab-categories`, edge case #21), `none` (typical: Kobler, Optidigital), or `dynamic-fetched` (rare). `go-data-table` is Go-only. When `yaml-inlined`, populate `yaml_field`, `table_size`, and `delivery_mechanism: constructor-arg | static-init` (the field is `delivery_mechanism` per ADR-001 D2). The YAML evidence is provided by `read-bidder-config` via orchestrator-merged `bidder_info.yaml_extra_fields`.
+
+`table_size` is a computed value (V4 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)) — count the entries in the YAML block, do not carry over a cardinality from a review comment or a sibling spec:
+
+```bash
+<fetch bidder-config/{xyz}.yaml> | awk '/^[[:space:]]*iab-categories:/{f=1;next} f&&/^[[:space:]]*[a-z-]+:[[:space:]]*$/{exit} f' | grep -c ':'
+```
+
+For appnexus at master this prints 95, matching both appnexus goldens. Rule 42 makes the cardinality a cross-language fidelity invariant, so an asserted number that was never counted breaks the Go↔Java comparison silently.
 
 ### Step 7 — Extract `ext_pojo_construction.*`
 
@@ -153,9 +161,16 @@ Set `used: true` when a `CurrencyConversionService` constructor parameter is pre
 
 ### Step 10 — Inventory `tests:`
 
-**Unit tests** (`*Test.java` files; NOT recorded in `code.file_layout.files[]` — see [`references/file-role-heuristics.md`](references/file-role-heuristics.md) "Multi-file detection" for the layout/test split): `tests.test_root_directory: src/test/java/org/prebid/server/bidder/{xyz}/`. `uses_canonical_harness: true` when the test class extends `VertxTest` (Java's `RunJSONBidderTest` analog); `false` triggers a `legacy-test-helpers-imported` quirk + warning (R10). Count `@Test`-annotated methods (regex `^\s*@Test\b`) into `unit_test_methods_count`; `unit_test_loc` is the file's line count; `hand_written_test_methods[]` lists method names in declaration order. Detailed regex / naming conventions: [`references/junit-it-patterns.md`](references/junit-it-patterns.md).
+**Unit tests** (`*Test.java` files; NOT recorded in `code.file_layout.files[]` — see [`references/file-role-heuristics.md`](references/file-role-heuristics.md) "Multi-file detection" for the layout/test split): `tests.test_root_directory: src/test/java/org/prebid/server/bidder/{xyz}/`. `uses_canonical_harness: true` when the test class extends `VertxTest` (Java's `RunJSONBidderTest` analog); `false` triggers a `legacy-test-helpers-imported` quirk + warning (R10). `unit_test_methods_count` and `unit_test_loc` are computed values (V4 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)) — record each command's stdout:
 
-**Integration tests** (`*IT.java` files; NOT recorded in `code.file_layout.files[]`): `integration_test_class` is the parent IT class (per-alias IT classes go into `aliases[].test_assets`). `integration_test_pattern: 4-file-split` (canonical Wiremock: bid-request + bid-response + auction-request + auction-response), `6-file-with-cache`, `multi-folder` (Rubicon), or `none`. `fixture_inventory.integration[]` records each fixture-file `{ filename, sha256, bytes, role }` where `role ∈ {bidder-bid-request, bidder-bid-response, auction-request, auction-response}` (per-fixture role; distinct from the file-level `role` enum). Folder convention: `src/test/resources/org/prebid/server/it/openrtb2/{xyz}/`; deviations populate `java_it_folder_naming` (`canonical | suffix-augmented | multi-folder | custom`).
+```bash
+<fetch {Xyz}BidderTest.java> | grep -c '^[[:space:]]*@Test'   # unit_test_methods_count
+<fetch {Xyz}BidderTest.java> | wc -l                          # unit_test_loc
+```
+
+`hand_written_test_methods[]` lists method names in declaration order, and its length must equal the `grep -c` output; a mismatch means the listing missed a method — re-extract the names rather than editing the count. Detailed regex / naming conventions: [`references/junit-it-patterns.md`](references/junit-it-patterns.md).
+
+**Integration tests** (`*IT.java` files; NOT recorded in `code.file_layout.files[]`): `integration_test_class` is the parent IT class (per-alias IT classes go into `aliases[].test_assets`). `integration_test_pattern: 4-file-split` (canonical Wiremock: bid-request + bid-response + auction-request + auction-response), `6-file-with-cache`, `multi-folder` (Rubicon), or `none`. `fixture_inventory.integration[]` records each fixture-file `{ filename, sha256, bytes, role }` where `role ∈ {bidder-bid-request, bidder-bid-response, auction-request, auction-response}` (per-fixture role; distinct from the file-level `role` enum). `sha256` and `bytes` are mandatory in all three `--fixture-mode` values, including `verbatim`, and both come from the fetch pipe rather than from the inlined body (V1/V2 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)). Folder convention: `src/test/resources/org/prebid/server/it/openrtb2/{xyz}/`; deviations populate `java_it_folder_naming` (`canonical | suffix-augmented | multi-folder | custom`).
 
 ### Step 11 — Per-alias IT class set + naming workarounds
 
@@ -167,7 +182,13 @@ Top-level `code_naming` block records the Java class-naming workarounds:
 
 ### Step 12 — Registry append count
 
-Read `src/test/resources/test-application.properties`; count lines beginning with `adapters.{xyz}.` (canonical 2–4 lines per bidder: `enabled=true`, `endpoint=...`, plus per-alias variants). Emit `tests.test_application_properties_entries_added: <count>`; per-alias detail under `aliases[].test_application_properties_entries[]` as `{ key, value, line }`. Zero count when an IT class exists triggers `incomplete-classification`.
+The registry file is `src/test/resources/org/prebid/server/it/test-application.properties` — its location both on current master and at the Phase A-4 pinned commit `69b1993c`, where `src/test/resources/test-application.properties` does not exist. Resolve the path at the read's own commit rather than assuming either form. `tests.test_application_properties_entries_added` is a computed value (V4 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)) — the stdout of:
+
+```bash
+<fetch src/test/resources/org/prebid/server/it/test-application.properties> | grep -c '^adapters\.{xyz}\.'
+```
+
+Canonically 2–4 lines per bidder (`enabled=true`, `endpoint=...`, plus per-alias variants); for kobler at master the command prints 2. Per-alias detail goes under `aliases[].test_application_properties_entries[]` as `{ key, value, line }`, whose length must equal the counted total. A zero count when an IT class exists triggers `incomplete-classification` — and a zero that came from grepping the wrong path is an instrument failure, not a finding: confirm the file exists at the resolved commit first.
 
 ### Step 13 — Emit `quirks[]` and populate `cross_language.*`
 
@@ -179,7 +200,7 @@ Populate `cross_language.port_concerns`: `multi_file_layout` from Step 1; `packa
 
 Populate `cross_language.java_artifacts`: `bidder_dir: src/main/java/org/prebid/server/bidder/{xyz}/`, `bidder_class: <Name>Bidder`, `config_class: <Name>Configuration | <Name>BidderConfiguration` (#19), `yaml_path: src/main/resources/bidder-config/{xyz}.yaml`, `proto_dir: src/main/java/org/prebid/server/proto/openrtb/ext/request/{xyz}/`.
 
-Stub `cross_language.go_artifacts` with path hints (`bidder_dir: adapters/{xyz}/`, `package_name: {xyz}` lowercase, `bidder_constant: openrtb_ext.Bidder<X>` looked up verbatim from Go-side `bidders.go` when available — do NOT derive). `reviewer_cohort.java[]` from [`../../../references/new-bid-adapter-prs.md`](../../../references/new-bid-adapter-prs.md); `reviewer_cohort.go: []`; `cross_language_coordinator: bretg`.
+Stub `cross_language.go_artifacts` with path hints (`bidder_dir: adapters/{xyz}/`, `package_name: {xyz}` lowercase, `bidder_constant: openrtb_ext.Bidder<X>` looked up verbatim from Go-side `bidders.go` when available — do NOT derive). Do NOT emit `reviewer_cohort` — the field was removed at `adapter_spec_version` 2.0.0 and the schema now rejects it, because no skill may key a check on reviewer identity (see [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md)).
 
 ## Edge case mapping (Java cases #18–#34)
 
@@ -187,16 +208,16 @@ Full 17-case catalog with field mappings, master samples, and owner skills: [`..
 
 ## Cross-language note
 
-Java's reviewer cohort is **wholly disjoint** from Go's (Phase 2 reconnaissance: only `@bretg` crosses both repos as cross-language coordinator). The transfer ban is canonicalized at [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md). Two consequences for `read-bidder-class` output:
+Review expectations do not carry between the two repos; the transfer ban is canonicalized at [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md). Two consequences for `read-bidder-class` output:
 
-1. Port-fidelity is the #1 review theme on Java adapter PRs ("I don't see that in Go" is a common blocker). Populate `cross_language.java_specific_concerns[]` densely; the Kobler Java golden's 9-entry list is the model.
-2. Review-pattern matchers MUST NOT auto-transfer between languages. Downstream review skills must consult `reviewer_cohort.java[]` for Java patterns and `cross_language_coordinator` (`bretg`) for cross-language PRs.
+1. Port-fidelity is a live review theme on Java adapter PRs that port from Go ("I don't see that in Go" is a common blocker), and it is structurally asymmetric — the Go side of the same port has nothing to be faithful to. Populate `cross_language.java_specific_concerns[]` densely; the Kobler Java golden's 9-entry list is the model.
+2. Review-pattern matchers MUST NOT auto-transfer between languages, and no output field may be used to key a check on reviewer identity. The `reviewer_cohort` field under `cross_language` was removed at 2.0.0.
 
 ## Verification
 
 The Java Kobler golden ([`../../test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml)) is the proof-of-concept output: currency conversion, dev-prod toggle, `BidderConfigurationProperties` subclass with `@NotBlank devEndpoint`, 14 hand-written `@Test` methods, 4-file Wiremock IT fixture set, 5 quirks, 9 `java_specific_concerns[]`. A reader following this SKILL produces output that matches byte-for-byte modulo `provenance.read.timestamp_utc` (R4).
 
-Appnexus is the complexity-high spot-check: `iab_category_storage.{storage_kind: yaml-inlined, table_size: ~120, delivery_mechanism: constructor-arg}`; custom `AppnexusExtImp` wrapper; `runtime-isobject-isarray-branching` keywords field; 2-step `batching.rules` (max-imps + pod-grouping). Full Appnexus golden is the canonical Phase 2 fixture.
+Appnexus is the complexity-high spot-check: `iab_category_storage.{storage_kind: yaml-inlined, table_size: 95 (counted per Step 6, not asserted), delivery_mechanism: constructor-arg}`; custom `AppnexusExtImp` wrapper; `runtime-isobject-isarray-branching` keywords field; 2-step `batching.rules` (max-imps + pod-grouping). Full Appnexus golden is the canonical Phase 2 fixture.
 
 ## Sources
 

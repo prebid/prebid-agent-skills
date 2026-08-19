@@ -223,11 +223,6 @@ assertions:
       - alias-with-geoscope-and-default-disabled
       - intra-language-rule-46-normalization
 
-  reviewer_cohort:
-    go_reviewers: []
-    java_reviewers: []
-    cross_language_coordinator: bretg
-
 overall:
   cross_language_state: aligned-with-known-divergence
   blocker_count: 0

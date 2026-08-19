@@ -65,7 +65,7 @@ Minimum viable file set for a Go adapter:
 | `adapters/{bidder}/params_test.go` | Validates `static/bidder-params/{bidder}.json` against schema. |
 | `openrtb_ext/imp_{bidder}.go` | Cross-package POJO struct: `ImpExt{Bidder}` with `json:"X"` tags. |
 | `static/bidder-info/{bidder}.yaml` | Bidder-info YAML (camelCase keys). |
-| `static/bidder-params/{bidder}.json` | Bidder-params JSON Schema (byte-copy from Java per Rule 38). |
+| `static/bidder-params/{bidder}.json` | Bidder-params JSON Schema (materialised from the source spec's `bidder_params_ref` per Rule 38; emitted sha256 must equal `ref.sha256`). |
 
 For multi-file adapters (rare; large codebases like rubicon, appnexus), additional `.go` files at `adapters/{bidder}/` carry helper functions; the convention is one file per logical concern (e.g., `models.go`, `utils.go`). Most ported adapters fit in a single `{bidder}.go` file.
 

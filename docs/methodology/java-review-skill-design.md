@@ -16,7 +16,7 @@ This file is the design contract anchoring the four shipped skills.
 |---|---|---|
 | `pr-triage-java` | Routing, drift checks, CI status, PR-type detection, manifest emission | v1.0.0 (commit `6f53c11`; references/routing-rules.md commit `c618fde`) |
 | `bidder-class-pr-review` | `bidder/{x}/*.java` + `bidder/{x}/*Test.java` + the `it/{X}Test.java` IT class | v1.0.0 (commit `63be93d`; references/bidder-class-index.md commit `c618fde`) |
-| `bidder-config-pr-review` | `bidder-config/{x}.yaml` + `{X}Configuration.java` + the Rule 35 typed-config subclass (in current upstream practice an inner `private static class` inside `{X}Configuration.java`; separate-file `{X}BidderConfigurationProperties.java` is design-permitted but absent from upstream master at SHA `a1fe64e123d6`) | v1.0.0 (commit `63be93d`; references/field-index.md commit `c618fde`) |
+| `bidder-config-pr-review` | `bidder-config/{x}.yaml` + `{X}Configuration.java` + the Rule 35 typed-config subclass (in current upstream practice an inner `private static class` inside `{X}Configuration.java`; separate-file `{X}BidderConfigurationProperties.java` is absent from upstream master (checked at `e3ffd57`; the suffix names two framework classes)) | v1.0.0 (commit `63be93d`; references/field-index.md commit `c618fde`) |
 | `bidder-params-java-pr-review` | `bidder-params/{x}.json` + `ExtImp{X}.java` + `it/openrtb2/{x}/*.json` IT fixtures | v1.0.0 (commit `63be93d`; references/params-type-index.md commit `c618fde`) |
 | `shared/framework-utilities-java.md` (review-side) | Cross-cutting Java conventions reviewers must know | v1.0.0 (commit `63be93d`) — adds reviewer-specific anti-patterns + verbatim policy quotes on top of the read-side analog at `prebid-server-java/read/skills/shared/framework-utilities-java.md` |
 
@@ -39,7 +39,7 @@ Mirror of the Go-side routing rules at `prebid-server-go/review/skills/pr-triage
 | Pattern | Example | Notes |
 |---|---|---|
 | `src/main/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidder.java` | Adapter implementation + helpers (request/response models, custom mappers) co-located with the class |
-| `src/test/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidderTest.java` | Unit tests (JUnit5 + AssertJ; @Test method counts feed into Jacoco gates) |
+| `src/test/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidderTest.java` | Unit tests (JUnit5 + AssertJ; what these cover drives the Jacoco report — see §5.5, which is a review expectation, not a build gate) |
 | `src/test/java/org/prebid/server/it/{X}Test.java` | `…/it/AaxTest.java` | The IT test class. Per-alias IT classes also land here (Adverxo aliases ship `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java`) — each lives at `it/{X}Test.java` where `X` is the TitleCase classroot of the alias name |
 
 ### bidder-config-pr-review
@@ -49,7 +49,7 @@ Mirror of the Go-side routing rules at `prebid-server-go/review/skills/pr-triage
 | `src/main/resources/bidder-config/{x}.yaml` | `bidder-config/aax.yaml` | UNIFIED bidder-info + endpoint + aliases + usersync. Note: Java's YAML is one file per parent; aliases are nested under the parent (`aliases: { adport: ~ }`), inverted from Go's per-alias `aliasOf:` pattern (port-translation Rule 33) |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` | `…/config/bidder/AaxConfiguration.java` | Spring `@Configuration` factory: `@Bean` declaring `BidderConfigurationProperties` + `BidderDeps` via `BidderDepsAssembler` |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfiguration.java` | `…/config/bidder/AdverxoBidderConfiguration.java` | Same role as above; upstream uses BOTH `{X}Configuration.java` AND `{X}BidderConfiguration.java` naming forms (see §5 conventions; the bidder-config skill must accept either) |
-| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | (design-permitted; no upstream example at SHA `a1fe64e123d6`) | The Rule 35 typed-config subclass when shipped as a SEPARATE file — present ONLY when the bidder needs extra config fields beyond the framework default (e.g., `dev-endpoint`, `pixel-url`, `region-prefix`). Subclasses `BidderConfigurationProperties`. Lombok `@Data`. In current upstream practice ALL Rule 35 subclasses are inner `private static class` declarations inside `{X}Configuration.java` (canonical: Kobler, TheTradeDesk, Adnuntius). The separate-file form is reviewer-accepted but unused upstream — when a PR ships it, this skill's activation table covers it |
+| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | (design-permitted; no upstream example at SHA `a1fe64e123d6`) | The Rule 35 typed-config subclass when shipped as a SEPARATE file — present ONLY when the bidder needs extra config fields beyond the framework default (e.g., `dev-endpoint`, `pixel-url`, `region-prefix`). Subclasses `BidderConfigurationProperties`. Lombok `@Data`. In current upstream practice ALL Rule 35 subclasses are inner `private static class` declarations inside `{X}Configuration.java` (canonical: Kobler, TheTradeDesk, Adnuntius). The separate-file form has no upstream instance — when a PR ships it, this skill's activation table covers it |
 
 ### bidder-params-java-pr-review
 
@@ -117,13 +117,13 @@ The following Java framework features have **no Go analog** and demand reviewer 
    - `FileLength` max=2024 (5x Go's typical adapter, but bidders should still fit comfortably)
    - `MultipleVariableDeclarations`, `SimplifyBooleanExpression`, `SimplifyBooleanReturn`, `EqualsHashCode`, `MissingOverride`, `StringLiteralEquality` (`==` on strings)
    - Suppressions for `*Test.java`: `AvoidStaticImport` and `FileLength` off (AssertJ uses static imports heavily; test files can be long)
-   - **Jacoco line-coverage ≥ 90%** per `pom.xml` (D2.3 gate 3). Reviewers must confirm new code is covered.
+   - (Coverage is NOT part of this checkstyle list, and not a build gate at all — see §5.5.)
 
 4. **IT tests as a separate concept.** Go has unit tests (`{bidder}_test.go`) + JSON fixtures under `{bidder}test/exemplary/` and `supplemental/` — one test runner, multiple fixtures. Java has TWO test surfaces:
    - **Unit tests**: `src/test/java/org/prebid/server/bidder/{x}/{X}BidderTest.java` — hand-written `@Test` methods (10–50 typically), AssertJ assertions, Mockito for `JacksonMapper`/`CurrencyConversionService`. Owned by `bidder-class-pr-review`.
    - **Integration tests**: `src/test/java/org/prebid/server/it/{X}Test.java` — extends `IntegrationTest`, uses WireMock stubs, drives the FULL Vert.x server. Each scenario references a 4-file fixture set under `src/test/resources/org/prebid/server/it/openrtb2/{x}/`. The IT class is owned by `bidder-class-pr-review` (it's a Java class with test logic); the 4-file fixtures are owned by `bidder-params-java-pr-review` (they're the schema-exercising payloads). This split forces a **cross-skill concern** when one moves without the other (§7 cross-skill references below).
 
-5. **Rule 35 typed-config subclass.** When a Java bidder needs extra config fields beyond the framework default (the canonical example is Kobler's `dev-endpoint`), upstream creates a subclass `extends BidderConfigurationProperties`. In current upstream practice (SHA `a1fe64e123d6`) the subclass is always an inner `private static class` inside `{X}Configuration.java` (Kobler, TheTradeDesk, Adnuntius); the separate-file `{X}BidderConfigurationProperties.java` form is reviewer-accepted but not used. Go has no equivalent — Go adapters access extras via the `cfg config.Adapter` map directly or a per-adapter extra struct. Reviewers must check:
+5. **Rule 35 typed-config subclass.** When a Java bidder needs extra config fields beyond the framework default (the canonical example is Kobler's `dev-endpoint`), upstream creates a subclass `extends BidderConfigurationProperties`. In current upstream practice (SHA `a1fe64e123d6`) the subclass is always an inner `private static class` inside `{X}Configuration.java` (Kobler, TheTradeDesk, Adnuntius); the separate-file `{X}BidderConfigurationProperties.java` form has no upstream instance. Go has no equivalent — Go adapters access extras via the `cfg config.Adapter` map directly or a per-adapter extra struct. Reviewers must check:
    - The subclass extends `BidderConfigurationProperties` (not `Object`)
    - Lombok `@Data` (not `@Value`) — Spring needs setters
    - Field names match the YAML's snake-case → Spring relaxed-binding (e.g., YAML `dev-endpoint` ↔ Java `devEndpoint`)
@@ -204,17 +204,17 @@ public class {X}Configuration {
 
     @Bean
     BidderDeps {x}BidderDeps(BidderConfigurationProperties {x}ConfigurationProperties,
-                             @NotBlank @Value("${external-url}") String externalUrl,
                              JacksonMapper mapper) {
 
         return BidderDepsAssembler.forBidder(BIDDER_NAME)
                 .withConfig({x}ConfigurationProperties)
-                .usersyncerCreator(UsersyncerCreator.create(externalUrl))
                 .bidderCreator(config -> new {X}Bidder(config.getEndpoint(), mapper))
                 .assemble();
     }
 }
 ```
+
+`forBidder` / `withConfig` / `bidderCreator` / `assemble` is the assembler's complete public surface (`BidderDepsAssembler.java:59,65,70,75` at `e3ffd57`). Earlier revisions of this document showed a `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` link and the `@NotBlank @Value("${external-url}") String externalUrl` parameter that feeds it; `UsersyncerCreator` was deleted upstream in `2880782f` (#4464), and the assembler now derives the `Usersyncer` from the bidder's own YAML `usersync` block (`BidderDepsAssembler.java:127,132-136`). A review skill must flag that chain link as a compile error, not accept it.
 
 Variations:
 - **Filename naming.** Upstream uses BOTH `{X}Configuration.java` (e.g., `AaxConfiguration`, `KoblerConfiguration`) AND `{X}BidderConfiguration.java` (e.g., `AdverxoBidderConfiguration`). The bidder-config skill must accept either form; reviewers should NOT flag the choice but MUST flag when the internal `public class` name does not match the filename (checkstyle `OuterTypeFilename` enforces this, but reviewers should pre-flag because the F-new-79 trap shows port-go2java emits this wrong).
@@ -236,7 +236,11 @@ Variations:
 
 ### 5.5 Jacoco
 
-Line coverage ≥ 90% per `pom.xml` (Jacoco plugin). Per-method coverage not enforced (`MethodLength` checkstyle is separately enforced). New code must clear this gate; reviewers should flag when a PR adds a method without a corresponding test.
+Upstream asks for **90% coverage on the changed code**, and says so twice: `docs/developers/contributing.md:17` ("All pull requests must have 90% coverage in the changed code. Check the code coverage with your IDE or external tools.") and the PR-template checkbox `.github/pull_request_template.md:34` ("Does your test coverage exceed 90%?").
+
+It is a **human requirement, not a build gate.** Jacoco is wired for measurement only: the parent pom declares exactly two executions, `prepare-agent` and `report` (`extra/pom.xml:325-344`), and the root `pom.xml:516-531` adds only `<configuration>` (a `skip` flag plus package excludes). There is no `check` goal and no `<rules>`/`<limit>` block anywhere, and `.github/workflows/pr-java-ci.yml` runs no coverage step — so coverage cannot fail CI. The contrast is deliberate and visible in the same file: checkstyle DOES bind `<goal>check</goal>` (`extra/pom.xml:302`), which is what a real hard gate looks like in this pom.
+
+Consequences for a review skill: never report coverage as "CI will catch it". The reviewer IS the enforcement — flag a PR that adds a method without a corresponding test, and read the coverage number from a local `mvn` run or an IDE rather than expecting a red check. Per-method coverage is not measured at all (`MethodLength` checkstyle is a separate, unrelated rule).
 
 ### 5.6 mvn-checkstyle (canonical ruleset, summarized)
 

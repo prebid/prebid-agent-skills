@@ -130,11 +130,38 @@ class TestPortRulesRenderDrift(unittest.TestCase):
                         missing.append(f"Rule {r.get('id', '?')!r} missing {key!r}")
         self.assertEqual(missing, [], "\n".join(missing))
 
+    def test_rendered_md_states_the_same_rules_version_as_the_yaml(self):
+        """The version must reach the file humans read.
+
+        A port skill author reads the rendered reference; the YAML is tooling
+        input. If only the YAML carries the version, `port_translation_rules_version`
+        in an emitted port report is unverifiable from the corpus the author
+        actually consulted -- and Rule 38 reads two incompatible ways across
+        0.2.0 and 0.3.0, so that question has to be answerable.
+        """
+        version = render_port_rules.load_yaml()["rules_version"]
+        md = Path(render_port_rules.MD_PATH).read_text(encoding="utf-8")
+        head = "\n".join(md.splitlines()[:8])
+        self.assertIn(f"`{version}`", head,
+                      f"rendered port-translation-rules.md does not state rules_version "
+                      f"{version!r} in its first 8 lines; header was:\n{head}")
+
     def test_rules_version_is_phase_2_5(self):
-        """Phase 2.5 bumps rules_version to 0.2.0 (was 0.1.0 with 43 rules)."""
+        """Version tripwire, with its history.
+
+        0.1.0 -> 0.2.0  Phase 2.5, 43 rules -> 46.
+        0.2.0 -> 0.3.0  Rule 38 restated as materialise-from-bidder_params_ref.
+                        The rule count is unchanged; the CONTRACT changed, and a
+                        port skill pinned at 0.2.0 would copy an inline string
+                        that is now non-normative -- so the pin has to move even
+                        though no rule was added.
+
+        NOTE for the open PR that also claims 0.3.0 (Rules 47/48/49): this landed
+        first, so that branch rebases onto 0.4.0.
+        """
         data = render_port_rules.load_yaml()
-        self.assertEqual(data["rules_version"], "0.2.0",
-                         f"Expected rules_version 0.2.0 (Phase 2.5), got {data['rules_version']!r}")
+        self.assertEqual(data["rules_version"], "0.3.0",
+                         f"Expected rules_version 0.3.0 (Rule 38 ref contract), got {data['rules_version']!r}")
 
     def test_render_rejects_unknown_yaml_keys(self):
         """Wave 11b B4 C4: render() must raise ValueError when the YAML grows

@@ -28,14 +28,13 @@ For each `.go` file under `adapters/{xyz}/` (excluding subdirectories — those 
 
 ## LOC counting
 
-For each file, `loc` is computed as the byte-count line count of the file at `provenance.source.resolved_commit`:
+`loc` is a computed value under V4 in [`../../shared/adapter-spec.md`](../../shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): it is the stdout of one command run against the bytes at `provenance.source.resolved_commit`.
 
-1. Read the file as bytes.
-2. Count occurrences of `\n` in the bytes.
-3. If the file does NOT end with `\n`, increment by 1 (count the last unterminated line).
-4. Blank lines, comments, and import blocks all count.
+```bash
+<fetch> | wc -l
+```
 
-This matches the conventional `wc -l` output. Record as `code.file_layout.files[].loc`. Examples:
+Blank lines, comments, and import blocks all count. `wc -l` counts `\n` occurrences, so a file with no terminal newline reports one less than its visible line count — record what the command prints; the terminal-newline question is answered separately by the `bytes` witness on that file's reference. Do not add a correction term, and do not read the number off an editor's gutter. Record as `code.file_layout.files[].loc`. Examples (each reproducible with the command above):
 
 - `adapters/kobler/kobler.go:177` (kobler golden spec).
 - `adapters/optidigital/optidigital.go:71` (optidigital golden spec).

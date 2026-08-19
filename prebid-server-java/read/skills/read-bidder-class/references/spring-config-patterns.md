@@ -19,7 +19,6 @@ The `@Configuration` class is the entry point for Spring's Bean discovery. Canon
 ```java
 @Configuration
 @PropertySource(value = "classpath:/bidder-config/kobler.yaml", factory = YamlPropertySourceFactory.class)
-@ConditionalOnProperty(name = "adapters.kobler.enabled", havingValue = "true")
 public class KoblerConfiguration {
 
     private static final String BIDDER_NAME = "kobler";
@@ -33,20 +32,27 @@ public class KoblerConfiguration {
     @Bean
     BidderDeps koblerBidderDeps(KoblerConfigurationProperties config,
                                 CurrencyConversionService currencyConversionService,
-                                @NotBlank @Value("${external-url}") String externalUrl,
                                 JacksonMapper mapper) {
+
         return BidderDepsAssembler.<KoblerConfigurationProperties>forBidder(BIDDER_NAME)
                 .withConfig(config)
-                .usersyncerCreator(UsersyncerCreator.create(externalUrl))
                 .bidderCreator(cfg -> new KoblerBidder(
                         cfg.getEndpoint(),
                         cfg.getDevEndpoint(),
                         currencyConversionService,
                         mapper))
                 .assemble();
+
     }
 }
 ```
+
+Verbatim from `src/main/java/org/prebid/server/spring/config/bidder/KoblerConfiguration.java` on `prebid/prebid-server-java` (commit `e3ffd57`), minus the inner `KoblerConfigurationProperties` class documented in the next section.
+
+Two shapes that older revisions of this file taught are NOT part of the current API — reject them if a spec or a port emission carries them:
+
+- **`.usersyncerCreator(UsersyncerCreator.create(externalUrl))`.** `UsersyncerCreator` was deleted upstream in `2880782f` (#4464) and no longer exists. `BidderDepsAssembler`'s complete public surface is `forBidder` / `withConfig` / `bidderCreator` / `assemble` (`src/main/java/org/prebid/server/spring/config/bidder/util/BidderDepsAssembler.java:59,65,70,75`). The assembler now derives the usersyncer itself from the bidder's own YAML `usersync` block, via a private helper (`BidderDepsAssembler.java:127,132-136`) — the factory class passes nothing.
+- **`@ConditionalOnProperty` on the class, and a `@Value("${external-url}") String externalUrl` bean parameter.** Neither appears on any class under `src/main/java/org/prebid/server/spring/config/bidder/`; the `externalUrl` parameter existed only to feed the deleted `UsersyncerCreator`. Enablement is expressed in the bidder's YAML, not by a Spring conditional.
 
 ### Extraction rules
 
@@ -55,7 +61,7 @@ public class KoblerConfiguration {
 | `factory_class` | Class declaration `public class <Name>Configuration` (or `<Name>BidderConfiguration` per edge case #19). | Record verbatim. |
 | `factory_method` | The `@Bean` method that returns `BidderDeps`. Method-name convention: `<name>BidderDeps`. | One per factory class. |
 | `property_source_path` | The `value` attribute of `@PropertySource`. | E.g., `classpath:/bidder-config/kobler.yaml`. |
-| `bidder_creator_lambda` | The verbatim lambda body inside `.bidderCreator(cfg -> ...)`. | Preserve indentation, line breaks, constructor-arg order. Round-trip fidelity is load-bearing. |
+| `bidder_creator_lambda` | The verbatim lambda body inside `.bidderCreator(cfg -> ...)`, extracted from the fetched file (`<fetch> \| sed -n '<start>,<end>p'`). | Preserve indentation, line breaks, constructor-arg order. Verbatim field under V1 in [`../../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4): the source file's reference (`sha256` + `bytes`) is what makes the span re-derivable, and the inline encoding is chosen with the V3 probe. Never retype the body from the constructor signature. |
 | `bean_dependencies[]` | The `@Bean` method's parameter list. | Each parameter recorded as `{ name, type, source }`. |
 
 ### Factory class naming variance (edge case #19)
@@ -146,11 +152,18 @@ configuration_properties_class:
 
 #### Appnexus — `platformId` + inlined IAB-categories map
 
+Verbatim from `AppnexusConfiguration.java` at master (note: **no** `@Validated`,
+and the fields are package-private, not `private`):
+
 ```java
-@Validated @Data @EqualsAndHashCode(callSuper = true) @NoArgsConstructor
-public static class AppnexusConfigurationProperties extends BidderConfigurationProperties {
-    private Integer platformId;
-    private Map<String, Long> iabCategories;     // inlined ~120 entries in YAML
+@Data
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+private static class AppnexusConfigurationProperties extends BidderConfigurationProperties {
+
+    Integer platformId;
+
+    Map<Integer, String> iabCategories;
 }
 ```
 
@@ -165,28 +178,45 @@ configuration_properties_class:
       type: Integer
       validations: []
     - name: iabCategories
-      type: "Map<String, Long>"
+      type: "Map<Integer, String>"
       validations: []
   nested_classes: []
   lombok_annotations: [Data, EqualsAndHashCode, NoArgsConstructor]
 ```
 
-The inlined `iabCategories` map carries 120-ish entries directly in `bidder-config/appnexus.yaml`. Read-bidder-class does NOT inventory the map's contents (that is `read-bidder-config`'s job), but it DOES set `iab_category_storage.storage_kind: yaml-inlined` + `yaml_field: iab-categories` + `table_size: ~120` + `delivery_mechanism: constructor-arg` (because the lambda passes `cfg.getIabCategories()` to the bidder constructor).
+The map is keyed by IAB category id and valued by the Appnexus category code —
+`Map<Integer, String>`. Read the declaration; a transposed key/value type
+produces a spec that a Go port turns into the wrong map direction.
+
+The inlined `iabCategories` map lives directly in `bidder-config/appnexus.yaml`. Read-bidder-class does NOT inventory the map's contents (that is `read-bidder-config`'s job), but it DOES set `iab_category_storage.storage_kind: yaml-inlined` + `yaml_field: iab-categories` + `table_size: <counted>` + `delivery_mechanism: constructor-arg` (because the lambda passes `cfg.getIabCategories()` to the bidder constructor). `table_size` comes from the counting command in the SKILL's Step 6 — 95 for appnexus at master — never from an approximate figure.
 
 #### Huaweiads / NextMillennium — nested ExtraInfo
 
 ```java
 @Validated @Data @EqualsAndHashCode(callSuper = true) @NoArgsConstructor
-public static class HuaweiAdsConfigurationProperties extends BidderConfigurationProperties {
-    private ExtraInfo extraInfo;
+private static class HuaweiAdsConfigurationProperties extends BidderConfigurationProperties {
 
-    @Data @NoArgsConstructor
-    public static class ExtraInfo {
-        private String pkgNameConvert;
-        private String closeSiteSelectionByCountry;
-    }
+    @Valid
+    @NotNull
+    private ExtraInfo extraInfo = new ExtraInfo();
+}
+
+@Data
+@NoArgsConstructor
+private static class ExtraInfo {
+
+    List<PkgNameConvert> pkgNameConvert;
+
+    String closeSiteSelectionByCountry;
+
+    String chineseEndpoint;
+    // … four more endpoint fields; see the file for the full list
 }
 ```
+
+Two details the abridged form used to lose: `ExtraInfo` is a **sibling**
+nested class, not nested inside the properties class, and `pkgNameConvert` is
+`List<PkgNameConvert>` — a list of a further nested type, not a `String`.
 
 Spec emits:
 
@@ -197,11 +227,11 @@ configuration_properties_class:
   extra_fields:
     - name: extraInfo
       type: ExtraInfo
-      validations: []
+      validations: ["@Valid", "@NotNull"]
   nested_classes:
     - name: ExtraInfo
       fields:
-        - { name: pkgNameConvert, type: String }
+        - { name: pkgNameConvert, type: "List<PkgNameConvert>" }
         - { name: closeSiteSelectionByCountry, type: String }
   lombok_annotations: [Data, EqualsAndHashCode, NoArgsConstructor]
 ```

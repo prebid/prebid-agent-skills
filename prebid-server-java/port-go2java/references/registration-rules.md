@@ -7,7 +7,7 @@ Phase D1.3 deliverable — alphabetical insertion-position rules for Java-side f
 | File | Edit kind | Sort | Helper |
 |---|---|---|---|
 | `src/main/resources/bidder-config/{bidder}.yaml` | Create | N/A (one file per bidder) | direct write |
-| `src/main/resources/static/bidder-params/{bidder}.json` | Create | N/A (one file per bidder) | `byte_copy` |
+| `src/main/resources/static/bidder-params/{bidder}.json` | Create | N/A (one file per bidder) | `materialize_params` + binary write |
 | `src/main/java/org/prebid/server/bidder/{bidder}/{Bidder}Bidder.java` | Create | N/A | direct write |
 | `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java` | Create | N/A (Spring auto-discovery) | direct write |
 | `src/main/java/org/prebid/server/proto/openrtb/ext/request/{bidder}/ExtImp{Bidder}.java` | Create | N/A | direct write |
@@ -55,7 +55,7 @@ For empire children, EACH child gets its own `{Bidder}{Alias}Test.java` IT class
 
 ## Connection to other rules
 
-- Rule 38 (`byte_copy`): drives the `bidder-params/{bidder}.json` create step.
+- Rule 38 (`materialize_params`): drives the `bidder-params/{bidder}.json` create step. Bytes come from the blob store named by `bidder_params_ref.sha256`, else the Go clone pinned to `ref.resolved_commit`; the emitted file's sha256 must equal `ref.sha256` and its length `ref.bytes`.
 - Rule 46 (`normalize_bidder_name`): Resolves `{bidder}` lowercase form for paths.
 - Rule 33 (`alias_graph_invert`): Builds the `aliases:` block for the parent YAML.
 - [`pr-template-mapping.md`](pr-template-mapping.md): How the upstream `pull_request_template.md` is auto-populated against the spec's behavioral fields.

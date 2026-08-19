@@ -1,0 +1,73 @@
+# Accepted warnings — round-trip-ci.py + lint-port-rules.py
+#
+# Both harnesses exit 2 on warnings and CI maps exit 2 to success. This file
+# is the record of which warnings that covers. `scripts/tests/
+# test_accepted_warnings.py` fails when the live warning set differs from
+# this list in EITHER direction:
+#
+#   - an unlisted warning appears  -> a regression or a new finding to decide on
+#   - a listed warning disappears  -> it was fixed; delete the line
+#
+# Key shape:  <source> | <rule> | <spec> | <topic>
+#
+# `topic` is the finding detail, whitespace-collapsed, with content hashes
+# replaced by <hash> and bare integers by <n>, truncated. Line numbers are
+# deliberately absent, so edits above a finding do not invalidate its entry,
+# and a fixture refresh that rewrites every bidder_params_sha256 does not
+# either.
+#
+# Regenerate after deciding a change is correct:
+#
+#     python3 scripts/tests/test_accepted_warnings.py --write-baseline
+#
+# Review the resulting diff — it is the record of what was accepted.
+#
+# Entries: 47
+
+port-lint | Rule 36 | limelightDigital | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
+port-lint | Rule 36 | teqblaze | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
+port-lint | Rule 36 | vungle | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
+round-trip-ci | R5 | pair/152media | bidder_info.endpoint: MACRO FORM DIVERGENCE: Go uses the canonical Go-template f
+round-trip-ci | R5 | pair/152media | bidder_info.gvl_vendor_id differs across languages
+round-trip-ci | R5 | pair/152media | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/aax | bidder_info.endpoint: Java appends a `?src={{PREBID_SERVER_ENDPOINT}}` query par
+round-trip-ci | R5 | pair/aax | bidder_params_sha256 semantic divergence (semantic): go=<hash> java=<hash> [down
+round-trip-ci | R5 | pair/aax | overall.cross_language_state=divergent-semantic with <n> blocker(s) [downgraded 
+round-trip-ci | R5 | pair/adverxo | bidder_info.endpoint: Same observable URL pattern (both resolve to `.../auction?
+round-trip-ci | R5 | pair/adverxo | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/appnexus | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/appnexus | params.schema_interpretation.combinators_used differs across languages
+round-trip-ci | R5 | pair/beachfront | bidder_info_endpoint_construction: ADR-<n> F1 master sample: multi-endpoint-by-m
+round-trip-ci | R5 | pair/beachfront | bidder_params_sha256 byte-only divergence (byte-only-whitespace-and-key-ordering
+round-trip-ci | R5 | pair/elementaltv | bidder_info.endpoint_compression differs across languages
+round-trip-ci | R5 | pair/elementaltv | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/emxdigital | bidder_info_default_enabled: divergent per dual-spec
+round-trip-ci | R5 | pair/freewheelssp | bidder_params_sha256 byte-only divergence (byte-only-whitespace-and-trailing-new
+round-trip-ci | R5 | pair/freewheelssp | params.schema_interpretation.flexible_types differs across languages
+round-trip-ci | R5 | pair/limelightDigital | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/mediasquare | bidder_info.capabilities differs across languages
+round-trip-ci | R5 | pair/mediasquare | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/optidigital | bidder_info_default_enabled: Go YAML omits `enabled:` (defaults to true). Java Y
+round-trip-ci | R5 | pair/optidigital | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/smarthub | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/teqblaze | bidder_info.endpoint: Both sides declare the parent as non-functional but with d
+round-trip-ci | R5 | pair/teqblaze | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R5 | pair/thetradedesk | bidder_params_sha256 byte-only divergence (byte-only-tabs-vs-spaces): go=<hash> 
+round-trip-ci | R5 | pair/vungle | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>
+round-trip-ci | R6 | go/33across | meta.bidder_name=33across != go_artifacts.package_name=ttx
+round-trip-ci | R6 | go/33across | meta.bidder_name=33across != java_artifacts.bidder_dir basename=ttx
+round-trip-ci | R6 | go/cadent_aperture_mx | go_artifacts.bidder_constant=openrtb_ext.BidderCadentApertureMX != expected open
+round-trip-ci | R6 | go/cadent_aperture_mx | meta.bidder_name=cadent_aperture_mx != go_artifacts.package_name=cadentaperturem
+round-trip-ci | R6 | go/cadent_aperture_mx | meta.bidder_name=cadent_aperture_mx != java_artifacts.bidder_dir basename=emxdig
+round-trip-ci | R6 | java/adkerneladn | meta.bidder_name=adkerneladn != go_artifacts.package_name=adkernelAdn
+round-trip-ci | R6 | java/emxdigital | go_artifacts.bidder_constant=openrtb_ext.BidderCadentApertureMX != expected open
+round-trip-ci | R6 | java/emxdigital | meta.bidder_name=emxdigital != go_artifacts.package_name=cadentaperturemx
+round-trip-ci | R6 | java/generic | meta.bidder_name=generic != java_artifacts.bidder_dir basename=bidder
+round-trip-ci | R7 | go/cadent_aperture_mx | bidder-constant-mismatch (params_test): referenced=openrtb_ext.BidderCadentApert
+round-trip-ci | R7 | go/kobler | bidder-constant-mismatch (params_test): referenced=openrtb_ext.BidderKrushmedia 
+round-trip-ci | R7 | go/kobler | bidder-constant-mismatch quirk: bidder-constant-mismatch-params-test — params_te
+round-trip-ci | R7 | go/kobler | bidder-constant-mismatch quirk: bidder-constant-mismatch-test — kobler_test.go c
+round-trip-ci | R7 | go/kobler | bidder-constant-mismatch warning at adapters/kobler/kobler_test.go:<n>: Builder 
+round-trip-ci | R7 | go/kobler | bidder-constant-mismatch warning at adapters/kobler/params_test.go:<n>: validato
+round-trip-ci | R7 | java/kobler | bidder-constant-mismatch quirk: bidder-constant-mismatch-params-test — params_te
+round-trip-ci | R7 | java/kobler | bidder-constant-mismatch quirk: bidder-constant-mismatch-test — kobler_test.go c

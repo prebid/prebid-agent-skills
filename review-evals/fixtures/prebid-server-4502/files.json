@@ -1,0 +1,11 @@
+[
+  {
+    "filename": "static/bidder-info/appStockSSP.yaml",
+    "status": "added",
+    "additions": 22,
+    "deletions": 0,
+    "changes": 22,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,22 @@\n+aliasOf: \"teqblaze\"\n+endpoint: \"https://#{REGION}#.al-ad.com/pserver\"\n+maintainer:\n+  email: \"sdksupport@app-stock.com\"\n+capabilities:\n+  site:\n+    mediaTypes:\n+      - banner\n+      - video\n+      - native\n+  app:\n+    mediaTypes:\n+      - banner\n+      - video\n+      - native\n+userSync:\n+  redirect:\n+    url: \"https://csync.al-ad.com/pbserver?gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&ccpa={{.USPrivacy}}&gpp={{.GPP}}&gpp_sid={{.GPPSID}}&redirect={{.RedirectURL}}\"\n+    userMacro: \"[UID]\"\n+  iframe:\n+    url: \"https://csync.al-ad.com/pbserverIframe?gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&ccpa={{.USPrivacy}}&gpp={{.GPP}}&gpp_sid={{.GPPSID}}&pbserverUrl={{.RedirectURL}}\"\n+    userMacro: \"[UID]\"\n\\ No newline at end of file"
+  }
+]

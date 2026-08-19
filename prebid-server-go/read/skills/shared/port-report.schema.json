@@ -67,7 +67,7 @@
           },
           "summary": {
             "type": ["string", "null"],
-            "description": "Free-text summary of the application. Examples: 'extracted 120 IAB cat entries from Java YAML, emitted iab_categories.go data file with delivery_mechanism: static-init' (Rule 42 applied); 'Java IT class assets generated' (Rule 33 applied); 'no Site mutation needed (entity_strategies.Site == null on source)' (Rule 5 skipped-not-applicable)."
+            "description": "Free-text summary of the application. Examples: 'extracted 95 IAB cat entries from Java YAML, emitted iab_categories.go data file with delivery_mechanism: static-init' (Rule 42 applied); 'Java IT class assets generated' (Rule 33 applied); 'no Site mutation needed (entity_strategies.Site == null on source)' (Rule 5 skipped-not-applicable)."
           }
         }
       }

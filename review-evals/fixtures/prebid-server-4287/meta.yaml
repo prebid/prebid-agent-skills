@@ -1,0 +1,27 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-4287
+repo: prebid/prebid-server
+pr_number: 4287
+title: 'New Adapter: Optidigital'
+language: go
+base_ref: master
+review_sha: c27f8bd200cfa8b9995a39d50d92ff24bd97efeb
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2025-06-05'
+merge_base_sha: 48e0ba02b7db830ac0f1a7b237658dbb076fa5ed
+head_sha: 8b269edf4d60983aa56831c824fa723657108122
+merge_state: merged
+merged_at: '2025-06-05'
+review_decision: APPROVED -> APPROVED
+outcome: defective
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server/compare/master...c27f8bd200cfa8b9995a39d50d92ff24bd97efeb
+file_count: 12
+truncation:
+  patch_char_limit: 20000
+  truncated_files: []
+  compare_file_limit_hit: false

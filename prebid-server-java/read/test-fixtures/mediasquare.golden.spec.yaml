@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -71,29 +71,11 @@ bidder_info:
 # bytes terminating with `\n}\n`. R2 holds: sha256(decoded scalar) == bidder_params_sha256.
 # Note the Go-side counterpart uses a different formatting for `required` (single-line
 # array vs Java's 4-line block) — bidder_params_sha256 differs across languages, R5 FAILS.
-bidder_params_json: |
-  {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Mediasquare Adapter Params",
-    "description": "A schema which validates params accepted by the Mediasquare adapter",
-    "type": "object",
-    "properties": {
-      "owner": {
-        "type": "string",
-        "minLength": 1,
-        "description": "The owner provided for mediasquare."
-      },
-      "code": {
-        "type": "string",
-        "minLength": 1,
-        "description": "The code provided for mediasquare."
-      }
-    },
-    "required": [
-      "owner",
-      "code"
-    ]
-  }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/mediasquare.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: 946207d8154ae56cf5b08d007b746cf75d4921a9650d2be5d6cf2f1893bf55a8
+  bytes: 527
 bidder_params_sha256: 946207d8154ae56cf5b08d007b746cf75d4921a9650d2be5d6cf2f1893bf55a8
 
 params:
@@ -466,7 +448,7 @@ quirks:
     file: src/main/resources/bidder-config/mediasquare.yaml
     summary: "modifying-vast-xml-allowed: true at line 5 of bidder-config/mediasquare.yaml. Mediasquare's video bid responses may carry rewritable VAST XML; the framework grants this bidder the ability to modify VAST URLs/wrappers post-bid. Default is false; this is the explicit opt-in."
     edge_case_taxon: port-fidelity-divergence
-  # R5 cross-language byte-divergence on bidder_params_json.
+  # R5 cross-language byte-divergence: the two bidder_params_ref sha256 values differ.
   - id: bidder-params-byte-divergence-go
     file: src/main/resources/static/bidder-params/mediasquare.json
     summary: "Java mediasquare.json (527 bytes, sha256=946207d8) formats the `required` array across multiple lines; Go-side same file (515 bytes, sha256=798a251b) uses single-line `[\"owner\", \"code\"]`. Schema content is semantically identical (same properties, same required fields, same descriptions, same minLength constraints) but bytes differ. R5 cross-language byte-equality FAILS for bidder_params_sha256."
@@ -534,7 +516,3 @@ cross_language:
     destination_language: java
     destination_pr: null
     fidelity_review_themes: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

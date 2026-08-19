@@ -1,0 +1,27 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-4614
+repo: prebid/prebid-server
+pr_number: 4614
+title: 'New Adapter: TRUSTX (remove Grid alias)'
+language: go
+base_ref: master
+review_sha: 5cc01b6aca0130a4781439c9a992ecbbd751ea85
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-02-03'
+merge_base_sha: f358e247272b6d2c3efade217e4cafa1b23762cb
+head_sha: 40489ca5492524f11beee950f0ed9910e9a67dff
+merge_state: merged
+merged_at: '2026-02-03'
+review_decision: DISMISSED -> APPROVED -> APPROVED
+outcome: defective
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server/compare/master...5cc01b6aca0130a4781439c9a992ecbbd751ea85
+file_count: 21
+truncation:
+  patch_char_limit: 20000
+  truncated_files: []
+  compare_file_limit_hit: false

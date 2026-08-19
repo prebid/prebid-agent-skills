@@ -29,7 +29,7 @@ python3 scripts/round-trip-ci.py --strict-r3
 
 ## Editing a SKILL.md
 
-- Keep SKILL.md bodies under 500 lines (per Anthropic skill-creator guidance). Use `references/` files for depth.
+- Put depth in `references/`, and keep the SKILL body to what a reviewer applies on every run. There is no line limit: the 500-line rule this file used to carry was sourced to generic authoring guidance and was never measured against this corpus, and enforcing it demanded deleting verified evidence to satisfy an ungrounded number. `scripts/tests/test_skill_budgets.py` now reports each skill's size and approximate token cost instead of gating on it — worth a glance when a body grows, since line count does not track cost (the longest skill is not the most expensive). If a body's growth is a real problem, it shows up in `review-evals/` as worse recall or more false positives, which is the measure that matters.
 - Reference fields by their canonical schema path. The schema lives at `prebid-server-go/read/skills/shared/adapter-spec.md`. Do not invent fields; if the field is missing from the schema, propose an addition first.
 - Use the closed taxonomy at `prebid-server-go/read/skills/shared/behavior-taxonomy.md` for enumerated values. Adding a new enum value requires updating the taxonomy in the same change.
 - Use imperative form ("emit", "parse", "verify") — prefer explanation of *why* over heavy-handed "MUSTs".

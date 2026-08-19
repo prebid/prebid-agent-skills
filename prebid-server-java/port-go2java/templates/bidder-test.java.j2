@@ -22,11 +22,14 @@ Inputs:
       each {method_name: str, summary: str (one-line // comment in body)}
   ctx.javadoc_summary          : str|null
 
-Coverage target: ≥ 90% line-coverage on the corresponding {Bidder}Bidder.java
-(per upstream Quality check checkbox). The template's baseline @Test set is
-sized for the canonical bidder shape; bidders with extra logic (Rule 35
-typed-config branches, custom URL resolution) need additional scenario
-methods to reach 90%.
+Coverage target: ≥ 90% line-coverage on the corresponding {Bidder}Bidder.java.
+Upstream asks contributors to self-certify that level (docs/developers/
+contributing.md:17; the pull_request_template.md checkbox) but does not check
+it — Jacoco declares prepare-agent + report only (extra/pom.xml:325-344), with
+no check goal and no coverage step in pr-java-ci.yml. Measure it locally; a
+green CI run says nothing about it. The template's baseline @Test set is sized
+for the canonical bidder shape; bidders with extra logic (Rule 35 typed-config
+branches, custom URL resolution) need additional scenario methods to reach 90%.
 #}
 {%- macro to_camel(s) -%}
 {%- set parts = s.split('_') -%}{{ parts[0] }}{%- for p in parts[1:] -%}{%- if p -%}{{ p[0]|upper }}{{ p[1:] }}{%- endif -%}{%- endfor -%}

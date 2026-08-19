@@ -11,7 +11,7 @@
 # Schema:    prebid-server-go/read/skills/shared/adapter-spec.schema.json
 # Worked:    prebid-server-go/read/test-fixtures/kobler.golden.spec.yaml
 
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -71,10 +71,17 @@ bidder_info:
   yaml_extra_fields: {}                              # Open map: extra YAML keys not covered above.
   yaml_field_name_quirks: []                         # `endpointCompression` (camelCase) typo regressions etc.
 
-bidder_params_json: |
-  {"$schema":"http://json-schema.org/draft-04/schema#","title":"TODO Adapter Params","type":"object","properties":{},"required":[]}
+# The params file is REFERENCED, never transcribed. Stage the bytes with the
+# fetch-and-hash pipeline in the read-bidder-params SKILL; the digest's input
+# must be the fetch, not anything typed here. An alias points at its PARENT's
+# path -- it has no upstream file of its own.
+bidder_params_ref:
+  path: static/bidder-params/{bidder}.json                # TODO
+  resolved_commit: null                              # TODO: the commit the bytes were read at
+  sha256: null                                       # TODO: sha256 of the fetched bytes
+  bytes: null                                        # TODO: byte length; second witness
 
-bidder_params_sha256: null                           # Populated by orchestrator from the verbatim bytes.
+bidder_params_sha256: null                           # Derived mirror of bidder_params_ref.sha256.
 
 params:
   schema_interpretation:
@@ -249,9 +256,4 @@ cross_language:
     multi_file_layout: false
     custom_unmarshaljson_present: false
   port_lineage: null                                 # { source_language, source_pr, destination_language, destination_pr, fidelity_review_themes }
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg
-
 registry: {}                                         # Open map: ad-hoc tracking sites (e.g., test-application.properties registry on Java).

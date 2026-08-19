@@ -1,0 +1,52 @@
+# prebid/prebid-server#4614 "New Adapter: TRUSTX (remove Grid alias)".
+#
+# Captured at 5cc01b6aca01, the state @bsardo reviewed on 2026-01-30. The
+# earlier @karwaankit32 round (2026-01-09) raised two of these against an
+# ancestor commit; both anchors are still present here.
+#
+# The headline finding is the corpus's only marshal-vs-unmarshal distinction:
+# the maintainers explicitly tolerate swallowing an UNMARSHAL error in this
+# helper and explicitly refuse to tolerate swallowing a MARSHAL error, because
+# a marshal failure in production has meant memory corruption. A check that
+# treats "swallowed error" as one class gets this fixture half wrong in either
+# direction.
+
+pr: prebid/prebid-server#4614
+review_sha: 5cc01b6aca0130a4781439c9a992ecbbd751ea85
+
+expected:
+  - id: trustx-swallowed-marshaling-error
+    path: adapters/trustx/trustx.go
+    anchor: "func setImpExtData(imp *openrtb2.Imp) {"
+    symbol: setImpExtData
+    family: error-handling
+    severity: FAIL
+    source: https://github.com/prebid/prebid-server/pull/4614#discussion_r2747036491
+    why_it_matters: "@bsardo: swallowing the unmarshal error here is fine, swallowing a marshaling error is not -- production marshal failures have signalled shared-memory corruption and must surface."
+
+  - id: trustx-bidmeta-assumes-nonempty-bidder-object
+    path: adapters/trustx/trustx.go
+    anchor: 'if be.Bidder.TrustX.NetworkName != "" {'
+    symbol: getBidMeta
+    family: error-handling
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4614#discussion_r2676303617
+    why_it_matters: The chain dereferences bid.ext.bidder.trustx without establishing it is present, so a response omitting it takes an untested path.
+
+  - id: trustx-redundant-supplemental-fixture
+    path: adapters/trustx/trustxtest/supplemental/test-response.json
+    anchor: "<file>"
+    family: test-coverage
+    severity: INFO
+    source: https://github.com/prebid/prebid-server/pull/4614#discussion_r2747076718
+    why_it_matters: The reviewer found it duplicated coverage the other supplemental cases already give; the author agreed and removed it, so more fixtures was not more quality.
+
+  - id: trustx-params-missing-type-validation-cases
+    path: adapters/trustx/params_test.go
+    anchor: "var invalidParams = []string{"
+    family: test-coverage
+    severity: INFO
+    source: https://github.com/prebid/prebid-server/pull/4614#discussion_r2675535352
+    why_it_matters: The invalid set never exercises a wrong-typed uid or keywords, so the JSON schema's type constraints are asserted by nothing.
+
+forbidden: []

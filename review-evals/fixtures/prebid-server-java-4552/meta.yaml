@@ -1,0 +1,28 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-java-4552
+repo: prebid/prebid-server-java
+pr_number: 4552
+title: 'RTBStack: New Adapter (Port from GO)'
+language: java
+base_ref: master
+review_sha: ed297b01c602da5e75ac4eebe284f7a7d3c1c464
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-08-18'
+merge_base_sha: d8a4f85be5b1d8eea57a15e65cdae109c0ed6a86
+head_sha: ed297b01c602da5e75ac4eebe284f7a7d3c1c464
+merge_state: open
+merged_at: null
+review_decision: CHANGES_REQUESTED
+outcome: defective
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server-java/compare/master...ed297b01c602da5e75ac4eebe284f7a7d3c1c464
+file_count: 12
+truncation:
+  patch_char_limit: 20000
+  truncated_files:
+  - src/test/java/org/prebid/server/bidder/rtbstack/RtbStackBidderTest.java
+  compare_file_limit_hit: false

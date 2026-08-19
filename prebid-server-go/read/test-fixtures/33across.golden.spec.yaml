@@ -1,4 +1,4 @@
-adapter_spec_version: "1.0.0"
+adapter_spec_version: "2.0.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -61,8 +61,13 @@ bidder_info:
 # byte-fidelity. The original file begins with a leading blank line ("\n{\n...") AND has
 # NO terminal newline; it also carries trailing whitespace on multiple lines (preserved).
 # A `|` block would clip the leading blank-line nuance and force a terminal newline,
-# breaking sha256(bidder_params_json) == bidder_params_sha256 (R2 contract).
-bidder_params_json: "\n{\n    \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n    \"title\": \"33Across Adapter Params\",\n    \"description\": \"A schema which validates params accepted by the 33Across adapter\",\n  \n    \"type\": \"object\",\n    \"properties\": {\n      \"productId\": {\n        \"type\": \"string\",\n        \"description\": \"Product type\"\n      },\n      \"siteId\": {\n        \"type\": \"string\",\n        \"description\": \"Site Id\"\n      },\n      \"zoneId\": {\n        \"type\": \"string\",\n        \"description\": \"Zone Id\"\n      }\n    },\n    \"anyOf\": [\n      { \"required\": [\"productId\", \"siteId\"] },\n      { \"required\": [\"productId\", \"zoneId\"] }\n    ]\n  }"
+# breaking byte fidelity. Since 2.0.0 the bytes live in the blob store and R2
+# checks them against bidder_params_ref, so no YAML style choice can lose one.
+bidder_params_ref:
+  path: static/bidder-params/33across.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 7e6b4be5de0aae3391c197f98d6aa172c586eb82769ba5036b9cd43475052cf9
+  bytes: 622
 bidder_params_sha256: 7e6b4be5de0aae3391c197f98d6aa172c586eb82769ba5036b9cd43475052cf9
 
 params:
@@ -341,7 +346,3 @@ cross_language:
     - "Direct encoding/json (json.Marshal/json.Unmarshal) is used in 33across.go alongside jsonutil — mixed style. json.Marshal is used at lines 105, 152, 196 (request body, imp ext, request ext); jsonutil.Unmarshal is used for read paths."
     - "MakeBids uses raw http.StatusXxx checks rather than canonical adapters.IsResponseStatusCodeNoContent / adapters.CheckResponseStatusCodeForErrors — pre-dates the helpers."
   java_specific_concerns: []
-  reviewer_cohort:
-    go: []
-    java: []
-    cross_language_coordinator: bretg

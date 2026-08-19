@@ -20,7 +20,7 @@
 | `limelightDigital` | (Phase 5) Cross-language port pair; alias-empire master (3 alias children) |
 | `mediasquare` | `Bidder<MediasquareRequest>` parameterized request type; 9 co-located helper classes; cross-language port pair |
 | `optidigital` | Cross-language port pair; `default_enabled: false` divergence vs Go |
-| `rubicon` | Most ambitious fixture: 13-arg constructor, 145 hand-written test methods, basic-auth pre-built header, `@Validated` Lombok stack, multi-folder integration test pattern, custom `RubiconBidResponse` |
+| `rubicon` | Most ambitious fixture: 13-arg constructor, 145 hand-written test methods, basic-auth pre-built header, `@Validated` (Spring, not Lombok) plus the Lombok `@Data`/`@EqualsAndHashCode`/`@NoArgsConstructor` stack, multi-folder integration test pattern, custom `RubiconBidResponse` |
 | `smarthub` | (Phase 5) Cross-language port pair; alias-empire parent-canonical case (Attekmi rebrand) |
 | `teqblaze` | (Phase 5) Cross-language port pair; white-label-only-parent case (10 alias children; parent uses placeholder endpoint) |
 | `thetradedesk` | (Phase 5) Cross-language port pair; ADR-007 F4 master sample (`bid_post_processing.macros[]` AUCTION_PRICE replacement) |

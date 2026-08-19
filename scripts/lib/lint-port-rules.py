@@ -51,6 +51,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any, NamedTuple, Optional
@@ -61,6 +62,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GOLDENS_GO = REPO_ROOT / "prebid-server-go" / "read" / "test-fixtures"
 GOLDENS_JAVA = REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures"
 DUAL_SPEC_DIR = REPO_ROOT / "cross-language-pairs"
+SHARED_DIR = REPO_ROOT / "prebid-server-go" / "read" / "skills" / "shared"
+ADAPTER_SPEC_SCHEMA = SHARED_DIR / "adapter-spec.schema.json"
+BEHAVIOR_TAXONOMY_YAML = SHARED_DIR / "behavior-taxonomy.yaml"
 
 RULE_TITLES = {
     5: "Site/App mutation strategy pairing",
@@ -102,16 +106,134 @@ def _normalize_strategy(s: Any) -> Optional[str]:
     return s
 
 
-# Rule 5: valid (go, java) entity_strategy pairings for Site/App scrubbing
-_RULE_5_VALID_PAIRS = {
-    ("copy-then-mutate", "immutable-rebuild"),
-    ("in-place", "immutable-rebuild"),
-    (None, None),
+# ---------------------------------------------------------------------------
+# Rule 5 — entity_strategies pairing semantics
+# ---------------------------------------------------------------------------
+#
+# The pre-fix implementation held three literal (go, java) tuples and
+# normalized only None/'none'. Across the shipped corpus that produced 0
+# passes and 4 warns — the pass arm had never executed, so the rule
+# discriminated nothing. Both warns were model gaps, not divergences:
+#
+#   thetradedesk  Site/App  go=deep-copy-then-mutate  java=immutable-rebuild
+#   vungle        Site      go=replace-with-app-synthesis  java=(same)
+#   vungle        App       go=synthesize-app-replacement  java=(same)
+#
+# `deep-copy-then-mutate ↔ immutable-rebuild` is declared a valid pair by
+# docs/methodology/port-skills-design.md ("Rule 5 mutation strategy pairing"),
+# and the vungle Site/App pair is the ADR-007 F3 master sample, which the
+# same document records as an R5 `pass` because the pattern is symmetric
+# across languages.
+#
+# Enumerating tuples cannot express either case without growing
+# combinatorially, so the model is now two orthogonal properties per
+# strategy:
+#
+#   mutation_class — what the adapter does to the entity, language-neutral.
+#                    Both sides must agree on this: if Go scrubs the entity
+#                    and Java leaves it alone, that is a real divergence.
+#   go_natural / java_natural — whether the strategy is idiomatic in that
+#                    language. Go mutates through pointers; Java rebuilds
+#                    through Lombok builders. A Java spec claiming `in-place`
+#                    is a modelling error even though the class matches.
+#
+# A pair is valid iff the classes agree AND each side's strategy is natural
+# for its own language. That admits every genuine pairing above and still
+# rejects `copy-then-mutate ↔ in-place` (Java never mutates in place) and
+# `copy-then-mutate ↔ none` (Go scrubs, Java does not).
+#
+# The vocabulary is NOT invented here: `test_lint_port_rules.py` asserts this
+# table covers every value in the schema's `$defs.EntityStrategy` enums,
+# every value in the taxonomy's entity_strategies table, and every value used
+# by a shipped golden. A new strategy anywhere fails that test until it is
+# modelled, so the table cannot silently drift from its sources.
+
+class StrategySemantics(NamedTuple):
+    mutation_class: str
+    go_natural: bool
+    java_natural: bool
+
+
+_NO_MUTATION = "no-mutation"
+_MUTATE_PRESERVE = "mutate-preserve"
+_APPEND = "append"
+_REPLACE_NULL = "replace-with-null"
+_APP_SYNTHESIS = "app-synthesis"
+
+STRATEGY_SEMANTICS: dict[str, StrategySemantics] = {
+    # Entity untouched. Normalized to None before lookup; listed for coverage.
+    "none": StrategySemantics(_NO_MUTATION, True, True),
+
+    # Scrub/overwrite fields on the entity, preserving the rest. The language
+    # idiom differs — this is the pairing Rule 5's title describes.
+    "in-place": StrategySemantics(_MUTATE_PRESERVE, True, False),
+    "copy-then-mutate": StrategySemantics(_MUTATE_PRESERVE, True, False),
+    "deep-copy-then-mutate": StrategySemantics(_MUTATE_PRESERVE, True, False),
+    "immutable-rebuild": StrategySemantics(_MUTATE_PRESERVE, False, True),
+
+    # Add a value to a collection if absent (currency lists). Both languages
+    # spell this the same way — kobler and beachfront do it on `Cur`.
+    "append-if-missing": StrategySemantics(_APPEND, True, True),
+
+    # Null the entity out to suppress passthrough. Java-side idiom
+    # (`toBuilder().cur(null)`); rubicon is the shipped example.
+    "replace-with-null": StrategySemantics(_REPLACE_NULL, False, True),
+
+    # ADR-007 F3: destructive Site→App rewrite. Symmetric — both languages
+    # carry the same token, so the pair is identity, not a translation.
+    "replace-with-app-synthesis": StrategySemantics(_APP_SYNTHESIS, True, True),
+    "synthesize-app-replacement": StrategySemantics(_APP_SYNTHESIS, True, True),
+    "synthesize-from-site": StrategySemantics(_APP_SYNTHESIS, True, True),
 }
 
 
+def load_schema_entity_strategy_values() -> set[str]:
+    """Strategy values admitted by `$defs.EntityStrategy` in the JSON Schema.
+
+    Union across the per-entity (Site/App/User) enums. This is the canonical
+    closed vocabulary; the schema position is not yet `$ref`-wired, so nothing
+    else validates a golden's strategy values against it.
+    """
+    with open(ADAPTER_SPEC_SCHEMA, encoding="utf-8") as fp:
+        schema = json.load(fp)
+    node = (schema.get("$defs") or {}).get("EntityStrategy") or {}
+    values: set[str] = set()
+    for prop in (node.get("properties") or {}).values():
+        for v in prop.get("enum") or []:
+            if isinstance(v, str):
+                values.add(v)
+    return values
+
+
+def load_taxonomy_entity_strategy_values() -> set[str]:
+    """Strategy values listed in behavior-taxonomy.yaml's entity_strategies table."""
+    with open(BEHAVIOR_TAXONOMY_YAML, encoding="utf-8") as fp:
+        taxonomy = yaml.safe_load(fp)
+    values: set[str] = set()
+    for enum in taxonomy.get("enumerations") or []:
+        for sub in enum.get("sub_sections") or []:
+            title = str(sub.get("title") or "")
+            if "entity_strategies" not in title:
+                continue
+            for row in sub.get("rows") or []:
+                if not row:
+                    continue
+                cell = str(row[0]).strip().strip("`")
+                if cell:
+                    values.add(cell)
+    return values
+
+
+def _describe(strategy: Optional[str]) -> str:
+    return "none/absent" if strategy is None else repr(strategy)
+
+
 def rule_5_mutation_strategies(go: dict, java: dict) -> list[Finding]:
-    """Verify Site/App entity_strategies pair correctly across languages."""
+    """Verify Site/App entity_strategies pair correctly across languages.
+
+    Scope is Site and App, matching Rule 5's declared `spec_field_driver`
+    (`code.make_requests.mutation.entity_strategies.Site` / `.App`).
+    """
     bidder = _path(go, "meta", "bidder_name") or _path(java, "meta", "bidder_name") or "unknown"
     findings: list[Finding] = []
     for entity in ("Site", "App"):
@@ -119,13 +241,41 @@ def rule_5_mutation_strategies(go: dict, java: dict) -> list[Finding]:
         java_strat = _normalize_strategy(_path(java, "code", "make_requests", "mutation", "entity_strategies", entity))
         if go_strat is None and java_strat is None:
             continue  # not applicable on either side; rule silent
-        if (go_strat, java_strat) in _RULE_5_VALID_PAIRS:
-            findings.append(Finding(5, "pass", bidder,
-                                    f"entity_strategies.{entity} pair OK: go={go_strat!r} java={java_strat!r}"))
-        else:
+
+        unknown = [s for s in (go_strat, java_strat) if s is not None and s not in STRATEGY_SEMANTICS]
+        if unknown:
             findings.append(Finding(5, "warn", bidder,
-                                    f"entity_strategies.{entity} pair unexpected: go={go_strat!r} java={java_strat!r}; "
-                                    f"per Rule 5, expect copy-then-mutate↔immutable-rebuild (or in-place↔immutable-rebuild)"))
+                f"entity_strategies.{entity} uses unmodelled strategy value(s) {unknown!r}; "
+                f"not in the canonical `$defs.EntityStrategy` vocabulary — either fix the "
+                f"golden or add the value to the schema and STRATEGY_SEMANTICS"))
+            continue
+
+        go_sem = STRATEGY_SEMANTICS[go_strat] if go_strat else STRATEGY_SEMANTICS["none"]
+        java_sem = STRATEGY_SEMANTICS[java_strat] if java_strat else STRATEGY_SEMANTICS["none"]
+
+        if go_sem.mutation_class != java_sem.mutation_class:
+            findings.append(Finding(5, "warn", bidder,
+                f"entity_strategies.{entity} class divergence: go={_describe(go_strat)} "
+                f"({go_sem.mutation_class}) vs java={_describe(java_strat)} "
+                f"({java_sem.mutation_class}); per Rule 5 both sides must do the same thing "
+                f"to the entity, differing only in language idiom"))
+            continue
+
+        unnatural = []
+        if go_strat is not None and not go_sem.go_natural:
+            unnatural.append(f"go={go_strat!r} is not a Go idiom")
+        if java_strat is not None and not java_sem.java_natural:
+            unnatural.append(f"java={java_strat!r} is not a Java idiom")
+        if unnatural:
+            findings.append(Finding(5, "warn", bidder,
+                f"entity_strategies.{entity} idiom mismatch ({go_sem.mutation_class}): "
+                + "; ".join(unnatural)
+                + "; per Rule 5 Go mutates through pointers and Java rebuilds through builders"))
+            continue
+
+        findings.append(Finding(5, "pass", bidder,
+            f"entity_strategies.{entity} pair OK ({go_sem.mutation_class}): "
+            f"go={_describe(go_strat)} java={_describe(java_strat)}"))
     return findings
 
 
@@ -394,6 +544,10 @@ def main(argv=None) -> int:
                         help="Treat warnings as errors (exit 1 instead of 2)")
     parser.add_argument("--quiet", action="store_true",
                         help="Print only the summary, not per-finding output")
+    parser.add_argument("--json", action="store_true",
+                        help="Emit machine-parseable JSON instead of human-readable text "
+                             "(same shape as round-trip-ci.py --json: findings[] carry "
+                             "rule/spec/severity/detail)")
     args = parser.parse_args(argv)
 
     try:
@@ -414,13 +568,14 @@ def main(argv=None) -> int:
         if not _path(java, "meta", "is_alias"):
             java_parents[bidder] = java
 
-    print("=== Port-rule lint (Phase 2.6) ===")
-    print(f"Pairs scanned: {len(pairs)}")
-    if pairs:
-        print(f"  bidders: {', '.join(p[0] for p in pairs)}")
-    if load_errors:
-        print(f"Load errors: {len(load_errors)} (rule_id=0 fail entries)")
-    print()
+    if not args.json:
+        print("=== Port-rule lint (Phase 2.6) ===")
+        print(f"Pairs scanned: {len(pairs)}")
+        if pairs:
+            print(f"  bidders: {', '.join(p[0] for p in pairs)}")
+        if load_errors:
+            print(f"Load errors: {len(load_errors)} (rule_id=0 fail entries)")
+        print()
 
     # Seed findings with any per-file load errors from discover_pairs.
     all_findings: list[Finding] = list(load_errors)
@@ -432,6 +587,35 @@ def main(argv=None) -> int:
     for f in all_findings:
         counts.setdefault(f.rule_id, {"pass": 0, "warn": 0, "fail": 0})
         counts[f.rule_id][f.severity] += 1
+
+    total_fail_json = sum(c["fail"] for c in counts.values())
+    total_warn_json = sum(c["warn"] for c in counts.values())
+    if args.json:
+        exit_code = 1 if total_fail_json else (
+            (1 if args.strict else 2) if total_warn_json else 0)
+        print(json.dumps({
+            "pairs_scanned": len(pairs),
+            "bidders": [p[0] for p in pairs],
+            "rules": {
+                str(rule_id): counts.get(rule_id, {"pass": 0, "warn": 0, "fail": 0})
+                for rule_id in sorted(RULE_TITLES)
+            },
+            # `rule` is stringified as "Rule N" so the key shape matches
+            # round-trip-ci.py --json findings and one baseline checker can
+            # consume both without special-casing.
+            "findings": [
+                {"rule": f"Rule {f.rule_id}", "spec": f.bidder,
+                 "severity": f.severity, "detail": f.message}
+                for f in all_findings
+            ],
+            "summary": {
+                "pass": sum(c["pass"] for c in counts.values()),
+                "warn": total_warn_json,
+                "fail": total_fail_json,
+                "exit_code": exit_code,
+            },
+        }, indent=2))
+        return exit_code
 
     if not args.quiet:
         for f in all_findings:

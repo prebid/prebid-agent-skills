@@ -13,7 +13,7 @@ Extracts a structured Adapter Specification from a single Java bidder in `prebid
 - A YAML spec following the canonical schema at `../../../../prebid-server-go/read/skills/shared/adapter-spec.md` (the schema is byte-identical between Go and Java suites — only the populated language-specific blocks differ).
 - A Markdown summary keyed off the same spec for human review.
 
-The spec carries `source_language: java`. Cross-language fields (`bidder_params_json`, `bidder_params_sha256`, `bidder_info.capabilities`, `params.schema_interpretation`, `bidder_info.gvl_vendor_id`) are byte-comparable to the Go-side spec for the same bidder. Language-specific fields populate `cross_language.java_specific_concerns[]` (dense) and `cross_language.go_specific_concerns[]` / `cross_language.go_artifacts.*` as path-stub hints only.
+The spec carries `source_language: java`. Cross-language fields (`bidder_params_ref.sha256`, `bidder_params_ref.bytes`, `bidder_info.capabilities`, `params.schema_interpretation`, `bidder_info.gvl_vendor_id`) are byte-comparable to the Go-side spec for the same bidder — each side measures its own digest before the comparison. Language-specific fields populate `cross_language.java_specific_concerns[]` (dense) and `cross_language.go_specific_concerns[]` / `cross_language.go_artifacts.*` as path-stub hints only.
 
 Downstream consumers: the future `port-java2go/` skill suite (Phase D), `diff-spec` (deferred), and any review skill that wants prior-spec comparison.
 
@@ -28,7 +28,7 @@ Downstream consumers: the future `port-java2go/` skill suite (Phase D), `diff-sp
 | `--out=<path>` (synonym `--output=<path>`) | no | stdout | Output file path. Filename convention: `{bidder}-{shortsha}.spec.{yaml,md}`. The `--output` synonym matches the spelling used in [`../../../../docs/methodology/end-to-end-flow.md`](../../../../docs/methodology/end-to-end-flow.md); both names resolve to the same flag. |
 | `--run-id=<id>` | no | `${FULL_LOOP_RUN_ID}` env var if set | Teal-flow convention (Phase D1.5). When set (and neither `--persist` nor `--out` is given), output path defaults to `.tmp/full-loop/{run-id}/java/{bidder}.yaml` — the canonical handoff location the upcoming `port-go2java` / `port-java2go` skills look for the source spec. Format: ISO-like timestamp + short hash, e.g., `2026-05-04T1430Z-a3f9`. The `.tmp/` directory is `.gitignore`d (Wave 5). |
 | `--format=<set>` | no | `yaml,md` | Comma-separated subset of `yaml,md`. |
-| `--fixture-mode=<mode>` | no | `count` | `count`, `summary`, `verbatim`. |
+| `--fixture-mode=<mode>` | no | `count` | `count`, `summary`, `verbatim`. Every mode records `{ filename, sha256, bytes }` per fixture — `summary` and `verbatim` add to that pair, never replace it — and both numbers come from the fetch pipe, not from an inlined copy (V1/V2 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)). |
 
 See [Output](#output) below for emission rules; the contract is the language-neutral form documented in the Go orchestrator's `## Output` section, with the Java-specific paths swapped in.
 
@@ -93,7 +93,7 @@ Algorithm:
 3. If found:
    - Set `meta.is_alias = true`, `meta.alias_of = <parent>`.
    - Read `adapters.{parent}.aliases.{xyz}` — if it's `~` (null) or `{}`, the alias inherits everything; record `aliases[].config_form: tilde_inherit`. If it's a populated block, record `config_form: full_block` and capture the override fields.
-   - Emit a MINIMAL spec: full `meta`, full `bidder_info` (resolved by parent's YAML + the alias's overrides), `bidder_params_json` copied from the parent file (which is the same file at `static/bidder-params/{parent}.json`), AND populate Java-specific alias test assets:
+   - Emit a MINIMAL spec: full `meta`, full `bidder_info` (resolved by parent's YAML + the alias's overrides), and a `bidder_params_ref` whose `path` is the PARENT's params file (`src/main/resources/static/bidder-params/{parent}.json`) with `sha256` + `bytes` produced by running `read-bidder-params-java` Step 1 against that path — never copied out of the parent's spec (V2 in [`../../../../prebid-server-go/read/skills/shared/adapter-spec.md`](../../../../prebid-server-go/read/skills/shared/adapter-spec.md#verbatim-capture-and-computed-values-v1-v4)). AND populate Java-specific alias test assets:
      - `aliases[].test_assets.it_class` (e.g., `AdportTest`)
      - `aliases[].test_assets.fixture_dir` (e.g., `src/test/resources/org/prebid/server/it/openrtb2/adport/`)
      - `aliases[].test_assets.fixture_file_count` (typically 4)
@@ -121,7 +121,7 @@ Each reader's output is independent — no inter-reader coupling. The orchestrat
 
 Assembly steps, in order:
 
-1. Initialize the spec scaffold with `adapter_spec_version: "1.0.0"` (SemVer string per ADR-001 D7; or `"1.1.0"` when emitting ADR-007 F1/F3/F4/F5 patterns), `spec_kind: prebid-server-adapter`, `source_language: java`.
+1. Initialize the spec scaffold with `adapter_spec_version: "2.0.0"` (SemVer string per ADR-001 D7), `spec_kind: prebid-server-adapter`, `source_language: java`. 2.0.0 is what a new read emits, and it is not optional: the version requires `bidder_params_ref`, and a spec carrying a ref while declaring an earlier version claims conformance to a required-field set it does not have. Earlier versions are still readable — a spec emitted by an older skill build declares one of them — but nothing new should be written at one.
 2. Populate `provenance.*` (source, ref, resolved_commit, fetch_method, skill_versions, timestamp_utc, operator).
 3. Populate `meta.*` (bidder_name, alias data from Step 4, java_artifact_version from Step 3, module_path_major: null).
 4. Merge each reader's fragment under its owned section. Resolve overlaps with reader-of-record precedence (e.g., `read-bidder-class` is the sole writer of `make_requests.mutation`; if `read-bidder-config` accidentally produces `mutation` data, the orchestrator drops it and emits `reader-fragment-collision` warning).
@@ -176,7 +176,7 @@ The output spec feeds the future `port-java2go/` skill (Phase D; will live under
 - `port-java2go` reverses Rules 33 (alias inversion), 34 (YAML unification), 36 (4-file split → httpCalls), 37 (per-alias IT class deletion — Go aliases need no test files).
 - `port-java2go` consumes `cross_language.java_specific_concerns[]` to flag fidelity issues that don't translate cleanly to Go.
 
-The spec's `bidder_params_sha256` is byte-equal to a Go-side spec for the same bidder. R5 (cross-language structural parity) enforces this.
+The spec's `bidder_params_ref.sha256` and `bidder_params_ref.bytes` are equal to a Go-side spec's for the same bidder. R5 (cross-language structural parity) enforces this, on two independently measured digests.
 
 When invoked via `pr-triage` for prior-spec comparison, the orchestrator's output at `read/specs/{bidder}/latest.yaml` is loaded as `prior_spec` and reviewer skills can flag behavioral regressions.
 
@@ -204,10 +204,10 @@ The Java orchestrator MIRRORS the Go orchestrator's 7-step workflow but with the
 | Per-alias tests | Aliases need NO test files (parent's tests cover them) | Each alias requires its own IT class + 4-file fixture set + `test-application.properties` entries. Step 4 gathers `test_assets`. |
 | Bidder constants | Go has `openrtb_ext.Bidder{Xyz}` constants — `bidder-constant-mismatch` warning checks this | Java has NO constants. Equivalent check: `@PropertySource` path matches YAML name; factory method name matches YAML name. Surfaces as `class-yaml-name-mismatch`. |
 | Module versioning | `go.mod` carries `module github.com/prebid/prebid-server/v4` (major in path) | `pom.xml` carries `<version>3.41.0-SNAPSHOT</version>`. Step 3 reads it. |
-| Reviewer cohort | bsardo, SyntaxNode, hhhjort | CTMBNara, AntoxaAntoxic, EmilNadimanov, sangarbe, osulzhenko (wholly disjoint per Phase 2 findings). `cross_language.reviewer_cohort.cross_language_coordinator: bretg` is the sole shared reviewer. NO review-pattern transfer between languages. |
+| Review expectations | per-repo | Derived from each repo's own upstream source, config, and merged-PR corpus. NO review-pattern transfer between languages, and no check keyed on reviewer identity — see `shared/review-pattern-transfer-policy.md`. The `reviewer_cohort` field under `cross_language` was removed at `adapter_spec_version` 2.0.0; do not emit it. |
 | Skill output sharing | The schema is identical; the populated blocks differ. Both languages read the SAME `adapter-spec.md`, `behavior-taxonomy.md`, `port-translation-rules.md`. |
 
-The reviewer cohort disjointness is documented at `../../README.md` (Java suite README). When a port pair is read in both languages, the dual-spec assertions enforce R5 cross-language structural parity. Review-pattern matchers MUST be encoded per-language and never transferred — the master plan explicitly bans this.
+The reviewer cohort disjointness is documented at [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md) §1, with the consumer-facing summary at [`../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md`](../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md) §8.4. When a port pair is read in both languages, the dual-spec assertions enforce R5 cross-language structural parity. Review-pattern matchers MUST be encoded per-language and never transferred — the master plan explicitly bans this.
 
 ## Verification
 
@@ -221,7 +221,7 @@ read-bidder-orchestrator --bidder=kobler --source-mode=local --format=yaml | yq 
 
 Round-trip determinism (R4): re-running on the same commit produces a spec idempotent under `yaml.safe_load → safe_dump` (R4 asserts dump2 == dump3). The orchestrator targets byte-identical reproduction modulo the two provenance read fields; R4 enforces idempotency, not raw-byte equality against a stored golden.
 
-Cross-language R5 verification: read Kobler in BOTH suites; compare `bidder_params_sha256` (must equal `125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685`), `bidder_info.capabilities` (banner-only on both), `params.schema_interpretation` (single `test: boolean` field), `bidder_info.gvl_vendor_id` (0 on both).
+Cross-language R5 verification: read Kobler in BOTH suites and compare the two outputs — `bidder_params_ref.sha256` and `bidder_params_ref.bytes` (each measured by that side's Step 1 command; equality between the two stdouts is the check, and no value is transcribed from this document into a spec), `bidder_info.capabilities` (banner-only on both), `params.schema_interpretation` (single `test: boolean` field), `bidder_info.gvl_vendor_id` (0 on both).
 
 Manual inspection corpus (full v1, 10 Java goldens): `kobler, optidigital, mediasquare, appnexus, rubicon, generic, aax, huaweiads, 152media (alias), elementaltv (rename)`. After a successful read of each, manually verify the Markdown summary captures the bidder's behavior precisely enough to recreate the adapter and port to Go without referencing source.
 

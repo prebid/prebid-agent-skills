@@ -211,7 +211,6 @@ R5_ADVISORY_DIVERGENT_KEYS: Tuple[Tuple[Optional[str], str], ...] = (
     ("meta.alias_metadata",                     "alias_metadata"),
     (None,                                      "lifecycle_rename"),
     (None,                                      "port_lineage"),
-    (None,                                      "reviewer_cohort"),
     (None,                                      "test_fixture_cost"),
 )
 
@@ -225,19 +224,37 @@ def normalize_endpoint_macros(s: Any) -> Any:
     Recognized forms:
       - ``{{.X}}``     → ``{{X}}``   (Go html/text template)
       - ``${X}``       → ``{{X}}``   (Java property reference / shell-style)
-      - ``#{X}``       → ``{{X}}``   (Spring Expression Language)
+      - ``#{X}#``      → ``{{X}}``   (deploy-time token, e.g. teqblaze ``#{REGION}#``)
+      - ``{X}``        → ``{{X}}``   (Java since the Vert.x UriTemplate migration)
       - ``{{X}}``      → ``{{X}}``   (already canonical)
 
     ``%s`` (printf positional) is intentionally NOT normalized — it has no
     name to canonicalize against, so any pair using ``%s`` on one side and
     ``{{X}}`` on the other will surface as a real divergence (and should be
     documented in dual-spec or fixed in the corpus).
+
+    Two fixes here, both about forms this function met after it was written:
+
+    ``{X}`` is the form every Java endpoint uses since upstream #4444
+    (2026-07-20) moved macro substitution to Vert.x ``UriTemplate``. Without it a
+    refreshed Java golden reading ``{Host}`` against a Go ``{{.Host}}`` normalizes
+    to two different strings and reports a MACRO FORM DIVERGENCE that is purely
+    syntactic. It changes no verdict on the corpus as it stands, because the Java
+    goldens were read before that migration and still carry double-brace — which
+    is exactly why it has to land BEFORE they are refreshed rather than after.
+
+    The deploy-time form is ``#{X}#`` with a trailing ``#``, and the old pattern
+    consumed only the leading one, leaving ``{{REGION}}#``. That can never equal a
+    canonical form, so the normalization silently did not normalize.
     """
     if not isinstance(s, str):
         return s
-    s = re.sub(r"\{\{\.(\w+)\}\}", r"{{\1}}", s)   # Go {{.X}} → {{X}}
-    s = re.sub(r"\$\{(\w+)\}",      r"{{\1}}", s)  # Java ${X} → {{X}}
-    s = re.sub(r"#\{([^}]+)\}",     r"{{\1}}", s)  # Spring EL #{X} → {{X}}
+    s = re.sub(r"\{\{\.(\w+)\}\}", r"{{\1}}", s)      # Go {{.X}} → {{X}}
+    s = re.sub(r"\$\{(\w+)\}", r"{{\1}}", s)           # Java ${X} → {{X}}
+    s = re.sub(r"#\{([^}]+)\}#?", r"{{\1}}", s)         # deploy-time #{X}# → {{X}}
+    # Single brace last, and only when not already part of a doubled pair -- a
+    # bare `\{(\w+)\}` would rewrite the inside of `{{X}}` to `{{{X}}}`.
+    s = re.sub(r"(?<!\{)\{(\w+)\}(?!\})", r"{{\1}}", s)  # Java {X} → {{X}}
     return s
 
 
