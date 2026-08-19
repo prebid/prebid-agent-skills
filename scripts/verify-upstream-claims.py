@@ -253,9 +253,18 @@ def check_sites(manifest: dict) -> list[Result]:
                 out.append(Result(claim["id"], FAIL, f"site missing: {site['path']}"))
                 continue
             text = p.read_text(encoding="utf-8", errors="replace")
-            if site["assert"] not in text:
+            hits = text.count(site["assert"])
+            if hits == 0:
                 out.append(Result(claim["id"], FAIL,
                                   f"{site['path']} no longer contains {site['assert']!r}"))
+            elif hits > 1:
+                # An anchor that matches many times is a word, not an anchor: the
+                # claim's substance can be inverted while the string survives
+                # elsewhere in the file, and the gate stays green. Quote enough
+                # context to be unique.
+                out.append(Result(claim["id"], FAIL,
+                                  f"{site['path']}: anchor {site['assert']!r} matches {hits} times; "
+                                  f"an anchor must match exactly once or it cannot go stale"))
             else:
                 out.append(Result(claim["id"], PASS, f"{site['path']} anchored"))
     return out

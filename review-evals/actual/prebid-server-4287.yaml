@@ -1,0 +1,166 @@
+# Transcribed from a run of the prebid-server-go review skills against
+# review-evals/fixtures/prebid-server-4287/files.json (the review-SHA snapshot).
+# pr-triage: PR type new-adapter; all three downstream skills activated.
+# Registration completeness: all 10 expected new-adapter files present.
+# Drift checks (run once against master @0ba3523): bidder-info OK, bidder-params OK,
+# adapter-code OK, module-path OK (v4).
+
+fixture: prebid-server-4287
+
+files_scanned: 12
+
+run:
+  skills: [pr-triage, adapter-code-pr-review, bidder-info-pr-review, bidder-params-pr-review]
+  skills_commit: 232855b
+  model: claude-opus-5
+  date: 2026-08-18
+
+findings:
+  - path: adapters/optidigital/optidigital.go
+    anchor: 'Method: "POST",'
+    symbol: MakeRequests
+    severity: WARN
+    family: framework-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 3 — "Method: Typically http.MethodPost
+      (use the net/http constant, not the string literal "POST")"; the same rule
+      is restated in shared/framework-utilities.md RequestData Fields. Severity
+      is not stated by the check; rated WARN (ASK) on the ladder because it is a
+      change request an author can satisfy or vouch. Upstream prevalence at
+      @0ba3523: 201 adapter dirs use the literal, 71 use the constant.
+
+  - path: adapters/optidigital/optidigital.go
+    anchor: 'requestData := &adapters.RequestData{'
+    symbol: MakeRequests
+    severity: WARN
+    family: framework-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 3 (Headers) — the RequestData literal
+      omits Headers entirely, so no Content-Type: application/json is sent.
+      Stated severity: WARN ("some upstream servers reject the request body
+      without an explicit Content-Type header").
+
+  - path: adapters/optidigital/optidigital.go
+    anchor: 'BidType: openrtb_ext.BidTypeBanner,'
+    symbol: MakeBids
+    severity: WARN
+    family: bid-type-resolution
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 4. Bid type is a bare constant with no
+      bid.MType switch, no response-ext path and no imp lookup. The multiformat
+      FAIL does not apply: exemption 2 holds — capabilities declare exactly one
+      media type (banner) across app+site+dooh. The "acceptable" carve-out
+      requires the constant to be operator-vouched (adrino's inline
+      "// our adserver supports only native ads"); this fallback is silent and
+      unvouched, which framework-utilities directs to flag. Rated WARN per the
+      "when uncertain between WARN and FAIL, default to WARN" guard, since with
+      only banner declared the constant cannot mis-type a declared media type.
+
+  - path: adapters/optidigital/optidigital.go
+    anchor: 'bidResponse.Currency = response.Cur'
+    symbol: MakeBids
+    severity: INFO
+    family: framework-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 6 directs guarding the assignment with
+      `if response.Cur != ""` so an empty response currency does not overwrite
+      the "USD" default. Rated INFO rather than WARN because PBS core already
+      normalizes it — exchange/bidder.go:316-318 sets Currency to defaultCurrency
+      when it is empty — and 93 upstream adapters assign it unguarded against 13
+      that guard. Recorded because the check directs it; flagged in the run
+      report as an over-strict check.
+
+  - path: adapters/optidigital/optidigitaltest/exemplary/banner.json
+    anchor: '"mockBidRequest": {'
+    symbol: null
+    severity: WARN
+    family: test-coverage
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Exemplary Test Data Changed step 6 (context coverage). The YAML
+      declares three platforms (app, site, dooh) but the single exemplary fixture
+      carries no site, app or dooh object in mockBidRequest, so no declared
+      platform is exercised. Stated severity: WARN.
+
+  - path: adapters/optidigital/optidigital_test.go
+    anchor: 'adapterstest.RunJSONBidderTest(t, "optidigitaltest", bidder)'
+    symbol: TestJsonSamples
+    severity: WARN
+    family: test-coverage
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Supplemental Test Data Changed step 3 + shared/framework-utilities
+      "Required supplemental coverage". The suite has 204, 400 and 500 fixtures
+      but no malformed imp.ext fixture, no invalid imp.ext.bidder fixture, no
+      malformed-response-body fixture and no unsupported-media-type fixture, so
+      four of the six required error paths for a new adapter are unexercised.
+
+  - path: adapters/optidigital/optidigital_test.go
+    anchor: 'Endpoint: "https://pbs.optidigital.com/bidder/openrtb2",'
+    symbol: TestJsonSamples
+    severity: INFO
+    family: framework-idiom
+    skill: adapter-code-pr-review
+    note: >-
+      shared/framework-utilities "Test fixture conventions" — fixtures and the
+      test runner should use a canonical fake endpoint (https://fake.endpoint.test/bid
+      or http://localhost:8080); the real production endpoint is used here and in
+      every httpCalls[].expectedRequest.uri, which breaks the suite when the
+      domain moves. No severity is stated by the convention; recorded at INFO.
+
+  - path: adapters/optidigital/optidigitaltest/supplemental/no_response.json
+    anchor: '"status": 204'
+    symbol: null
+    severity: WARN
+    family: test-coverage
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Supplemental Test Data Changed step 4 — "Flag as WARN if a
+      supplemental test has no expected errors (it may belong in exemplary/)".
+      The 204 fixture declares neither expectedMakeRequestsErrors nor
+      expectedMakeBidsErrors. Recorded because the check directs it; flagged in
+      the run report as a probable misfire, since a 204 no-content fixture
+      correctly produces no error and canonically lives in supplemental/.
+
+  - path: static/bidder-info/optidigital.yaml
+    anchor: 'dooh:'
+    symbol: null
+    severity: WARN
+    family: mediatype-config-drift
+    skill: bidder-info-pr-review
+    note: >-
+      Workflow: Capabilities Changed step 6 (DOOH-specific cross-check) plus
+      step 4 (DOOH scrutiny). capabilities.dooh.mediaTypes: [banner] is declared
+      but no exemplary fixture exercises a dooh context, so nothing demonstrates
+      the bidder has DOOH supply. Stated severity: WARN — reviewer may ask for
+      DOOH to be dropped from capabilities.
+
+  - path: openrtb_ext/imp_optidigital.go
+    anchor: 'type ImpExtOptidigital struct {'
+    symbol: ImpExtOptidigital
+    severity: INFO
+    family: naming-conventions
+    skill: bidder-params-pr-review
+    note: >-
+      Workflow: Struct Declaration Changed step 1. The canonical type name for a
+      new adapter is ExtImp{Bidder}; this new file uses the legacy
+      ImpExt{Bidder} form. Stated severity: INFO (recommend converting).
+
+  - path: openrtb_ext/imp_optidigital.go
+    anchor: 'PublisherID  string `json:"publisherId"`'
+    symbol: null
+    severity: INFO
+    family: cross-file-consistency
+    skill: bidder-params-pr-review
+    note: >-
+      Step 3 PR-level companion check, which this skill records UNCONDITIONALLY
+      whenever openrtb_ext/imp_{bidder}.go and files under adapters/{bidder}/ are
+      both in the diff. Inbound tags (publisherId, placementId, divId,
+      pageTemplate) match static/bidder-params/optidigital.json exactly; the
+      adapter forwards the request unmodified so there is no outbound payload
+      struct to diverge. Verification of any mismatch is owned by
+      adapter-code-pr-review. Flagged in the run report as noise-by-design.

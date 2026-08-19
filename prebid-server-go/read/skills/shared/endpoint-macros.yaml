@@ -20,24 +20,44 @@
 # corresponding `provenance.warnings[].type: endpoint-placeholder-unresolved`
 # entry that documents the deviation.
 
-# Macros known to prebid-server-go's macros.EndpointTemplateParams (subset;
-# canonical). Used in URL strings as `{{.X}}` form (Go html/text template).
+# The COMPLETE field set of prebid-server-go's macros.EndpointTemplateParams,
+# used in URL strings as `{{.X}}` form (Go text/template). Not a subset: R8
+# admits a placeholder only if it appears here, so a missing field is a false
+# WARN on a legitimate endpoint and an extra name silently admits a macro that
+# aborts config.New at startup (template field lookup is case-sensitive).
+#
+# This list is claim-registered as `go.macros.endpoint-template-params` in
+# scripts/upstream-claims.yaml and pinned to it by
+# scripts/tests/test_endpoint_macro_registry.py. The manifest is checked against
+# upstream weekly; this file is checked against the manifest on every run.
+#
+# It previously carried seven names that are not fields upstream (BidderCode,
+# PartnerID, RegionID, SiteID, SourceID, TagID, Username -- zero uses in any
+# golden or any upstream bidder-info file) while omitting thirteen real ones,
+# which is why R8 warned on the genuine {{.TokenID}}, {{.SourceId}} and
+# {{.SupplyId}}.
 go_template_macros:
   - AccountID
   - AdUnit
-  - BidderCode
+  - AppDomain
+  - Bundle
   - GvlID
   - Host
+  - ImpID
   - MediaType
+  - NetworkId
   - PageID
-  - PartnerID
+  - PartnerId
   - PlacementID
   - PublisherID
-  - RegionID
-  - SiteID
-  - SourceID
-  - TagID
-  - Username
+  - Region
+  - SeatID
+  - SiteDomain
+  - SourceId
+  - SspID
+  - SspId
+  - SupplyId
+  - TokenID
   - ZoneID
 
 # Java template macros used in URL replacement. Form: `{{X}}` (no leading dot)

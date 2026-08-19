@@ -45,6 +45,23 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # Shallow checkouts of both upstream repos so the claim verifier can
+      # re-derive every registered claim from source. This is the networked half
+      # of the upstream-claims gate; round-trip-ci.yml runs the hermetic half.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: prebid/prebid-server
+          ref: master
+          path: .upstream/go
+          fetch-depth: 1
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: prebid/prebid-server-java
+          ref: master
+          path: .upstream/java
+          fetch-depth: 1
+
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -71,6 +88,19 @@ jobs:
           # failure (empty scan set / unusable source). This step never fails;
           # the exit code is enforced after the issue has been filed.
           echo "exit=$EXIT" >> $GITHUB_OUTPUT
+
+      # A registered claim that no longer holds upstream is the same class of
+      # event as golden drift: the skills are asserting something false to
+      # reviewers. Non-blocking here so it cannot mask the drift report; the
+      # exit code is folded into the final enforcement step.
+      - name: Verify upstream claims against source
+        id: claims
+        continue-on-error: true
+        run: |
+          set +e
+          python3 scripts/verify-upstream-claims.py --upstream \
+            --go-checkout .upstream/go --java-checkout .upstream/java
+          echo "exit=$?" >> $GITHUB_OUTPUT
 
       - name: Upload drift-report artifact
         if: always()

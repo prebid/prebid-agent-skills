@@ -67,6 +67,29 @@ class TestManifestIntegrity(unittest.TestCase):
             self.assertIn(claim["kind"], vuc.CHECKERS, f"{claim['id']} unknown kind")
             self.assertTrue(claim["sites"], f"{claim['id']} has no sites")
 
+    def test_every_site_anchor_matches_exactly_once(self):
+        """An anchor that matches many times is a word, not an anchor.
+
+        An independent audit inverted two claims -- rewrote "multiformat is the
+        DEFAULT" to "OPT-IN", and neutered every "checkstyle" mention -- and the
+        gate stayed green, because both anchors were bare words that survived
+        elsewhere in the file. 13 of 28 anchors had that property.
+        """
+        import yaml
+        doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+        weak = []
+        for claim in doc["claims"]:
+            for site in claim.get("sites") or []:
+                path = REPO_ROOT / site["path"]
+                if not path.is_file():
+                    continue
+                hits = path.read_text(encoding="utf-8").count(site["assert"])
+                if hits != 1:
+                    weak.append(f"{claim['id']} -> {site['path']}: {hits} matches for {site['assert']!r}")
+        self.assertEqual([], weak,
+                         "anchors must match exactly once; quote enough context to be unique:\n  "
+                         + "\n  ".join(weak))
+
     def test_claim_ids_are_unique(self):
         import yaml
         doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))

@@ -41,7 +41,7 @@ claims:
       making every PR that used one of them a false FAIL.
     sites:
       - path: prebid-server-go/review/skills/shared/framework-utilities.md
-        assert: "NetworkId"
+        assert: "| `{{.NetworkId}}` | `NetworkId` |"
 
   - id: go.macros.usersync-privacy
     kind: struct_fields
@@ -55,7 +55,7 @@ claims:
     why: User-sync URL review keys on this set; it is separate from the endpoint set.
     sites:
       - path: prebid-server-go/review/skills/shared/framework-utilities.md
-        assert: "GPPSID"
+        assert: "| `{{.GPPSID}}` | `GPPSID` | GPP Section ID list |"
 
   # ------------------------------------------------------- Go: alias semantics
   - id: go.alias.gvl-never-inherited
@@ -81,7 +81,7 @@ claims:
     why: Startup abort, not a style nit; the suite had no check for it at all.
     sites:
       - path: prebid-server-go/review/skills/bidder-info-pr-review/SKILL.md
-        assert: "white label only"
+        assert: "`validateAliases` (`config/bidderinfo.go:461-463`) returns"
 
   # ----------------------------------------------------------- Go: multiformat
   - id: go.multiformat.defaults-true
@@ -96,7 +96,7 @@ claims:
       exempt the exact case it exists to catch (Teal #4765).
     sites:
       - path: prebid-server-go/review/skills/shared/framework-utilities.md
-        assert: "IsMultiFormatSupported"
+        assert: "Multiformat is the DEFAULT. Do NOT open the YAML looking for an opt-in."
 
   # ------------------------------------------------------- Go: framework calls
   - id: go.adapters.status-helpers
@@ -107,7 +107,7 @@ claims:
     why: Cited as the canonical 204 check in adapter review.
     sites:
       - path: prebid-server-go/review/skills/shared/framework-utilities.md
-        assert: "adapters.IsResponseStatusCodeNoContent"
+        assert: "| `adapters.IsResponseStatusCodeNoContent(resp)` |"
 
   - id: go.adapterstest.runjsonbiddertest
     kind: symbol
@@ -156,7 +156,7 @@ claims:
       fails. The severity was right; the mechanism sentence was wrong.
     sites:
       - path: prebid-server-go/review/skills/shared/framework-utilities.md
-        assert: "validateAdapterEndpoint"
+        assert: "it does NOT silently resolve to empty string"
 
   - id: go.params.no-draft-pin
     kind: enforcement
@@ -170,7 +170,7 @@ claims:
       observe what it claims to watch.
     sites:
       - path: prebid-server-go/review/skills/pr-triage/SKILL.md
-        assert: "gojsonschema"
+        assert: "it still delegates to `gojsonschema`"
 
   - id: go.coverage.is-warning-only
     kind: enforcement
@@ -213,7 +213,7 @@ claims:
       existed, and called HttpUtil.validateUrl deprecated when it is not.
     sites:
       - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
-        assert: "validateUrl"
+        assert: "delegates to `HttpUtil.parseUrl(String)`"
 
   - id: java.whitelabelonly.is-go-only
     kind: absence
@@ -224,7 +224,7 @@ claims:
     why: The key exists only in Go; a Java check keyed on it can never fire.
     sites:
       - path: prebid-server-java/review/skills/bidder-config-pr-review/references/field-index.md
-        assert: "white-label"
+        assert: "**(no Java binding — key does not exist)**"
 
   # ------------------------------------------------------ Java: assembler + Uri
   - id: java.assembler.bidder-creator
@@ -236,7 +236,7 @@ claims:
     why: Part of the real 4-member assembler surface that replaced the phantom chain call.
     sites:
       - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
-        assert: "bidderCreator"
+        assert: "public surface `forBidder`, `withConfig`, `bidderCreator`"
 
   - id: java.uri.replace-macro
     kind: symbol
@@ -250,7 +250,7 @@ claims:
       still documented String.replace("{{TOKEN}}", ...), which no adapter uses.
     sites:
       - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
-        assert: "replaceMacro"
+        assert: "Hand-rolled `configEndpoint.replace(\"{{TOKEN}}\", value)`"
 
   - id: java.macros.no-double-brace-framework-names
     kind: absence
@@ -265,7 +265,7 @@ claims:
       framework macro rather than banning the sequence outright.
     sites:
       - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
-        assert: "single-brace"
+        assert: "**zero** double-brace occurrences"
 
   # ------------------------------------------------------ Java: config defaults
   - id: java.adapter-defaults.modifying-vast-xml-allowed
@@ -291,7 +291,7 @@ claims:
     why: Same default-true semantics as Go; both sides fail open if a guard assumes false.
     sites:
       - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
-        assert: "multiformat"
+        assert: "Java `adapters.{x}.ortb.multiformat-supported: true`"
 
   # ------------------------------------------------------------ Java: CI truth
   - id: java.jacoco.has-no-coverage-gate
@@ -320,7 +320,7 @@ claims:
       trap could never happen.
     sites:
       - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
-        assert: "excludes"
+        assert: "**Spring config classes are not measured at all.**"
 
   - id: java.checkstyle.binds-to-validate-phase
     kind: enforcement
@@ -334,7 +334,7 @@ claims:
       model cannot over-swing and delete the pre-flag checks.
     sites:
       - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
-        assert: "validate"
+        assert: "**Checkstyle IS a real gate — keep every pre-flag in this section.**"
 
   - id: java.checkstyle.import-order-bottom
     kind: enforcement
@@ -358,7 +358,7 @@ claims:
       fired on every correct PR.
     sites:
       - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
-        assert: "Java 25"
+        assert: "idiomatic modern Java (Java 25"
 
   # ------------------------------------------------------------ Java: lifecycle
   - id: java.magnite.replaced-rubicon
@@ -371,7 +371,7 @@ claims:
       Skills still cite Rubicon* classes as canonical examples.
     sites:
       - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
-        assert: "Magnite"
+        assert: "`MagniteConfiguration.java`'s nested `MagniteConfigurationProperties`"
 
   - id: java.rubicon-config.removed
     kind: path
@@ -380,5 +380,5 @@ claims:
     expect_exists: false
     why: Paired with the claim above so a revert upstream is visible too.
     sites:
-      - path: prebid-server-java/review/skills/bidder-config-pr-review/SKILL.md
-        assert: "Magnite"
+      - path: prebid-server-java/review/skills/pr-triage-java/references/routing-rules.md
+        assert: "Java PR #4573 (`rubicon` → `magnite`, merged 2026-07-27)"

@@ -28,66 +28,43 @@ scripts/tests/test_score_review_evals.py   self-tests for the scorer
 
 ## The corpus
 
-Nine fixtures, 30 expected findings, 6 named non-findings.
+Nine fixtures. Six Go, three Java; six carry defects a maintainer raised, three
+are PRs where the correct outcome is no blocking finding.
 
-| Fixture | Lang | Outcome | Expected | Forbidden | Check families |
-|---|---|---|---|---|---|
-| `prebid-server-4765` | Go | defective | 12 | — | bid-type-resolution, mediatype-config-drift, request-mutation, error-handling, stdlib-idiom, canonical-artifacts, pr-scope, perf |
-| `prebid-server-java-4552` | Java | defective | 3 | — | framework-idiom, upstream-api-drift |
-| `prebid-server-4287` | Go | defective | 4 | — | framework-idiom, test-coverage, bid-type-resolution |
-| `prebid-server-4614` | Go | defective | 4 | — | error-handling, test-coverage |
-| `prebid-server-java-4428` | Java | defective | 4 | — | naming-conventions, framework-idiom, error-handling |
-| `prebid-server-4502` | Go | defective | 2 | — | endpoint-config |
-| `prebid-server-4216` | Go | clean | 1 | 1 | maintainer-metadata / naming-conventions |
-| `prebid-server-4211` | Go | clean | 0 | 2 | endpoint-config, naming-conventions |
-| `prebid-server-4651` | Go | clean | 0 | 3 | endpoint-config, maintainer-metadata, pr-scope |
+| Fixture | Repo |
+|---|---|
+| `prebid-server-4765` | prebid/prebid-server |
+| `prebid-server-4287` | prebid/prebid-server |
+| `prebid-server-4614` | prebid/prebid-server |
+| `prebid-server-4502` | prebid/prebid-server |
+| `prebid-server-4216` | prebid/prebid-server |
+| `prebid-server-4211` | prebid/prebid-server |
+| `prebid-server-4651` | prebid/prebid-server |
+| `prebid-server-java-4552` | prebid/prebid-server-java |
+| `prebid-server-java-4428` | prebid/prebid-server-java |
 
-`outcome: clean` means **no blocking finding is correct** — not that the PR was
-silent. `prebid-server-4216` carries one non-blocking INFO and one forbidden
-verdict on the same three-line file, so a reviewer cannot score well on it by
-saying nothing *or* by flagging everything.
+Which fixtures carry which defects, how many findings each expects, and which
+check families they cover live in [`CORPUS.md`](CORPUS.md) — **do not read it
+while recording a run.** Both of the first two recorded runs reported that this
+README had already told them the family vocabulary and the per-fixture counts
+before they scanned a single file, which is contamination by the document that
+is required reading. It does not do that any more.
 
 ### Forbidden findings are the point of the clean fixtures
 
-Recall alone rewards a reviewer that flags everything. A `forbidden` entry is a
-verdict the maintainers explicitly ruled out, in writing, on that PR:
+Recall alone rewards a reviewer that flags everything. A `forbidden` entry records
+a verdict the maintainers explicitly ruled out, in writing, on that PR -- a
+construct someone raised in review and the repo adjudicated as acceptable, then
+merged unchanged. A run that re-raises it is not being thorough; it is
+relitigating a settled question at the author's expense.
 
-- `#4211` — `http://` endpoint: *"While https is strongly preferred, http is
-  still permitted."* And an underscore in the bidder name: *"I guess we have to
-  allow underscores server-side."* Both raised in review, both adjudicated
-  permitted, merged unchanged.
-- `#4216` — the six-character-prefix guideline, raised and waived in the same
-  comment because the collision is with the very bidder being aliased.
-- `#4651` — five aliases in one PR, all on `http://`, none declaring
-  `maintainer.email`; verified endpoint-by-endpoint and approved the same day.
+The ceiling is 0 and it is enforced from day one, unlike the recall floor.
 
-That last one is deliberately in tension with a *correct* finding elsewhere:
-`teal-alias-shipped-with-new-adapter` (#4765) says an alias must not ride along
-with a brand-new adapter. `#4651` says a bundle of aliases from one parent org
-is routine. A reviewer that cannot tell those apart fails one fixture or the
-other, whichever way it is calibrated. That is the instrument working.
-
-### Fixtures are captured at the *review* SHA
-
-A merged PR's head is the state **after** the findings were fixed. Scoring
-against it measures nothing. Every fixture is captured at the commit the
-maintainers actually reviewed (`original_commit_id` on the review comment),
-recorded in `meta.yaml` as `review_sha` alongside the merged `head_sha`.
-
-For `#4765` that is `6367a39cc311`, the original submission. Its findings were
-raised across three rounds over five weeks, but every one of the twelve anchors
-is present in that single snapshot — the later rounds surfaced defects that
-were already there.
-
-### Truncation
-
-`capture_fixture.py` caps each file's patch at **20,000 characters**, cut at
-the last complete diff line, and appends a `[TRUNCATED …]` marker naming the
-character count omitted. Truncated files are listed in
-`meta.yaml → truncation.truncated_files`. **No file in the current corpus is
-truncated**; the largest fixture is 117 KB of `files.json`.
-
----
+> The specific verdicts are deliberately NOT listed here. This file is required
+> reading for anyone producing a run, so anything it names is disclosed to the
+> thing being measured. The entries live in each fixture's `expected.yaml`, which
+> a run must not read. If you are recording a run, stop at this paragraph -- you
+> have everything you need from `## Output format` below.
 
 ## How to capture a new fixture
 
@@ -276,8 +253,8 @@ Be specific about this. It is a narrow instrument and it is easy to over-read.
    construction, and no score here will ever surface it.
 
 4. **`forbidden` is scoped to its own PR.** *"http is permitted"* was settled on
-   #4211 in 2025 for a Limelight alias. It is not a timeless rule, and it is not
-   a licence to stop looking at endpoint schemes.
+   one PR, at one time, for one adapter shape. It is not a timeless rule, and it
+   is not a licence to stop looking at that construct.
 
 5. **It does not measure the skills end to end.** It scores a *transcription* of
    what a run emitted. Routing (did `pr-triage` hand the file to the right

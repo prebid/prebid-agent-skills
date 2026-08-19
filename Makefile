@@ -98,14 +98,13 @@ verify-claims:
 # Networked: needs local checkouts of both upstream repos. This is the check that
 # catches upstream moving under the skills; --check-sites cannot see that.
 verify-claims-upstream:
-	@if [ -z "$(GO)" ] && [ -z "$(JAVA)" ]; then \
-		echo "Usage: make verify-claims-upstream GO=/path/to/prebid-server JAVA=/path/to/prebid-server-java"; \
+	@if [ -z "$(GO)" ] || [ -z "$(JAVA)" ]; then \
+		echo "Both checkouts are required: a half-run skips every claim for the"; \
+		echo "missing repo and would otherwise report success."; \
 		exit 1; \
 	fi
-	@python3 scripts/verify-upstream-claims.py --upstream \
-		$(if $(GO),--go-checkout $(GO),) $(if $(JAVA),--java-checkout $(JAVA),); \
-	EXIT=$$?; \
-	if [ $$EXIT -eq 0 ] || [ $$EXIT -eq 2 ]; then exit 0; else exit $$EXIT; fi
+	python3 scripts/verify-upstream-claims.py --upstream \
+		--go-checkout $(GO) --java-checkout $(JAVA)
 
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +

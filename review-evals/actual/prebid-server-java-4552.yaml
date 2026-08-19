@@ -1,0 +1,119 @@
+fixture: prebid-server-java-4552
+
+# 12 changed files in the fixture; all 12 examined. RtbStackBidderTest.java is
+# truncated by the capture (3506 of 23441 patch chars omitted); the visible
+# portion was reviewed.
+files_scanned: 12
+
+run:
+  skills: [pr-triage-java, bidder-class-pr-review, bidder-config-pr-review, bidder-params-java-pr-review]
+  skills_commit: c72e1f4042fcffd15e0fa57f6e03d2eea1b085c4
+  model: claude-opus-5
+  date: 2026-08-18
+
+# pr-triage-java: PR type = new-adapter (all four strict conditions hold:
+# RtbStackBidder.java added, bidder-config/rtbstack.yaml added,
+# bidder-params/rtbstack.json added, a new top-level adapters.rtbstack.enabled
+# line in test-application.properties). Step 5e completeness: all 12 canonical
+# files present. Step 5i IT-registry: adapters.rtbstack.endpoint=
+# http://localhost:8090/rtbstack-exchange matches the convention and the IT
+# class' urlPathEqualTo("/rtbstack-exchange") -- PASS. Step 5g white-label
+# heuristic does NOT fire (RtbStackBidder.java is 222 lines; endpoint
+# registrable domain rtb-stack.com does not match admixer.net, the only other
+# adapter in that family). Step 5k pre-checkstyle: no added Java line exceeds
+# 120 chars, no snake_case @Test names, no trailing whitespace, no star imports,
+# no banned imports, all public class names match their filenames, import groups
+# follow the inverted 3-group order -- all PASS.
+#
+# Upstream verification (prebid/prebid-server-java master @e3ffd57, the state
+# this still-open PR must merge into):
+#   - spring/config/bidder/util/ contains only BidderDepsAssembler.java,
+#     BidderInfoCreator.java, UsersyncerUtil.java; UsersyncerCreator.java is
+#     gone and `.usersyncerCreator(` has zero occurrences under src/main/java
+#   - `String.replace("{{`  has zero occurrences under src/main/java
+#   - only 6 bidder-config YAMLs contain `{{`, all of them uid-macro values
+#   - GVL 511 = "Admixer EU GmbH"; admixer.yaml already declares vendor-id 511
+#     and maintainer-email prebid@admixer.net, so the GVL-name/bidder-name
+#     mismatch is covered by the workflow's "credible relationship" tolerance
+#     and is NOT emitted
+#   - endpoint POST (region substituted) returned HTTP 204; cert
+#     CN=*.rtb-stack.com valid to 2026-12-16 -- reachability + SSL PASS
+#   - bid-type resolution switches on bid.getMtype() first and errors on an
+#     unresolved type; YAML declares banner/video/native/audio for app and site
+#     and every one has a Java return path -- makeBids steps 5+6 PASS
+findings:
+  - path: src/main/java/org/prebid/server/spring/config/bidder/RtbStackConfiguration.java
+    anchor: '.usersyncerCreator(UsersyncerCreator.create(externalUrl))'
+    symbol: rtbstackBidderDeps
+    severity: FAIL
+    family: upstream-api-drift
+    note: >-
+      bidder-config-pr-review Workflow: Assembler Chain Surface step 1 /
+      F-new-57b. BidderDepsAssembler's complete public surface is forBidder,
+      withConfig, bidderCreator, assemble; UsersyncerCreator and the
+      .usersyncerCreator(...) chain link were deleted in 2880782f (PR #4464).
+      Verified absent at master @e3ffd57. Both the import and the call are a
+      compile error against the branch this PR targets. The Usersyncer is
+      derived internally from configProperties.getUsersync() -- and
+      bidder-config/rtbstack.yaml declares no usersync block at all, so no
+      usersync wiring belongs in this class.
+
+  - path: src/main/java/org/prebid/server/bidder/rtbstack/RtbStackBidder.java
+    anchor: '.replace(REGION_MACRO, region)'
+    symbol: buildEndpointUrl
+    severity: FAIL
+    family: framework-idiom
+    note: >-
+      bidder-class-pr-review Workflow: makeHttpRequests Changed step 10 plus
+      Constructor/Builder Changed step 8. Endpoint macro substitution must go
+      through org.prebid.server.util.Uri (Uri.of(...).replaceMacro(NAME,
+      value).expand(), RFC 6570 via Vert.x UriTemplate, adopted in bc0409271 /
+      PR #4444), and the macro constants must hold BARE variable names. This
+      adapter stores the endpoint as a String and hand-rolls
+      String.replace(...) over the braced constants REGION_MACRO="{{Region}}",
+      SSP_ID_MACRO="{{SspID}}", ZONE_ID_MACRO="{{ZoneID}}",
+      PARTNER_ID_MACRO="{{PartnerId}}". Zero files under src/main/java at
+      master @e3ffd57 use String.replace("{{...", and a braced macro constant is
+      called out as FAIL by both workflows. Recorded as one finding: the braced
+      constants and the String.replace chain are the same defect at two anchors.
+
+  - path: src/main/resources/bidder-config/rtbstack.yaml
+    anchor: 'endpoint: https://{{Region}}-adx-admixer.rtb-stack.com/pbs?ssp={{SspID}}&endpoint={{ZoneID}}&client={{PartnerId}}'
+    symbol: null
+    severity: FAIL
+    family: framework-idiom
+    note: >-
+      bidder-config-pr-review Workflow: Endpoint Changed step 5. Endpoint
+      template macros are single-brace RFC 6570 since PR #4444; a double-braced
+      {{TOKEN}} in an endpoint: value is pre-#4444 syntax and is rated FAIL by
+      the workflow. At master @e3ffd57 the only `{{` in bidder-config/*.yaml are
+      the 6 bidder-owned uid-macro values, which the rule explicitly exempts.
+      Paired with the RtbStackBidder finding above; fixing one without the other
+      leaves the macros unresolved.
+
+  - path: src/main/resources/static/bidder-params/rtbstack.json
+    anchor: '"tagId": {'
+    symbol: null
+    severity: WARN
+    family: port-fidelity
+    note: >-
+      bidder-params-java-pr-review Workflow: Schema Property Changed step 5
+      ("Constraints appropriate"). tagId is a string listed in required[] but
+      declares no minLength: 1, so an empty string passes validation. The
+      workflow rates a missing minLength on a required string field WARN and
+      names it the canonical port-fidelity bug (the aax cid/crid case). route,
+      the other required string, does declare minLength: 1.
+
+  - path: src/test/resources/org/prebid/server/it/openrtb2/rtbstack/test-auction-rtbstack-request.json
+    anchor: src/test/resources/org/prebid/server/it/openrtb2/rtbstack/test-auction-rtbstack-request.json
+    symbol: null
+    severity: INFO
+    family: it-fixture-format
+    note: >-
+      bidder-params-java-pr-review Step 3, PR-level task item 3 (F-new-49):
+      "When the PR includes IT fixture files, this skill unconditionally records
+      an INFO flagging that trailing whitespace before ']' is a known
+      Lombok-template emit defect." Transcribed because the directive is
+      unconditional. Doubt recorded: none of the four rtbstack IT fixtures
+      contains any trailing whitespace, so on this PR the check has nothing to
+      point at.

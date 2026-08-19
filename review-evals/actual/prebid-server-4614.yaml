@@ -1,0 +1,115 @@
+# Transcribed from a run of the prebid-server-go review skills against
+# review-evals/fixtures/prebid-server-4614/files.json (the review-SHA snapshot).
+# pr-triage: PR type mixed (new-adapter for trustx + adapter-modification on the
+# existing static/bidder-info/trustx.yaml, which drops `aliasOf: grid`).
+# All three downstream skills activated. Registration completeness: all present.
+# Drift checks (master @0ba3523): bidder-info OK, bidder-params OK, adapter-code OK,
+# module-path OK (v4).
+
+fixture: prebid-server-4614
+
+files_scanned: 21
+
+run:
+  skills: [pr-triage, adapter-code-pr-review, bidder-info-pr-review, bidder-params-pr-review]
+  skills_commit: 232855b
+  model: claude-opus-5
+  date: 2026-08-18
+
+findings:
+  - path: adapters/trustx/trustx.go
+    anchor: 'extJSON, err := jsonutil.Marshal(ext) if err == nil { imp.Ext = extJSON }'
+    symbol: setImpExtData
+    severity: FAIL
+    family: error-handling
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeRequests Changed step 6 and shared/framework-utilities
+      "Marshaling Error Safety". The jsonutil.Marshal error is discarded — the
+      write is guarded by `if err == nil` and setImpExtData returns nothing, so a
+      marshal failure is invisible to MakeRequests and the request goes out with
+      the un-updated ext. The skill's stated severity for an ignored/discarded
+      Marshal error is FAIL; marshal failures signal shared-memory corruption and
+      must surface.
+
+  - path: adapters/trustx/trustx.go
+    anchor: 'Message: fmt.Sprintf("Unsupported MType: %v", bid.MType),'
+    symbol: getTypedBid
+    severity: WARN
+    family: error-handling
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 4, final bullet — "Error messages that fail
+      to resolve bid type MUST include the bid.ImpID for log diagnosability". The
+      error names the MType but not the impression, so a production log cannot
+      identify which bid was dropped. No severity is attached to that bullet;
+      rated WARN (ASK) on the ladder.
+
+  - path: adapters/trustx/trustx.go
+    anchor: 'headers.Set("X-Openrtb-Version", "2.6")'
+    symbol: getHeaders
+    severity: WARN
+    family: openrtb-version-drift
+    skill: adapter-code-pr-review
+    note: >-
+      bidder-info-pr-review Cross-Field Validation rule 12 (cross-check owned by
+      adapter-code-pr-review). The adapter advertises OpenRTB 2.6 on the wire but
+      static/bidder-info/trustx.yaml declares no `openrtb: version: "2.6"` block
+      — the post-diff YAML has endpoint, maintainer, capabilities and userSync
+      only — so PBS will send 2.5-shaped requests behind a 2.6 header. Stated
+      severity: WARN.
+
+  - path: adapters/trustx/trustx.go
+    anchor: 'bidderResponse := adapters.NewBidderResponseWithBidsCapacity(1)'
+    symbol: MakeBids
+    severity: INFO
+    family: perf
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: MakeBids Changed step 5 — the stated form is
+      NewBidderResponseWithBidsCapacity(len(request.Imp)); a fixed capacity of 1
+      under-allocates for the multi-imp case the adapter's own
+      exemplary/multiple-imp-types.json exercises. Allocation sizing only, no
+      behavioral effect; recorded at INFO.
+
+  - path: adapters/trustx/trustxtest/supplemental/test-response.json
+    anchor: "<file>"
+    symbol: null
+    severity: WARN
+    family: test-coverage
+    skill: adapter-code-pr-review
+    note: >-
+      Workflow: Supplemental Test Data Changed step 4 plus Workflow: Test Data
+      Accuracy step 1. The fixture is a 200 happy-path case with
+      expectedBidResponses and no expectedMakeRequestsErrors /
+      expectedMakeBidsErrors, so it belongs in exemplary/ (where
+      simple-web-video.json already covers the same mtype-2 path), and the name
+      "test-response" describes nothing about what it tests.
+
+  - path: adapters/trustx/trustxtest/supplemental/no-content-response.json
+    anchor: "<file>"
+    symbol: null
+    severity: WARN
+    family: test-coverage
+    skill: adapter-code-pr-review
+    note: >-
+      Same rule (Supplemental Test Data Changed step 4) firing on the three
+      remaining error-free supplemental fixtures: no-content-response.json
+      (204 -> empty expectedBidResponses), invalid-imp-ext.json and
+      invalid-bid-ext.json (both assert graceful degradation with no error).
+      Recorded once for the class because the skill groups supplemental fixtures
+      into a single task. Flagged in the run report as a probable misfire — each
+      exercises a genuine error path whose correct outcome is no error.
+
+  - path: openrtb_ext/imp_trustx.go
+    anchor: 'Uid      int             `json:"uid"`'
+    symbol: ExtImpTrustX
+    severity: INFO
+    family: cross-file-consistency
+    skill: bidder-params-pr-review
+    note: >-
+      Step 3 PR-level companion check, recorded UNCONDITIONALLY whenever
+      openrtb_ext/imp_{bidder}.go and adapters/{bidder}/ files are both in the
+      diff. Inbound tags (uid, keywords) match static/bidder-params/trustx.json;
+      the adapter forwards the request without a separate outbound payload
+      struct. Flagged in the run report as noise-by-design.

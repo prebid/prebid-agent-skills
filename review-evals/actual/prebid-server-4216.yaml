@@ -1,0 +1,44 @@
+# Transcribed from a run of the prebid-server-go review skills against
+# review-evals/fixtures/prebid-server-4216/files.json (the review-SHA snapshot).
+# pr-triage routed the single file to bidder-info-pr-review (PR type: alias-only).
+
+fixture: prebid-server-4216
+
+files_scanned: 1
+
+run:
+  skills: [pr-triage, bidder-info-pr-review]
+  skills_commit: 232855b
+  model: claude-opus-5
+  date: 2026-08-18
+
+findings:
+  - path: static/bidder-info/admaticde.yaml
+    anchor: 'aliasOf: "admatic"'
+    symbol: null
+    severity: WARN
+    family: alias-inheritance
+    skill: bidder-info-pr-review
+    note: >-
+      Workflow: Alias Adapter Added step 8 / Cross-Field rule 10. The alias omits
+      gvlVendorID while the parent static/bidder-info/admatic.yaml declares
+      gvlVendorID: 1281 (verified at merge-base 09006e7f and at master 0ba3523).
+      config/bidderinfo.go:371-373 never copies GVLVendorID to an alias and
+      ToGVLVendorIDMap drops bidders with 0, so admaticde gets no GDPR vendor
+      registration at all. Table disposition for "omitted, parent declares a
+      GVL" is WARN (ASK).
+
+  - path: static/bidder-info/admaticde.yaml
+    anchor: 'email: "prebid@admatic.com.tr"'
+    symbol: null
+    severity: INFO
+    family: maintainer-metadata
+    skill: bidder-info-pr-review
+    note: >-
+      Field Index `maintainer.email` (alias clause): the alias declares the
+      parent's exact address — admatic.yaml carries the identical
+      prebid@admatic.com.tr at the merge base. The skill's disposition for a
+      parent-email-on-alias is INFO, asking the author to confirm the copy is
+      intentional rather than an inherited-by-omission case (PR #4441 practice).
+      Local-part `prebid@` is a recognized role token, so the personal-address
+      WARN in the same clause does not apply.

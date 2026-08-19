@@ -1,0 +1,153 @@
+fixture: prebid-server-java-4428
+
+# 16 changed files in the fixture; all 16 examined. TrustxBidderTest.java is
+# truncated by the capture (9475 of 29468 patch chars omitted); the visible
+# portion was reviewed.
+files_scanned: 16
+
+run:
+  skills: [pr-triage-java, bidder-class-pr-review, bidder-config-pr-review, bidder-params-java-pr-review]
+  skills_commit: c72e1f4042fcffd15e0fa57f6e03d2eea1b085c4
+  model: claude-opus-5
+  date: 2026-08-18
+
+# pr-triage-java: PR type = new-adapter (all four strict conditions hold).
+# Step 5e completeness: all 12 canonical files present (+4 extra proto classes).
+# Step 5i IT-registry: adapters.trustx.endpoint=http://localhost:8090/
+# trustx-exchange matches the convention and the IT class' urlPathEqualTo -- PASS.
+# Step 5k pre-checkstyle: no added Java line exceeds 120 chars, no snake_case
+# @Test names, no trailing whitespace, no star or banned imports, public class
+# names match filenames, import groups follow the inverted 3-group order -- PASS.
+#
+# Upstream verification (prebid/prebid-server-java):
+#   - this PR's merge base 5926c922 is dated 2026-03-06. At that commit
+#     spring/config/bidder/util/UsersyncerCreator.java EXISTS and every
+#     bidder-config usersync URL uses double-brace macros ({{gdpr}} etc.). The
+#     single-brace Uri/UriTemplate migration (bc0409271, PR #4444, 2026-07-20)
+#     and the UsersyncerCreator deletion (2880782f, PR #4464, 2026-07-09) both
+#     post-date the review. The skills' brace-count FAIL and F-new-57b FAIL are
+#     therefore NOT emitted here -- firing them would be an anachronism against
+#     the framework state this merged PR targeted. (They ARE emitted on
+#     prebid-server-java-4552, whose PR is still open against current master.)
+#   - `trustx` does not exist as a bidder or as an alias in any
+#     bidder-config/*.yaml at the merge base, so the alias-name-collision and
+#     alias->full-migration checks PASS.
+#   - Result.withValue(R) returns Result<List<R>> -- the makeHttpRequests return
+#     shape compiles; BidderUtil.defaultRequest(request, headers, endpoint,
+#     mapper) is a real 4-arg overload -- PASS.
+#   - bid-type resolution reads bid.getMtype() first and throws on an
+#     unresolved/unsupported type; YAML declares banner+video for app and site
+#     and both have a Java return path -- makeBids steps 5+6 PASS.
+#   - IntegrationTest.java:182 substitutes "{{ <bidder>.response_time_ms }}"
+#     keyed on the name passed to assertJsonEquals -- basis for the fixture
+#     finding below.
+findings:
+  - path: src/test/resources/org/prebid/server/it/openrtb2/trustx/test-auction-trustx-response.json
+    anchor: '"trustx": "{{ trustedstack.response_time_ms }}"'
+    symbol: null
+    severity: FAIL
+    family: naming-conventions
+    note: >-
+      bidder-params-java-pr-review Workflow: IT Fixture Changed step 2
+      (bidder-id consistency inside the fixture). The response-time placeholder
+      names `trustedstack`, the adapter registered immediately above trustx in
+      test-application.properties -- a copy-paste from the neighbouring bidder.
+      IntegrationTest.java:182 replaces only "{{ <bidder>.response_time_ms }}"
+      for the bidder passed to assertJsonEquals (here singletonList("trustx")),
+      so the literal placeholder survives into the comparison and the IT fails.
+
+  - path: src/main/resources/static/bidder-params/trustx.json
+    anchor: '"uid": {'
+    symbol: null
+    severity: FAIL
+    family: schema-pojo-sync
+    note: >-
+      bidder-params-java-pr-review Workflow: Cross-File Consistency ("Property
+      added in schema -> POJO MUST also add a matching field, FAIL if missing")
+      and Schema Property Changed step 7. Neither declared param (uid, keywords)
+      has a field in any class under proto/openrtb/ext/request/trustx/.
+      ExtImpTrustx occupies the canonical ExtImp{X} name but models the whole
+      imp.ext wrapper (prebid / bidder:JsonNode / data / gpid) rather than the
+      bidder params, so the params reach the bidder only as an untyped JsonNode
+      passthrough and TrustxBidder never reads uid or keywords. The same
+      workflow's converse rule ("POJO field added without matching schema
+      property") also fires on prebid/bidder/data/gpid. Doubt recorded: the
+      passthrough is functional at runtime -- the schema is still enforced by
+      BidderParamValidator -- so a reviewer may rate this WARN rather than FAIL.
+
+  - path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
+    anchor: 'errors.add(BidderError.badInput(e.getMessage()));'
+    symbol: makeBid
+    severity: WARN
+    family: error-handling
+    note: >-
+      bidder-class-pr-review Workflow: makeHttpRequests Changed step 7 and
+      framework-utilities-java section 7 error taxonomy: badInput is for
+      publisher/request faults and badServerResponse is the makeBids error type
+      for upstream-bidder faults. This catch sits in makeBids and handles the
+      PreBidException thrown by getBidType for a missing or unsupported
+      bid.mtype -- a defect in the bidder's response, not in the publisher's
+      request. The wrong type mislabels the bid-error metric.
+
+  - path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
+    anchor: 'return BidderBid.builder()'
+    symbol: makeBid
+    severity: WARN
+    family: framework-idiom
+    note: >-
+      bidder-class-pr-review Workflow: makeBids Changed step 7 ("BidderBid
+      construction ... preserves bidResponse.getCur() per spec, the
+      passthrough-from-response pattern"). The builder sets bid, type and
+      videoInfo but never bidCurrency, and bidsFromResponse never reads
+      bidResponse.getCur(), so a non-USD response currency is dropped and the
+      bid is treated as the framework default.
+
+  - path: src/main/java/org/prebid/server/proto/openrtb/ext/request/trustx/ExtBidBidderTrustx.java
+    anchor: 'public class ExtBidBidderTrustx {'
+    symbol: ExtBidBidderTrustx
+    severity: WARN
+    family: naming-conventions
+    note: >-
+      bidder-params-java-pr-review Workflow: POJO Declaration Changed step 1 --
+      helper protos co-located with ExtImp{X} follow the ExtImp{X}{Suffix} shape
+      (ExtImpAppnexusKeywords, ExtImpGumGumBanner); "WARN when a new class
+      deviates". ExtBidBidderTrustx and ExtBidTrustx are bid-ext types carrying
+      an ExtBid prefix inside proto/openrtb/ext/request/trustx/. Recorded once
+      for the pair. Doubt recorded: the prefix is semantically accurate for a
+      bid-ext, and the package check (same package as ExtImp{X}) passes.
+
+  - path: src/main/resources/bidder-config/trustx.yaml
+    anchor: 'url: https://static.cdn.trustx.org/x/user_sync.html?source=pbs&us_privacy={{us_privacy}}&gpp={{gpp}}&gpp_sid={{gpp_sid}}&redirect={{redirect_url}}'
+    symbol: null
+    severity: WARN
+    family: usersync-macros
+    note: >-
+      bidder-config-pr-review Workflow: User Sync URL Changed step 3 ("Verify
+      required macros are present"). Both declared sync URLs carry us_privacy,
+      gpp, gpp_sid and redirect_url but neither carries the GDPR pair
+      (gdpr / gdpr_consent), so a TCF-scoped sync fires without consent signal.
+      HTTPS scheme, domain ownership and uid-macro ('$UID', exempt from the
+      brace rule) all PASS. Brace COUNT is deliberately not flagged -- see the
+      merge-base note above.
+
+  - path: src/main/resources/bidder-config/trustx.yaml
+    anchor: 'vendor-id: 0'
+    symbol: null
+    severity: INFO
+    family: gvl-vendor-id
+    note: >-
+      bidder-config-pr-review Workflow: GVL Vendor ID Changed step 3 ("GVL ID 0
+      redundancy ... Flag as INFO asking for removal -- but do not FAIL;
+      explicit declaration is tolerated upstream").
+
+  - path: src/test/resources/org/prebid/server/it/openrtb2/trustx/test-auction-trustx-request.json
+    anchor: src/test/resources/org/prebid/server/it/openrtb2/trustx/test-auction-trustx-request.json
+    symbol: null
+    severity: INFO
+    family: it-fixture-format
+    note: >-
+      bidder-params-java-pr-review Step 3, PR-level task item 3 (F-new-49):
+      the skill "unconditionally records an INFO" about trailing whitespace
+      before ']' in IT fixtures whenever a PR ships them. Transcribed because
+      the directive is unconditional. Doubt recorded: none of the four trustx IT
+      fixtures contains trailing whitespace.
