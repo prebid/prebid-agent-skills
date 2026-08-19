@@ -8,6 +8,10 @@ title: 'New Adapter: TrustX'
 language: java
 base_ref: master
 review_sha: ec94fed0814d6f794a7b4268f94da9a5068e8225
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-03-23'
 merge_base_sha: 5926c922ba211307371d70eaad9478606b19a779
 head_sha: 689b561206dcc3e68172f64223305b2a892da63b
 merge_state: merged

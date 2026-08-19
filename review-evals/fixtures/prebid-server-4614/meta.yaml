@@ -8,6 +8,10 @@ title: 'New Adapter: TRUSTX (remove Grid alias)'
 language: go
 base_ref: master
 review_sha: 5cc01b6aca0130a4781439c9a992ecbbd751ea85
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-02-03'
 merge_base_sha: f358e247272b6d2c3efade217e4cafa1b23762cb
 head_sha: 40489ca5492524f11beee950f0ed9910e9a67dff
 merge_state: merged

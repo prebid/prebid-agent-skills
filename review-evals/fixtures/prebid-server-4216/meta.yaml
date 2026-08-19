@@ -8,6 +8,10 @@ title: 'New Adapter: Admatic GMBH - Admatic alias'
 language: go
 base_ref: master
 review_sha: d19d760113e2dc360008886422416d062e6251fd
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2025-03-13'
 merge_base_sha: 09006e7fee71342242755af541e74e49a717314b
 head_sha: a6eebd4791d70cdb84bee0561556287ea09feea8
 merge_state: merged

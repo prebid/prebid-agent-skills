@@ -8,6 +8,10 @@ title: 'RTBStack: New Adapter (Port from GO)'
 language: java
 base_ref: master
 review_sha: ed297b01c602da5e75ac4eebe284f7a7d3c1c464
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-08-18'
 merge_base_sha: d8a4f85be5b1d8eea57a15e65cdae109c0ed6a86
 head_sha: ed297b01c602da5e75ac4eebe284f7a7d3c1c464
 merge_state: open

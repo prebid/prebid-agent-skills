@@ -8,6 +8,10 @@ title: 'New Adapter: appStockSSP'
 language: go
 base_ref: master
 review_sha: 5a5e38ebcc4442948b4ef7dde00ca71fb0ba4ce5
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2025-10-23'
 merge_base_sha: c48d94d9b24f883e93a7676d94c5109c36c46911
 head_sha: ca83a702268f5f821e1036a16223ed25d6b712ac
 merge_state: merged

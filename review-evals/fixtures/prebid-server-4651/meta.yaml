@@ -8,6 +8,10 @@ title: New Limelight Adapters
 language: go
 base_ref: master
 review_sha: cce65869b48e98c75dae4b9603eece5759df8021
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-03-03'
 merge_base_sha: 48e0ba02b7db830ac0f1a7b237658dbb076fa5ed
 head_sha: cce65869b48e98c75dae4b9603eece5759df8021
 merge_state: merged

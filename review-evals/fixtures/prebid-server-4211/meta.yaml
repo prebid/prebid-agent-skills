@@ -8,6 +8,10 @@ title: 'New Adapter: AdTarget.org - Limelight Alias'
 language: go
 base_ref: master
 review_sha: 6511cc2b91da507b3d827d266f88571ae9b5fc43
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2025-04-07'
 merge_base_sha: d82c99733d7f0a41e5f15af95c8a5e45ab60177c
 head_sha: 6511cc2b91da507b3d827d266f88571ae9b5fc43
 merge_state: merged

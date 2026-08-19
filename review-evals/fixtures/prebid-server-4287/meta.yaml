@@ -8,6 +8,10 @@ title: 'New Adapter: Optidigital'
 language: go
 base_ref: master
 review_sha: c27f8bd200cfa8b9995a39d50d92ff24bd97efeb
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2025-06-05'
 merge_base_sha: 48e0ba02b7db830ac0f1a7b237658dbb076fa5ed
 head_sha: 8b269edf4d60983aa56831c824fa723657108122
 merge_state: merged

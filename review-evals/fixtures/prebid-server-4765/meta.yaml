@@ -8,6 +8,10 @@ title: 'New Adapter: Teal'
 language: go
 base_ref: master
 review_sha: 6367a39cc3118e21f57642a53912d9c096591ae8
+# Upstream state this PR was reviewed against. Rules in
+# review-evals/rule-epochs.yaml with a later effective_from are
+# neutralised for this fixture -- see that file.
+epoch: '2026-07-20'
 merge_base_sha: 2fae16f31693452b62dd2a0924b78e71bbec43ec
 head_sha: a470fee58c3582f8be8e642da7e3dc65150a692a
 merge_state: merged

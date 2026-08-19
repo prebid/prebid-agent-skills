@@ -650,5 +650,64 @@ class TestRealCorpus(unittest.TestCase):
             self.assertIn(meta.get("outcome"), ("clean", "defective"), fid)
 
 
+
+class TestRuleEpochs(unittest.TestCase):
+    """A rule whose upstream fact postdates a PR could not have been raised on it.
+
+    Verified in both directions: neutralised when the rule is newer than the
+    fixture, counted normally when it is older. Without the second arm this is
+    an amnesty, not a correction.
+    """
+
+    EPOCHS = [
+        {"family": "upstream-api-drift", "scope": "java",
+         "effective_from": "2026-07-09", "upstream": "java#4464"},
+        {"family": "framework-idiom", "scope": "java",
+         "effective_from": "2026-07-20", "upstream": "java#4444"},
+    ]
+
+    def test_rule_newer_than_fixture_is_neutralised(self):
+        meta = {"epoch": "2026-03-23", "language": "java"}
+        out = scorer.neutralised_families(meta, self.EPOCHS)
+        self.assertEqual({"upstream-api-drift", "framework-idiom"}, set(out))
+
+    def test_rule_older_than_fixture_still_applies(self):
+        """The load-bearing arm: a PR reviewed after the change gets no excuse."""
+        meta = {"epoch": "2026-08-18", "language": "java"}
+        self.assertEqual({}, scorer.neutralised_families(meta, self.EPOCHS))
+
+    def test_scope_confines_a_rule_to_its_language(self):
+        meta = {"epoch": "2026-03-23", "language": "go"}
+        self.assertEqual({}, scorer.neutralised_families(meta, self.EPOCHS))
+
+    def test_missing_epoch_neutralises_nothing(self):
+        """Absent metadata must not silently excuse findings."""
+        self.assertEqual({}, scorer.neutralised_families({"language": "java"}, self.EPOCHS))
+
+    def test_empty_registry_neutralises_nothing(self):
+        meta = {"epoch": "2020-01-01", "language": "java"}
+        self.assertEqual({}, scorer.neutralised_families(meta, []))
+
+    def test_neutralised_findings_leave_the_unexpected_count(self):
+        fx = {"id": "t", "meta": {}, "files": [{"filename": "a.java"}],
+              "expected": [], "forbidden": [], "patches": {"a.java": ""},
+              "neutralised_families": {"framework-idiom": {"upstream": "java#4444"}}}
+        actual = {"findings": [
+            {"path": "a.java", "anchor": "x", "severity": "FAIL", "family": "framework-idiom"},
+            {"path": "a.java", "anchor": "y", "severity": "FAIL", "family": "error-handling"},
+        ], "files_scanned": 1}
+        res = scorer.score_fixture(fx, actual)
+        self.assertEqual(1, res["unexpected"], "only the non-neutralised finding counts")
+        self.assertEqual(1, res["neutralised"])
+        self.assertEqual("java#4444", res["neutralised_detail"][0]["rule"],
+                         "the exemption must name the rule that granted it")
+
+    def test_registry_on_disk_parses_and_is_scoped(self):
+        epochs = scorer.load_rule_epochs(REPO_ROOT / "review-evals")
+        self.assertTrue(epochs, "rule-epochs.yaml should carry the known migrations")
+        for rule in epochs:
+            for field in ("family", "effective_from", "upstream", "what_changed"):
+                self.assertIn(field, rule, f"{rule.get('family')} missing {field}")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

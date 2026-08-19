@@ -1,0 +1,48 @@
+# When a review rule became true upstream.
+#
+# The skills are pinned to current upstream master. The corpus is historical. A
+# rule that is correct today can be an anachronism against a PR reviewed before
+# the upstream change that created it — flagging a 2026-03 PR for an API deleted
+# in 2026-07 is not a finding, it is a category error.
+#
+# The first blind run hit this directly: `prebid-server-java-4428` (reviewed
+# 2026-03) predates both entries below, and a literal application of the pinned
+# rules would have produced two FAILs that no reviewer could have raised at the
+# time. The runner spotted it and asked rather than guessing.
+#
+# So each entry records the date a rule became true. For a fixture whose `epoch`
+# is earlier, findings in that family are NEUTRALISED: they count neither toward
+# recall nor against the unexpected ceiling, and are reported separately.
+#
+# This is not a way to excuse misses. It only covers findings that COULD NOT have
+# been raised, because the upstream fact they rest on did not exist yet. A rule
+# with no entry here applies to every fixture.
+#
+# Adding an entry: cite the upstream PR or commit that changed the fact, and the
+# date it merged. If you cannot name one, the rule is not epoch-sensitive — it is
+# just a rule, and a miss against it is a real miss.
+
+version: 1
+
+epochs:
+  - family: upstream-api-drift
+    scope: java
+    effective_from: '2026-07-09'
+    upstream: prebid/prebid-server-java#4464 (commit 2880782f)
+    what_changed: >
+      `UsersyncerCreator` was deleted and `BidderDepsAssembler` lost the
+      `usersyncerCreator` chain link. Before this date the call was not merely
+      allowed, it was the canonical form every Configuration class used — so a
+      PR reviewed earlier cannot be faulted for carrying it.
+
+  - family: framework-idiom
+    scope: java
+    effective_from: '2026-07-20'
+    upstream: prebid/prebid-server-java#4444 (commit bc0409271)
+    what_changed: >
+      Endpoint macros migrated to Vert.x `UriTemplate`: framework macro names in
+      bidder-config went from double-brace to single-brace, and substitution
+      moved from `String.replace("{{TOKEN}}", …)` to
+      `Uri.of(…).replaceMacro(NAME, …).expand()`. Before this date the
+      double-brace form and `String.replace` were correct, and every merged
+      adapter used them.

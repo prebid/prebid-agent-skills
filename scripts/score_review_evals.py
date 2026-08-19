@@ -136,6 +136,37 @@ class HarnessError(Exception):
 # loading
 # --------------------------------------------------------------------------
 
+def load_rule_epochs(root: pathlib.Path) -> list[dict]:
+    """Rules that only became true after some upstream change.
+
+    The skills are pinned to current master; the corpus is historical. A rule
+    whose upstream fact postdates a fixture could not have been raised on that
+    PR, so findings in its family are neutralised rather than counted either way.
+    Absent registry = every rule applies everywhere, which is the safe default.
+    """
+    f = root / "rule-epochs.yaml"
+    if not f.is_file():
+        return []
+    doc = yaml.safe_load(f.read_text()) or {}
+    return doc.get("epochs") or []
+
+
+def neutralised_families(fx_meta: dict, epochs: list[dict]) -> dict[str, dict]:
+    """Families whose governing upstream change postdates this fixture's epoch."""
+    epoch = str(fx_meta.get("epoch") or "").strip()
+    if not epoch:
+        return {}
+    lang = (fx_meta.get("language") or "").strip().lower()
+    out: dict[str, dict] = {}
+    for rule in epochs:
+        scope = (rule.get("scope") or "").strip().lower()
+        if scope and lang and scope != lang:
+            continue
+        if str(rule.get("effective_from") or "") > epoch:
+            out[str(rule["family"]).strip().lower()] = rule
+    return out
+
+
 def load_fixture(fixture_id: str, fixtures_dir: pathlib.Path) -> dict:
     d = fixtures_dir / fixture_id
     if not d.is_dir():
@@ -148,6 +179,8 @@ def load_fixture(fixture_id: str, fixtures_dir: pathlib.Path) -> dict:
         raise HarnessError(f"fixture {fixture_id} incomplete: {exc}") from exc
     except (yaml.YAMLError, json.JSONDecodeError) as exc:
         raise HarnessError(f"fixture {fixture_id} unparseable: {exc}") from exc
+    _epochs = load_rule_epochs(fixtures_dir.parent)
+    _neutral = neutralised_families(meta, _epochs)
 
     return {
         "id": fixture_id,
@@ -157,6 +190,7 @@ def load_fixture(fixture_id: str, fixtures_dir: pathlib.Path) -> dict:
         "forbidden": expected.get("forbidden") or [],
         "patches": {normalize_path(f["filename"]): normalize_patch(f.get("patch"))
                     for f in files},
+        "neutralised_families": _neutral,
     }
 
 
@@ -311,6 +345,16 @@ def score_fixture(fx: dict, actual: dict) -> dict:
     forb_matched, forb_used = assign(fx["forbidden"], remaining)
     unexpected = [f for i, f in enumerate(remaining) if i not in forb_used]
 
+    # A rule whose upstream fact postdates this PR could not have been raised on
+    # it. Such findings are neutralised: they do not count against the unexpected
+    # ceiling, and they are reported separately so the exemption stays visible
+    # rather than quietly shrinking the denominator.
+    neutral = fx.get("neutralised_families") or {}
+    neutralised = [f for f in unexpected
+                   if (f.get("family") or "").strip().lower() in neutral]
+    if neutral:
+        unexpected = [f for f in unexpected if f not in neutralised]
+
     total_expected = len(fx["expected"])
     recall = (len(exp_matched) / total_expected) if total_expected else None
 
@@ -370,6 +414,12 @@ def score_fixture(fx: dict, actual: dict) -> dict:
         "forbidden_total": len(fx["forbidden"]),
         "forbidden_hits": sorted(forb_matched),
         "unexpected": len(unexpected),
+        "neutralised": len(neutralised),
+        "neutralised_detail": [
+            {"family": (f.get("family") or ""), "path": f.get("path"),
+             "anchor": f.get("anchor"),
+             "rule": neutral.get((f.get("family") or "").strip().lower(), {}).get("upstream")}
+            for f in neutralised],
         "unexpected_detail": [
             {"path": f.get("path"), "anchor": (f.get("anchor") or "")[:120],
              "severity": f.get("severity"), "family": f.get("family")}

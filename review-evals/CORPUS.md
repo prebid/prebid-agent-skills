@@ -50,3 +50,31 @@ merged unchanged:
 `prebid-server-4765`'s alias finding: one is an alias bundle shipped alone, the
 other an alias riding along with a brand-new adapter. A run that cannot tell
 those apart fails one or the other.
+
+---
+
+## Rule epochs
+
+The skills are pinned to current upstream master; these fixtures are historical.
+A rule can be correct today and an anachronism against a PR reviewed before the
+upstream change that created it.
+
+`rule-epochs.yaml` records, per rule family, the date its upstream fact became
+true. For a fixture whose `epoch` (in `meta.yaml`) is earlier, findings in that
+family are neutralised: they count neither toward recall nor against the
+unexpected ceiling, and the score reports them separately with the upstream PR
+that granted the exemption.
+
+Two entries today, both Java, both from July 2026 — the `UsersyncerCreator`
+deletion and the `UriTemplate` macro migration. `prebid-server-java-4428` was
+reviewed in March, so a literal application of the pinned rules would fault it
+for an API that still existed and a macro form that was still correct.
+
+This is not an amnesty for misses. It covers only findings that COULD NOT have
+been raised, because the fact they rest on did not exist yet. A rule with no
+entry applies to every fixture, and a miss against it is a real miss — the
+`test_rule_older_than_fixture_still_applies` case pins that arm.
+
+Every future upstream migration makes today's fixtures anachronistic in turn, so
+expect this file to grow. If you cannot name the PR that changed a fact, the rule
+is not epoch-sensitive.
