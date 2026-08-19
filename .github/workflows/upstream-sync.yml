@@ -136,6 +136,24 @@ jobs:
             --go-checkout .upstream/go --java-checkout .upstream/java
           echo "exit=$?" >> $GITHUB_OUTPUT
 
+      # The same question for fixture-inventory digests, which had no upstream
+      # check at all: does each recorded digest and byte length describe the file
+      # it names at the golden's own pinned commit? The drift scan compares those
+      # digests against master, which cannot distinguish a digest that never
+      # described the file from one upstream moved past -- fourteen sha1-length
+      # digests in the Go adverxo golden sat unnoticed under exactly that gap.
+      # --min-coverage 1.0 holds the achieved state: every resolvable entry
+      # carries a checkable claim, so a new entry cannot land unmeasured.
+      - name: Verify fixture-inventory digests against upstream
+        id: fixtures
+        continue-on-error: true
+        run: |
+          set +e
+          python3 scripts/verify-fixture-digests.py \
+            --go-checkout .upstream/go --java-checkout .upstream/java \
+            --min-coverage 1.0 --allow-unverifiable
+          echo "exit=$?" >> $GITHUB_OUTPUT
+
       - name: Upload drift-report artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -229,7 +247,8 @@ jobs:
           CLAIMS="${{ steps.claims.outputs.exit }}"
           REFS="${{ steps.refs.outputs.exit }}"
           BASELINE="${{ steps.baseline.outputs.exit }}"
-          echo "sync=$EXIT claims=$CLAIMS refs=$REFS baseline=$BASELINE"
+          FIXTURES="${{ steps.fixtures.outputs.exit }}"
+          echo "sync=$EXIT claims=$CLAIMS refs=$REFS baseline=$BASELINE fixtures=$FIXTURES"
           STATUS=0
           # An EMPTY output is not a pass: it means the step never reached its
           # echo, so nothing was checked. Treated as a failure, because the whole
@@ -246,6 +265,13 @@ jobs:
             STATUS=1
           elif [ "$REFS" != "0" ]; then
             echo "::error::A bidder_params_ref no longer matches upstream, or could not be verified (exit $REFS)."
+            STATUS=1
+          fi
+          if [ -z "$FIXTURES" ]; then
+            echo "::error::the fixture-digest step produced no exit code — it did not run to completion."
+            STATUS=1
+          elif [ "$FIXTURES" != "0" ]; then
+            echo "::error::A fixture digest does not describe the file it names at its golden's pin, or coverage regressed."
             STATUS=1
           fi
           if [ -z "$BASELINE" ]; then

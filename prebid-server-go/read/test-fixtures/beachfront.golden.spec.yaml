@@ -230,21 +230,146 @@ tests:
   fixture_inventory:
     exemplary:
       - filename: adm-video-app.json
-        sha256: pending-operator-fetch
-        bytes: 0
+        sha256: e6bc244ad0feeff0811fed3e16d3126832f256956e149a4cb281c226d5988283
+        bytes: 2780
       - filename: adm-video.json
-        sha256: pending-operator-fetch
-        bytes: 0
+        sha256: ed5ebee4b35d0fdc6c755eb41a92500ba0e76b2004937b3f4a93f6cdb9f0ca16
+        bytes: 2826
       - filename: banner.json
-        sha256: pending-operator-fetch
-        bytes: 0
+        sha256: de17769f3bba7102c44b8b5f2f97d1eaae0f7d1a31f72c13f5cf474eb0876633
+        bytes: 2403
       - filename: nurl-video.json
-        sha256: pending-operator-fetch
-        bytes: 0
+        sha256: 090c1608e8a35ed4863e18fa12addf2ff28f1eda9fe84d8c1c56ac20b8348942
+        bytes: 2986
     supplemental:
-      - filename: '40 supplemental fixtures (error paths + edge cases — operator fetches SHAs at sync time)'
-        sha256: pending-operator-fetch
-        bytes: 0
+      # Enumerated from upstream at this golden's own resolved_commit. The entry
+      # here was a single prose line -- "40 supplemental fixtures (error paths +
+      # edge cases -- operator fetches SHAs at sync time)" -- with
+      # `sha256: pending-operator-fetch` and `bytes: 0`. The count was right and
+      # only the enumeration was missing: `git ls-tree` over
+      # adapters/beachfront/beachfronttest/supplemental at that commit returns exactly
+      # these 40 files. A prose entry cannot be verified against anything, so it
+      # read as permanently unverifiable rather than as a gap to close.
+      - filename: adm-video-app-alphanum-bundle.json
+        sha256: 2a8e325741cdc605ff66c1158f460359f6cd8808d6ef002d32b30ad60253465f
+        bytes: 2738
+      - filename: adm-video-app-malformed-bundle.json
+        sha256: 78e0f0adef83fcd3219590bcdddbed861c90258420862b32dabafa05dc03c1ea
+        bytes: 2809
+      - filename: adm-video-by-explicit.json
+        sha256: 376925d35b6580a973e09758b3b0b054eba7951f02de0d6c255dedc1b17be379
+        bytes: 2841
+      - filename: adm-video-no-cat.json
+        sha256: a9ed4c6dac6598648d34f8be0d82bc94caff0db81501a201aae42de32f1807d9
+        bytes: 2764
+      - filename: adm-video-no-ip.json
+        sha256: 7180b8d0358f8e1ee08cdcdefe6fe99dd026e2e1e8436b97bfef158a52213148
+        bytes: 2750
+      - filename: adm-video-no-size.json
+        sha256: 2cea46fd53229911fbf58eb0a830c8c8d9babcdfdf63ae157436d69d545665ee
+        bytes: 2858
+      - filename: adm-video-partial-size.json
+        sha256: c6b1ee2a7fa046ab13653ffe59061aa330f813b7bface430d8f956333a24a3ad
+        bytes: 2878
+      - filename: adm-video-schain.json
+        sha256: 100d414bdcea193014cff94054572d63b843389d15b93730b937b2431704879f
+        bytes: 3580
+      - filename: adm-video-zero-size-partial.json
+        sha256: 7bfdbf6e4fc081c03d1150b0050435119ea16be8c2774dd263f698f974011848
+        bytes: 2896
+      - filename: adm-video-zero-size.json
+        sha256: eb412465b81b1c09e44d63383a35f7f72392fd39e34cc5e172923111241668ce
+        bytes: 2894
+      - filename: banner-204-with-body.json
+        sha256: 5f3891a153fb9efb9f3bdc714b5e74149ef6b7dcabacb1636776219126113e42
+        bytes: 1744
+      - filename: banner-204.json
+        sha256: 1584f3934600d8e3a3eb9d50213784557c23215614b9aebcc00880601519988f
+        bytes: 1663
+      - filename: banner-and-adm-video-by-explicit.json
+        sha256: 1a151e2294b58b1394ee0eaa0f8e8b403b71aeb455c94f03e7b852c7a1a10e2b
+        bytes: 4753
+      - filename: banner-and-adm-video-expected-204-response-on-banner.json
+        sha256: 353ff368da9c828720bb8cd19e8212dd773cc36643458771d1b25b6de275581d
+        bytes: 4044
+      - filename: banner-and-adm-video.json
+        sha256: d3327ac06e81ee5789d37fc41f73d018f13213aa13fc86e3e4d113fd990b6d33
+        bytes: 4715
+      - filename: banner-and-nurl-video.json
+        sha256: 453eee58b55724984e4a146621bcc4101dbad08b6910ee8adbda6ebd5bf85ed9
+        bytes: 4939
+      - filename: banner-bad-request-400.json
+        sha256: 74712e005556438ba1a885865a5ae5e0a34aaf130d1942e89d3142b0fa6f31a6
+        bytes: 1782
+      - filename: banner-no-appid.json
+        sha256: 0783456c65fab15f4f40ae2309dea3b06d2b857166156c4cf3b974a809ebd299
+        bytes: 609
+      - filename: banner-schain.json
+        sha256: 10f3e124cd57ed371b546277f742a4b141dacbca223699358a3e1e4114cf47ac
+        bytes: 2916
+      - filename: banner-wrong-appids.json
+        sha256: acce1d1c8f2fac69907aa6fbba086f70c5608752073c7bde83b4f8b1ec703d5a
+        bytes: 663
+      - filename: bidder_response_unmarshal_error_adm_video.json
+        sha256: 12b808501ce6d8ca4159af4832acb26276f3adcbf116241ad96ebda0cbcdf477
+        bytes: 1654
+      - filename: bidder_response_unmarshal_error_banner.json
+        sha256: e2e765e0428a23003d569a4ad963be7f165259de1f80f8719eeaa29c5676af0d
+        bytes: 1865
+      - filename: bidder_response_unmarshal_error_nurl_video.json
+        sha256: f6289616bb50c4c578c74df42ed9ba9d4ec2c170f4faca4340614d2e814574e5
+        bytes: 1736
+      - filename: currency-adm-video-converted.json
+        sha256: a2941193bce1d935b124df29164b6cdae65fa39a653b122ca99be631746fadf3
+        bytes: 3272
+      - filename: currency-adm-video-ext-wins.json
+        sha256: 2b19bee0f8a8006793d1072b748b0279122dbd2aee41f114e1bd9aab451f5cc1
+        bytes: 2950
+      - filename: currency-adm-video-imp-wins.json
+        sha256: 9c73e04af6a9147cd1fd96b04e5fd295e9f9735da8d3e2af4d397c2f1c92b9be
+        bytes: 2950
+      - filename: currency-adm-video-warning-and-fallback.json
+        sha256: fc69564ca568e5cda611ba041f8c2b5d0d9f56a62798cd255e070aef312dfe19
+        bytes: 3642
+      - filename: currency-adm-video-warning-no-fallback.json
+        sha256: a6e367a8af1a4203661d0d65adf6e23d50a311527a9dbbca8ccdaee7f9bd76aa
+        bytes: 1208
+      - filename: currency-adm-video-warning-zeroed-fallback.json
+        sha256: a6e367a8af1a4203661d0d65adf6e23d50a311527a9dbbca8ccdaee7f9bd76aa
+        bytes: 1208
+      - filename: currency-adm-video-zero-by-min-both.json
+        sha256: 3b9e1f5c968baf481703d12d2275a4d9c88a34391a924f8ed4aafbe58ba1c325
+        bytes: 2882
+      - filename: currency-adm-video-zero-by-min-ext.json
+        sha256: d8f427b03a7324a9deb0791c42301e7a1722c623780912b5eaf5b1de13fb9aea
+        bytes: 2856
+      - filename: currency-adm-video-zero-by-min-imp.json
+        sha256: 3f1b945aecdd19ae05279a76e2f7663c7ddc40c9a7d8c6c5047d8ccb0dedb239
+        bytes: 2852
+      - filename: internal-server-error-500.json
+        sha256: 42f9ae0f314d2bc4d6eba47fcd7efd2ce68d19bf1889c185676408fd4de03d6d
+        bytes: 1732
+      - filename: no-imps.json
+        sha256: 210279be158156c5171d4d594744eb7ce47864e7c1c3a422025aef899e90801f
+        bytes: 291
+      - filename: six-nine-combo.json
+        sha256: 5b30cc58332c5ecacea5a3fcda3717d2bc71ecc4ac8ef44a508d1cfa6df5b5e4
+        bytes: 15487
+      - filename: two-four-combo.json
+        sha256: 0b48d2968e6ed4557805673216dfa0590578a414446be7d20be9c0a5d74c4e22
+        bytes: 8942
+      - filename: unmarshal-error-banner.json
+        sha256: 7e9c8adcc864e3fd8ea7e547a771dee0572ddfb3367a5b50028c1548d7b6941d
+        bytes: 721
+      - filename: unmarshal-error-video.json
+        sha256: 320b61a6cac476cb81957c8cce429a2769d2e5be99bb4296f0dd5dee60c53e96
+        bytes: 890
+      - filename: video-no-appid.json
+        sha256: 2c8234a2561715ff0fd7e93bf60ac4f3861add13f696a79592a771a756bab758
+        bytes: 724
+      - filename: video-wrong-appids.json
+        sha256: 91e6678e766c5335e86e3736ef46f8cc7f632c65b9c0b637dc90315ea6c3d867
+        bytes: 729
     amp: []
     video: []
     videosupplemental: []

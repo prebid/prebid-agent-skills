@@ -225,27 +225,67 @@ tests:
   java_it_folder_naming: null
   fixture_inventory:
     exemplary:
-      - ortb_response_video_parsing
-      - prebidjs_response_video_parsing
-      - simple-banner-inapp
-      - simple-banner-multiple-bids-and-formats
-      - simple-banner-multiple-bids
-      - simple-banner
-      - simple-empty-publisherId
-      - simple-multi-type-banner
-      - simple-multi-type-video
-      - simple-native
-      - simple-video
-      - use-supply-source-id-param
+      - filename: ortb_response_video_parsing.json
+        sha256: 4af77d8b80ae6da7430998ef45302d6e38affe08fae25aec44d346a5cc9acebf
+        bytes: 7285
+      - filename: prebidjs_response_video_parsing.json
+        sha256: ac5e861577f7b973afa3bda8698767ca58ca09d01ebc43ededefabddf1d06b96
+        bytes: 8553
+      - filename: simple-banner-inapp.json
+        sha256: c68a1c007233e6437b994c2bf7234569b6edbc8d38114490d9ee56127d245d7a
+        bytes: 3271
+      - filename: simple-banner-multiple-bids-and-formats.json
+        sha256: 897b9b60597446df276c8aba76df3318188f06b519107d527deb0b41ffeb877e
+        bytes: 5350
+      - filename: simple-banner-multiple-bids.json
+        sha256: 178ac7d231fa18029988ebddeb26464f02a11e1fa3b37964f4e5ae1b0160989c
+        bytes: 5002
+      - filename: simple-banner.json
+        sha256: 15726eb0762eb2376b8c4507780f4f094ee909b91cc61721a0429298275821eb
+        bytes: 3117
+      - filename: simple-empty-publisherId.json
+        sha256: 7a3acb589c43a85c7ed56a443f163089259726c3c48bdb8b91377d04b2f0381b
+        bytes: 3125
+      - filename: simple-multi-type-banner.json
+        sha256: c716a25cf5b6d18121aaa4dbe4e031f4271052a9d1e4d28c94e0029959e10e20
+        bytes: 3368
+      - filename: simple-multi-type-video.json
+        sha256: bcf404f5b87509a7ee7314c27446f1dc140dbd6065e9f9480067545afb549d55
+        bytes: 3245
+      - filename: simple-native.json
+        sha256: afde52d2211afbda90b7f8ba200444ed146bb601bc46332bd447d701a89ffe43
+        bytes: 2526
+      - filename: simple-video.json
+        sha256: 920dcd698c0ff6ea5fcf0c8f98d792633df7c2f8b2d3b627bbbb93dad2844914
+        bytes: 3511
+      - filename: use-supply-source-id-param.json
+        sha256: e4bd3ec7025574796aafb442656a5246f08b0222db909bf65ab37f1637dde5d9
+        bytes: 5066
     supplemental:
-      - 200-response-from-target
-      - 204-response-from-target
-      - 400-response-from-target
-      - 500-response-from-target
-      - auction-price-macro-replacement       # F4 self-evidence: dedicated supplemental fixture explicitly named for the bid-post-processing-macro pattern
-      - invalid-mtype
-      - invalid-publisher
-      - invalid-supplySourceId
+      - filename: 200-response-from-target.json
+        sha256: 0548d5d76f21cb7ffda5d7f1bbea451133cdd12ac8cb22c5695fdff437b281db
+        bytes: 2342
+      - filename: 204-response-from-target.json
+        sha256: f5a659cbd2b056b600098bfe62aabeaf028f49315b885438d7675421081155b0
+        bytes: 2306
+      - filename: 400-response-from-target.json
+        sha256: 1c71ad4cb515f9d982afbd1f009bef96e3c2b44032a0eaa1eaf89d0a940a2a7e
+        bytes: 2384
+      - filename: 500-response-from-target.json
+        sha256: c1a487449eaa5af9807dc3cfb4deeff27a886280bedada9c9bc3b1d7d7b78ddd
+        bytes: 2384
+      - filename: auction-price-macro-replacement.json   # F4 self-evidence: dedicated supplemental fixture explicitly named for the bid-post-processing-macro pattern
+        sha256: ec854500a3658ef99316910d2cc0f4d29c1ed17f9381b92745178d5c2f8aee31
+        bytes: 3277
+      - filename: invalid-mtype.json
+        sha256: 4bd638cd1895dfa907f210d97d3f525e880030ab55812287203304c21967de40
+        bytes: 1860
+      - filename: invalid-publisher.json
+        sha256: 8bc3f9964f047a901ed8ba842118a2a32ea6b3786da0fe636b9e6f6a5c309693
+        bytes: 872
+      - filename: invalid-supplySourceId.json
+        sha256: eb7a1eebb86dbf8d9af2ebceed9f09488eb124df3ca8a60c14241903841b7f8c
+        bytes: 877
     amp: []
     video: []
     videosupplemental: []

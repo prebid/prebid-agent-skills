@@ -220,19 +220,43 @@ tests:
   java_it_folder_naming: null
   fixture_inventory:
     exemplary:
-      - multiformat-impression
-      - single-banner-impression
-      - single-video-impression
+      - filename: multiformat-impression.json
+        sha256: 7f8fffe2865227f17ea90c44e12993fdf560628f41861b363dac4980351afab6
+        bytes: 2385
+      - filename: single-banner-impression.json
+        sha256: 4f851f38d720cdbde3a9eb77b6c87426861be19bf822bc51465592ade2268647
+        bytes: 2267
+      - filename: single-video-impression.json
+        sha256: 089ae89000d410009d55c750f9ce966bfa0b2ef6a9c2e565e086aa01cf4d01b1
+        bytes: 2579
     supplemental:
-      - 204status
-      - banner-impression-nosizes
-      - http-err-status
-      - native-impression
-      - no-imps
-      - two-impressions-two-seatbids
-      - wrong-imp-ext-1
-      - wrong-imp-ext-2
-      - wrong-imp-ext-3
+      - filename: 204status.json
+        sha256: 5648bb57dd3d2338e00761cd5298225a28396f06ed08a898a522d01e91e5adf9
+        bytes: 1022
+      - filename: banner-impression-nosizes.json
+        sha256: 402457b7e8b45adccc0b7b3cf8406823731491c775ffc158f4cc6a4f7a8bdb10
+        bytes: 623
+      - filename: http-err-status.json
+        sha256: a930be2e6aff28440f2153e41d1dcafcb1c30ca3ae211ceac9aada76a30a9fa2
+        bytes: 1103
+      - filename: native-impression.json
+        sha256: 60bb4732a7713f3cbc78699407230232650c569f72c2f195dd14557620f2a6e7
+        bytes: 668
+      - filename: no-imps.json
+        sha256: be039e331b098f1be7118a1f30cf5fc9fd424bbe93c012d45e9d1d179facc3a1
+        bytes: 316
+      - filename: two-impressions-two-seatbids.json
+        sha256: 9625ee66832a383d126579724da39b2ea8dbdbea47bb1f30af85b63c9581dff5
+        bytes: 2475
+      - filename: wrong-imp-ext-1.json
+        sha256: b9818ea5d2b9f5eb7728717119083545df84205cd9d33a0b01688d09301b5a58
+        bytes: 493
+      - filename: wrong-imp-ext-2.json
+        sha256: 410a2b1e93f4daa039129306f9b472a6cc390caa61cce803f576fe4f97a99384
+        bytes: 446
+      - filename: wrong-imp-ext-3.json
+        sha256: 22658a9cf5e027d00a688311c96d18433286b5daac42bc92c9977497ee906047
+        bytes: 411
     amp: []
     video: []
     videosupplemental: []

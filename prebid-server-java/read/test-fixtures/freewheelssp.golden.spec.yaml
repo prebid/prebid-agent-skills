@@ -226,16 +226,20 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-auction-freewheelssp-request.json
-        bytes: 0
+        sha256: d587288b143818d451ea70da9162c57d9be0f030ad2145978a81da0760b8782b
+        bytes: 346
         role: auction-request
       - filename: test-auction-freewheelssp-response.json
-        bytes: 0
+        sha256: 343d9491ba4c71bcb2523d07ff07bd458656ecf92bbea44ae609d5510ee3f910
+        bytes: 848
         role: auction-response
       - filename: test-freewheelssp-bid-request.json
-        bytes: 0
+        sha256: d2c5b2f24e733b25a4eb73794365e4abad4d8b1257a327999547045717c0a9e8
+        bytes: 867
         role: bidder-bid-request
       - filename: test-freewheelssp-bid-response.json
-        bytes: 0
+        sha256: 83c4060b7f1d6181541e84c2c11c6b45e4f26621c95c950f1a0ed5703dd59cbb
+        bytes: 396
         role: bidder-bid-response
   uses_canonical_harness: true
   unit_test_methods_count: null

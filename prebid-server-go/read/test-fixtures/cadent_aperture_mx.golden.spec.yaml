@@ -241,13 +241,27 @@ tests:
   java_it_folder_naming: null
   fixture_inventory:
     exemplary:
-      - banner-and-video-app
-      - banner-and-video-site
-      - banner-app
-      - minimal-banner
-      - video-app
-      - video-ctv
-      - video-site
+      - filename: banner-and-video-app.json
+        sha256: 9a2f7fa6d840a8404aecc35777dba6cd9b40a4d792596676c2787ba2c6e24fe1
+        bytes: 17391
+      - filename: banner-and-video-site.json
+        sha256: ad69d25af42985c4537fa0665ac52084623db2c5e8491a3555522b82dc45030e
+        bytes: 17509
+      - filename: banner-app.json
+        sha256: 0cac1dac03c352b49977cc993ffa65267cd391e9086b77267580cf758dd5e82a
+        bytes: 3052
+      - filename: minimal-banner.json
+        sha256: 9caa16f5723c951d494ab9ae795b830e1b89281537d357b648bba625d4a95825
+        bytes: 3154
+      - filename: video-app.json
+        sha256: 9a2417875f5dbb7f80b82053f2805992d063ec09fc75a344661f8b6538837e88
+        bytes: 10701
+      - filename: video-ctv.json
+        sha256: 2998ff3dddda90deece4c66f9a625e2b57dec050a7ae53e10b21dc1db508bcf1
+        bytes: 11095
+      - filename: video-site.json
+        sha256: 13fca3695459a37ffaec2a8916326ffe3e7b741daabdfa8aeb28e41205a53a2f
+        bytes: 10837
     supplemental: []                          # 17 supplemental fixtures (bidfloor, app/site URL parsing, bad-imp variants, no-imp, server errors) — count-only mode
     amp: []
     video: []

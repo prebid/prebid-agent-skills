@@ -203,13 +203,25 @@ tests:
   java_it_folder_naming: null
   fixture_inventory:
     exemplary:
-      - multi-imp
-      - single-imp
-      - string-single-imp
+      - filename: multi-imp.json
+        sha256: f6d0a7767397c800d9caf45127a0ecf0271392108fc6650ac4a266ca2185b347
+        bytes: 3900
+      - filename: single-imp.json
+        sha256: bd6494fb696b44acbb3f884c85d4199700e913b7b669b0a356c6ff5b36cf2167
+        bytes: 2100
+      - filename: string-single-imp.json
+        sha256: 117d444e3d7d99be0332790b672c4c0136bb5ec9e5cb92c73dd1bfeb214a8010
+        bytes: 2102
     supplemental:
-      - 204-bid-response
-      - 503-bid-response
-      - zoneid_error
+      - filename: 204-bid-response.json
+        sha256: b49eeedc97c8002edaee31fad8c6d5aa31bd9410bbe6a6835b5380169d6925b9
+        bytes: 1083
+      - filename: 503-bid-response.json
+        sha256: d28df0a75e49244599f449147375c7dca919ca7d96a9d46e20260aac5eaf5655
+        bytes: 1216
+      - filename: zoneid_error.json
+        sha256: f552d5e25a1cfb8c7c573ef03c9cd466f9cb86cd9d84ff4afdc087285b377c69
+        bytes: 501
     amp: []
     video: []
     videosupplemental: []

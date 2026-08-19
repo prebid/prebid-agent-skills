@@ -32,62 +32,24 @@
 # Then review the diff and write the cause above each new entry. That diff is the
 # record of what was accepted.
 #
-# Entries: 23
-
-# prebid-server-java b2a24a0de (#4590, 2026-08-11) — "`emx_digital`: Add `emxdigital` alias".
-# The params file moved from emx_digital.json to emxdigital.json, byte-identical:
-# the golden's sha matches the file at its new path. A refresh re-roots
-# bidder_params_ref.path and re-pins; the sha and byte length do not change.
-# prebid-server-java 9cc44efdd (#4573, 2026-07-27) — "Magnite adapter: Rebrand
-# Rubicon adapter into Magnite adapter". 31 paths vanished; `rubicon` survives as an
-# alias of `magnite`. Refreshing needs a decision this baseline does not make: read
-# `magnite` as the parent and `rubicon` as its alias child, or rename the golden.
-# Until then the golden describes an adapter that no longer exists under that name.
-# prebid-server-java bc0409271 (#4444, 2026-07-20) — "Add Vert.x `UriTemplate`".
-# Endpoint macros moved from `{{X}}` to single-brace `{X}` across bidder-config, and
-# `String.replace` substitution moved to `Uri.of(...).replaceMacro(...).expand()`.
-# 152media's is the same commit but a mechanism change rather than a delimiter one:
-# `?zone=%s` (String.format) became `?zone={ZoneId}`. r5_check.normalize_endpoint_macros
-# canonicalizes the single-brace form, so refreshing these will not read as a
-# cross-language divergence; before that normalization landed it would have.
-# prebid-server 16f2ebd6 (#4608, 2026-07-03) — "Attekmi: Update root domain".
-# prebid.attekmi.com -> prebid.attekmi.co. NOT a brace-form change, and the Java side
-# still declares .com, so refreshing the Go golden alone surfaces a real
-# cross-language divergence that should be recorded in the pair file rather than
-# normalized away.
-# prebid-server-java d61575672 (#4378, 2026-07-23) — "Add `http_method` field to
-# `ExtRequestPrebidServer`". One line added to ext.prebid.server in every IT
-# bid-request fixture: `"http_method": "POST"`. Framework-wide, nothing
-# bidder-specific, and it accounts for all ten fixture_content_drift findings.
-# prebid-server-java ab56d865c (#4533, 2026-07-30) — "Require `vendor-id` for
-# aliases". At the golden's pin the alias was a tilde-stub (`152media: ~`) inheriting
-# adkernel's vendor-id 14; upstream now gives it its own 1111. The golden is right
-# about its pin.
-# prebid-server 3e80fa0f (#4824, 2026-08-18) — "TheTradeDesk: openrtb2.6 and audio
-# support". `openrtb.version` was absent at the golden's pin and is now 2.6. The
-# other three Go ortb_version findings were NOT drift: elementaltv, msft and
-# optidigital record the value at yaml_extra_fields.openrtb.version, which is where
-# read-bidder-info's documented policy puts it, and the comparison now looks there.
+# Entries: 31
 
 # prebid-server-java b2a24a0de (#4590, 2026-08-11) — "`emx_digital`: Add `emxdigital`
 # alias". The params file moved from emx_digital.json to emxdigital.json,
 # byte-identical: the golden's sha matches the file at its new path. A refresh
 # re-roots bidder_params_ref.path and re-pins; the sha and byte length do not change.
 sync-upstream | bidder_params_renamed_upstream | emxdigital/java | src/main/resources/static/bidder-params/emx_digital.json -> src/main/resources/static/bidder-params/emxdigital.json
-
 # prebid-server-java 9cc44efdd (#4573, 2026-07-27) — "Magnite adapter: Rebrand Rubicon
 # adapter into Magnite adapter". 31 paths vanished; `rubicon` survives as an alias of
 # `magnite`. Refreshing needs a decision this baseline does not make: read `magnite` as
 # the parent with `rubicon` as its alias child, or rename the golden. Until then the
 # golden describes an adapter that no longer exists under that name.
 sync-upstream | bidder_renamed_upstream | rubicon/java | magnite
-
 # Also #4444, but a mechanism change rather than a delimiter one: `?zone=%s`
 # (String.format) became `?zone={ZoneId}` (UriTemplate). The golden records
 # `macros_used: []` because `%s` is not a macro name; after a refresh it is
 # `['ZoneId']`.
 sync-upstream | endpoint_drift | 152media/java | http://pbs.adksrv.com/hb?zone={ZoneId}
-
 # prebid-server-java bc0409271 (#4444, 2026-07-20) — "Add Vert.x `UriTemplate`".
 # Endpoint macros moved from `{{X}}` to single-brace `{X}` across bidder-config, and
 # `String.replace` substitution moved to `Uri.of(...).replaceMacro(...).expand()`.
@@ -100,39 +62,51 @@ sync-upstream | endpoint_drift | adkerneladn/java | https://pbs2.adksrv.com/rtbp
 sync-upstream | endpoint_drift | adverxo/java | https://pbsadverxo.com/auction?adUnitId={adUnitId}&auth={auth}
 sync-upstream | endpoint_drift | elementaltv/java | https://pbs.elementaltv.io/ads/processHeaderBid/{AdUnit}
 sync-upstream | endpoint_drift | limelightDigital/java | http://ads-pbs.ortb.net/openrtb/{PublisherID}?host={Host}
-
 # prebid-server 16f2ebd6 (#4608, 2026-07-03) — "Attekmi: Update root domain".
 # prebid.attekmi.com -> prebid.attekmi.co, Go side only. NOT a brace change. The Java
 # side still declares .com, so refreshing this golden alone surfaces a real
 # cross-language divergence, which belongs in the pair file rather than being
 # normalized away.
 sync-upstream | endpoint_drift | smarthub/go | https://prebid.attekmi.co/pbserver?partnerName={{.Host}}&seat={{.AccountID}}&token={{.SourceId}}
-
 # #4444 delimiter change on the Java side of the same bidder. Note the host: still
 # .com here, while the Go entry above is .co.
 sync-upstream | endpoint_drift | smarthub/java | https://prebid.attekmi.com/pbserver?partnerName={Host}&seat={AccountID}&token={SourceId}
 sync-upstream | endpoint_drift | thetradedesk/java | https://direct.adsrvr.org/bid/bidder/{SupplyId}
-
 # prebid-server-java d61575672 (#4378, 2026-07-23) — "Add `http_method` field to
 # `ExtRequestPrebidServer`". One line added to ext.prebid.server in every IT
 # bid-request fixture: `"http_method": "POST"`. Framework-wide, nothing
-# bidder-specific, and it accounts for all ten fixture_content_drift entries below.
+# bidder-specific. It accounted for ten entries until the undigested fixture
+# inventories were filled; six more became visible then, in the adkerneladn,
+# emxdigital, freewheelssp, smarthub, thetradedesk and vungle goldens, whose
+# integration entries had carried `bytes: 0` and no sha256.
 sync-upstream | fixture_content_drift | 152media/java | src/test/resources/org/prebid/server/it/openrtb2/152media/test-152media-bid-request.json -> 96158cb4734faa6bdbac5dbda21c7c6769325366dcba39a94edbafd3bf12dc43
 sync-upstream | fixture_content_drift | aax/java | src/test/resources/org/prebid/server/it/openrtb2/aax/test-aax-bid-request.json -> 160fc11ee0783e48e11fc736292c2e499f7afd4eb8e8c72c4a10e2de7083c401
+sync-upstream | fixture_content_drift | adkerneladn/java | src/test/resources/org/prebid/server/it/openrtb2/adkerneladn/test-adkerneladn-bid-request.json -> 7e2fdcfb08c36974fcbf148fada48352833cfc16e6b0b66b92b5701250d5b483
 sync-upstream | fixture_content_drift | appnexus/java | src/test/resources/org/prebid/server/it/openrtb2/appnexus/test-video-appnexus-bid-request-1.json -> 3c605b2a605412b21c66fcfcd567941f70135390f0b051d294d08d9b6b3cd026
 sync-upstream | fixture_content_drift | appnexus/java | src/test/resources/org/prebid/server/it/openrtb2/appnexus/test-video-appnexus-bid-request-2.json -> 30722371145283501ef178f2ab8b868f5c349dbe4d251189317974164964b753
 sync-upstream | fixture_content_drift | elementaltv/java | src/test/resources/org/prebid/server/it/openrtb2/elementaltv/test-elementaltv-bid-request-1.json -> b4ceefbd5dc90b598f33cf4c7be8cd65c27fa9912ce6787f8c8c431ba3608e0b
+
+# prebid-server-java b2a24a0de (#4590, 2026-08-11) — the same commit as the
+# bidder-params rename above also rewrote the bidder key inside the auction
+# fixtures, `"emx_digital"` -> `"emxdigital"` under ext.prebid.bidder. Both files
+# became visible to the scan only once their digests were filled; they carried
+# `bytes: 0` and no sha256 before that.
+sync-upstream | fixture_content_drift | emxdigital/java | src/test/resources/org/prebid/server/it/openrtb2/emxdigital/test-auction-emxdigital-request.json -> 79c8c3789286b4a94fc6ad109202372dcd8a7f89afaa6994cb801adfa7fa19ee
+sync-upstream | fixture_content_drift | emxdigital/java | src/test/resources/org/prebid/server/it/openrtb2/emxdigital/test-auction-emxdigital-response.json -> e7fe83ea11c26d8bca4e822c0a16b7bb867e8fe10191b971857966e600845bc8
+sync-upstream | fixture_content_drift | emxdigital/java | src/test/resources/org/prebid/server/it/openrtb2/emxdigital/test-emxdigital-bid-request.json -> 3ac2bc6f3676f3907b87eb9fe33c9324ab88c69f66071420880b57599ab671bd
+sync-upstream | fixture_content_drift | freewheelssp/java | src/test/resources/org/prebid/server/it/openrtb2/freewheelssp/test-freewheelssp-bid-request.json -> 3bdc5e398d26eeb4ea15b27eeda14e1eea105360ce1b165065ce0d28d7a715e9
 sync-upstream | fixture_content_drift | generic/java | src/test/resources/org/prebid/server/it/openrtb2/generic/test-generic-bid-request.json -> 55424aef951630b00729a003330d14be606c1c6a695760ccd928efc68ef0213d
 sync-upstream | fixture_content_drift | generic/java | src/test/resources/org/prebid/server/it/openrtb2/generic_core_functionality/test-generic-bid-request.json -> 9898f2952b54afc1530fd817d2d4950216403d3e173cdf4b7b3bf308e4960605
 sync-upstream | fixture_content_drift | kobler/java | src/test/resources/org/prebid/server/it/openrtb2/kobler/test-kobler-bid-request.json -> 0e332e0d66226d44f4a1aef30d49d38fa14408d97137256152030c86b0e0e50c
 sync-upstream | fixture_content_drift | optidigital/java | src/test/resources/org/prebid/server/it/openrtb2/optidigital/test-optidigital-bid-request.json -> 5756b70e87b8dd6cab3d456c18877b0250a76c478b3b1d6cebc02b6ecd683827
+sync-upstream | fixture_content_drift | smarthub/java | src/test/resources/org/prebid/server/it/openrtb2/smarthub/test-smarthub-bid-request.json -> aaed033e893f0cd08fecf53f2f077d6e3fa2cb0f3ff6b3f58c29470a3aa793e5
 sync-upstream | fixture_content_drift | teqblaze/java | src/test/resources/org/prebid/server/it/openrtb2/teqblaze/test-teqblaze-bid-request.json -> 2411e24735575146bd6073c54da59c9d1115205e21640fa42432e845d8e77ab6
-
+sync-upstream | fixture_content_drift | thetradedesk/java | src/test/resources/org/prebid/server/it/openrtb2/thetradedesk/test-thetradedesk-bid-request.json -> 8c5a5e83cf45c76027c10bdfb7a265c4a2eec7a0993d2101552bc74771550189
+sync-upstream | fixture_content_drift | vungle/java | src/test/resources/org/prebid/server/it/openrtb2/vungle/test-vungle-bid-request.json -> 98edab6bce86da656b0f0ed27941322b1b7b8237f4c1610b4fbd067ef7e4cf2b
 # prebid-server-java ab56d865c (#4533, 2026-07-30) — "Require `vendor-id` for aliases".
 # At the golden's pin the alias was a tilde-stub (`152media: ~`) inheriting adkernel's
 # vendor-id 14; upstream now gives it its own 1111. The golden is right about its pin.
 sync-upstream | gvl_vendor_id_drift | 152media/java | 1111
-
 # prebid-server 3e80fa0f (#4824, 2026-08-18) — "TheTradeDesk: openrtb2.6 and audio
 # support". `openrtb.version` was absent at the golden's pin and is now 2.6. The other
 # three Go ortb_version findings were never drift: elementaltv, msft and optidigital

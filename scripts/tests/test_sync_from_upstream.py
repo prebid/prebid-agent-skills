@@ -1066,11 +1066,11 @@ _EXPR_SUBS = {
 
 
 def _substitute(text: str, exit_code: str, claims: str = "0", refs: str = "0",
-                baseline: str = "0") -> str:
+                baseline: str = "0", fixtures: str = "0") -> str:
     """Render a step's shell body with the step outputs it reads.
 
-    `claims`, `refs` and `baseline` default to "0" so the many callers that only
-    care about the sync exit keep working. An EMPTY string is a meaningful value,
+    `claims`, `refs`, `baseline` and `fixtures` default to "0" so the many callers
+    that only care about the sync exit keep working. An EMPTY string is a meaningful value,
     not a default: GitHub renders an unset step output as the empty string, which
     is what a step that died before its `echo` produces.
     """
@@ -1078,6 +1078,7 @@ def _substitute(text: str, exit_code: str, claims: str = "0", refs: str = "0",
     text = re.sub(r"\$\{\{\s*steps\.claims\.outputs\.exit\s*\}\}", claims, text)
     text = re.sub(r"\$\{\{\s*steps\.refs\.outputs\.exit\s*\}\}", refs, text)
     text = re.sub(r"\$\{\{\s*steps\.baseline\.outputs\.exit\s*\}\}", baseline, text)
+    text = re.sub(r"\$\{\{\s*steps\.fixtures\.outputs\.exit\s*\}\}", fixtures, text)
     for pat, val in _EXPR_SUBS.items():
         text = re.sub(pat, val, text)
     return text
@@ -1414,8 +1415,25 @@ class TestWorkflowEscalation(unittest.TestCase):
             self.assertNotIn("${{", body)
             proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
             self.assertEqual(expected, proc.returncode,
-                             f"{why} (sync={sync} claims={claims} refs={refs}): "
-                             f"{proc.stdout}{proc.stderr}")
+                             f"{why}: {proc.stdout}{proc.stderr}")
+
+    def test_fixture_digest_verdict_reaches_the_exit_code(self):
+        """The fixture-digest step is `continue-on-error`, so the only thing that
+        turns it into a verdict is this step reading its output. A digest that
+        stopped describing its file, or a coverage regression, would otherwise be
+        reported into a log nobody reads."""
+        step = self.steps["Enforce sync exit code"]
+        cases = [
+            ("0", 0, "clean"),
+            ("1", 1, "a digest no longer describes its file, or coverage regressed"),
+            ("", 1, "the step never reached its echo"),
+        ]
+        for fixtures, expected, why in cases:
+            body = _substitute(step["run"], "0", "0", "0", "0", fixtures)
+            self.assertNotIn("${{", body)
+            proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
+            self.assertEqual(expected, proc.returncode,
+                             f"{why} (fixtures={fixtures!r}): {proc.stdout}{proc.stderr}")
 
     def test_a_step_that_never_ran_is_not_a_pass(self):
         """An empty step output means the step died before its echo.

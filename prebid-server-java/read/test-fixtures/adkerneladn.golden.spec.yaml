@@ -208,16 +208,20 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-adkerneladn-bid-request.json
-        bytes: 0
+        sha256: 4c9badc4226e7b141f703fcdd3b61f11ee66a95579e3e25e7bd0298a59c9f0cf
+        bytes: 715
         role: bidder-bid-request
       - filename: test-adkerneladn-bid-response.json
-        bytes: 0
+        sha256: 72feabc911e52f528798fcb622fa0c9077dfa8f9f083eb7a31636065d9f7b2e7
+        bytes: 457
         role: bidder-bid-response
       - filename: test-auction-adkerneladn-request.json
-        bytes: 0
+        sha256: 5835c3b45649a88c8d0fc7063e8447ddea8834cf8147c978ff46ab7575da8840
+        bytes: 285
         role: auction-request
       - filename: test-auction-adkerneladn-response.json
-        bytes: 0
+        sha256: 5a046bcac0d777c7729dcd928e353cb5f68221dcd70e287a7e0f56b0cee9e143
+        bytes: 923
         role: auction-response
   uses_canonical_harness: true
   unit_test_methods_count: null
