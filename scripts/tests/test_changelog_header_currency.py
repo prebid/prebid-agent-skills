@@ -18,10 +18,13 @@ SCOPE
     excludes CHANGELOG.md wholesale for exactly that reason, and this gate is the
     narrow exception for the one header that is a present-tense claim.
 
-    `port_report_version` is not checked: `port-report.schema.json` declares no
-    version field anywhere, so the number has no artifact to compare against. That
-    is worth fixing in the schema; until then the gate would be asserting one piece
-    of prose against another.
+    None of the four versions is pinned by a `const` anywhere. Each schema
+    constrains only a SemVer `pattern`, deliberately, so an artifact emitted by an
+    older skill build still validates. The current value therefore lives in the
+    shipped artifacts, and this gate reads it from there: `adapter_spec_version`
+    from the goldens, `port_report_version` from the two port SKILLs' emission
+    blocks, the other two from their own YAML. Each source requires unanimity, so a
+    half-migrated corpus fails rather than silently picking a winner.
 
 Run: python3 -m unittest scripts.tests.test_changelog_header_currency -v
 """
@@ -41,8 +44,16 @@ SHARED = REPO_ROOT / "prebid-server-go" / "read" / "skills" / "shared"
 HEADER_RE = re.compile(
     r"^## \[adapter_spec_version (?P<spec>[\d.]+)\]"
     r" · \[taxonomy_version (?P<taxonomy>[\d.]+)\]"
-    r" · \[port_translation_rules_version (?P<rules>[\d.]+)\]",
+    r" · \[port_translation_rules_version (?P<rules>[\d.]+)\]"
+    r" · \[port_report_version (?P<report>[\d.]+)\]",
     re.M)
+
+# The two skills whose Step 7 emission block writes port_report_version.
+PORT_SKILLS = (
+    REPO_ROOT / "prebid-server-go" / "port-java2go" / "SKILL.md",
+    REPO_ROOT / "prebid-server-java" / "port-go2java" / "SKILL.md",
+)
+REPORT_VERSION_RE = re.compile(r'"port_report_version":\s*"([\d.]+)"')
 
 
 def live_versions() -> dict[str, str]:
@@ -62,8 +73,12 @@ def live_versions() -> dict[str, str]:
                               "test-fixtures").glob("*.golden.spec.yaml")):
             spec = yaml.safe_load(golden.read_text(encoding="utf-8"))
             declared.add(str(spec.get("adapter_spec_version")))
+    emitted = set()
+    for skill in PORT_SKILLS:
+        emitted.update(REPORT_VERSION_RE.findall(skill.read_text(encoding="utf-8")))
     return {
         "spec": declared.pop() if len(declared) == 1 else None,
+        "report": emitted.pop() if len(emitted) == 1 else None,
         "taxonomy": yaml.safe_load(
             (SHARED / "behavior-taxonomy.yaml").read_text(encoding="utf-8"))["taxonomy_version"],
         "rules": yaml.safe_load(
@@ -86,15 +101,16 @@ class TestChangelogHeaderCurrency(unittest.TestCase):
         self.assertEqual([], missing,
                          f"could not read the live version for {missing} -- an "
                          f"unreadable source makes the comparison vacuous. For "
-                         f"'spec' this also fires when the goldens do not all "
-                         f"declare the same adapter_spec_version.")
+                         f"'spec' this also fires when the goldens disagree on "
+                         f"adapter_spec_version, and for 'report' when the two "
+                         f"port SKILLs emit different port_report_version values.")
 
     def test_topmost_header_matches_the_corpus(self):
         m = HEADER_RE.search(CHANGELOG.read_text(encoding="utf-8"))
         assert m is not None  # covered by test_a_header_is_parseable
         live = live_versions()
         drift = [f"{key}: CHANGELOG says {m.group(key)!r}, corpus says {live[key]!r}"
-                 for key in ("spec", "taxonomy", "rules")
+                 for key in ("spec", "taxonomy", "rules", "report")
                  if m.group(key) != live[key]]
         self.assertEqual(
             [], drift,
