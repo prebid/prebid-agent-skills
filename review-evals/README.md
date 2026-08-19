@@ -50,6 +50,32 @@ ceiling. An entry without one is an instrument error, not a pass.
 `additional` describes what a correct review MAY report, never what it must: an
 unreported `additional` entry does not reduce recall. Only `expected` does.
 
+### Two rules the classification has to follow
+
+**Neutralisation wins.** The order is neutralised, then additional, then unexpected.
+"The rule did not exist yet" is a stronger statement than "documented and unraised",
+so an `additional` entry must not claim an epoch-exempt finding and take it out of
+the neutralised report. Writing `prebid-server-java-4428`'s entries produced exactly
+that error before the order was fixed.
+
+**Severity direction decides borderline cases.** A finding rated *below* its
+sanctioned severity is still `additional` — the subject is right and
+`severity_agreement` records the gap. A finding rated *above* it is not, because the
+over-rating is the harm: a blocking comment where a note is sanctioned. Three
+findings on `prebid-server-4287` stay `unexpected` for that reason or because the
+rule they name explicitly excludes them:
+
+- a supplemental-coverage absence reported at WARN where the rule says "as a single
+  INFO … never as a FAIL";
+- a test-runner endpoint literal, where the reference is explicit that "a
+  test-runner endpoint is not a finding at any severity";
+- a 204 fixture with no expected errors, where the rule says "Do NOT flag a fixture
+  asserting graceful degradation … This covers HTTP 204 / no-content".
+
+All three quote pre-calibration wording, so the recorded run predates the
+re-scoping now in the skills. A citation must match the rule **as currently
+scoped**, not merely name it.
+
 ## The corpus
 
 Nine fixtures. Six Go, three Java; six carry defects a maintainer raised, three

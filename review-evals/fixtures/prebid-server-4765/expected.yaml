@@ -134,6 +134,16 @@ forbidden: []
 # assistant finding something a human did not is the point, not a defect, so the
 # unexpected ceiling must not absorb it. Each entry cites the rule it rests on;
 # without a citation it is indistinguishable from raising the ceiling.
+#
+# NOT listed here, deliberately: the WARN on
+# adapters/teal/tealtest/supplemental/status-204.json. It stays `unexpected`
+# because the rule it names excludes it. adapter-code-pr-review/SKILL.md step 4
+# says "Do NOT flag a fixture asserting graceful degradation ... This covers
+# HTTP 204 / no-content" and "Do NOT flag 'this looks like it belongs in
+# exemplary/'" -- and the recorded finding's note gives both as its reasons. The
+# run quotes a pre-re-scoping version of the rule; the calibration in that step
+# measures the unscoped form at 31% of the merged corpus. A citation has to match
+# the rule as currently scoped, not merely name it.
 additional:
   - id: teal-alias-omits-gvl
     path: static/bidder-info/tealplus.yaml
@@ -184,13 +194,6 @@ additional:
     severity: WARN
     rule: >-
       adapter-code-pr-review/SKILL.md:252 — destructive write to caller-provided ext/JSON; document the intentional clobber
-  - id: teal-204-fixture-declares-no-expectation
-    path: adapters/teal/tealtest/supplemental/status-204.json
-    anchor: <file>
-    family: test-coverage
-    severity: WARN
-    rule: >-
-      adapter-code-pr-review — supplemental fixture declaring neither expectedMakeRequestsErrors nor expectedMakeBidsErrors
   - id: teal-ext-struct-companion-note
     path: openrtb_ext/imp_teal.go
     anchor: Account   string  `json:"account"`

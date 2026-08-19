@@ -50,3 +50,62 @@ expected:
     why_it_matters: Every bid is stamped banner with no reference to the bid or its imp; the reviewer asked for a getMediaTypeForBid returning (BidType, error).
 
 forbidden: []
+
+# Findings this repo's own documented rules require, that no maintainer raised on
+# this PR. A citation must match the rule AS CURRENTLY SCOPED, not merely name it.
+#
+# Three of the eight are NOT here, and each names a rule that excludes it:
+#
+#  - WARN on optidigital_test.go `RunJSONBidderTest` (supplemental coverage). The
+#    rule reports absences other than 204 "as a single INFO naming what is
+#    missing; never as six findings, and never as a FAIL"
+#    (adapter-code-pr-review/SKILL.md step 3). WARN is above the sanctioned
+#    severity, so the subject is right and the verdict is not.
+#  - INFO on the test runner's `Endpoint:` literal. adapter-code-index.md:349 is
+#    explicit: "A test-runner endpoint is not a finding at any severity" -- 134
+#    adapters configure their real production domain there and `fake.endpoint.test`
+#    appears in 0 upstream fixtures.
+#  - WARN on supplemental/no_response.json `"status": 204`. Step 4 says "Do NOT
+#    flag a fixture asserting graceful degradation ... This covers HTTP 204 /
+#    no-content" and "Do NOT flag 'this looks like it belongs in exemplary/'" --
+#    the recorded note gives both as its reasons.
+#
+# All three quote pre-calibration wording, so the recorded run predates the
+# re-scoping now in the skills. They stay `unexpected`: that is the class for a
+# finding the suite should not have made.
+additional:
+  - id: optidigital-requestdata-omits-headers
+    path: adapters/optidigital/optidigital.go
+    anchor: requestData := &adapters.RequestData{
+    family: framework-idiom
+    severity: WARN
+    rule: >-
+      adapter-code-pr-review/SKILL.md:228 — `Headers` should include `Content-Type: application/json` at minimum; an adapter that omits `Headers` entirely from `RequestData` is WARN
+  - id: optidigital-no-dooh-exemplary-fixture
+    path: adapters/optidigital/optidigitaltest/exemplary/banner.json
+    anchor: '"mockBidRequest": {'
+    family: test-coverage
+    severity: WARN
+    rule: >-
+      bidder-info-pr-review/SKILL.md:306 — DOOH-specific cross-check: if capabilities.dooh is declared the adapter MUST include at least one exemplary fixture exercising dooh context; absent is WARN. Same rule as optidigital-dooh-declared-unexercised, seen from the fixture side
+  - id: optidigital-dooh-declared-unexercised
+    path: static/bidder-info/optidigital.yaml
+    anchor: 'dooh:'
+    family: mediatype-config-drift
+    severity: WARN
+    rule: >-
+      bidder-info-pr-review/SKILL.md:303-306 — DOOH scrutiny plus the DOOH-specific cross-check; WARN when declared and no dooh fixture exists
+  - id: optidigital-legacy-impext-naming
+    path: openrtb_ext/imp_optidigital.go
+    anchor: type ImpExtOptidigital struct {
+    family: naming-conventions
+    severity: INFO
+    rule: >-
+      bidder-params-pr-review/SKILL.md:225 — canonical type name is ExtImp{Bidder}; when reviewing a NEW adapter that uses ImpExt{Bidder}, flag as INFO
+  - id: optidigital-ext-struct-tag-companion
+    path: openrtb_ext/imp_optidigital.go
+    anchor: PublisherID  string `json:"publisherId"`
+    family: cross-file-consistency
+    severity: INFO
+    rule: >-
+      adapter-code-pr-review/SKILL.md:137 — cross-file JSON tag consistency when the PR includes both openrtb_ext/imp_{bidder}.go and adapter Go files; INFO at most

@@ -384,19 +384,23 @@ def score_fixture(fx: dict, actual: dict) -> dict:
             del forb_matched[fid]
 
     after_forbidden = [f for i, f in enumerate(remaining) if i not in forb_used]
-    add_matched, add_used = assign(fx.get("additional") or [], after_forbidden)
-    additional = [f for i, f in enumerate(after_forbidden) if i in add_used]
-    unexpected = [f for i, f in enumerate(after_forbidden) if i not in add_used]
 
-    # A rule whose upstream fact postdates this PR could not have been raised on
-    # it. Such findings are neutralised: they do not count against the unexpected
-    # ceiling, and they are reported separately so the exemption stays visible
-    # rather than quietly shrinking the denominator.
+    # Neutralisation comes BEFORE `additional`, and the order is load-bearing. A
+    # rule whose upstream fact postdates this PR could not have been raised on it
+    # at all, which is a stronger statement than "documented and unraised" -- so an
+    # `additional` entry must not be able to claim such a finding and quietly take
+    # it out of the neutralised report. Writing the entries for
+    # prebid-server-java-4428 produced exactly that: a substring match assigned the
+    # epoch-neutralised `framework-idiom` finding an `additional` id, which would
+    # have moved it from NEUTRALISED to ADDITIONAL and hidden the exemption.
     neutral = fx.get("neutralised_families") or {}
-    neutralised = [f for f in unexpected
+    neutralised = [f for f in after_forbidden
                    if (f.get("family") or "").strip().lower() in neutral]
-    if neutral:
-        unexpected = [f for f in unexpected if f not in neutralised]
+    classifiable = [f for f in after_forbidden if f not in neutralised]
+
+    add_matched, add_used = assign(fx.get("additional") or [], classifiable)
+    additional = [f for i, f in enumerate(classifiable) if i in add_used]
+    unexpected = [f for i, f in enumerate(classifiable) if i not in add_used]
 
     total_expected = len(fx["expected"])
     recall = (len(exp_matched) / total_expected) if total_expected else None

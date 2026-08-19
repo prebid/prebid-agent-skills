@@ -408,6 +408,32 @@ class TestFalsePositives(HarnessTestCase):
                          "an unreported additional finding must not reduce recall")
         self.assertEqual(scorer.EXIT_PASS, rc)
 
+    def test_neutralisation_beats_an_additional_entry(self):
+        """Order is load-bearing: neutralised, then additional, then unexpected.
+
+        "The rule did not exist yet" is a stronger statement than "documented and
+        unraised", so an `additional` entry must not be able to claim an
+        epoch-neutralised finding and take it out of the neutralised report.
+        Classifying `prebid-server-java-4428` produced exactly that: a substring
+        match gave the epoch-exempt `framework-idiom` finding an `additional` id,
+        which moved it from NEUTRALISED to ADDITIONAL and hid the exemption.
+        """
+        fx = {"id": "t", "meta": {}, "files": [{"filename": "a.java"}],
+              "expected": [], "forbidden": [], "patches": {"a.java": ""},
+              "additional": [{"id": "would-claim-it", "path": "a.java", "anchor": "x",
+                              "family": "framework-idiom", "severity": "FAIL",
+                              "rule": "shared/framework-utilities-java.md — a real rule"}],
+              "neutralised_families": {"framework-idiom": {"upstream": "java#4444"}}}
+        actual = {"files_scanned": 1, "findings": [
+            {"path": "a.java", "anchor": "x", "severity": "FAIL", "family": "framework-idiom"},
+        ]}
+        res = scorer.score_fixture(fx, actual)
+        self.assertEqual(1, res["neutralised"],
+                         "the epoch-exempt finding must stay neutralised")
+        self.assertEqual(0, res.get("additional_matched"),
+                         "an additional entry must not claim a neutralised finding")
+        self.assertEqual(0, res["unexpected"])
+
     def test_clean_fixture_with_no_findings_passes(self):
         """The pass arm of the false-positive gate: saying nothing about a PR
         the maintainers merged unchanged is the correct answer."""
