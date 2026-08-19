@@ -144,7 +144,7 @@ For each of the 49 rules, scan the rule body for bidder names and check whether 
 | Rule 13 | Dev-prod toggle | (generic) | 0 | 0 |
 | Rule 14 | Region from country (runtime-region-selection) | (generic) | 0 | 0 |
 | Rule 15 | Deploy-time tokens | `rubicon` | 1 | 0 |
-| Rule 48 | Param-derived endpoint macros (parse a publisher param to fill macros) | (generic) | 0 | 0 |
+| Rule 48 | Param-derived endpoint macros (parse a publisher param to fill macros) | `teqblaze` | 1 | 0 |
 | Rule 16 | max-imps-per-request split | (generic) | 0 | 0 |
 | Rule 17 | Pod-grouping by imp.id prefix | (generic) | 0 | 0 |
 | Rule 18 | Multi-format split (one request per media type) | (generic) | 0 | 0 |

@@ -775,3 +775,47 @@ claims:
       - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
         assert: Integer (adtarget) and an enum (taboola)
 
+  - id: java.clydo.geographic-host-param-is-optional
+    kind: count
+    repo: java
+    upstream_path: src/main/resources/static/bidder-params
+    glob: clydo.json
+    mode: files
+    pattern: '"required":\s*\[\s*"partnerId"\s*\]'
+    expect: 1
+    strict: true
+    why: 'The merged precedent for Rule 48''s geographic-host constraint. clydo puts
+      {Region} in its hostname and still leaves `region` OUT of the params required
+      list, so the publisher is never forced to supply the geo component. The PR
+      template''s "geographic host parameters are NOT required" is otherwise a line
+      with no worked example, and Rule 48''s own example does the opposite.
+
+      '
+    regenerate: 'git grep -n ''"required"'' -- src/main/resources/static/bidder-params/clydo.json
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: '`\"required\": [\"partnerId\"]` only'
+
+  - id: java.clydo.default-region-fallback
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder/clydo
+    glob: ClydoBidder.java
+    mode: files
+    pattern: DEFAULT_REGION
+    expect: 1
+    strict: true
+    why: 'The other half of the same precedent: an absent or unrecognized region
+      resolves to a default rather than failing the request. Without this, "optional in
+      the schema" would still mean a broken request when the param is omitted.
+
+      '
+    regenerate: 'git grep -n DEFAULT_REGION -- src/main/java/org/prebid/server/bidder/clydo
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: 'carries `DEFAULT_REGION = \"us\"`'
+

@@ -453,72 +453,89 @@ sections:
     spec_field_driver: '`endpoint_resolution.kind: param-derived-endpoint-macros` (+ paired quirk taxon
       of the same name)'
     body: "**Go code** (rtbstack — master sample; region parsed from the route URL's hostname label, remaining\
-      \ macros from its query params):\n```go\nvar validRegions = map[string]bool{\"us\": true, \"eu\"\
-      : true, \"sg\": true}\n\nfunc (a *adapter) buildEndpointURL(ext *openrtb_ext.ExtImpRTBStack) (string,\
-      \ error) {\n    routeURL, err := url.Parse(ext.Route)\n    if err != nil {\n        return \"\"\
-      , &errortypes.BadInput{Message: fmt.Sprintf(\"invalid route URL: %v\", err)}\n    }\n\n    region,\
-      \ err := extractRegion(routeURL.Hostname())\n    if err != nil {\n        return \"\", err\n   \
-      \ }\n\n    queryParams := routeURL.Query()\n    client := queryParams.Get(\"client\")\n    endpoint\
-      \ := queryParams.Get(\"endpoint\")\n    ssp := queryParams.Get(\"ssp\")\n\n    if client == \"\"\
-      \ || endpoint == \"\" || ssp == \"\" {\n        return \"\", &errortypes.BadInput{Message: \"route\
-      \ URL must contain client, endpoint, and ssp query parameters\"}\n    }\n\n    params := macros.EndpointTemplateParams{Region:\
+      \ macros from its query params):\n```go\nvar validRegions = map[string]bool{\"us\": true, \"eu\": true,\
+      \ \"sg\": true}\n\nfunc (a *adapter) buildEndpointURL(ext *openrtb_ext.ExtImpRTBStack) (string, error)\
+      \ {\n    routeURL, err := url.Parse(ext.Route)\n    if err != nil {\n        return \"\", &errortypes.BadInput{Message:\
+      \ fmt.Sprintf(\"invalid route URL: %v\", err)}\n    }\n\n    region, err := extractRegion(routeURL.Hostname())\n\
+      \    if err != nil {\n        return \"\", err\n    }\n\n    queryParams := routeURL.Query()\n    client\
+      \ := queryParams.Get(\"client\")\n    endpoint := queryParams.Get(\"endpoint\")\n    ssp := queryParams.Get(\"\
+      ssp\")\n\n    if client == \"\" || endpoint == \"\" || ssp == \"\" {\n        return \"\", &errortypes.BadInput{Message:\
+      \ \"route URL must contain client, endpoint, and ssp query parameters\"}\n    }\n\n    params := macros.EndpointTemplateParams{Region:\
       \ region, SspID: ssp, ZoneID: endpoint, PartnerId: client}\n    return macros.ResolveMacros(a.endpoint,\
-      \ params)\n}\n\nfunc extractRegion(hostname string) (string, error) {\n    for _, part := range\
-      \ strings.Split(hostname, \".\") {\n        if strings.HasSuffix(part, \"-adx-admixer\") {\n   \
-      \         region := strings.ToLower(strings.TrimSuffix(part, \"-adx-admixer\"))\n            if\
-      \ validRegions[region] {\n                return region, nil\n            }\n        }\n    }\n\
-      \    return \"\", &errortypes.BadInput{Message: \"unable to extract valid region from route URL\
-      \ hostname\"}\n}\n```\n\n**Java code** (URIBuilder parse, then `Uri.replaceMacro` on single-brace\
-      \ config macros):\n```java\nprivate static final Set<String> VALID_REGIONS = Set.of(\"us\", \"eu\"\
-      , \"sg\");\n\nprivate String buildEndpointUrl(String route) {\n    final URIBuilder routeUri;\n\
-      \    try {\n        routeUri = new URIBuilder(route);\n    } catch (URISyntaxException e) {\n  \
-      \      throw new PreBidException(\"invalid route URL: \" + e.getMessage());\n    }\n\n    final\
-      \ String region = extractRegion(routeUri.getHost());\n    final List<NameValuePair> queryParams\
-      \ = routeUri.getQueryParams();\n    final String client = firstQueryParam(queryParams, \"client\"\
-      );\n    final String endpoint = firstQueryParam(queryParams, \"endpoint\");\n    final String ssp\
-      \ = firstQueryParam(queryParams, \"ssp\");\n\n    if (StringUtils.isEmpty(client) || StringUtils.isEmpty(endpoint)\
-      \ || StringUtils.isEmpty(ssp)) {\n        throw new PreBidException(\"route URL must contain client,\
-      \ endpoint, and ssp query parameters\");\n    }\n\n    return endpointUrl              // Uri.of(configEndpoint),\
-      \ built once in the constructor\n            .replaceMacro(REGION_MACRO, region)\n            .replaceMacro(SSP_ID_MACRO,\
-      \ ssp)\n            .replaceMacro(ZONE_ID_MACRO, endpoint)\n            .replaceMacro(PARTNER_ID_MACRO,\
-      \ client)\n            .expand();\n}\n```\n\nThe macro constants hold BARE names (`\"Region\"`,\
-      \ `\"SspID\"`), and the bidder-config\nendpoint writes them single-brace (`{Region}`), not `{{Region}}`.\n\
-      \n**This example was rewritten, and the original is worth knowing about.** The rule was\nminted\
-      \ from a green-field canary against `prebid/prebid-server-java#4552`, and it first\ncarried the\
-      \ canary's own Java code: chained `String.replace` with a per-parameter\n`HttpUtil.encodeUrl` on\
-      \ each value. Upstream review rejected exactly that, on that PR,\nas a FAIL — \"hand-substituted\
-      \ macros with per-parameter `HttpUtil.encodeUrl`\ndouble-encode once `Uri.java` is used; the target\
-      \ repo builds bidder URIs\" through\n`Uri`. The rule was teaching porters the pattern the reviewer\
-      \ asked to be changed.\n\nTwo consequences worth carrying forward. The review's stated mechanism\
-      \ is that\n`Uri.java` performs the encoding, so a per-parameter `HttpUtil.encodeUrl` double-encodes\n\
+      \ params)\n}\n\nfunc extractRegion(hostname string) (string, error) {\n    for _, part := range strings.Split(hostname,\
+      \ \".\") {\n        if strings.HasSuffix(part, \"-adx-admixer\") {\n            region := strings.ToLower(strings.TrimSuffix(part,\
+      \ \"-adx-admixer\"))\n            if validRegions[region] {\n                return region, nil\n  \
+      \          }\n        }\n    }\n    return \"\", &errortypes.BadInput{Message: \"unable to extract valid\
+      \ region from route URL hostname\"}\n}\n```\n\n**Java code** (URIBuilder parse, then `Uri.replaceMacro`\
+      \ on single-brace config macros):\n```java\nprivate static final Set<String> VALID_REGIONS = Set.of(\"\
+      us\", \"eu\", \"sg\");\n\nprivate String buildEndpointUrl(String route) {\n    final URIBuilder routeUri;\n\
+      \    try {\n        routeUri = new URIBuilder(route);\n    } catch (URISyntaxException e) {\n      \
+      \  throw new PreBidException(\"invalid route URL: \" + e.getMessage());\n    }\n\n    final String region\
+      \ = extractRegion(routeUri.getHost());\n    final List<NameValuePair> queryParams = routeUri.getQueryParams();\n\
+      \    final String client = firstQueryParam(queryParams, \"client\");\n    final String endpoint = firstQueryParam(queryParams,\
+      \ \"endpoint\");\n    final String ssp = firstQueryParam(queryParams, \"ssp\");\n\n    if (StringUtils.isEmpty(client)\
+      \ || StringUtils.isEmpty(endpoint) || StringUtils.isEmpty(ssp)) {\n        throw new PreBidException(\"\
+      route URL must contain client, endpoint, and ssp query parameters\");\n    }\n\n    return endpointUrl\
+      \              // Uri.of(configEndpoint), built once in the constructor\n            .replaceMacro(REGION_MACRO,\
+      \ region)\n            .replaceMacro(SSP_ID_MACRO, ssp)\n            .replaceMacro(ZONE_ID_MACRO, endpoint)\n\
+      \            .replaceMacro(PARTNER_ID_MACRO, client)\n            .expand();\n}\n```\n\nThe macro constants\
+      \ hold BARE names (`\"Region\"`, `\"SspID\"`), and the bidder-config\nendpoint writes them single-brace\
+      \ (`{Region}`), not `{{Region}}`.\n\n**This example was rewritten, and the original is worth knowing\
+      \ about.** The rule was\nminted from a green-field canary against `prebid/prebid-server-java#4552`,\
+      \ and it first\ncarried the canary's own Java code: chained `String.replace` with a per-parameter\n\
+      `HttpUtil.encodeUrl` on each value. Upstream review rejected exactly that, on that PR,\nas a FAIL —\
+      \ \"hand-substituted macros with per-parameter `HttpUtil.encodeUrl`\ndouble-encode once `Uri.java` is\
+      \ used; the target repo builds bidder URIs\" through\n`Uri`. The rule was teaching porters the pattern\
+      \ the reviewer asked to be changed.\n\nTwo consequences worth carrying forward. The review's stated\
+      \ mechanism is that\n`Uri.java` performs the encoding, so a per-parameter `HttpUtil.encodeUrl` double-encodes\n\
       rather than protecting anything — attributed to the review rather than measured here, and\nconsistent\
-      \ with `expand()` delegating to Vert.x `UriTemplate`. And\na rule minted from a canary is only as\
-      \ validated as that canary's upstream review — a\ncanary that compiles and passes a local gate has\
-      \ not yet been reviewed by the people\nwhose merge bar the rule is meant to encode.\n\n**Translation\
-      \ rule**: This is NOT Rule 11 (macros filled from direct `imp.ext.bidder` fields) and NOT Rule 14\
-      \ (region from request geo context like `device.geo.country`) — here every macro value is derived\
-      \ by parsing ONE publisher-supplied param. Three invariants must survive the port: (1) the parse-validate-substitute\
-      \ order, including the component allow-list (region here) enforced in CODE while the params JSON\
-      \ schema stays permissive (validation-layering — the schema accepting values code rejects is source-faithful,\
-      \ do not \"fix\" it unilaterally per Rule 38); (2) per-group error isolation — an invalid param\
-      \ value rejects only its own request group with BadInput; (3) the pinned parent domain in bidder\
-      \ config, which is what keeps the derived host inside vendor-controlled DNS (upstream new-adapter\
-      \ checklist \"NO fully dynamic hostnames\" — cite this in the PR body when the reviewer checklist\
-      \ asks).\n\n**Round-trip considerations**: encoding still diverges, but not where the original example\
-      \ put it. Java substitutes through `Uri.expand()`, which delegates to Vert.x `UriTemplate` with\
-      \ `Variables` (`org/prebid/server/util/Uri.java`), so the URI template performs the expansion; Go's\
-      \ `macros.ResolveMacros` substitutes raw. Do NOT hand-encode a value before handing it to `replaceMacro`\
-      \ — that is a second encoding on top of the template's, which is what upstream review rejected.\
-      \ Record the asymmetry in `port-report.json` (`human_todos[]: framework-asymmetry` + dest-spec `java_specific_concerns[]`)\
-      \ and pin it with a differential unit test built from a value containing a URL-special character.\
-      \ The earlier form of this note asserted `client%201` in the route becoming `client+1` in the resolved\
-      \ URL; that `+` is `HttpUtil.encodeUrl`'s form encoding, which is no longer in the path. The character-level\
-      \ behaviour of the template expansion was NOT measured here — read it off a run rather than assuming\
-      \ a table.\n\n**Notes**: Master sample: rtbstack (Go PR #4685 → Java PR #4552). Often composes with\
-      \ Rule 47 — the parsed param is also the grouping key, so endpoint resolution runs once per imp\
-      \ group on the group's key. Template support: `port-go2java`'s `bidder.java.j2` handles this via\
-      \ the operator-fill path (`unresolved_translations[]: novel-pattern`) — the parse/validate logic\
-      \ is vendor-specific by construction."
+      \ with `expand()` delegating to Vert.x `UriTemplate`. And\na rule minted from a canary is only as validated\
+      \ as that canary's upstream review — a\ncanary that compiles and passes a local gate has not yet been\
+      \ reviewed by the people\nwhose merge bar the rule is meant to encode.\n\n**Translation rule**: This\
+      \ is NOT Rule 11 (macros filled from direct `imp.ext.bidder` fields) and NOT Rule 14 (region from request\
+      \ geo context like `device.geo.country`) — here every macro value is derived by parsing ONE publisher-supplied\
+      \ param. Three invariants must survive the port: (1) the parse-validate-substitute order, including\
+      \ the component allow-list (region here) enforced in CODE while the params JSON schema stays permissive\
+      \ (validation-layering — the schema accepting values code rejects is source-faithful, do not \"fix\"\
+      \ it unilaterally per Rule 38); (2) per-group error isolation — an invalid param value rejects only\
+      \ its own request group with BadInput; (3) the pinned parent domain in bidder config, which is what\
+      \ keeps the derived host inside vendor-controlled DNS (upstream new-adapter checklist \"NO fully dynamic\
+      \ hostnames\" — cite this in the PR body when the reviewer checklist asks).\n\n**Round-trip considerations**:\
+      \ encoding still diverges, but not where the original example put it. Java substitutes through `Uri.expand()`,\
+      \ which delegates to Vert.x `UriTemplate` with `Variables` (`org/prebid/server/util/Uri.java`), so the\
+      \ URI template performs the expansion; Go's `macros.ResolveMacros` substitutes raw. Do NOT hand-encode\
+      \ a value before handing it to `replaceMacro` — that is a second encoding on top of the template's,\
+      \ which is what upstream review rejected. Record the asymmetry in `port-report.json` (`human_todos[]:\
+      \ framework-asymmetry` + dest-spec `java_specific_concerns[]`) and pin it with a differential unit test\
+      \ built from a value containing a URL-special character. The earlier form of this note asserted `client%201`\
+      \ in the route becoming `client+1` in the resolved URL; that `+` is `HttpUtil.encodeUrl`'s form encoding,\
+      \ which is no longer in the path. The character-level behaviour of the template expansion was NOT measured\
+      \ here — read it off a run rather than assuming a table.\n\n**Geographic host components have a checklist\
+      \ item of their own, and the worked example does not satisfy it.** prebid-server-java's PR template\
+      \ carries two adjacent New Bid Adapter items: \"NO fully dynamic hostnames\" and \"geographic host parameters\
+      \ are NOT required\". The first is the one this rule already cites for pinning the parent domain. The\
+      \ second constrains something different -- whether the publisher can be *made* to supply the geo component.\n\
+      \nA macro in the hostname is not itself the problem: 24 merged bidder-config endpoints have one. What\
+      \ upstream does not do is require the publisher to provide it. Three merged patterns, none of which\
+      \ forces it:\n\n- **Deploy-time Spring placeholder.** teqblaze's endpoint is `https://#{REGION}#.al-ad.com/pserver`;\
+      \ `#{REGION}#` resolves from host configuration, and its bidder-params declares no region field at all.\n\
+      - **Host-operator config edit.** adagio ships `endpoint: https://mp-REGION.4dex.io/pbserver` with the\
+      \ literal instruction `# Replace the REGION by one of the value below`, so the host edits the YAML at\
+      \ deploy time.\n- **Optional publisher param with a code-level default.** clydo's endpoint is `http://{Region}.clydo.io/{PartnerId}`,\
+      \ its params schema lists `region` as an optional enum with `\"required\": [\"partnerId\"]` only, and\
+      \ `ClydoBidder` carries `DEFAULT_REGION = \"us\"` with `case null, default -> DEFAULT_REGION`, so an\
+      \ absent or unrecognized region resolves rather than failing.\n\nThe worked example above is a fourth\
+      \ shape with no merged precedent: the region is derived from a REQUIRED publisher param, and `extractRegion`\
+      \ returns `BadInput` when it cannot parse one, so a publisher that omits or misformats the route gets\
+      \ no bid. A porter reproducing that should expect the checklist item to be raised, and should be ready\
+      \ to default the derived component the way clydo does, move it to deploy-time configuration the way\
+      \ teqblaze does, or state in the PR body why this vendor's routing cannot be defaulted. This point was\
+      \ NOT among the findings on prebid/prebid-server-java#4552 -- it is a checklist item that PR has not\
+      \ been measured against, not a recorded rejection.\n\n**Notes**: Master sample: rtbstack (Go PR #4685\
+      \ → Java PR #4552). Often composes with Rule 47 — the parsed param is also the grouping key, so endpoint\
+      \ resolution runs once per imp group on the group's key. Template support: `port-go2java`'s `bidder.java.j2`\
+      \ handles this via the operator-fill path (`unresolved_translations[]: novel-pattern`) — the parse/validate\
+      \ logic is vendor-specific by construction."
 - kind: rules
   title: Multi-imp grouping rules (4)
   driver: Driven by `code.make_requests.batching.rules[]`.
