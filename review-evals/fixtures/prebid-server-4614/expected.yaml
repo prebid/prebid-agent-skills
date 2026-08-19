@@ -22,7 +22,7 @@ expected:
     family: error-handling
     severity: FAIL
     source: https://github.com/prebid/prebid-server/pull/4614#discussion_r2747036491
-    why_it_matters: "@bsardo: swallowing the unmarshal error here is fine, swallowing a marshaling error is not -- production marshal failures have signalled shared-memory corruption and must surface."
+    why_it_matters: "Swallowing the unmarshal error here is fine; swallowing a marshaling error is not -- production marshal failures have signalled shared-memory corruption and must surface."
 
   - id: trustx-bidmeta-assumes-nonempty-bidder-object
     path: adapters/trustx/trustx.go

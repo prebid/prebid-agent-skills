@@ -20,7 +20,14 @@ forbidden:
     family: endpoint-config
     severity: WARN
     source: https://github.com/prebid/prebid-server/pull/4211#discussion_r1989888655
-    why_it_matters: "@bsardo settled it on this line: https is strongly preferred but http is still permitted. Blocking on it contradicts the merge bar the maintainers apply."
+    forbidden_at_or_above: WARN
+    why_it_matters: >
+      Settled on this line during review: https is strongly preferred but http is
+      still permitted, and the PR merged with http intact. What contradicts the
+      merge bar is BLOCKING on it, not noting it -- so an INFO note is tolerated
+      and a WARN or FAIL is the forbidden verdict. The Go bidder-info skill says
+      the same thing ("flag HTTP as INFO ... never FAIL"), and before this entry
+      carried a severity floor that instruction scored as a hard false positive.
 
   - id: adtg-underscore-in-bidder-name-is-permitted
     path: static/bidder-info/adtg_org.yaml
@@ -28,4 +35,9 @@ forbidden:
     family: naming-conventions
     severity: WARN
     source: https://github.com/prebid/prebid-server/pull/4211#discussion_r2010721315
-    why_it_matters: "@bretg ruled underscores allowed server-side for parity with the Prebid.js bidder name; adtg_org merged with the underscore intact."
+    forbidden_at_or_above: WARN
+    why_it_matters: >
+      Ruled during review that underscores are allowed server-side for parity with
+      the Prebid.js bidder name; adtg_org merged with the underscore intact. As
+      above, the forbidden verdict is a blocking one; observing the underscore at
+      INFO is tolerated.

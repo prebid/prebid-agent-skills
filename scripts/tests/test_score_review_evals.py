@@ -264,6 +264,84 @@ class TestFalsePositives(HarnessTestCase):
                          "a forbidden hit is classified, not double-counted as unexpected")
         self.assertEqual(rc, scorer.EXIT_FAIL)
 
+    def test_a_severity_floor_tolerates_a_note_and_forbids_a_verdict(self):
+        """`forbidden_at_or_above` separates the subject from the verdict.
+
+        adtg_org's http endpoint is the case that forced this. The corpus records
+        that BLOCKING on it contradicts the merge bar, and the Go bidder-info skill
+        instructs "flag HTTP as INFO ... never FAIL". Both are correct, and a
+        matcher that ignored severity scored the skill's INFO note as a hard false
+        positive — the one forbidden hit in the whole corpus was the suite doing
+        what it was told.
+        """
+        forbidden = [{
+            "id": "demo-http-endpoint-permitted",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "forbidden_at_or_above": "WARN",
+            "source": "https://example.invalid/pull/1#discussion_r2",
+            "why_it_matters": "blocking on it contradicts the merge bar; a note is fine",
+        }]
+        for got, want_forb, want_tol in (("INFO", 0, 1), ("WARN", 1, 0), ("FAIL", 1, 0)):
+            with self.subTest(severity=got):
+                fid = self.make_fixture(forbidden=forbidden)
+                hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+                       "family": "endpoint-config", "severity": got}
+                self.write_actual(fid, [MATCHING_FINDING, hit])
+                summary = self.tmp / f"summary-{got}.json"
+                rc = self.run_scorer("--json", str(summary))
+                data = json.loads(summary.read_text())
+                self.assertEqual(want_forb, data["corpus"]["forbidden_hits"],
+                                 f"{got}: forbidden_hits")
+                self.assertEqual(0, data["corpus"]["unexpected"],
+                                 f"{got}: a tolerated finding must not become unexpected")
+                self.assertEqual(scorer.EXIT_PASS if want_forb == 0 else scorer.EXIT_FAIL, rc,
+                                 f"{got}: exit code")
+
+    def test_a_forbidden_entry_without_a_floor_still_forbids_any_severity(self):
+        """The default must not change: an entry with no floor forbids the subject
+        outright, at INFO as much as at FAIL."""
+        forbidden = [{
+            "id": "demo-outright",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "source": "https://example.invalid/pull/1#discussion_r2",
+            "why_it_matters": "never raise this at all",
+        }]
+        fid = self.make_fixture(forbidden=forbidden)
+        hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+               "family": "endpoint-config", "severity": "INFO"}
+        self.write_actual(fid, [MATCHING_FINDING, hit])
+        summary = self.tmp / "summary.json"
+        rc = self.run_scorer("--json", str(summary))
+        data = json.loads(summary.read_text())
+        self.assertEqual(1, data["corpus"]["forbidden_hits"])
+        self.assertEqual(scorer.EXIT_FAIL, rc)
+
+    def test_an_unparseable_severity_floor_is_an_instrument_error(self):
+        """A typo in the floor must not silently forbid nothing."""
+        forbidden = [{
+            "id": "demo-bad-floor",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "forbidden_at_or_above": "CRITICAL",
+            "source": "https://example.invalid/pull/1#discussion_r2",
+            "why_it_matters": "typo in the floor",
+        }]
+        fid = self.make_fixture(forbidden=forbidden)
+        hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+               "family": "endpoint-config", "severity": "INFO"}
+        self.write_actual(fid, [MATCHING_FINDING, hit])
+        rc = self.run_scorer()
+        self.assertNotEqual(scorer.EXIT_PASS, rc,
+                            "an invalid floor must not read as a clean run")
+
     def test_clean_fixture_with_no_findings_passes(self):
         """The pass arm of the false-positive gate: saying nothing about a PR
         the maintainers merged unchanged is the correct answer."""

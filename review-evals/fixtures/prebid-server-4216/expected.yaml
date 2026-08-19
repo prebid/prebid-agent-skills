@@ -26,4 +26,4 @@ forbidden:
     family: naming-conventions
     severity: WARN
     source: https://github.com/prebid/prebid-server/pull/4216#discussion_r1989899991
-    why_it_matters: "@bsardo raised the first-six-characters-unique guideline and waived it in the same comment because the collision is with the very bidder being aliased; it merged as admaticde."
+    why_it_matters: "The first-six-characters-unique guideline was raised and waived in the same comment because the collision is with the very bidder being aliased; it merged as admaticde."

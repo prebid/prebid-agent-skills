@@ -38,7 +38,7 @@ expected:
     family: error-handling
     severity: WARN
     source: https://github.com/prebid/prebid-server-java/pull/4428#discussion_r2947256231
-    why_it_matters: "@CTMBNara: bidResponse cannot be null on this path, so the guard is dead code that hides which values the method really has to handle."
+    why_it_matters: "bidResponse cannot be null on this path, so the guard is dead code that hides which values the method really has to handle."
 
   - id: trustx-java-redundant-device-locals
     path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java

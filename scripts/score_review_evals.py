@@ -217,6 +217,13 @@ def validate_fixture(fx: dict) -> list[str]:
                     f"captured patch for {path}: {anchor!r}")
     if key_dupes := _dupes([e["id"] for e in fx["expected"] + fx["forbidden"] if e.get("id")]):
         problems.append(f"{fx['id']}: duplicate finding ids {sorted(key_dupes)}")
+    for entry in fx["forbidden"]:
+        floor = entry.get("forbidden_at_or_above")
+        if floor is not None and str(floor).upper() not in SEVERITY_RANK:
+            problems.append(
+                f"{fx['id']}/{entry.get('id', '?')}: forbidden_at_or_above={floor!r} "
+                f"is not one of {SEVERITIES}; an unparseable floor would tolerate "
+                f"every severity and forbid nothing")
     return problems
 
 
@@ -343,6 +350,31 @@ def score_fixture(fx: dict, actual: dict) -> dict:
     exp_matched, exp_used = assign(fx["expected"], actual["findings"])
     remaining = [f for i, f in enumerate(actual["findings"]) if i not in exp_used]
     forb_matched, forb_used = assign(fx["forbidden"], remaining)
+
+    # A forbidden entry may forbid a VERDICT rather than a subject. adtg_org's
+    # http endpoint is the case that forced this: the corpus records "blocking on
+    # it contradicts the merge bar the maintainers apply", and the Go skill
+    # instructs "flag HTTP as INFO ... never FAIL". Both are right, and a matcher
+    # that ignores severity called the skill's INFO note a hard false positive.
+    #
+    # `forbidden_at_or_above: WARN` on the entry means a note below WARN is
+    # tolerated. Tolerated findings count neither as forbidden hits nor as
+    # unexpected, and are reported separately so the allowance stays visible
+    # instead of shrinking a denominator.
+    by_id = {e["id"]: e for e in fx["forbidden"] if e.get("id")}
+    tolerated: list[dict] = []
+    for fid, ai in list(forb_matched.items()):
+        floor = (by_id.get(fid) or {}).get("forbidden_at_or_above")
+        if not floor:
+            continue
+        got = str(remaining[ai].get("severity") or "").upper()
+        want = str(floor).upper()
+        # Validated at load time by validate_fixture; unreachable here.
+        if got in SEVERITY_RANK and SEVERITY_RANK[got] < SEVERITY_RANK[want]:
+            tolerated.append({**remaining[ai], "forbidden_id": fid,
+                              "tolerated_below": want})
+            del forb_matched[fid]
+
     unexpected = [f for i, f in enumerate(remaining) if i not in forb_used]
 
     # A rule whose upstream fact postdates this PR could not have been raised on
@@ -413,6 +445,11 @@ def score_fixture(fx: dict, actual: dict) -> dict:
         "recall": recall,
         "forbidden_total": len(fx["forbidden"]),
         "forbidden_hits": sorted(forb_matched),
+        "tolerated": len(tolerated),
+        "tolerated_detail": [
+            f"{t.get('severity')} {t.get('path')} {str(t.get('anchor'))[:60]!r} "
+            f"(tolerated below {t['tolerated_below']} by {t['forbidden_id']})"
+            for t in tolerated],
         "unexpected": len(unexpected),
         "neutralised": len(neutralised),
         "neutralised_detail": [
@@ -543,7 +580,10 @@ def render_table(results: list[dict], baseline: dict, breaches: list[str]) -> st
         for u in r["unexpected_detail"]:
             lines.append(f"UNEXPECTED {r['fixture']}: {u['severity'] or '?'} {u['path']} "
                          f"{u['anchor']}")
-    if any(r["scan_note"] or r["forbidden_hits"] or r["unexpected_detail"] for r in results):
+        for t in r.get("tolerated_detail") or []:
+            lines.append(f"TOLERATED {r['fixture']}: {t}")
+    if any(r["scan_note"] or r["forbidden_hits"] or r["unexpected_detail"]
+           or r.get("tolerated_detail") for r in results):
         lines.append("")
 
     unmeasured = [k for k, v in (baseline.get("fixtures") or {}).items()
