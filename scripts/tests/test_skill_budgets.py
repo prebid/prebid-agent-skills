@@ -99,8 +99,15 @@ BODY_LINE_WAIVERS: dict[str, Waiver] = {
         "Over budget when the gate landed. The unified bidder-config YAML "
         "field walkthrough is the bulk.",
     ),
+    "prebid-server-go/review/skills/adapter-code-pr-review/SKILL.md": Waiver(
+        519, "2026-08-18",
+        "Crossed the limit while gaining regeneration commands and upstream "
+        "anchors for eight re-scoped checks. The long command blocks were moved "
+        "to references/adapter-code-index.md when this waiver was added; what "
+        "remains over budget is check prose. Trim in the consolidation PR.",
+    ),
     "prebid-server-go/review/skills/bidder-info-pr-review/SKILL.md": Waiver(
-        647, "2026-08-18",
+        654, "2026-08-18",
         "Over budget when the gate landed. The bidder-info YAML field "
         "walkthrough is the bulk.",
     ),

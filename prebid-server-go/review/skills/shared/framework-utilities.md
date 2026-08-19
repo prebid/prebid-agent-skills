@@ -105,7 +105,7 @@ Method: `func (r ExtraRequestInfo) ConvertCurrency(value float64, from, to strin
 
 ```go
 type RequestData struct {
-    Method   string       // http.MethodPost (constant) — not literal "POST"
+    Method   string       // "POST" — the literal and http.MethodPost are equally acceptable (201 vs 69 sites on master)
     Uri      string       // Endpoint URL — from adapter struct, not hardcoded
     Body     []byte       // Marshaled request JSON
     Headers  http.Header  // At minimum Content-Type: application/json
@@ -176,7 +176,7 @@ type adapter struct {
 
 ```go
 type RequestData struct {
-    Method  string      // Use http.MethodPost (constant), not literal "POST"
+    Method  string      // "POST" — literal or http.MethodPost, both fine
     Uri     string      // Endpoint URL — from adapter struct, not hardcoded
     Body    []byte      // Marshaled request JSON
     Headers http.Header // At minimum Content-Type: application/json
@@ -185,6 +185,8 @@ type RequestData struct {
 ```
 
 `ImpIDs` is required. Use `openrtb_ext.GetImpIDs(imps)` to populate — do not hand-roll.
+
+**`Method` spelling is not a finding at any severity.** `http.MethodPost` is defined as `"POST"`; the string literal is the upstream majority (201 sites vs 69 for the constant at master @0ba3523). See `adapter-code-pr-review/SKILL.md` Workflow: MakeRequests Changed step 3 for the regenerating commands.
 
 ---
 
@@ -599,9 +601,9 @@ At @0ba3523 the largest parents are `limelightDigital` (23), `teqblaze` (25 acro
 ## Test fixture conventions
 
 - **Filename matches content**: `multi-imp.json` should have multiple impressions; `status-204.json` should have `mockResponse.status: 204`. Avoid internal codes (`200-212.json`) — PR #4053 reviewer convention.
-- **Use canonical fake endpoints** in JSON fixtures: `https://fake.endpoint.test/bid` or `http://localhost:8080`. Real endpoints break maintenance when domains move.
-- **Required supplemental coverage** for new adapters: `status-204.json`, `status-400.json`, `status-500.json`, malformed-response (e.g., `bad-response.json`), unsupported-media-type (`bad-media-type.json`), and at least one `bad-imp-ext.json` exercising malformed `imp.ext`.
-- **JSON framework first**: Coverage via `RunJSONBidderTest` is preferred over Go unit tests. Go unit tests are tolerated only when the JSON harness genuinely cannot exercise the case (e.g., the loader rejects malformed JSON before the adapter sees it). Reviewer convention since PR #4533: "test coverage must be achieved via the JSON test framework wherever possible. The JSON test framework has shared memory checks built in which are very important."
+- **Fixture endpoint host is NOT a finding at any severity.** A fixture may use a fake host (`https://fake.endpoint.test/bid`, `http://localhost:8080`) or the bidder's real production domain — both merge. There is no upstream convention here: `fake.endpoint.test` appears in **0** JSON fixtures at master @0ba3523, `localhost:8080` in 51, and 134 adapters ship at least one fixture whose `expectedRequest.uri` host is their own production endpoint domain (1402 such httpCalls). What matters is already mechanically enforced — `adapters/adapterstest/test_json.go:341-342` fails the test when `expectedRequest.uri` does not equal the `Uri` the adapter built from the test runner's configured endpoint, so a stale host cannot pass silently. Raise the host only if it is a *live* endpoint a test could actually reach.
+- **Supplemental coverage for new adapters** — advisory, not a gate: `status-204.json` (**WARN** if absent — 34 of the 37 adapters added in the last 18 months ship it), plus `status-400.json`, `status-500.json`, malformed-response (`bad-response.json`), unsupported-media-type (`bad-media-type.json`), and a `bad-imp-ext.json` exercising malformed `imp.ext` (each **INFO** if absent). **0 of those 37 adapters cover all six** — see `adapter-code-pr-review/SKILL.md` Workflow: Supplemental Test Data Changed step 3 for the per-item rates and the rule that absences other than 204 are reported as one INFO, never six findings.
+- **JSON framework first**: Coverage via `RunJSONBidderTest` is preferred over Go unit tests. Go unit tests are tolerated only when the JSON harness genuinely cannot exercise the case (e.g., the loader rejects malformed JSON before the adapter sees it). Reviewer convention since PR #4533 (`przemkaczmarek`): "test coverage must be achieved via the JSON test framework wherever possible. The JSON test framework has shared memory checks built in which are very important."
 
 ---
 

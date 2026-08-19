@@ -193,6 +193,8 @@ var invalidParams = []string{ /* ... */ }
 
 ### Expected Coverage
 
+**Disposition for everything in this section: INFO (NOTE).** These lists are suggested coverage, not a gate — only 72 of 235 upstream `params_test.go` files contain all six primitive rejections and 92 contain none (counts and regenerating command in `../SKILL.md` Workflow: Params Test Changed step 4). Report absences as a single note naming the gaps, never one finding per item and never a FAIL. The one FAIL in this area is scope-bound, not list-bound: a `required` field added by *this* PR with no `TestInvalidParams` case omitting it.
+
 **validParams should include:**
 - Required-fields-only case (minimum valid input)
 - All-optional-fields populated

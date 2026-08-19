@@ -54,7 +54,7 @@ type BidderInfo struct {
 | `capabilities` | Capabilities | *CapabilitiesInfo | Yes | `validateCapabilities()` |
 | `modifyingVastXmlAllowed` | ModifyingVastXmlAllowed | bool | No | Default: true |
 | `debug` | Debug | *DebugInfo | No | — |
-| `geoscope` | Geoscope | []string | No | `validateGeoscope()` |
+| `geoscope` | Geoscope | []string | No | `validateGeoscope()` — **case-insensitive**: each entry is `strings.ToUpper(strings.TrimSpace(...))`-ed before every comparison, so lowercase entries pass. Uppercase is conventional; lowercase `global` is the dominant master form (27 files vs 1 `GLOBAL`). Casing is not a defect — do not FAIL or WARN on it. |
 | `gvlVendorID` | GVLVendorID | uint16 | No | Must be > 0 if present |
 | `userSync` | Syncer | *Syncer | No | `validateSyncer()` |
 | `experiment` | Experiment | BidderInfoExperiment | No | — |
@@ -269,7 +269,7 @@ Patterns surfaced from review of the 89 reference adapter PRs (`prebid-server-go
 | `validateAdapterEndpoint()` | Endpoint URL validity, template macro resolution |
 | `validateInfo()` | Maintainer, geoscope, capabilities |
 | `validateMaintainer()` | `maintainer.email` must exist |
-| `validateGeoscope()` | ISO 3166-1 alpha-3, `GLOBAL`, `EEA`, `!` prefix |
+| `validateGeoscope()` | ISO 3166-1 alpha-3, `GLOBAL`, `EEA`, `!` prefix. Upper-cases and trims each entry before every comparison (`config/bidderinfo.go:645-675`), so the check is case-insensitive and lowercase entries validate — casing is never a defect. |
 | `validateCapabilities()` | At least one platform with valid media types |
 | `validatePlatformInfo()` | Media types: `banner`, `video`, `native`, `audio` |
 | `validateAliasCapabilities()` | Alias capabilities subset of parent |
@@ -321,4 +321,92 @@ experiment.adsCert.enabled
 xapi.username
 xapi.password
 xapi.tracker
+```
+
+## Regeneration commands
+
+Commands behind the counts quoted in `SKILL.md`. They live here rather than in the SKILL body because that body is loaded into context on every review; the numbers belong in the check, the shell does not.
+
+**Command 1** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+     # in a prebid-server checkout
+     python3 - <<'EOF'
+     import glob, os, json, yaml
+     d = {os.path.basename(f)[:-5]: yaml.safe_load(open(f)) or {} for f in glob.glob('static/bidder-info/*.yaml')}
+     a = {n: v for n, v in d.items() if v.get('aliasOf')}
+     for k in ('capabilities', 'userSync', 'gvlVendorID'):
+         dec = [n for n in a if k in a[n]]
+         same = [n for n in dec if k in d.get(a[n]['aliasOf'], {})
+                 and json.dumps(d[a[n]['aliasOf']][k], sort_keys=True) == json.dumps(a[n][k], sort_keys=True)]
+         print(k, len(a), len(dec), len(same))   # capabilities 113 12 11 | userSync 113 55 20 | gvlVendorID 113 44 18
+     EOF
+```
+
+**Command 2** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+   # in a prebid-server checkout — regenerate the 115/349 split
+   python3 - <<'EOF'
+   import glob, os, re, yaml
+   from urllib.parse import urlparse
+   tot = un = 0
+   for p in glob.glob('static/bidder-info/*.yaml'):
+       b = os.path.basename(p)[:-5]
+       ep = (yaml.safe_load(open(p)) or {}).get('endpoint')
+       if not isinstance(ep, str): continue
+       h = urlparse(ep).netloc.lower()
+       if not h: continue
+       tot += 1
+       nb, nh = re.sub(r'[^a-z0-9]', '', b.lower()), re.sub(r'[^a-z0-9]', '', h)
+       if not any(nb[i:i + 5] in nh for i in range(max(1, len(nb) - 4))): un += 1
+   print(tot, un)   # 349 115
+   EOF
+```
+
+**Command 3** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+  # in a prebid-server checkout — counted at master @0ba3523
+  grep -lE '^ +- *"?!?global"?$' static/bidder-info/*.yaml | wc -l   # 27
+  grep -lE '^ +- *"?!?GLOBAL"?$' static/bidder-info/*.yaml | wc -l   # 1
+  grep -lE '^geoscope:' static/bidder-info/*.yaml | wc -l            # 47 files declare the field
+```
+
+**Command 4** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+    python3 - <<'EOF'
+    import glob, json, yaml
+    m = f = both = 0
+    for p in glob.glob('static/bidder-info/*.yaml'):
+        d = yaml.safe_load(open(p)) or {}
+        macro = any(x in json.dumps(d.get('userSync') or {}) for x in ('{{.GPP}}', '{{.GPPSID}}'))
+        flag = bool((d.get('openrtb') or {}).get('gpp-supported'))
+        m += macro; f += flag; both += macro and flag
+    print(m, f, both)   # 90 26 16  -> 74 macro-without-flag
+    EOF
+```
+
+**Command 5** — run in a `prebid/prebid-server` checkout at the pinned SHA.
+
+```bash
+    # in a prebid-server checkout — adapters sending a 2.6 header, vs what their YAML declares
+    python3 - <<'EOF'
+    import glob, os, re, yaml
+    send26 = set()
+    for f in glob.glob('adapters/*/*.go'):
+        if f.endswith('_test.go'):
+            continue
+        t = open(f, errors='ignore').read()
+        if not re.search(r'(?i)x-openrtb-version', t):
+            continue                                  # header sent inline, or via a named constant:
+        if re.search(r'(?i)x-openrtb-version[^\n]{0,60}2\.6', t) or re.search(r'(?i)\w*openrtbversion\w*\s*=\s*"2\.6"', t):
+            send26.add(f.split('/')[1])
+    for b in sorted(send26):
+        p = 'static/bidder-info/%s.yaml' % b
+        v = ((yaml.safe_load(open(p)) or {}).get('openrtb') or {}).get('version') if os.path.exists(p) else None
+        print('%-14s %s' % (b, v or 'NO openrtb.version -> request is down-converted to 2.5'))
+    EOF
+    # at master @0ba3523: 7 senders; madsense / resetdigital / trustx declare no openrtb.version
 ```

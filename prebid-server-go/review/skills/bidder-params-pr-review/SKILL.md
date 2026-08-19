@@ -106,7 +106,7 @@ There are two categories of tasks:
 **1. PR-level task (at most one):** A single task covering PR-wide checks that don't map to a specific property:
 - **Alias check**: If the bidder has `aliasOf` in its bidder-info YAML, it should NOT have its own params schema, imp ext struct, or params test — these inherit from the parent. Flag if present.
 - **Cross-file consistency**: If multiple file types changed for the same bidder, verify they are in sync (see [Cross-File Consistency](#workflow-cross-file-consistency) workflow)
-- **Adapter-code JSON tag consistency (companion check)**: When the PR includes both `openrtb_ext/imp_{bidder}.go` AND files under `adapters/{bidder}/`, this skill UNCONDITIONALLY records an **INFO** in its findings whenever both file types are present in the diff, cross-referencing the adapter-code-pr-review skill's same-direction JSON tag check. The bidder-params skill does NOT verify the mismatch — that is owned exclusively by adapter-code-pr-review. Note in the INFO that an inbound tag differing from an outbound tag (e.g., `pubclick` inbound vs `pub_click` outbound in merged `msft`) is a legitimate deliberate rename, not a mismatch. The companion INFO ensures a reviewer reading bidder-params findings sees the cross-skill connection without duplicate flags.
+The adapter-code JSON-tag cross-reference is **not** a PR-level task and produces **no finding** — see Step 5. Its trigger condition (`openrtb_ext/imp_{bidder}.go` and `adapters/{bidder}/` both in the diff) is satisfied by every new-adapter PR, so emitting it as an INFO put a guaranteed non-finding in the findings stream of every such review.
 
 **2. Item-level tasks (one per changed item):** For each changed property, struct field, or test case, look up the matching Verification Workflow:
 
@@ -145,6 +145,7 @@ After all tasks are complete, produce a review summary:
 - Verification steps executed
 - Issues found (critical / warning / info)
 - Recommendation (approve, request changes, or comment)
+- **Cross-skill note (summary text only — never a finding):** when the diff contains both `openrtb_ext/imp_{bidder}.go` and files under `adapters/{bidder}/`, close the summary with one line naming adapter-code-pr-review as the owner of the JSON-tag spelling-consistency check (`pubclick` vs `pub_click`, PR #4592), which is a **FAIL** there. This skill neither verifies the mismatch nor records a finding for it — the note exists so a reviewer reading only bidder-params findings knows where that check lives.
 
 ---
 
@@ -232,16 +233,35 @@ See [../shared/framework-utilities.md](../shared/framework-utilities.md) for the
 
 1. **Correct bidder constant**: `openrtb_ext.Bidder{Name}` must match the bidder
 2. **Correct schema path**: Must use `"../../static/bidder-params"` relative path
-3. **validParams coverage**: Should cover at minimum:
+3. **validParams coverage** — **INFO** (NOTE) for anything missing; report the gaps as one note, never one finding per item, and never FAIL. Suggested cases:
    - Required-fields-only case
    - All-optional-fields populated (if applicable)
    - Edge cases for flexible types (e.g., both `int` and `string` for `["integer", "string"]` fields)
-4. **invalidParams coverage**: Should cover at minimum:
-   - Primitive type rejections: `""`, `null`, `true`, `5`, `4.2`, `[]`
+4. **invalidParams coverage** — **INFO** (NOTE) for anything missing, same reporting rule as step 3. Suggested cases:
+   - Primitive type rejections: empty string, `null`, `true`, `5`, `4.2`, `[]`
    - Empty object `{}` (if fields are required)
    - Missing each required field individually
    - Wrong type for each field
    - Empty strings for fields with `minLength: 1`
+
+   **Why INFO and not WARN**: the primitive-rejection list is a real house style but far from universal. At master @0ba3523, 72 of 235 `params_test.go` files (31%) contain all six primitives and 92 contain none; per-item rates are `null` 59%, empty string 56%, `[]` 54%, `true` 53%, `5` 36%, `4.2` 31%. Treating the list as a WARN gate would open a change request on roughly two thirds of merged adapters. The escalation that *is* a **FAIL** is unrelated to list length: a `required` schema field with no `TestInvalidParams` case omitting it, when that PR is the one adding the field (Workflow: Required Fields Changed step 4).
+   ```bash
+   # in a prebid-server checkout
+   python3 - <<'EOF'
+   import glob, re, collections
+   pats = {'empty': r'^\s*(``|"")\s*,', 'null': r'`null`', 'true': r'`true`',
+           '5': r'`5`', '4.2': r'`4\.2`', '[]': r'`\[\]`'}
+   have, full, files = collections.Counter(), 0, sorted(glob.glob('adapters/*/params_test.go'))
+   for f in files:
+       t = open(f, errors='ignore').read()
+       m = re.search(r'invalidParams\s*=\s*\[\]string\{(.*?)\n\}', t, re.S)
+       hits = [k for k, p in pats.items() if re.search(p, m.group(1) if m else t, re.M)]
+       have.update(hits)
+       full += len(hits) == len(pats)
+   print(len(files), full, dict(have))
+   # 235 72 {'empty': 131, 'null': 139, 'true': 124, '5': 84, '4.2': 72, '[]': 128}
+   EOF
+   ```
 5. **No duplicate test cases**: Each test case should exercise a distinct validation path
 6. **Test function names**: Must be `TestValidParams` and `TestInvalidParams`
 7. **Filename canonical**: The test file MUST be named `params_test.go` (plural). Flag the singular form `param_test.go` as **WARN** for new files (PR #4082 Ogury merged with the singular form — tolerated for that one but new adapters should use the plural). For modifications to an existing `param_test.go` file, do not request a rename.
