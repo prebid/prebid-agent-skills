@@ -44,7 +44,14 @@ bidder_info:
     macro_syntax: go-template                       # {{.AdUnit}} delimiter (Go canonical) — contrast with Java {{AdUnit}} (no leading dot).
     placeholders_unresolved: []
   endpoint_compression: gzip
-  ortb_version: null                                # Go side does NOT declare ortb-version in YAML (Java-only field). The X-OpenRTB-Version request header IS set to "2.6" via the bidHeaders map at line 19 — distinct from Java's hardcoded "2.5" header.
+  # null at the TOP level per read-bidder-info's documented policy: when the
+  # upstream yaml uses a nested `openrtb:` block, the value is preserved at
+  # yaml_extra_fields.openrtb.version (2.6 here) and this field stays null.
+  # The earlier comment said the Go side does not declare ortb-version at all,
+  # calling it a Java-only field; static/bidder-info/elementaltv.yaml has
+  # declared `openrtb: version: 2.6` since the adapter landed (#4639). What is
+  # Java-only is the flat `ortb-version:` KEY, not the setting.
+  ortb_version: null
   default_enabled: true
   modifying_vast_xml_allowed: false
   maintainer:

@@ -137,12 +137,22 @@ class FieldSpec(NamedTuple):
     adapter section, or the Go bidder-info root); the first one that
     resolves wins. `absent_default` is the value upstream is understood to
     mean when the key is missing — `None` means "cannot compare, skip".
+
+    `golden_keys_alt` holds further golden-side paths, tried in order when the
+    primary yields None. A reader may legitimately record one value in more than
+    one place: `read-bidder-info/SKILL.md` tells the Go reader that when
+    `openrtb:` is a nested map it should preserve the nested layout at
+    `bidder_info.yaml_extra_fields.openrtb.version` and leave top-level
+    `ortb_version: null`. Three goldens follow that policy exactly and were
+    reported as drifting against an upstream file they record faithfully, because
+    this comparison looked only at the top-level field.
     """
     name: str
     golden_keys: tuple
     upstream_keys: tuple
     severity: str
     absent_default: Any = None
+    golden_keys_alt: tuple = ()
 
 
 # YAML fields the script tracks for "data-only-drift" detection. These
@@ -156,8 +166,11 @@ GO_BIDDER_INFO_FIELDS: tuple[FieldSpec, ...] = (
               ("gvlVendorID",), SEVERITY_WARN, absent_default=0),
     FieldSpec("modifying_vast_xml_allowed", ("bidder_info", "modifying_vast_xml_allowed"),
               ("modifyingVastXmlAllowed",), SEVERITY_WARN, absent_default=False),
+    # The Go reader may record this at either of two documented places; see
+    # golden_keys_alt on FieldSpec.
     FieldSpec("ortb_version", ("bidder_info", "ortb_version"),
-              ("openrtb.version", "ortb-version"), SEVERITY_WARN),
+              ("openrtb.version", "ortb-version"), SEVERITY_WARN,
+              golden_keys_alt=(("bidder_info", "yaml_extra_fields", "openrtb", "version"),)),
     FieldSpec("disabled", ("meta", "disabled"), ("disabled",), SEVERITY_WARN,
               absent_default=False),
     FieldSpec("alias_of", ("meta", "alias_of"), ("aliasOf",), SEVERITY_FAIL),
@@ -776,6 +789,10 @@ def compare_fields(bidder: str, language: str, golden: dict, upstream: dict,
     findings: list[Finding] = []
     for spec in specs:
         golden_value = _path(golden, *spec.golden_keys)
+        for alt in spec.golden_keys_alt:
+            if golden_value is not None:
+                break
+            golden_value = _path(golden, *alt)
         upstream_value = None
         found = False
         for key in spec.upstream_keys:
