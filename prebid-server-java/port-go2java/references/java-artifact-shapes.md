@@ -102,6 +102,15 @@ Hard cap. Long lines wrap at:
 - Constructor parameter lists: break after the `(`, one parameter per line, closing `)` on its own line aligned with the opening line
 - String concatenation: prefer `String.format(...)` over `+` chains for >2 components
 
+## 6.1 Idiom currency when hand-filling from a sibling (F-new-114)
+
+Operator-fill steps copy shapes from sibling adapters, and siblings age. The behavioral sibling — the adapter that shares your batching or bid-type pattern — is the natural place to look and the wrong place to take idioms from, because it was merged whenever it was merged. Prefer the current form:
+
+- `stream…toList()` over `collect(Collectors.toList())`, which also drops the `Collectors` import. Applies whenever the list is not mutated afterwards, which is every emitted `extractBids`.
+- A static-imported `org.assertj.core.api.Assertions.tuple` in tests over a local `tuple(...)` shim; a plain `import java.util.function.UnaryOperator` over fully-qualified references.
+
+Reference set for "current": the most recently merged adapters, not the one that shares your behavioral pattern. Read the merge order off the target repo rather than trusting a list here, which ages the same way.
+
 ## 7. Lombok annotation order
 
 Class-level annotations stack in this order (top to bottom):
