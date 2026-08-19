@@ -40,6 +40,14 @@ Inputs:
                                               bean needs `@NotBlank @Value("${external-url}") String externalUrl`
                                               to resolve it (canonical: AaxConfiguration.java; 4 of 255 upstream
                                               configs). Default false — usersync does NOT require this parameter.
+                                              The `@NotBlank` here is decorative and is emitted anyway, because all
+                                              4 upstream instances carry it and a port that drops it diverges from
+                                              the file a reviewer will diff against. It does not enforce: parameter
+                                              validation comes from MethodValidationPostProcessor, whose pointcut is
+                                              the CLASS-annotation form of AnnotationMatchingPointcut, and these
+                                              @Configuration classes are not @Validated. Do not "fix" it by adding
+                                              @Validated to the class — that changes proxying for every @Bean method
+                                              on it, and no upstream config does that.
   ctx.javadoc_summary          : str|null  — class-level Javadoc summary; null → no Javadoc
 
 Canonical shape per references/java-artifact-shapes.md §9 (Adverxo "BidderConfiguration"

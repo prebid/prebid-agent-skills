@@ -411,7 +411,7 @@ After all tasks are complete, produce a review summary:
    - **Do NOT flag a fixture asserting graceful degradation.** A supplemental fixture whose entire purpose is proving that a bad, empty, or absent input degrades *without* an error legitimately has no expected errors. This covers HTTP 204 / no-content, an empty or zero-bid response body, a suppressed request (no `httpCalls` at all), and tolerated-malformed input the adapter skips rather than rejects (`invalid-imp-ext`, `invalid-bid-ext` style). "No expected error" is the assertion, not an omission.
    - **Do NOT flag "this looks like it belongs in `exemplary/`".** Directory placement is author judgement, not a defect.
    - Calibration at master @0ba3523: 623 of 1986 supplemental fixtures (31%) declare no expected errors — an unscoped "no expected errors ⇒ WARN" rule flags roughly a third of the merged corpus (228 of them 204/no-content, 65 empty/zero-bid, 27 with no HTTP call, 303 asserting bids). Re-scoped to error paths it flags 4: the only ≥400-status supplemental fixtures upstream with no error assertion (`e_volution`, `infytv`, `kidoz`, `krushmedia` — all `status-503`), out of 401 fixtures that mock a ≥400 status.
-     Regenerate: [`adapter-code-index.md` → Regeneration commands](adapter-code-index.md#regeneration-commands) command 1.
+     Regenerate: [`adapter-code-index.md` → Regeneration commands](references/adapter-code-index.md#regeneration-commands) command 1.
 
 ### Workflow: AMP Test Data Changed
 

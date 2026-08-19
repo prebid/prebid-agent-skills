@@ -146,7 +146,7 @@ The 10 mechanical-ready rules (priority order):
 4. **Rule 44** — alias-empire flavor coherence
 5. **Rule 36** — fixture-inventory parity → semantic-coverage parity (re-author Java IT 4-file split from Go's flat fixtures; document unreachable-error-paths exclusion per porting guide)
 6. **Rule 42** — IAB-cat storage translation (`iab_table_translate`)
-7. **Rule 35** — config-properties subclass scaffolding (Jinja template at `templates/configuration-properties.java.j2`)
+7. **Rule 35** — config-properties subclass scaffolding (nested subclass emitted by `templates/configuration.java.j2`; the separate-file `configuration-properties.java.j2` was removed — no upstream bidder ships that shape)
 8. **Rule 39** — derived-view (no-op on porter)
 9. **Rule 19** — standard headers (`HttpUtil.headers()` collapse)
 10. **Rule 30** — canonical Go status helpers ↔ Java framework default

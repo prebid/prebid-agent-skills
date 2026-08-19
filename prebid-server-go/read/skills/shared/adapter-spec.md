@@ -16,7 +16,9 @@ The canonical YAML schema for prebid-server adapter specifications. Language-neu
 
 A reader skill MUST emit the version it produced. A consumer (write, port) MUST refuse a version higher than its own and SHOULD warn on a lower version.
 
-The legacy form `adapter_spec_version: 1` (integer) is accepted by the schema during the Phase 2 migration window; Phase 2.7 migrates all goldens to the SemVer string form.
+The legacy integer form `adapter_spec_version: 1` is **rejected** — the property is `type: string` with pattern `^[0-9]+\.[0-9]+\.[0-9]+$`, so both `1` and `"1"` fail validation. The Phase 2 migration window it was accepted in is closed.
+
+A new read emits `"2.0.0"`. All 42 goldens declare it. Earlier versions stay documented in the schema because a spec produced by an older skill build declares one of them, but a spec that carries `bidder_params_ref` while declaring an earlier version is self-contradictory: the ref is what 2.0.0 requires.
 
 ---
 
@@ -117,7 +119,7 @@ When adding or changing a field:
 
 1. Edit `adapter-spec.schema.json` (the authoritative contract)
 2. If goldens need to change, edit them and verify with `make audit-goldens`
-3. Run `make ci` to confirm `test_schema_jsonschema.py` passes for all 40 goldens (21 Go + 19 Java post-Phase-5)
+3. Run `make ci` to confirm `test_schema_jsonschema.py` passes for all 42 goldens (22 Go + 20 Java)
 4. Document significant changes in `CHANGELOG.md` (Phase 2.7+)
 5. If the change is breaking, write an ADR and bump the schema version per the policy above
 

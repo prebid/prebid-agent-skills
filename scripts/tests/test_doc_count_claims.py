@@ -34,11 +34,16 @@ auto-discovered — no manifest update needed.
   fixtures" for batch 2). These are HISTORICAL state counts that do not
   match any single canonical. Adding "N fixtures" generically would force
   test-fixtures/README to either be excluded or rewritten. Deferred.
-- "N goldens" — used as both "10 goldens" (per-language subset count in
-  per-language READMEs) and "40 goldens" (cross-language total). Plus
-  SemVer strings ("1.0.0 goldens") create false positives. Tracking
-  would require unambiguous phrasing in the corpus or a more elaborate
-  regex with negative lookbehind for SemVer fragments. Deferred.
+- Bare "N goldens" — still deferred, for the original reason: used as both a
+  per-language subset count and the cross-language total, and SemVer
+  fragments ("1.0.0 goldens") are false positives.
+
+  The SPLIT form "N goldens (X Go + Y Java)" IS now tracked
+  (`GOLDENS_SPLIT_REGEX`), because it is unambiguous and because leaving it
+  untracked cost exactly what this gate exists to prevent: the schema's own
+  description and a "make ci covers N" instruction both read "40 goldens
+  (21 Go + 19 Java)" while the corpus held 22 + 20. All three numbers are
+  checked.
 
 ## Gated surfaces
 
@@ -170,12 +175,29 @@ DISCOVERY_REGEX = re.compile(
     r")\b",
     re.IGNORECASE,
 )
-# "N goldens" was considered but excluded — the corpus uses the phrase
-# ambiguously: "10 goldens" appears in per-language READMEs as a subset
-# count (Go-side or Java-side only), not the 40-spec total. Plus SemVer
-# strings ("1.0.0 goldens") create false positives. Tracking would need
-# either a corpus rewrite to unambiguous phrasing or a more elaborate
-# regex with negative lookbehind. Deferred.
+# Bare "N goldens" stays untracked, for the reason first recorded here: the
+# corpus uses it both as a per-language subset count in the per-language READMEs
+# and as the cross-language total, and SemVer fragments ("1.0.0 goldens") are
+# false positives.
+#
+# The SPLIT form is not ambiguous, and it is the one that rotted: the schema's own
+# description and an instruction about what `make ci` covers both said "40 goldens
+# (21 Go + 19 Java)" against a real 22 + 20. GOLDENS_SPLIT_REGEX below tracks it
+# and checks all three numbers, so a new fixture cannot land without the claims
+# moving. Historical corpus-size notes inside cross-language-pairs/*.yaml ("32
+# goldens (16 Go + 16 Java)") record the corpus as it was when each pair was
+# authored; they are YAML, outside this gate's *.md walk, and stay as history.
+GOLDENS_SPLIT_REGEX = re.compile(
+    r"\b(\d+)\s+goldens\s*\(\s*(\d+)\s+Go\s*\+\s*(\d+)\s+Java",
+    re.IGNORECASE,
+)
+
+
+def canonical_goldens_split() -> tuple[int, int, int]:
+    """(total, go, java) counted on disk."""
+    go = len(list(GO_FIXTURES_DIR.glob("*.golden.spec.yaml")))
+    java = len(list(JAVA_FIXTURES_DIR.glob("*.golden.spec.yaml")))
+    return go + java, go, java
 
 
 def _normalize_phrase(s: str) -> str:
@@ -285,6 +307,58 @@ class Mismatch(NamedTuple):
             f"{self.relpath}:{self.line_no} claims `{self.phrase}` = {self.claimed}, "
             f"but canonical count is {self.canonical}"
         )
+
+
+def _scan_goldens_split(text: str) -> list[tuple[int, tuple[int, int, int]]]:
+    """(line_no, (total, go, java)) for each split-form claim in `text`."""
+    out = []
+    for m in GOLDENS_SPLIT_REGEX.finditer(text):
+        out.append((text[:m.start()].count("\n") + 1,
+                    (int(m.group(1)), int(m.group(2)), int(m.group(3)))))
+    return out
+
+
+class TestGoldensSplitClaims(unittest.TestCase):
+    """The split form has to agree with the directory listing, in all three
+    numbers. A total that happens to match while the per-language split is wrong
+    is still a wrong claim, and the stale site had that shape -- off by one on
+    each side."""
+
+    def test_every_split_claim_matches_the_corpus(self):
+        want = canonical_goldens_split()
+        bad = []
+        for doc in _eligible_docs():
+            text = doc.read_text(encoding="utf-8", errors="replace")
+            for line_no, got in _scan_goldens_split(text):
+                if got != want:
+                    rel = doc.relative_to(REPO_ROOT).as_posix()
+                    bad.append(f"{rel}:{line_no} claims {got[0]} goldens "
+                               f"({got[1]} Go + {got[2]} Java), corpus has "
+                               f"{want[0]} ({want[1]} Go + {want[2]} Java)")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+    def test_the_schema_description_agrees_too(self):
+        """The schema is not markdown, so the *.md walk cannot see it -- and it
+        is where the stale count actually lived."""
+        import json
+        want = canonical_goldens_split()
+        schema = json.loads(
+            (REPO_ROOT / "prebid-server-go" / "read" / "skills" / "shared"
+             / "adapter-spec.schema.json").read_text(encoding="utf-8"))
+        claims = _scan_goldens_split(schema.get("description", ""))
+        self.assertTrue(claims, "adapter-spec.schema.json description no longer states its "
+                                "golden coverage in the tracked form")
+        for line_no, got in claims:
+            self.assertEqual(want, got,
+                             f"schema description claims {got}, corpus has {want}")
+
+    def test_the_regex_matches_the_form_the_corpus_uses(self):
+        self.assertEqual([(1, (42, 22, 20))],
+                         _scan_goldens_split("all 42 goldens (22 Go + 20 Java) validate"))
+        self.assertEqual([], _scan_goldens_split("10 goldens in this README"),
+                         "bare form must stay untracked")
+        self.assertEqual([], _scan_goldens_split("1.0.0 goldens"),
+                         "SemVer fragment must not match")
 
 
 class TestDocCountClaims(unittest.TestCase):

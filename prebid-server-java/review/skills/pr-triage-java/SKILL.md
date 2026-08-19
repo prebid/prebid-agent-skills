@@ -698,7 +698,7 @@ This is OPT-IN: pr-triage-java continues to work without `prior_spec`. The hook 
 --- PRIOR SPEC COMPARISON ---
 prior_spec: read/specs/{bidder}/latest.yaml
 prior_spec.resolved_commit: {sha}
-prior_spec.adapter_spec_version: "1.0.0"
+prior_spec.adapter_spec_version: "{version}"
 Regressions detected ({N}):
   - PRIOR-SPEC: {flag text} (file:{path}:{line if applicable})
   ...
