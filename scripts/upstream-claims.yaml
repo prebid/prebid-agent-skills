@@ -562,3 +562,54 @@ claims:
     sites:
       - path: prebid-server-java/port-go2java/SKILL.md
         assert: has no upstream instance and its suffix names two framework classes
+
+  # ---------------------------------------------------------------------------
+  # Java endpoint macro substitution. The taxonomy described `string-replace` as
+  # "Adapter calls endpoint.replace(\"{{.X}}\", value)" and 8 goldens declared it.
+  # Upstream #4444 (2026-07-20) moved every adapter to Vert.x UriTemplate, so that
+  # mechanism now has zero instances. The `.replace(` calls that remain in bidder
+  # classes are ${AUCTION_PRICE} bid post-processing, not endpoint construction.
+  - id: java.endpoint.uri-template-is-the-mechanism
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    mode: files
+    pattern: '[\w)]\s*\.replaceMacro\('
+    expect: 88
+    why: >
+      The mechanism a Java reader records for endpoint resolution.
+      88, not the 89 files that merely MENTION the name: adverxo defines its own
+      `private static String replaceMacro(String, String)` helper for the
+      ${AUCTION_PRICE} macro, so the bare name over-counts. The pattern below
+      matches the invocation, and has to be receiver-agnostic -- `Uri.of(x)
+      .replaceMacro(` is preceded by `)`, not by a word character, which an
+      earlier matcher missed on trustedstack and sparteo. The whitespace has to sit
+      BETWEEN the receiver and the call, not after a `)` alone: the dominant style
+      chains onto the next line
+      (`return endpointUrl` / `        .replaceMacro(...)`), so a pattern anchored to
+      the character immediately before `.replaceMacro` finds 79 of the 88. A count that
+      drops toward zero would mean upstream moved again; what must not drift is
+      that this is the mechanism and `endpoint.replace(...)` is not.
+    regenerate: |
+      git grep -lP '[\w)]\s*\.replaceMacro\(' \
+        -- 'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | wc -l
+    sites:
+      - path: prebid-server-go/read/skills/shared/behavior-taxonomy.yaml
+        assert: 88 of 89 bidder classes call `.replaceMacro(...)`
+
+  - id: java.endpoint.string-replace-is-extinct
+    kind: absence
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    absent: 'endpoint.replace('
+    why: >
+      The historical mechanism, pinned as absent at current upstream. The
+      vocabulary KEEPS the value -- eight goldens are pinned before #4444 and
+      state it truthfully -- so what this guards is that a NEW read never reaches
+      for it: if the construct reappears upstream the epoch is wrong, and if it
+      does not, a spec declaring it must also carry a pre-2026-07-20 pin.
+    sites:
+      - path: prebid-server-go/read/skills/shared/behavior-taxonomy.yaml
+        assert: zero instances after it

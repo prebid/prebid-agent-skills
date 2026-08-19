@@ -136,7 +136,7 @@ code:
     endpoint_resolution:
       kind: dev-prod-toggle
       mechanism_go: null
-      mechanism_java: string-replace
+      mechanism_java: literal
       macro_field_set: []
       template_params_struct_field_count: null
     helpers:

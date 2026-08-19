@@ -181,5 +181,71 @@ class TestMacroRecordForm(unittest.TestCase):
             "prose entries grew — the form rule is not being followed by new reads:\n  "
             + "\n  ".join(prose))
 
+
+class TestMechanismMatchesTheDelimiterForm(unittest.TestCase):
+    """A spec's declared mechanism and its endpoint's delimiters must agree.
+
+    Java changed both together in #4444 (2026-07-20): `{{X}}` resolved by
+    `endpoint.replace(...)` became `{X}` resolved by
+    `Uri.of(...).replaceMacro(...).expand()`. So the delimiter form in the endpoint
+    is observable evidence for the mechanism, and a spec claiming `uri-template`
+    while carrying `{{X}}` is either mid-refresh or wrong.
+
+    This is the check that would have caught the error made writing it: four
+    goldens had `mechanism_java` rewritten to `uri-template` while their
+    `provenance.source.resolved_commit` stayed on a commit whose bidder class had
+    no `replaceMacro` at all. Mechanism, delimiters and pin move together.
+    """
+
+    JAVA_FIXTURES = REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures"
+
+    def _specs(self):
+        for f in sorted(self.JAVA_FIXTURES.glob("*.golden.spec.yaml")):
+            yield f, yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+
+    def test_uri_template_specs_use_single_brace_endpoints(self):
+        bad = []
+        for f, d in self._specs():
+            mech = (((d.get("code") or {}).get("make_requests") or {})
+                    .get("endpoint_resolution") or {}).get("mechanism_java")
+            if mech not in ("uri-template", "uri-template-at-bean-construction"):
+                continue
+            endpoint = (d.get("bidder_info") or {}).get("endpoint") or ""
+            if "{{" in endpoint:
+                bad.append(f"{f.name}: mechanism_java={mech} but endpoint carries the "
+                           f"pre-#4444 double-brace form: {endpoint}")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+    def test_string_replace_specs_use_double_brace_endpoints(self):
+        """The other direction. A single-brace endpoint with the historical
+        mechanism means the endpoint was refreshed and the mechanism was not."""
+        bad = []
+        for f, d in self._specs():
+            mech = (((d.get("code") or {}).get("make_requests") or {})
+                    .get("endpoint_resolution") or {}).get("mechanism_java")
+            if mech != "string-replace":
+                continue
+            endpoint = (d.get("bidder_info") or {}).get("endpoint") or ""
+            import re as _re
+            single = _re.search(r"(?<!\{)\{[A-Za-z_]\w*\}(?!\})", endpoint)
+            if single:
+                bad.append(f"{f.name}: mechanism_java=string-replace but endpoint carries "
+                           f"the post-#4444 single-brace form: {endpoint}")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+    def test_macro_syntax_agrees_with_mechanism(self):
+        pairs = {"java-uri-template": ("uri-template", "uri-template-at-bean-construction"),
+                 "java-string-replace": ("string-replace",)}
+        bad = []
+        for f, d in self._specs():
+            syn = ((d.get("bidder_info") or {}).get("endpoint_construction") or {}).get("macro_syntax")
+            if syn not in pairs:
+                continue
+            mech = (((d.get("code") or {}).get("make_requests") or {})
+                    .get("endpoint_resolution") or {}).get("mechanism_java")
+            if mech is not None and mech not in pairs[syn]:
+                bad.append(f"{f.name}: macro_syntax={syn} with mechanism_java={mech}")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
 if __name__ == "__main__":
     unittest.main()

@@ -475,11 +475,13 @@
               ],
               "enum": [
                 "go-template",
+                "java-uri-template",
                 "java-string-replace",
                 "printf",
                 "custom",
                 null
-              ]
+              ],
+              "description": "Syntax of the macro delimiters in the declared endpoint. Java has two values because upstream changed mechanism: `java-string-replace` (`{{X}}` delimiters, resolved by `endpoint.replace(...)`) was correct until #4444 merged 2026-07-20, and `java-uri-template` (`{X}` delimiters, resolved by `Uri.of(...).replaceMacro(...).expand()`) after it. Neither is deprecated: a golden pinned before that date states the first truthfully, and rewriting it to the second without moving `provenance.source.resolved_commit` makes the spec claim a mechanism its own pinned commit does not have. The pair must move together."
             },
             "placeholders_unresolved": {
               "type": "array",

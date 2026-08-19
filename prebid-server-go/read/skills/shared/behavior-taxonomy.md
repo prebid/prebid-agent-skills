@@ -166,10 +166,30 @@ Split into `kind` (semantic, cross-language) + `mechanism_go` / `mechanism_java`
 
 | Mechanism | When |
 |---|---|
-| `string-replace` | Adapter calls `endpoint.replace("{{.X}}", value)`. |
+| `uri-template` | Adapter calls `Uri.of(endpoint).replaceMacro(NAME, value).expand()`. The dominant form: 89 of the bidder classes at `e3ffd57`. |
+| `uri-template-at-bean-construction` | Same call, but in the `{X}Configuration` class rather than the bidder, so the endpoint is resolved once at startup instead of per request. Canonical: `AaxConfiguration.resolveEndpoint(configEndpoint, externalUrl)` substituting `PREBID_SERVER_ENDPOINT` from `${external-url}`. |
 | `URIBuilder` | Adapter uses `org.apache.http.client.utils.URIBuilder`. |
-| `custom-resolver-class` | Adapter uses a co-located resolver class (e.g., `RubiconUriBuilder`). |
+| `custom-resolver-class` | Adapter uses a co-located resolver class (e.g., `MagniteUriBuilder`). |
+| `literal` | The endpoint carries no macro. A `dev-prod-toggle` picking between two literal URLs is this, not a substitution. Canonical: kobler. |
 | `null` | When no mechanism applies (Go-source spec). |
+
+| `string-replace` | Adapter calls `endpoint.replace("{{X}}", value)`. **Historical**: correct until #4444 merged 2026-07-20, zero instances after it. |
+
+`string-replace` is kept, not retired. It has no instance at current upstream —
+88 of 89 bidder classes call `.replaceMacro(...)` and none resolves its endpoint
+with `endpoint.replace(...)` — but a golden pinned before 2026-07-20 states it
+truthfully, and a spec cannot be made to claim a mechanism its own
+`provenance.source.resolved_commit` does not have. Mechanism and pin move
+together or not at all. Eight goldens carry it today and every one is correct at
+its own pin; verified in the clone rather than inferred.
+
+Two traps in measuring this. `.replace(...)` calls that remain in bidder classes
+are usually `${AUCTION_PRICE}` bid post-processing (`adverxo`, `thetradedesk`),
+which belongs to `make_bids.bid_post_processing`, not to endpoint construction.
+And `adverxo` defines its own `private static String replaceMacro(String, String)`
+helper for that price macro, so grepping the bare name counts a file that is not
+using the framework call at all — match on the invocation
+(`\)\s*\.replaceMacro\(` or `\w\.replaceMacro\(`), not the name.
 
 A spec emits `kind` always and the relevant `mechanism_*` for its source language; the other-language mechanism is null.
 
