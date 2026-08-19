@@ -655,3 +655,61 @@ claims:
     sites:
       - path: prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md
         assert: '**zero** carry a `try` prefix'
+
+  - id: java.bidder-config.phantom-keys
+    kind: absence
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: '*.yaml'
+    absent: gvl-vendor-id
+    why: 'The port reference showed `gvl-vendor-id:` under `meta-info`. Zero of the
+      255 bidder-config files carry it; the live key is `vendor-id`, which all 255
+      carry. A key that does not bind is silently ignored at startup, so the
+      emission looks complete and the vendor id is simply absent at runtime.
+
+      '
+    regenerate: 'git grep -l "gvl-vendor-id" -- src/main/resources/bidder-config
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/references/java-artifact-shapes.md
+        assert: "`gvl-vendor-id:` | 0 | `vendor-id:` (under `meta-info`) | 255"
+
+  - id: java.bidder-config.usersync-is-one-word
+    kind: absence
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: '*.yaml'
+    absent: 'user-sync:'
+    why: 'Same silent-binding class as gvl-vendor-id. Zero of the 255 bidder-config
+      files carry `user-sync:`; 162 carry `usersync:`. The hyphenated spelling is
+      what kebab-case convention suggests and what the port reference showed.
+
+      '
+    regenerate: 'git grep -l "user-sync:" -- src/main/resources/bidder-config
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/references/java-artifact-shapes.md
+        assert: "`user-sync:` | 0 | `usersync:` (one word) | 162"
+
+  - id: java.bidder-config.usersync-file-count
+    kind: count
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: '*.yaml'
+    mode: files
+    pattern: "(?m)^\\s*usersync:"
+    expect: 162
+    strict: true
+    why: 'Pins the positive half of the two absence claims above. Without it, a
+      corpus-wide rename to `user-sync:` would satisfy both absences (nothing named
+      user-sync would be missing) while making the reference wrong again.
+
+      '
+    regenerate: 'git grep -lP ''^\s*usersync:'' -- src/main/resources/bidder-config | wc -l
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/references/java-artifact-shapes.md
+        assert: "162 carry `usersync:`"

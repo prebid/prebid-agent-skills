@@ -42,15 +42,26 @@ package org.prebid.server.spring.config.bidder;
 
 (NOT under a `{bidder}` sub-package — Spring config files live in a flat directory.)
 
-## 4. Import order (checkstyle ImportOrder: strict)
+## 4. Import order (checkstyle ImportOrder)
 
-Three groups separated by exactly one blank line. Within each group, imports are alphabetically sorted (case-sensitive ASCII).
+> **Corrected (F-new-111).** This section previously showed the groups INVERTED, with `java.*` first. `java.*` goes LAST. The templates already emitted the correct order, so an operator hand-filling from this doc would have produced a checkstyle failure the templates do not.
+
+The enforcing configuration is `checkstyle.xml:77-85` in prebid-server-java:
+
+```xml
+<module name="ImportOrder">
+    <property name="option" value="bottom"/>
+    <property name="groups" value="*,/^java|^jakarta/"/>
+    <property name="ordered" value="false"/>
+    <property name="separated" value="true"/>
+    <property name="caseSensitive" value="true"/>
+</module>
+```
+
+Group 1: everything else — third-party and project-own (`com.*`, `io.*`, `lombok.*`, `org.*`), plus `javax.*`, which the group-2 regex does not match.
+Group 2: `java.*` and `jakarta.*`, LAST.
 
 ```java
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.iab.openrtb.request.BidRequest;
 import com.iab.openrtb.response.BidResponse;
@@ -59,12 +70,15 @@ import lombok.Builder;
 import lombok.Value;
 import org.prebid.server.bidder.Bidder;
 import org.prebid.server.bidder.model.BidderBid;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 ```
 
-Group 1: `java.*`, `javax.*` (only; no third-party packages mixed in).
-Group 2: third-party + project-own packages (`com.*`, `io.*`, `lombok.*`, `org.*`).
+`separated="true"` makes the single blank line between groups mandatory. `ordered="false"` means alphabetical order WITHIN a group is convention, not enforcement — the templates emit it anyway, and matching it keeps a diff against a sibling adapter readable.
 
-Static imports (when used) form a third group below the regular imports, separated by one blank line. Most adapters do not use static imports.
+`option="bottom"` places static imports below the regular groups, separated by one blank line. Most main-source adapters use none; test classes routinely do (`org.assertj.core.api.Assertions.*`, fixture helpers).
 
 **Banned**: `io.vertx.core.json.Json` (per upstream checkstyle ban-list; use `org.prebid.server.json.JacksonMapper` instead). Templates MUST NOT emit this import.
 
@@ -118,18 +132,18 @@ The Spring-config class lives at `src/main/java/org/prebid/server/spring/config/
 
 Templates emit the form that matches the source spec's `cross_language.java_artifacts.config_class` field (when present, populated by Phase E read skills).
 
-## 10. test-application.properties append shape
+## 10. test-application.properties insertion shape
 
-The IT-test resource file at `src/test/resources/org/prebid/server/it/test-application.properties` carries one section per bidder. The port skill APPENDS exactly two lines (per upstream convention):
+The IT-test resource file at `src/test/resources/org/prebid/server/it/test-application.properties` carries two lines per bidder. The port skill INSERTS exactly two lines (per upstream convention):
 
 ```properties
 adapters.{bidder}.enabled=true
 adapters.{bidder}.endpoint=http://localhost:8090/{bidder}-exchange
 ```
 
-Where `{bidder}` is the lowercase Java YAML name. The append happens at the END of the file (no alphabetical sort on this file — entries land in the order they were added).
+Where `{bidder}` is the lowercase Java YAML name. The insertion point is the END OF THE CONTIGUOUS `adapters.*` BLOCK, not the end of the file (F-new-110). At `e3ffd57db` that block is lines 1-707 and the file's remaining 61 lines carry non-adapter settings (`http-client.*`, `auction.*`, … `ccpa.enforce`), so an EOF append lands the entry outside the block. No alphabetical sort within the block — entries land in the order they were added.
 
-DO NOT rewrite the file or move existing entries; that conflicts with concurrent ports.
+DO NOT rewrite the file or move existing entries; that conflicts with concurrent ports. See [`registration-rules.md`](registration-rules.md) for the full rule.
 
 ## 11. Bidder-config YAML emission rules
 
@@ -139,19 +153,34 @@ DO NOT rewrite the file or move existing entries; that conflicts with concurrent
 adapters:
   {bidder}:
     endpoint: <URL>
+    endpoint-compression: gzip           # when the source declares it
+    ortb-version: "2.6"                  # when the source speaks anything but the adapter-default 2.5
+    modifying-vast-xml-allowed: false    # Rule 49: ALWAYS declared, source-effective value, both polarities
     geoscope: [<region>, ...]
+    aliases:
+      {alias}: ~                         # or per-alias overrides per Rule 33 alias-graph-invert
+    usersync:
+      ...
     meta-info:
       maintainer-email: <email>
-      gvl-vendor-id: <int>
       site-media-types: [banner, video, native]
       app-media-types: [banner, video, native]
-    yaml-extra-fields:
-      key: value
-    aliases:
-      {alias}: ~ # or per-alias overrides per Rule 33 alias-graph-invert
-    user-sync:
-      ...
+      vendor-id: <int>
 ```
+
+> **Corrected (F-new-112).** This example previously showed three keys that do not exist in the live binding. Measured at `e3ffd57db` across the 255 files in `src/main/resources/bidder-config/`:
+>
+> | shown before | files carrying it | live key | files carrying that |
+> |---|---|---|---|
+> | `gvl-vendor-id:` | 0 | `vendor-id:` (under `meta-info`) | 255 |
+> | `user-sync:` | 0 | `usersync:` (one word) | 162 |
+> | `yaml-extra-fields:` | 0 | no such parent key — see below | — |
+>
+> Regenerate the figures with `git grep -l <key> -- src/main/resources/bidder-config | wc -l`; 162 carry `usersync:` at that pin, and the two spellings never coexist. A key that does not bind is silently ignored at startup, which is the same silent-binding-typo class the bidder-config review skill exists to catch. The templates already emitted `vendor-id` and `usersync` correctly, so the exposure was to an operator hand-filling from this doc.
+>
+> `yaml-extra-fields` was a spec field name (`bidder_info.yaml_extra_fields`) transcribed as if it were a YAML key. What the spec records there lands as an ordinary adapter-level key: kobler's `dev-endpoint` sits directly under `adapters.kobler`, sibling to `endpoint`, with no wrapper.
+
+Key order is not fixed upstream — kobler puts `dev-endpoint` second and `geoscope` before `meta-info`, vungle puts `aliases` before `modifying-vast-xml-allowed`. Do not treat the order above as a constraint.
 
 **Field-name convention**: kebab-case (NOT camelCase). The Go-side equivalent uses camelCase. The template MUST emit kebab-case regardless of what the source spec recorded. (Source of truth: `bidder_info.yaml_field_name_quirks[]` is informational, NOT the canonical naming for the target language.)
 
