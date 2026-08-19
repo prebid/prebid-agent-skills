@@ -1081,6 +1081,144 @@ def _substitute(text: str, exit_code: str, claims: str = "0", refs: str = "0") -
     return text
 
 
+class TestGoAliasInheritance(unittest.TestCase):
+    """A Go alias yaml carries only what it overrides, so the fields it inherits
+    were never compared.
+
+    `compare_fields` skips a field whose upstream key is absent and whose
+    FieldSpec declares no `absent_default` -- true of `endpoint` and
+    `endpointCompression`. So for `152media.yaml`, which is `aliasOf: adkernel`
+    plus `gvlVendorID`, the golden's recorded endpoint could diverge from the
+    parent's indefinitely with nothing reported. The Java path has resolved this
+    since it was written (`resolve_java_adapter_section`); these are the Go
+    counterpart's tests.
+    """
+
+    PARENT = "endpoint: \"http://parent/hb?zone={{.ZoneID}}\"\nendpointCompression: \"GZIP\"\ngvlVendorID: 14\n"
+
+    def _resolve(self, alias_yaml: str, golden: dict) -> dict:
+        source = make_source({"static/bidder-info/parent.yaml": self.PARENT})
+        return sfu.resolve_go_bidder_info(yaml.safe_load(alias_yaml), golden, source)
+
+    def test_inherited_fields_come_from_the_parent(self):
+        got = self._resolve("aliasOf: parent\ngvlVendorID: 1111\n",
+                            {"meta": {"alias_of": "parent"}})
+        self.assertEqual("http://parent/hb?zone={{.ZoneID}}", got["endpoint"])
+        self.assertEqual("GZIP", got["endpointCompression"])
+
+    def test_alias_overrides_win_over_the_parent(self):
+        got = self._resolve("aliasOf: parent\ngvlVendorID: 1111\n",
+                            {"meta": {"alias_of": "parent"}})
+        self.assertEqual(1111, got["gvlVendorID"])
+
+    def test_aliasof_is_not_carried_into_the_merged_view(self):
+        """`aliasOf` is the alias's own marker, not an inherited field; leaving it
+        in would compare against the parent's absent `aliasOf`."""
+        got = self._resolve("aliasOf: parent\n", {"meta": {"alias_of": "parent"}})
+        self.assertNotIn("aliasOf", got)
+
+    def test_parent_aliases_block_is_not_inherited(self):
+        """A parent's `aliases:` map describes its children, not this child."""
+        source = make_source({"static/bidder-info/parent.yaml":
+                              self.PARENT + "aliases:\n  sibling: ~\n"})
+        got = sfu.resolve_go_bidder_info(yaml.safe_load("aliasOf: parent\n"),
+                                         {"meta": {"alias_of": "parent"}}, source)
+        self.assertNotIn("aliases", got)
+
+    def test_non_alias_doc_is_returned_untouched(self):
+        source = make_source({})
+        doc = {"endpoint": "http://own/", "endpointCompression": "gzip"}
+        self.assertEqual(doc, sfu.resolve_go_bidder_info(doc, {"meta": {}}, source))
+
+    def test_unreadable_parent_degrades_instead_of_raising(self):
+        """A parent that cannot be fetched falls back to the alias's own doc --
+        the previous behaviour -- rather than failing the whole scan."""
+        source = make_source({})
+        doc = {"aliasOf": "gone", "gvlVendorID": 7}
+        self.assertEqual(doc, sfu.resolve_go_bidder_info(doc, {"meta": {"alias_of": "gone"}}, source))
+
+    def test_inherited_endpoint_drift_is_now_reported(self):
+        """End to end: the golden records the endpoint it inherited, the parent's
+        endpoint changes, and the finding fires. Before the resolver this
+        comparison was skipped because the alias yaml has no `endpoint` key."""
+        golden = {"meta": {"alias_of": "parent"},
+                  "bidder_info": {"endpoint": "http://old/hb"}}
+        effective = self._resolve("aliasOf: parent\n", golden)
+        found = sfu.compare_fields("152media", "go", golden, effective,
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertIn("endpoint_drift", [f.type for f in found])
+
+    def test_wiring_end_to_end_through_compare_bidder_go(self):
+        """The resolver being CALLED is the load-bearing part. Unit tests that
+        invoke it directly stay green when `_compare_info` stops using it, so
+        this one drives the whole comparison the way the scan does: an alias
+        golden whose recorded endpoint matches its parent's must produce no
+        endpoint finding, which is only true if the merge happened."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            golden_path = write_golden(tmp, "152media", {
+                "adapter_spec_version": "2.1.0",
+                "spec_kind": "prebid-server-adapter",
+                "source_language": "go",
+                "provenance": {"source": {"resolved_commit": "d" * 40}},
+                "meta": {"bidder_name": "152media", "is_alias": True,
+                         "alias_of": "adkernel", "disabled": False},
+                "bidder_info": {
+                    "endpoint": "http://pbs.adksrv.com/hb?zone={{.ZoneID}}",
+                    "endpoint_compression": "GZIP",
+                    "gvl_vendor_id": 1111,
+                    "maintainer": {"email": "x@y.z"},
+                },
+            })
+            upstream = {
+                "static/bidder-info/152media.yaml": "aliasOf: adkernel\ngvlVendorID: 1111\n",
+                "static/bidder-info/adkernel.yaml": yaml.safe_dump({
+                    "endpoint": "http://pbs.adksrv.com/hb?zone={{.ZoneID}}",
+                    "endpointCompression": "GZIP",
+                    "maintainer": {"email": "x@y.z"},
+                    "gvlVendorID": 14,
+                    "aliases": {"152media": None},
+                }),
+            }
+            findings = sfu.compare_bidder_go("152media", golden_path, make_source(upstream))
+            drift = [f.type for f in findings if f.type.endswith("_drift")]
+            self.assertEqual([], drift,
+                             f"inherited fields should compare clean once merged; got {findings}")
+
+    def test_wiring_reports_inherited_divergence_end_to_end(self):
+        """The other direction: the parent's endpoint moves, the alias yaml still
+        declares nothing, and the finding fires."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            golden_path = write_golden(tmp, "152media", {
+                "adapter_spec_version": "2.1.0",
+                "spec_kind": "prebid-server-adapter",
+                "source_language": "go",
+                "provenance": {"source": {"resolved_commit": "d" * 40}},
+                "meta": {"bidder_name": "152media", "is_alias": True,
+                         "alias_of": "adkernel", "disabled": False},
+                "bidder_info": {"endpoint": "http://pbs.adksrv.com/hb?zone={{.ZoneID}}",
+                                "maintainer": {"email": "x@y.z"}},
+            })
+            upstream = {
+                "static/bidder-info/152media.yaml": "aliasOf: adkernel\n",
+                "static/bidder-info/adkernel.yaml": yaml.safe_dump({
+                    "endpoint": "http://MOVED.example/hb?zone={{.ZoneID}}",
+                    "maintainer": {"email": "x@y.z"},
+                }),
+            }
+            findings = sfu.compare_bidder_go("152media", golden_path, make_source(upstream))
+            self.assertIn("endpoint_drift", [f.type for f in findings])
+
+    def test_matching_inherited_endpoint_is_not_drift(self):
+        golden = {"meta": {"alias_of": "parent"},
+                  "bidder_info": {"endpoint": "http://parent/hb?zone={{.ZoneID}}"}}
+        effective = self._resolve("aliasOf: parent\n", golden)
+        found = sfu.compare_fields("152media", "go", golden, effective,
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertNotIn("endpoint_drift", [f.type for f in found])
+
+
 class TestWorkflowEscalation(unittest.TestCase):
     """Runs the shipped YAML's own shell body against a stubbed `gh`."""
 

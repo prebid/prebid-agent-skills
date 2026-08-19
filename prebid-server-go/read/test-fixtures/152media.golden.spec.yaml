@@ -42,7 +42,12 @@ bidder_info:
     macros_used:
       - ZoneID
     placeholders_unresolved: []
-  endpoint_compression: gzip  # inherited from adkernel (endpointCompression: GZIP normalized to lowercase)
+  # Inherited from adkernel, whose yaml says `"GZIP"`. This previously recorded
+  # `gzip` with a comment saying the value had been normalized to lowercase.
+  # Normalizing here made the golden disagree with its own pinned upstream file
+  # and kept the drift detector permanently red; R5 does the case-insensitive
+  # comparison instead.
+  endpoint_compression: GZIP
   ortb_version: null
   default_enabled: true
   modifying_vast_xml_allowed: false

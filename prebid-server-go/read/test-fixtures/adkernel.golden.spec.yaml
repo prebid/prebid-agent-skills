@@ -40,7 +40,11 @@ bidder_info:
     macros_used:
       - ZoneID
     placeholders_unresolved: []
-  endpoint_compression: gzip
+  # `"GZIP"` is what static/bidder-info/adkernel.yaml says at this pin and at
+  # master. Upstream Go uses both spellings and resolves either
+  # (`strings.ToUpper` in exchange/bidder.go::getRequestBody); R5 compares this
+  # key case-insensitively, so recording the file's own casing costs nothing.
+  endpoint_compression: GZIP
   ortb_version: null
   default_enabled: true
   modifying_vast_xml_allowed: false
