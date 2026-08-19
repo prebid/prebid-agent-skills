@@ -187,6 +187,8 @@ For each fixture file in `inputs.files.integration_test_fixtures`:
 
 A complete 4-file set has exactly one of each role. When a set is incomplete (e.g., missing `auction-response`), set `tests.integration_test_pattern: custom` and emit a quirk.
 
+> `custom` is also the value for a set that is complete but larger than a named shape. The named values are count-based, so a folder with extra bidder calls has no other home: appnexus carries eight files because `AppnexusVideoTest` stubs two bidder calls plus a cache call plus the auction pair, and it was labelled `6-file-with-cache` until the count was checked against the inventory. When the pattern is `custom`, the shape must stay readable from `fixture_inventory.integration[]` roles.
+
 ### Worked example — Kobler 4-file set
 
 The Kobler IT folder `src/test/resources/org/prebid/server/it/openrtb2/kobler/` contains:
@@ -232,7 +234,7 @@ test-cache-{xyz}-request.json    → role: cache-request
 test-cache-{xyz}-response.json   → role: cache-response
 ```
 
-When the IT folder has 6 files matching the 4 standard + 2 cache patterns, set `tests.integration_test_pattern: 6-file-with-cache`. Record all 6 in `fixture_inventory.integration[]`. The cache-* roles are extensions; record them with the appropriate `role` value.
+When the IT folder has 6 files matching the 4 standard + 2 cache patterns, set `tests.integration_test_pattern: 6-file-with-cache`. Record all 6 in `fixture_inventory.integration[]`. The cache-* roles are extensions; record them with the appropriate `role` value. **Count the files.** `6-file-with-cache` means six; a cache pair beside more than one bidder call is `custom`, and `scripts/tests/test_fixture_inventory_shape.py` fails a count-named label that disagrees with the inventory beside it.
 
 ---
 

@@ -996,6 +996,7 @@
           ]
         },
         "java_it_folder_naming": {
+          "description": "Folder layout under src/test/resources/org/prebid/server/it/openrtb2/. `custom` admitted for the same reason as integration_test_pattern's: read-bidder-class/SKILL.md and junit-it-patterns.md both list it as an emittable value.",
           "type": [
             "string",
             "null"
@@ -1004,6 +1005,7 @@
             "canonical",
             "multi-folder",
             "suffix-augmented",
+            "custom",
             null
           ]
         },
@@ -1055,6 +1057,7 @@
           ]
         },
         "integration_test_pattern": {
+          "description": "Shape of the Java IT fixture set. The named values are count-based: 4-file-split is one bidder call plus the auction pair; 6-file-with-cache adds a cache pair. `custom` is the catch-all for a set matching no named shape -- an incomplete 4-file set, or extra bidder calls as in appnexus (two bidder calls plus cache plus auction, eight files). It was admitted after read-bidder-class/references/junit-it-patterns.md was found instructing readers to emit it against an enum that rejected it. When `custom`, the shape is readable from fixture_inventory.integration[] roles.",
           "type": [
             "string",
             "null"
@@ -1063,6 +1066,7 @@
             "4-file-split",
             "6-file-with-cache",
             "multi-folder",
+            "custom",
             "none",
             null
           ]
