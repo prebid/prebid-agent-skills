@@ -70,26 +70,38 @@ Fetch all PR data that downstream skills will need. This step replaces Step 1a i
   - Commit count
   - Commit messages (for context on PR evolution — e.g., "fix checkstyle", "addressed review feedback", "mvn fmt")
 - Then use `curl`: `curl -sS "https://api.github.com/repos/prebid/prebid-server-java/commits/{head_sha}/check-runs"`
+- **Read `total_count` FIRST.** An empty check-run list is a finding, not a pass — see the `no-checks` category below.
+- **The check-run names on this repo** (canonical list + semantics in [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) §8.2). There is **no** `Build / Test` check-run, **no** `checkstyle` check-run, and **no** `JaCoCo Coverage` check-run — do not look for them, and never report one as missing:
+
+  | Name | Workflow | Relevance |
+  |---|---|---|
+  | `build (25)` | `pr-java-ci.yml` job `build`, matrix `java: [25]` | **The gate.** `mvn -B package --file extra/pom.xml` — runs checkstyle (`validate` phase), javac, and surefire unit tests. Every compile, style, and unit-test failure surfaces here. May appear 2-3 times per SHA across workflow runs/re-runs. |
+  | `Analyze (actions)`, `Analyze (java-kotlin)`, `CodeQL` | `codeql-analysis.yml` | Security analysis; rarely adapter-relevant. |
+  | `Trivy`, `Trivy security check` | `trivy-security-check.yml` | Dependency scan. |
+  | `cross-repo` | `cross-repo-issue.yml` | Appears on merged/closed PRs; not a pre-merge gate. |
+
 - Categorize the overall CI status:
-  - **clean**: All checks passed, PR is mergeable
-  - **unstable**: Some checks failed but PR may still be reviewable
-  - **blocked**: Critical checks failed (e.g., `validate` / `compile` / `checkstyle` jobs)
-  - **pending**: Checks still running
+  - **clean**: check-run list is NON-EMPTY and all checks passed
+  - **unstable**: some non-`build (25)` checks failed but PR may still be reviewable
+  - **blocked**: **`build (25)` failed** — the cause is checkstyle, javac, or a unit test; read the job log or annotations to tell which, since there is no per-concern check-run to read a conclusion from
+  - **pending**: checks still running
+  - **no-checks**: `total_count == 0`. **This is NOT clean.** The workflows never ran for this SHA — most commonly a fork PR from a first-time contributor awaiting a maintainer's "Approve and run workflows". Common: 4 of 12 recent PR heads sampled 2026-08-18 (`#4601`, `#4597`, `#4589`, `#4582`) returned zero check-runs. Record `CI: no check-runs for {head_sha} — workflows not authorized to run; CI state UNKNOWN, not green.` at **INFO** and carry it into the manifest so downstream skills do not read silence as success.
 - For failed check runs, extract:
-  - Check run `name` (Java upstream's CI typically declares: `Build / Test`, `checkstyle`, `JaCoCo Coverage`, others — check the head SHA's actual check names)
+  - Check run `name` (from the table above — verify against the head SHA's actual names rather than assuming)
   - Check run `conclusion` (success/failure/neutral/skipped)
-  - `output.annotations` if available (exact file + line of failure — checkstyle annotations are especially useful)
+  - `output.annotations` if available (exact file + line of failure — checkstyle annotations arrive on `build (25)`)
 - Produce a CI status summary:
 
 ```
-CI Status: {clean|unstable|blocked|pending}
+CI Status: {clean|unstable|blocked|pending|no-checks}
+Check-runs for {head_sha}: {total_count}
 Failed checks:
   - {check_name}: {conclusion} - {summary}
     Annotations: {file}:{line} - {message}
 ```
 
 - **If blocked** (compile failure, checkstyle violation, needs rebase): Report the CI failures and recommend the PR author fix them before detailed review. Still produce the routing manifest for informational purposes, but flag that downstream reviews should be deferred.
-- **If unstable** (some test failures, e.g., flaky Jacoco threshold): Proceed with review but include CI failures in the manifest so downstream skills are aware.
+- **If unstable** (a non-`build (25)` check failed — e.g. a Trivy advisory): Proceed with review but include CI failures in the manifest so downstream skills are aware. Note there is no coverage threshold anywhere in this build, so a "coverage gate" is never the cause.
 
 **1d. Fetch PR comments.**
 
@@ -136,8 +148,10 @@ Fetch all in parallel:
    - This drives Rule 35 typed-subclass review — if the base class gained fields, subclasses may inherit them silently and the reviewer needs to know.
 
 2. **pom.xml drift (module version + dependency set)**: `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/pom.xml"` and `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/extra/pom.xml"`
-   - Extract `<artifactId>prebid-server</artifactId>` `<version>` — compare against the orchestrator's tested baseline (the `prebid-server-java/read/skills/shared/framework-utilities-java.md` baseline at `3.x`)
-   - If major version changed (e.g., `3.x` → `4.x`), record: `DRIFT: prebid-server-java major version changed (3.x → 4.x)`. The skills' references files MUST be updated atomically before proceeding.
+   - **Where the version lives:** the root `pom.xml` `prebid-server` artifact declares **no** `<version>` element of its own — it inherits from `<parent><artifactId>prebid-server-aggregator</artifactId><version>…</version></parent>` (`pom.xml:5-10`). Read the `<version>` under `<parent>` in `pom.xml`, or the top-level `<version>` in `extra/pom.xml:7`. Do not search for a `<version>` sibling of `<artifactId>prebid-server</artifactId>`; there is none, and an extractor that looks for one silently reports nothing.
+   - Baseline pinned by the review suite: **`4.1.0-SNAPSHOT`**, Java **25**, Spring Boot **4.0.6**, Vert.x **5.0.12**, checkstyle **10.17.0** + plugin **3.6.0**, jacoco **0.8.13** (see [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) upstream pin).
+   - If the major version changed (e.g., `4.x` → `5.x`), record: `DRIFT: prebid-server-java major version changed ({old} → {new})`. The skills' references files MUST be updated atomically before proceeding.
+   - If `<java.version>`, `<spring.boot.version>`, or `<vertx.version>` in `extra/pom.xml` differs from the baseline above, record `DRIFT: toolchain — {property} ({old} → {new})`.
    - For dependency drift: if the PR modifies `pom.xml` or `extra/pom.xml` itself, record: `DEPENDENCY: pom.xml modified. Verify new dependencies are necessary and version-pinned.`
 
 3. **checkstyle.xml drift**: `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/checkstyle.xml"`
@@ -153,8 +167,8 @@ Fetch all in parallel:
    - `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/src/main/java/org/prebid/server/bidder/BidderCatalog.java"`
    - `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/src/main/java/org/prebid/server/spring/config/bidder/util/BidderDepsAssembler.java"`
    - Compare against the API-surface snapshot embedded in [`../bidder-config-pr-review/references/field-index.md`](../bidder-config-pr-review/references/field-index.md) Part B.2.3 (`BidderDepsAssembler` fluent chain) and [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) §1 (canonical wiring examples)
-   - If `BidderCatalog`'s public API (`bidders()`, `bidderInfoByName(...)`, `nameByAlias(...)`) changed, record: `DRIFT: framework-spring-di — BidderCatalog API surface changed`
-   - If `BidderDepsAssembler.<T>forBidder(...)` or the builder methods (`withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`) changed, record: `DRIFT: framework-spring-di — BidderDepsAssembler API changed`
+   - `BidderCatalog`'s drift-watched public API at `e3ffd57` is `names()`, `bidderInfoByName(String)`, `resolveBaseBidder(String)`, `isAlias(String)` (alongside `isValidName`, `isActive`, `bidderByName`, `usersyncerByName`, `cookieFamilyName`, `configuredName`, …). **There is no `bidders()` and no `nameByAlias(...)` on this class** — a drift check keyed on those names matches nothing and reports a false OK. If any of the four watched signatures changed, record: `DRIFT: framework-spring-di — BidderCatalog API surface changed`
+   - `BidderDepsAssembler`'s complete public surface at `e3ffd57` is `forBidder`, `withConfig`, `bidderCreator`, `assemble` — four members, no more (`usersyncerCreator` was deleted in `2880782f`, PR #4464). If any changed, or a member was added, record: `DRIFT: framework-spring-di — BidderDepsAssembler API changed`
    - This is the Java analog of Go's `openrtb_ext/bidders.go` drift check. Java has no single BidderName enum (per design-doc §8 Q5); the framework drift check is more diffuse.
 
 5. **test-application.properties drift**: `curl -sS "https://raw.githubusercontent.com/prebid/prebid-server-java/master/src/test/resources/org/prebid/server/it/test-application.properties"`
@@ -280,7 +294,7 @@ Based on the categorized files, determine the PR type. A PR may have a primary t
    - Label: `infrastructure`
    - Sub-label `framework-debt` (additional, on top of `infrastructure`): if `checkstyle.xml`, `BidderCatalog.java`, `BidderDepsAssembler.java`, `BidderConfigurationProperties.java` (the base class), or `src/test/java/org/prebid/server/it/IntegrationTest.java` is modified — this triggers cascading-impact assessment because all bidders inherit from these (Step 5h enforces the same 5-file list)
    - Effect: Downstream skills activate in "bulk mode" — verify pattern consistency across affected bidders, not per-bidder detailed review. Focus detailed review only on net-new code that is NOT part of the bulk pattern.
-   - **Multi-adapter alias bundle exception**: A PR may contain N aliases for the SAME parent without triggering bulk mode IF: all changes are `aliases:`-block additions inside one `bidder-config/{parent}.yaml`, the IT classes added are all `{Alias}Test.java` for those aliases, the test-application.properties additions are all `adapters.{parent}.aliases.{alias}.*`, and no `{X}Bidder.java` / `ExtImp{X}.java` / `bidder-params/{x}.json` is touched. In this case PR type is `alias-only` (not `infrastructure`). Canonical Java case: Adverxo with `adport`, `bidsmind`, `mobupps` per-alias IT classes shipped in `bidder-config/adverxo.yaml`'s `aliases:` block.
+   - **Multi-adapter alias bundle exception**: A PR may contain N aliases for the SAME parent without triggering bulk mode IF: all changes are `aliases:`-block additions inside one `bidder-config/{parent}.yaml`, the IT classes added are all `{Alias}Test.java` for those aliases, the test-application.properties additions are all `adapters.{parent}.aliases.{alias}.*`, and no `{X}Bidder.java` / `ExtImp{X}.java` / `bidder-params/{x}.json` is touched. In this case PR type is `alias-only` (not `infrastructure`). Canonical Java case: Adverxo, whose `bidder-config/adverxo.yaml` `aliases:` block carries `adport`, `bidsmind`, `harrenmedia` (the three alias keys at `e3ffd57`) alongside their per-alias IT classes.
 
 2. **New Adapter**
    - Trigger: ALL FOUR of the following hold for at least one bidder (strict form — byte-aligned with [references/routing-rules.md](references/routing-rules.md) §"New Adapter"):
@@ -323,7 +337,7 @@ Based on the categorized files, determine the PR type. A PR may have a primary t
 6. **Bidder Rename / Refactor**
    - Trigger: Files are deleted from `bidder/{old_x}/` AND added to `bidder/{new_x}/` in the same PR; OR `bidder-config/{old_x}.yaml` deleted with `bidder-config/{new_x}.yaml` added; OR a YAML's top-level adapter key is renamed inside an existing file (rare)
    - Label: `bidder-rename`
-   - Effect: All affected files routed to their normal owner skills. pr-triage records `RENAME: {old} → {new}` in the manifest. Reviewer guidance: bidder renames are breaking changes typically deferred to the next major release (mirror Go-side guidance from PR #4456 / #4639).
+   - Effect: All affected files routed to their normal owner skills. pr-triage records `RENAME: {old} → {new}` in the manifest. Reviewer guidance: bidder renames are breaking changes typically deferred to the next major release. Precedents: Java PR #4326 (`adoppler` → `elementaltv`, merged 2026-01-12, old name retained as an alias) and Java PR #4573 (`rubicon` → `magnite`, merged 2026-07-27); Go-side PR #4639 (`adoppler` → `elementaltv`, merged 2026-03-04).
 
 7. **Framework-Only**
    - Trigger: All changed files are in `unowned:*` categories
@@ -358,8 +372,8 @@ Check for issues that fall between the cracks of individual skills. These are co
 
 If the PR type is `alias-only`:
 - For each new alias entry in the `aliases:` block, extract the `endpoint:` value
-- If the endpoint contains template macros (e.g., `{{adUnitId}}`, `{{auth}}`, `{{PREBID_SERVER_ENDPOINT}}`), cross-reference against the parent's `endpoint:` value AND the canonical Java macro list (the parent typically uses a subset; aliases CAN extend the macro set but each macro must be one the framework resolves at runtime)
-- Canonical Java macros: `{{PREBID_SERVER_ENDPOINT}}` (resolved from `external-url`), per-bidder template tokens declared in `{X}Configuration.java::resolveEndpoint(...)`. Aliases inherit the parent's `resolveEndpoint`, so an alias declaring a `{{TOKEN}}` not handled by the parent's resolver will silently leave the macro literal in the URL at runtime.
+- If the endpoint contains template macros (e.g. `{adUnitId}`, `{auth}`, `{PREBID_SERVER_ENDPOINT}` — **single brace**, RFC 6570 via Vert.x `UriTemplate` since `bc0409271` / PR #4444), cross-reference against the parent's `endpoint:` value AND the canonical Java macro list (the parent typically uses a subset; aliases CAN extend the macro set but each macro must be one the framework or the parent's adapter supplies at runtime)
+- Canonical Java macros: `{PREBID_SERVER_ENDPOINT}` (resolved from `external-url` by `{X}Configuration.java::resolveEndpoint(...)`), plus per-bidder template tokens the parent's `{X}Bidder` supplies via `Uri.replaceMacro(...)`. Aliases inherit the parent's resolver, so an alias declaring a `{Token}` nobody supplies makes `Uri.expand()` throw `NoSuchElementException` at request time. A **double-braced** `{{Token}}` in any endpoint is pre-#4444 syntax and is itself a finding — raise it as cross-skill concern 5a and let `bidder-config-pr-review` land the FAIL.
 - Record as: `CROSS-SKILL: Invalid endpoint macro "{{XYZ}}" in alias {alias} of parent {parent} — parent's resolveEndpoint does not substitute this token. Will leave macro literal in URL at runtime.`
 
 **5b. Framework File Impact Assessment**
@@ -581,7 +595,10 @@ Recommended mode for downstream skills: bulk-pattern-consistency-check
 {bidder}:
   parent: {parent | none}                          # Java's aliases are inverted; for an alias, this is the parent's name
   aliases: {[alias1, alias2, ...] | none}          # for a parent, the list of aliases declared
-  whitelabelOnly: {true | false | absent}          # if the YAML declares this at the adapter top-level
+  # NOTE: no white-label field is emitted for Java. `whiteLabelOnly` is a Go-only static/bidder-info key;
+  # zero occurrences of `whiteLabelOnly` or `white-label-only` exist under prebid-server-java/src/ at e3ffd57,
+  # and BidderConfigurationProperties has no such field. White-label resemblance is detected from the diff
+  # shape in Step 5g, not from a YAML flag.
   capabilities:
     app-media-types: [banner, video, native]       # extracted from meta-info if in PR; else "not in PR — downstream must fetch from master"
     site-media-types: [banner, video, native]
@@ -755,7 +772,7 @@ The full routing table, framework-impact file list, PR-type detection heuristics
 
 ## Shared Framework Reference
 
-For framework-wide concerns (Lombok annotation conventions, Spring DI patterns, JacksonMapper conventions, checkstyle ruleset, Jacoco coverage gates, Vert.x ban-list, JUnit5 + AssertJ conventions, naming conventions, alias inversion semantics, IT test harness contract), the four review skills share [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) (review-side, LANDED in this PR, step 2, commit `63be93d`), which adds reviewer-specific anti-patterns + verbatim policy quotes on top of the read-side companion at [`../../../read/skills/shared/framework-utilities-java.md`](../../../read/skills/shared/framework-utilities-java.md). Design rationale lives at [`../../../../docs/methodology/java-review-skill-design.md`](../../../../docs/methodology/java-review-skill-design.md).
+For framework-wide concerns (Lombok annotation conventions, Spring DI patterns, JacksonMapper conventions, checkstyle ruleset, coverage expectations — note jacoco is report-only, with no gate, Vert.x ban-list, JUnit5 + AssertJ conventions, naming conventions, alias inversion semantics, IT test harness contract), the four review skills share [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) (review-side, LANDED in this PR, step 2, commit `63be93d`), which adds reviewer-specific anti-patterns + verbatim policy quotes on top of the read-side companion at [`../../../read/skills/shared/framework-utilities-java.md`](../../../read/skills/shared/framework-utilities-java.md). Design rationale lives at [`../../../../docs/methodology/java-review-skill-design.md`](../../../../docs/methodology/java-review-skill-design.md).
 
 ---
 
@@ -763,8 +780,8 @@ For framework-wide concerns (Lombok annotation conventions, Spring DI patterns, 
 
 The Go side documents a "one alias per PR for clean changelog" reviewer preference (PR #4214 / #4215). Java's analog is less clearly established because Java's aliases live INSIDE the parent YAML — bundling N aliases for the same parent is a single-file change, low cognitive cost. Reviewers' Java-side preference is more permissive:
 
-- **OK**: N aliases bundled for the SAME parent in one PR (canonical case: Adverxo's `adport` + `bidsmind` + `mobupps` per-alias IT classes shipped together; PR added `aliases: { adport: ..., bidsmind: ..., mobupps: ... }` block plus three IT classes).
-- **WARN**: N aliases for DIFFERENT parents in one PR — the cross-cutting blast radius is higher; reviewers may request split per the Go-side `pm-isha-bharti` convention.
+- **OK**: N aliases bundled for the SAME parent in one PR (canonical case: Adverxo's `adport` + `bidsmind` + `harrenmedia` per-alias IT classes shipped together; the parent YAML carries `aliases: { adport: ..., bidsmind: ..., harrenmedia: ... }` plus one IT class each).
+- **WARN**: N aliases for DIFFERENT parents in one PR — the cross-cutting blast radius is higher; a split may be requested for changelog clarity, mirroring the Go-side one-alias-per-PR convention (PR #4214 / #4215).
 - **NOT-OK**: bundling aliases with adapter-modification work for the parent — the diff readability suffers; reviewers will request split.
 
 When the WARN condition is detected, pr-triage-java records:

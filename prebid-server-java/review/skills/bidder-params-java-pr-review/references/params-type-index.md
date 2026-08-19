@@ -6,7 +6,7 @@ Mapping of JSON Schema draft-04 types to Lombok-annotated POJO conventions for t
 2. `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/ExtImp{X}.java` (+ helper protos in the same package) — Lombok `@Value`-annotated POJO that Jackson deserializes `imp.ext.bidder` into.
 3. `src/test/resources/org/prebid/server/it/openrtb2/{x}/test-{...}.json` — the Rule 36 4-file IT fixture set (no Go analog).
 
-**Upstream pin:** `prebid/prebid-server-java` master @ SHA `a1fe64e123d6` (per `shared/framework-utilities-java.md`). Schema engine: `com.networknt.schema` (draft-04 via `SpecVersion.VersionFlag.V4`). Lombok: provided by Spring Boot 3.5.10 BOM.
+**Upstream pin:** `prebid/prebid-server-java` master @ SHA `e3ffd57` (per `shared/framework-utilities-java.md`). Schema engine: `com.networknt.schema` (draft-04 via `SpecVersion.VersionFlag.V4`). Lombok: provided by the Spring Boot 4.0.6 BOM.
 
 **Sync policy:** Local snapshot. The `pr-triage-java` skill's Step 2 runs centralized drift checks; this skill's Step 1b reads results from the manifest. If upstream `BidderParamValidator.java` or the schema spec version changes, update this file.
 
@@ -18,7 +18,7 @@ For framework-wide concerns (Lombok annotation semantics, JacksonMapper conventi
 
 ## Module path
 
-The Java codebase uses Maven coordinates `org.prebid:prebid-server-aggregator` version `3.42.0-SNAPSHOT`. No `vN`-major-suffix gymnastics analogous to Go's `github.com/prebid/prebid-server/vN` module — Java versioning is in `pom.xml` only and does not affect file paths or imports. PR diffs do NOT have Go's v3↔v4 import-noise issue.
+The Java codebase uses Maven coordinates `org.prebid:prebid-server-aggregator` version `4.1.0-SNAPSHOT` (`extra/pom.xml:5-7`; the root `pom.xml` `prebid-server` artifact carries no `<version>` of its own and inherits it from `<parent>`). No `vN`-major-suffix gymnastics analogous to Go's `github.com/prebid/prebid-server/vN` module — Java versioning is in `pom.xml` only and does not affect file paths or imports. PR diffs do NOT have Go's v3↔v4 import-noise issue.
 
 ---
 
@@ -138,7 +138,7 @@ The Lombok-annotated `imp.ext.bidder` POJO that Jackson deserializes into. Lives
 | `@NoArgsConstructor` (on `@Value` class) | Forbidden combo — Lombok can't generate a no-args constructor on a class with final fields. Indicates copy-paste from a `@ConfigurationProperties` template. | **FAIL**. |
 | `@JsonInclude(JsonInclude.Include.NON_NULL)` | Suppresses null fields on serialization. | **INFO** if absent (not required for read-only ExtImp); **PASS** when present and POJO is round-tripped. |
 
-For full Lombok semantics, see `shared/framework-utilities-java.md` §2.1–§2.8.
+For full Lombok semantics, see `shared/framework-utilities-java.md` §2.0–§2.10.
 
 ### B.2 Field-level annotations
 
@@ -154,7 +154,7 @@ For full Lombok semantics, see `shared/framework-utilities-java.md` §2.1–§2.
 
 Java field names MUST be camelCase per Java convention. Lombok / Jackson serialize verbatim — so the JSON tag DEFAULTS to the field name when no `@JsonProperty` is present.
 
-**Examples (canonical, verified against upstream master @ SHA `a1fe64e123d6`):**
+**Examples (canonical, verified against upstream master @ SHA `e3ffd57`):**
 
 Kobler — single optional boolean, factory constructor:
 
@@ -624,7 +624,7 @@ Bidder-name consistency: filename slug MUST match across all 3 file types — `{
 
 ## Sources
 
-- `prebid/prebid-server-java` master @ SHA `a1fe64e123d6` (verified 2026-05-04)
+- `prebid/prebid-server-java` master @ SHA `e3ffd57` (verified 2026-08-18)
 - `src/main/java/org/prebid/server/validation/BidderParamValidator.java` (validation runtime path)
 - `src/main/resources/static/bidder-params/{aax,adverxo,kobler}.json` (sample schemas)
 - `src/main/java/org/prebid/server/proto/openrtb/ext/request/{adverxo,appnexus,ix,kobler,thetradedesk}/ExtImp{X}.java` (sample POJOs)

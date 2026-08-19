@@ -1,6 +1,6 @@
 ---
 name: bidder-config-pr-review
-description: Reviews changes to Java bidder Spring config files — bidder-config YAML (src/main/resources/bidder-config/{x}.yaml), Spring `@Configuration` class (src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java OR {X}BidderConfiguration.java), and the Rule 35 typed-config subclass when present (BidderConfigurationProperties.java). USE WHEN a PR touches any of these files. Do NOT use for bidder/{x}/{X}Bidder.java, bidder-params/{x}.json, or ExtImp{X}.java — those are owned by sibling skills.
+description: Reviews changes to Java bidder Spring config files — bidder-config YAML (src/main/resources/bidder-config/{x}.yaml), Spring `@Configuration` class (src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java OR {X}BidderConfiguration.java), and the Rule 35 typed-config subclass when present (a nested {X}ConfigurationProperties class inside the Configuration file). USE WHEN a PR touches any of these files. Do NOT use for bidder/{x}/{X}Bidder.java, bidder-params/{x}.json, or ExtImp{X}.java — those are owned by sibling skills.
 version: 1.0.0
 ---
 
@@ -10,7 +10,7 @@ Review pull requests that touch the three Spring DI files that wire a Java bidde
 
 1. `src/main/resources/bidder-config/{x}.yaml` — the **unified** Spring property-source YAML (bidder-info + endpoint + aliases + usersync, under an `adapters.{x}` wrapper). This is the Java analog of Go's `static/bidder-info/{x}.yaml` BUT richer: it carries Spring property keys for the adapter endpoint URL, usersync, and operator-supplied extras.
 2. `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` (or the `{X}BidderConfiguration.java` variant) — the Spring `@Configuration` factory that emits the `BidderDeps` bean via `BidderDepsAssembler`. **No Go analog exists**: Go's `exchange/adapter_builders.go` is a single map keyed by BidderName; Java has one factory class per bidder.
-3. `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` — the **Rule 35** typed-config subclass when present. In current upstream practice this is almost always an **inner `private static class`** inside the `{X}Configuration.java` file (canonical: Kobler, Rubicon, Appnexus, Adnuntius). Either form (separate file OR inner class) is acceptable; both are reviewed by this skill.
+3. The **Rule 35** typed-config subclass when present. At `e3ffd57` upstream ships **16** of these and **all 16 are nested** `private static class {X}ConfigurationProperties extends BidderConfigurationProperties` declared inside `{X}Configuration.java` (canonical: Kobler, Magnite, Appnexus, Adnuntius). There are **zero** standalone `{X}BidderConfigurationProperties.java` files — the only files matching that name are the framework's own `model/BidderConfigurationProperties.java` and `model/DefaultBidderConfigurationProperties.java`. The separate-file form remains design-permitted and is reviewed here if a PR introduces one, but **detection must key on the nested declaration**, not on a filename that never appears.
 
 For every changed field/line, apply the matching verification workflow to produce actionable review findings.
 
@@ -31,9 +31,9 @@ This skill activates when `pr-triage-java`'s routing manifest routes ≥1 file i
 | Pattern | Notes |
 |---|---|
 | `src/main/resources/bidder-config/{x}.yaml` | The unified config (bidder-info + endpoint + aliases + usersync) |
-| `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` | Spring `@Configuration` factory (default convention; canonical: `AaxConfiguration.java`, `KoblerConfiguration.java`, `RubiconConfiguration.java`) |
+| `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` | Spring `@Configuration` factory (default convention; canonical: `AaxConfiguration.java`, `AdprimeConfiguration.java`, `KoblerConfiguration.java`, `MagniteConfiguration.java`) |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfiguration.java` | Same role; alternate naming form (canonical: `AdverxoBidderConfiguration.java`, `AdnuntiusBidderConfiguration.java`, `DianomiBidderConfiguration.java`) |
-| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | Rule 35 typed-config subclass when present as a **separate file** (rare; most subclasses are inner classes) |
+| A nested `private static class {X}ConfigurationProperties extends BidderConfigurationProperties` inside either file above | Rule 35 typed-config subclass — **this is the form upstream uses (16/16 at `e3ffd57`)**. It arrives in the diff as a hunk inside the Configuration file, not as its own file. A standalone `{X}BidderConfigurationProperties.java` is accepted if a PR ships one, but no upstream example exists. |
 
 It does NOT activate on its own — `pr-triage-java` runs first and routes files here.
 
@@ -45,7 +45,7 @@ Upstream uses BOTH `{X}Configuration.java` AND `{X}BidderConfiguration.java` nam
 - Flag for reviewer attention as **INFO** only when the form differs from sibling adapters of similar age (e.g., new adapter in 2026 using `{X}BidderConfiguration.java` while the surrounding cohort uses `{X}Configuration.java` — likely cargo-culted from an older template)
 - **DO** flag as **FAIL** when the internal `public class` name does not match the filename root (checkstyle `OuterTypeFilename` will fail; this is the F-new-79 trap — port-go2java has emitted this wrong in canaries)
 
-Both filename forms map to the same skill; the typed-config subclass (Rule 35) is most often an inner `private static class` inside the Configuration file rather than a separate file. If the PR ships it as a separate file, route + review it here; the Activation table above accepts either form.
+Both filename forms map to the same skill; the typed-config subclass (Rule 35) is a nested `private static class` inside the Configuration file in every upstream instance. If the PR ships it as a separate file, route + review it here; the Activation table above accepts either form.
 
 ## Review Workflow
 
@@ -69,7 +69,7 @@ The pr-triage-java skill provides:
 - Any cross-skill concerns relevant to bidder-config (notably 5a invalid-endpoint-macros-in-alias, 5c alias+parent consistency, 5d registration-without-implementation, 5g whitelabel-resemblance, 5i IT-registry misalignment, 5k pre-checkstyle pre-flags)
 - PR description analysis (docs PR link, template completeness, feature rationale)
 - Commit history + reviewer feedback + duplicate-PR search results
-- Bidder metadata (parent, aliases, whitelabelOnly, capabilities, endpoint, rule_35_typed_config)
+- Bidder metadata (parent, aliases, capabilities, endpoint, rule_35_typed_config). Note: there is no white-label flag on the Java side — see §"Workflow: White-Label Policy" step 2.
 
 **1b. Handle drift warnings.**
 
@@ -79,9 +79,13 @@ When the BidderConfigurationProperties base class gained fields, every typed-con
 
 **1c. Handle CI status.**
 
-If CI status is `blocked` (typically: checkstyle failure, compile failure), acknowledge in the summary and note that review findings are preliminary until CI passes. Specifically for this skill:
+If CI status is `blocked` (typically: checkstyle failure, compile failure), acknowledge in the summary and note that review findings are preliminary until CI passes.
 
-- A checkstyle `ImportOrder` violation in a `{X}Configuration.java` or `{X}BidderConfigurationProperties.java` is **the F-new-58/59 trap** — the template emits imports out of canonical 3-group order. The CI annotation tells you the exact file:line; flag as **FAIL** with a note that this is template-fixed in current SKILLs.
+**Read the check-run names correctly** — see [framework-utilities-java.md §8.2](../shared/framework-utilities-java.md). This repo has **no** `checkstyle` check-run and **no** `JaCoCo Coverage` check-run. Checkstyle runs inside **`build (25)`** (bound to the `validate` phase of `mvn package`), so a `blocked` classification for an import-order or class-name violation comes from a failing `build (25)`, and the annotations are on that check-run. An **empty** check-run list is a finding (`INFO / NOTE`), not a pass.
+
+Specifically for this skill:
+
+- A checkstyle `ImportOrder` violation in a `{X}Configuration.java` is **the F-new-58/59 trap** — the template emits imports out of canonical 3-group order. The `build (25)` annotation tells you the exact file:line; flag as **FAIL** with a note that this is template-fixed in current SKILLs.
 - A checkstyle `OuterTypeFilename` violation is the F-new-79 trap — class name does not match filename. Flag as **FAIL**.
 - A checkstyle `LineLength` violation (> 120 chars) is common in `bidderCreator` lambdas with many constructor args. Flag as **FAIL**; the reviewer's typical fix is to indent the constructor args across multiple lines.
 
@@ -140,7 +144,7 @@ When the triage manifest carries a `--- PRIOR SOURCE SPEC COMPARISON ---` block 
 - **Source spec carries openrtb version / multiformat / gpp signals (per F-new-44 family)** → verify Java YAML mirrors **with the correct keys**:
   - Go `openrtb.version: "2.6"` ↔ Java `adapters.{x}.ortb-version: "2.6"` (top-level field on base `BidderConfigurationProperties`, NOT under an `ortb:` block; the key is `ortb-version`, not `ortb.version`). Both accept the string `"2.6"` per Java edge case #29 quoting rule.
   - Go `openrtb.multiformat-supported: true` ↔ Java `adapters.{x}.ortb.multiformat-supported: true` (this IS under the `ortb:` block — it's the only field on the Java `Ortb` POJO).
-  - Go `openrtb.gpp-supported: true` ↔ Java HAS NO `gpp-supported` boolean. GPP capability is signaled implicitly via the presence of `{{gpp}}` / `{{gpp_sid}}` macros in `usersync.iframe.url` / `usersync.redirect.url`. When source-spec declares `gpp-supported: true`, verify the Java YAML's usersync URLs include the GPP macros.
+  - Go `openrtb.gpp-supported: true` ↔ Java HAS NO `gpp-supported` boolean. GPP capability is signaled implicitly via the presence of `{gpp}` / `{gpp_sid}` macros (single brace) in `usersync.iframe.url` / `usersync.redirect.url`. When source-spec declares `gpp-supported: true`, verify the Java YAML's usersync URLs include the GPP macros.
 - **Source spec carries `code.make_bids.http_status_handling.kind=canonical-go-helpers`** → cross-reference: Java framework defaults handle 204/non-200 status codes BEFORE `makeBids` is invoked (Rule 30 framework-default no-op). The Java `{X}Configuration.java` should NOT include explicit status-check wiring. If the Configuration file includes a custom HTTP status handler bean or registers a non-default response filter, flag as **warn** — divergence from the canonical Go semantics is suspicious for a port.
 - **F-new-67/69/72 (empty `geoscope:` bare-line)** — pre-flagged by pr-triage-java Step 5k. If the YAML contains a bare `geoscope:` line with no list value, this resolves to YAML null which Spring then maps to an empty list — but the line is unused (the canonical pattern is to omit the field entirely). Flag as **info** with note: "Empty `geoscope:` bare-line — omit the field entirely or supply a list."
 - **F-new-44 (ortb fields missing on Java port)** — when source spec declares `openrtb.version: "2.6"` but Java YAML omits the `ortb` block, the adapter will send `X-OpenRTB-Version: 2.5` headers despite the Go side declaring 2.6. Flag as **fail**.
@@ -166,7 +170,7 @@ Parse the diff output to identify exactly which YAML fields and Java lines were 
 For **modified files**, extract only the diff hunks. Within each hunk:
 
 - For YAML files: map each changed line to its corresponding field path (e.g., `meta-info.maintainer-email`, `aliases.adport.endpoint`, `usersync.iframe.url`). Java's unified YAML is nested deeper than Go's; track path correctly.
-- For Java files: classify each changed line as one of: import (the F-new-58/59 trap zone), class declaration (F-new-79 zone), `@Bean` declaration, `@Configuration` annotation, `@PropertySource` value, `BidderDepsAssembler.forBidder(...)` constant, `.withConfig(...)`, `.usersyncerCreator(...)`, `.bidderCreator(...)` lambda, `resolveEndpoint(...)` helper, inner `BidderConfigurationProperties` subclass body. Each category maps to a specific verification workflow below.
+- For Java files: classify each changed line as one of: import (the F-new-58/59 trap zone), class declaration (F-new-79 zone), `@Bean` declaration, `@Configuration` annotation, `@PropertySource` value, `BidderDepsAssembler.forBidder(...)` constant, `.withConfig(...)`, `.bidderCreator(...)` lambda, `resolveEndpoint(...)` helper, nested `{X}ConfigurationProperties` subclass body. Each category maps to a specific verification workflow below. **Any other method chained on `BidderDepsAssembler` belongs to no category** — the public surface is exactly `forBidder`, `withConfig`, `bidderCreator`, `assemble`, so an unclassifiable chain link is the F-new-57b compile error, not a workflow gap.
 - Ignore all context lines (lines without `+` or `-` prefix).
 
 **Comment-only / whitespace-only changes:** If all changed lines in a file are YAML comments (`#` lines), Java comments (`//` or `/* */`), or whitespace-only (trailing newline, indentation), the file has **zero changed fields**. Skip to Step 5 and recommend fast-track approval — note in the summary that the change is comment/formatting only with no functional impact.
@@ -190,7 +194,7 @@ There are two categories of tasks:
 1. One "bulk pattern consistency" task verifying: (a) all aliases reference the same parent's `aliases:` block, (b) all aliases have identical structural shape (tilde-inherit OR full-block; not mixed), (c) each alias's endpoint domain plausibly belongs to that alias's organization, (d) each alias's usersync URL plausibly belongs to the alias org.
 2. One shared task for parent-endpoint and parent-resolveEndpoint verification.
 
-Total tasks for a 5-alias bulk PR: 2, not (5 × number-of-fields-per-alias). The canonical Java case is Adverxo's `adport`+`bidsmind`+`mobupps` per-alias bundle shipped together — this skill should produce ~2 tasks under bulk-mode, not 30.
+Total tasks for a 5-alias bulk PR: 2, not (5 × number-of-fields-per-alias). The canonical Java case is Adverxo's `adport` + `bidsmind` + `harrenmedia` per-alias bundle (the three alias keys in `bidder-config/adverxo.yaml` at `e3ffd57`) — this skill should produce ~2 tasks under bulk-mode, not 30.
 
 **2. Field-level tasks (one per changed field/section):** For each changed line, look up the matching Verification Workflow. Create tasks in this priority order (but only for fields that appear in the diff):
 
@@ -212,10 +216,10 @@ Java side (within `{X}Configuration.java`):
 2. `@Bean("{x}ConfigurationProperties") @ConfigurationProperties("adapters.{x}")` quartet — use [Bean Quartet](#workflow-bean-quartet)
 3. `BidderDepsAssembler.<T>forBidder(BIDDER_NAME)` — use [BidderDepsAssembler Generic](#workflow-bidderdepsassembler-generic)
 4. `.withConfig(...)` — use [withConfig Binding](#workflow-withconfig-binding)
-5. `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` — use [UsersyncerCreator URL](#workflow-usersyncercreator-url)
+5. Any OTHER method chained on the assembler (`.usersyncerCreator(...)`, `.bidderInfo(...)`, …) — use [Assembler Chain Surface](#workflow-assembler-chain-surface) (**FAIL** — compile error)
 6. `.bidderCreator(cfg -> new {X}Bidder(...))` lambda — use [bidderCreator Lambda](#workflow-biddercreator-lambda) (HIGH PRIORITY — F-new-57 trap)
 7. `resolveEndpoint(...)` helper method — use [resolveEndpoint Helper](#workflow-resolveendpoint-helper)
-8. Inner `BidderConfigurationProperties` subclass — use [Typed-Config Subclass](#workflow-typed-config-subclass)
+8. Nested `{X}ConfigurationProperties` subclass — use [Typed-Config Subclass](#workflow-typed-config-subclass)
 9. Import block — use [Import Order Pre-Check](#workflow-import-order-pre-check) (F-new-58/59 trap)
 10. `public class {Name}` declaration — use [Class-Filename Match](#workflow-class-filename-match) (F-new-79 trap)
 
@@ -267,10 +271,12 @@ The YAML side mirrors the Go-side `bidder-info-pr-review` workflows but adapts f
    echo | openssl s_client -connect {host}:443 -servername {host} 2>/dev/null | openssl x509 -noout -subject -dates -issuer
    ```
    Flag expired/invalid as **FAIL**.
-5. **Template macros**: Two macro syntaxes are valid in Java:
-   - `{{PREBID_SERVER_ENDPOINT}}` — resolved at construction time via the `resolveEndpoint(...)` helper in `{X}Configuration.java` (canonical: aax — see AaxConfiguration.java line 24). This single macro is the canonical framework-provided one.
-   - Per-bidder template tokens — e.g., `{{adUnitId}}`, `{{auth}}` (canonical: Adverxo `endpoint: https://pbsadverxo.com/auction?adUnitId={{adUnitId}}&auth={{auth}}`). These are passed through to the adapter and resolved by `{X}Bidder.java`'s `makeHttpRequests(...)` via `String.replace(...)`.
-   - Any macro NOT handled by the Configuration's `resolveEndpoint` AND NOT consumed by `{X}Bidder.java`'s request builder will leave the literal `{{TOKEN}}` in the URL at runtime. Cross-reference both files (the read-side companion's macro list at [../../../read/skills/shared/framework-utilities-java.md](../../../read/skills/shared/framework-utilities-java.md) catalogs known framework-level macros). Unknown macros: **FAIL**.
+5. **Template macros — SINGLE brace, RFC 6570.** Endpoint templates are expanded by Vert.x `UriTemplate` through `org.prebid.server.util.Uri` (migrated in `bc0409271`, PR #4444). See [framework-utilities-java.md §3.0](../shared/framework-utilities-java.md) for the full mechanism. Two macro classes are valid:
+   - `{PREBID_SERVER_ENDPOINT}` — resolved at bean-construction time by the `resolveEndpoint(...)` helper in `{X}Configuration.java`. Canonical: `AaxConfiguration.java`, where the constant is the **bare** name `private static final String EXTERNAL_URL_MACRO = "PREBID_SERVER_ENDPOINT";` and the body is `Uri.of(configEndpoint).replaceMacro(EXTERNAL_URL_MACRO, externalUrl).expand()`.
+   - Per-bidder template tokens — e.g. `{adUnitId}`, `{auth}` (Adverxo: `endpoint: https://pbsadverxo.com/auction?id={adUnitId}&auth={auth}`), `{AdUnit}` (`elementaltv.yaml`), `{AccountID}` / `{SourceId}` (`imds.yaml`). These pass through to the adapter and are resolved in `{X}Bidder.java` via `Uri.replaceMacro(NAME, value).expand()`.
+   - **Double-brace `{{TOKEN}}` in an `endpoint:` value is FAIL.** `UriTemplate` reads `{{TOKEN}}` as a variable literally named `{TOKEN` — it will not expand, and `expand()` throws on the unfilled variable. Any PR carrying a double-braced endpoint macro is emitting pre-`#4444` syntax.
+   - Any macro NOT resolved by the Configuration's `resolveEndpoint` AND NOT consumed by `{X}Bidder.java`'s request builder will fail expansion at runtime. Cross-reference both files. Unknown macros: **FAIL**.
+   - **Scope note:** this rule governs `endpoint:` and `usersync.*.url` values only. It does NOT apply to `uid-macro:` values, which are opaque bidder-owned strings and legitimately include `{{…}}` forms (`{{UUID}}`, `{{OGURY_UID}}`, …) — see step 4 of the User Sync workflow.
 6. **Non-template tokens** (`#{REGION}#`, `${X}`, `<X>`): MUST be paired with `enabled: false` at the adapter top-level + a YAML comment block listing valid replacement values. Otherwise Spring will not substitute and runtime calls will fail. Missing `enabled: false` pairing: **FAIL** (mirror of Go-side `disabled-by-default region endpoint` rule).
 7. **Domain ownership**: Verify the domain plausibly belongs to the bidder organization (domain name relates to bidder name). Flag mismatch as **INFO**.
 8. **No hardcoded credentials**: Ensure the URL does not contain actual API keys, passwords, or secrets in plain text. **FAIL** if present.
@@ -289,10 +295,11 @@ For each added or modified alias entry:
 
 1. **Parent existence**: The wrapping bidder MUST be a parent (not itself an alias of another bidder). Java does not support alias-of-alias chains. Check the parent YAML's adapter key is NOT itself inside another bidder's `aliases:` block. **FAIL** on chain detection.
 2. **Alias name uniqueness**: The alias name MUST NOT collide with any existing bidder name (top-level adapter key in any other `bidder-config/*.yaml`). pr-triage-java's bidder-name extraction surfaces collisions in the manifest's `New aliases:` section; cross-check.
-3. **Endpoint resolveability** (full-block only): Extract the alias's `endpoint:` value. For each `{{TOKEN}}` macro found:
+3. **Endpoint resolveability** (full-block only): Extract the alias's `endpoint:` value. For each single-brace `{Token}` macro found:
    - Cross-reference against parent's `resolveEndpoint(...)` method in `{X}Configuration.java` (if present).
    - Cross-reference against parent's `{X}Bidder.java` `makeHttpRequests(...)` (read-only; this skill READS bidder-class for this check — owned by bidder-class-pr-review).
-   - Any macro NOT handled in either location: **FAIL** — silently leaves literal in URL (this is the 5a cross-skill concern surfaced by pr-triage-java).
+   - Any macro NOT handled in either location: **FAIL** — `Uri.expand()` throws `NoSuchElementException` on the unfilled variable at request time (this is the 5a cross-skill concern surfaced by pr-triage-java).
+   - A double-braced `{{Token}}` in an alias endpoint is **FAIL** on its own (pre-`#4444` syntax; see Workflow: Endpoint Changed step 5).
 4. **Endpoint domain ownership**: The alias endpoint domain SHOULD belong to the alias organization, not reuse the parent's verbatim (unless shared infrastructure is intentional — canonical: Adverxo aliases share `pbsadverxo.com` but each has its own subdomain like `adport.pbsadverxo.com`, `bidsmind.pbsadverxo.com`). Flag domain match with no subdomain differentiation as **WARN**.
 5. **Per-alias usersync** (full-block only):
    - When the alias declares a full `usersync:` block, verify each URL passes the [User Sync URL Changed](#workflow-user-sync-url-changed) workflow.
@@ -302,7 +309,7 @@ For each added or modified alias entry:
 7. **Parent + alias consistency** (when pr-triage-java surfaced concern 5c): If both parent and alias were modified in the same PR, verify:
    - Parent endpoint template-token changes are reflected in alias endpoints (where applicable)
    - Parent capability changes (media-types) are inherited by aliases unless explicitly overridden (Java does NOT have an alias-side `meta-info` override; aliases inherit capabilities from parent verbatim)
-8. **Tilde + alias-back-after-rename detection**: If the alias is tilde-inherit AND the alias name matches a previously-deleted top-level adapter key (i.e., the bidder was renamed; canonical: Adoppler → ElementalTV via PR #4326), flag as **INFO** with note: "tilde alias-back for bidder rename (`{old}` → `{new}`) — confirm rename was intentional and major-version-bounded." This pattern is the Java edge case #33 bidder-rename three-step refactor.
+8. **Alias-back-after-rename detection**: If an added alias name matches a previously-deleted top-level adapter key (i.e., the bidder was renamed), flag as **INFO** with note: "alias-back for bidder rename (`{old}` → `{new}`) — confirm rename was intentional and major-version-bounded." This pattern is the Java edge case #33 bidder-rename three-step refactor. Canonical: `adoppler` → `elementaltv` (PR #4326, merged 2026-01-12); at `e3ffd57` `bidder-config/elementaltv.yaml` still carries the alias — as a **full-block** (`adoppler: { meta-info: { vendor-id: 0 } }`), not tilde-inherit. Either form satisfies the pattern; do not require the tilde.
 9. **One-line alias OK**: `aliases: { adport: ~ }` (tilde-inherit) is fully valid. Do not flag as "missing fields".
 10. **Cross-skill consistency with test-application.properties**: For each added alias, pr-triage-java's `IT-REGISTRY` check verifies `adapters.{parent}.aliases.{alias}.enabled=true` + `.endpoint=...` lines exist. This skill records the YAML-side completeness; if a YAML alias is added but pr-triage reports no IT-registry entry, this is **FAIL** — IT framework will run without alias visibility.
 
@@ -316,12 +323,14 @@ For each added or modified alias entry:
    curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s" {url}
    ```
    Accept 200, 301, 302 (redirects expected for sync URLs). Flag 404, 500, connection refused as **FAIL**.
-3. **Privacy macro validation**: Verify required macros are present:
-   - `{{gdpr}}`, `{{gdpr_consent}}` for GDPR compliance (note: Java uses lowercase + underscore; Go uses `{{.GDPR}}` / `{{.GDPRConsent}}` — Port Translation Rule 12)
-   - `{{us_privacy}}` for US privacy
-   - `{{redirect_url}}` for the callback
-   - `{{gpp}}` / `{{gpp_sid}}` if GPP is supported (note: Java has NO `ortb.gpp-supported` boolean; the presence of these macros in usersync URLs IS the GPP-support signal — see Workflow: ORTB Block Changed)
-4. **userMacro consistency**: If `uid-macro` is declared, verify it follows the bidder's expected format (e.g., `$UID`, `<vsid>`, `[USER_ID]`).
+3. **Privacy macro validation — SINGLE brace.** Verify required macros are present, written with one brace each:
+   - `{gdpr}`, `{gdpr_consent}` for GDPR compliance (note: Java uses lowercase + underscore, single brace; Go uses `{{.GDPR}}` / `{{.GDPRConsent}}` — Port Translation Rule 12. The brace count is part of the translation, not just the casing.)
+   - `{us_privacy}` for US privacy
+   - `{redirect_url}` for the callback
+   - `{gpp}` / `{gpp_sid}` if GPP is supported (note: Java has NO `ortb.gpp-supported` boolean; the presence of these macros in usersync URLs IS the GPP-support signal — see Workflow: ORTB Block Changed)
+
+   At `e3ffd57` there are **zero** double-brace occurrences of any of these names anywhere under `src/`. A `{{gdpr}}` in a sync URL is **FAIL** — `UriTemplate` will not expand it and the sync fires with a literal token. Regeneration command in [framework-utilities-java.md §3.0](../shared/framework-utilities-java.md).
+4. **`uid-macro` is EXEMPT from the brace rule**: `uid-macro` is not a framework macro — it is the opaque placeholder the *bidder* substitutes on its own side, so its shape is whatever that bidder documents. All of `$UID`, `[UID]`, `<vsid>`, `[USER_ID]`, and double-braced forms are valid. Upstream ships 7 double-braced `uid-macro` values at `e3ffd57` (`tappx` `{{TPPXUID}}`, `frvradn` `{{UID}}`, `lockerdome` `{{uid}}`, `vidoomy` `{{VID}}`, `ogury` `{{OGURY_UID}}` ×2, `avocet` `{{UUID}}`). **Do not flag a double-braced `uid-macro` value** — that is a false positive. Verify only that the value matches what the bidder's own sync documentation expects.
 5. **Domain ownership**: Sync URL domain SHOULD belong to the bidder organization. Flag mismatch as **WARN**.
 6. **Both types declared**: If the bidder declares both iframe AND redirect, verify both URLs are functional. Flag unreachable declared type as **FAIL**.
 
@@ -329,7 +338,7 @@ For each added or modified alias entry:
 
 **Triggers when:** `meta-info.maintainer-email` is added or modified.
 
-1. **Manual reviewer process**: The maintainer-email "received" verification gate is a manual reviewer process (typical: bsardo sends an email; merge is gated on the maintainer replying "received"). Skills cannot automate this gate. When the triage manifest reports `blocking-confirmation-pending`, note this in the finding.
+1. **Manual maintainer process**: The maintainer-email "received" verification gate is a manual out-of-band step — a maintainer sends mail to the declared address and merge is gated on a reply of "received". It is also the first item on the PR template's New Bid Adapter Checklist (`.github/pull_request_template.md`: "verify email contact works"). Skills cannot automate this gate. When the triage manifest reports `blocking-confirmation-pending`, note this in the finding.
 2. **Generic-domain emails** (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `proton.me`, `icloud.com`): flag as **INFO** — these don't establish organizational ownership and historically receive extra scrutiny.
 3. **Local-part is not a role/group token**: flag as **WARN** — reviewer convention is to require a group/role mailbox (`tech@`, `support@`, `prebid@`, `info@`, etc.). A personal name or handle (`firstname.lastname@`, `firstname@`, `flast@`, initials, a nickname) is not a role token **even on the bidder's own corporate domain** — that corporate-domain-personal case is the one a name-pattern regex misses (the Teal #4765 class). Judge role-vs-person, not just the regex.
 4. **Aliases inherit**: When the change is to a parent's `maintainer-email` and aliases are tilde-inherit, the new email applies to all aliases. Note this in the finding.
@@ -364,7 +373,7 @@ For each added or modified alias entry:
 
 **Triggers when:** `geoscope` (at adapter top-level OR under an alias) is added or modified.
 
-**Operator-warning context (verified at SHA `a1fe64e123d6`)**: the `geoscope` key is **currently UNBOUND in upstream Java** — `BidderConfigurationProperties` has no `geoscope` field and `BidderInfoCreator` has no `getGeoscope()` reference. Spring relaxed-binding silently discards the value. Reviewer guidance: still apply the value-validity checks below (so YAML stays correct when upstream binds the field), but mark the finding INFO with note: "geoscope is currently silently dropped by Spring relaxed-binding — operator should treat as documentation until upstream wires it." Operators upgrading or hand-mirroring the Go-side geoscope should not expect runtime enforcement on the Java side today.
+**Operator-warning context (re-verified at SHA `e3ffd57`)**: the `geoscope` key is **currently UNBOUND in upstream Java** — `BidderConfigurationProperties` has no `geoscope` field and `BidderInfoCreator` has no `getGeoscope()` reference. Spring relaxed-binding silently discards the value. Reviewer guidance: still apply the value-validity checks below (so YAML stays correct when upstream binds the field), but mark the finding INFO with note: "geoscope is currently silently dropped by Spring relaxed-binding — operator should treat as documentation until upstream wires it." Operators upgrading or hand-mirroring the Go-side geoscope should not expect runtime enforcement on the Java side today.
 
 1. **Valid values**: 3-letter ISO 3166-1 alpha-3 country codes (e.g., `USA`, `CAN`, `GBR`, `NOR`, `SWE`, `DNK`). Special values: `GLOBAL`, `EEA`. Negation prefix `!` (e.g., `!EEA`).
 2. **Uppercase required**: All values MUST be uppercase. Lowercase is **FAIL** (when upstream binds the field; today only style).
@@ -396,11 +405,11 @@ For each added or modified alias entry:
 
 **Important — what does NOT exist in Java's POJO surface:**
 - `ortb.version` (nested) is NOT a Java key. The version field is `ortb-version` at adapter top-level, binding to `BidderConfigurationProperties.ortbVersion`.
-- `ortb.gpp-supported` is NOT a Java key. GPP capability is signaled implicitly via `{{gpp}}` / `{{gpp_sid}}` macros in `usersync.*.url`. The Java `Ortb` POJO contains ONLY `multiFormatSupported` (kebab-case `multiformat-supported`).
+- `ortb.gpp-supported` is NOT a Java key. GPP capability is signaled implicitly via `{gpp}` / `{gpp_sid}` macros (single brace) in `usersync.*.url`. The Java `Ortb` POJO contains ONLY `multiFormatSupported` (kebab-case `multiformat-supported`).
 
 1. **`ortb-version: "2.6"` quoting (Java edge case #29)**: Must be a QUOTED string. `ortb-version: 2.6` (unquoted) parses as YAML float `2.6` — Spring's binding to `OrtbVersion` enum then fails silently (or maps to wrong enum). Flag unquoted as **FAIL**. Canonical examples: kobler.yaml does NOT declare the field at all (defaults apply); declared examples must quote.
 2. **`ortb.multiformat-supported: bool`**: Boolean. Controls whether adapter handles multi-format imps in a single request. Verify adapter code's `makeHttpRequests(...)` actually splits or merges multi-format correctly.
-3. **Pseudo-`gpp-supported`**: When source-spec carries `gpp-supported: true` (Go side), verify Java's usersync URLs include `{{gpp}}` / `{{gpp_sid}}` macros — flag mismatch as **WARN**. There is no `ortb.gpp-supported` boolean to set on the Java side.
+3. **Pseudo-`gpp-supported`**: When source-spec carries `gpp-supported: true` (Go side), verify Java's usersync URLs include `{gpp}` / `{gpp_sid}` macros (single brace) — flag mismatch as **WARN**. There is no `ortb.gpp-supported` boolean to set on the Java side.
 4. **F-new-44 family**: When `prior_source_spec` declares `openrtb.version: "2.6"` but Java YAML omits the top-level `ortb-version` field, the adapter sends 2.5 requests. Flag as **fail** — port is incomplete.
 
 ### Workflow: Bidder Disabled
@@ -420,7 +429,7 @@ For each added or modified alias entry:
 - A new YAML's `endpoint:` matches an existing adapter's endpoint domain
 
 1. **Prebid policy quote (verbatim)**: "If an adapter is a white label, the aliasing feature should be used instead of copying an adapter."
-2. **`white-label-only: true` semantics (Java kebab-case key; Go side uses camelCase `whiteLabelOnly`)**: Marks parent as available only as white-label target (aliases reference it). Does NOT preclude `{X}Bidder.java` Java code on the parent — canonical white-label parents (TeqBlaze, SmartHub) have full Java code AND `white-label-only: true`. **INFO** if the flag is set on a new file.
+2. **There is no white-label flag on the Java side.** `whiteLabelOnly` is a **Go-only** `static/bidder-info/*.yaml` key. At `e3ffd57` neither `whiteLabelOnly` nor `white-label-only` appears anywhere under `prebid-server-java/src/` — zero hits, in YAML and in Java. `BidderConfigurationProperties` has no such field, so even if a PR added the key, Spring relaxed-binding would silently discard it. Reviewer actions: (a) do NOT look for the key, and do NOT ask for it to be added; (b) if a PR *does* add `white-label-only:` to a Java YAML, flag **INFO** — "no Java binding exists for this key; it is silently dropped. Remove it or raise an upstream issue to bind it."  White-label *policy* is still enforced — via step 3 below, on the shape of the diff, not on a flag.
 3. **Full adapter that looks like a copy**: If a new full Java adapter is being added but the diff structure resembles an existing adapter (heuristic: identical endpoint domain, comparable parameter schema, copy-paste-style Configuration class), flag as **WARN** with the suggestion: "this may be a white-label scenario — consider adding the new bidder as an alias under an existing parent's `aliases:` block instead of duplicating Java code."
 4. **Alias-only directionality**: `aliases:` entries are typically added (not deleted from full). Reverse migration (alias → full) is rare and requires reviewer judgment.
 5. **Cross-skill de-duplication**: If pr-triage-java's CROSS-SKILL CONCERNS already records the 5g resemblance signal OR the `whitelabel-redirect-mid-review` sub-label was set, do NOT re-flag — note `Previously flagged by triage` and surface only net-new findings (e.g., parent-choice verification: when the redirect-resolution chose a different parent than the reviewer originally suspected).
@@ -464,12 +473,16 @@ These workflows have NO Go analog — Java's per-bidder Spring DI factory is uni
 2. **Type alignment**: When Rule 35 subclass is used, the parameter type MUST be the subclass (`{X}ConfigurationProperties`), not the base class. Mismatched types is **FAIL** (compile error; CI will catch but pre-flag).
 3. **Single config binding**: Exactly one `.withConfig(...)` call per chain. Multiple is **FAIL** (overwrites).
 
-### Workflow: UsersyncerCreator URL
+### Workflow: Assembler Chain Surface
 
-**Triggers when:** the `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` line is added or modified.
+**Triggers when:** any method other than `forBidder`, `withConfig`, `bidderCreator`, `assemble` appears on a `BidderDepsAssembler` chain.
 
-1. **Hardcoded factory call**: Always `UsersyncerCreator.create(externalUrl)` — never an alternate factory or a `null`. Adapter has NO usersync? Then the YAML simply omits `usersync:` block; the framework handles the absence. Do NOT skip this line in the chain (the chain requires it).
-2. **`externalUrl` parameter**: Must come from `@NotBlank @Value("${external-url}") String externalUrl` in the method signature. Other sources (constructor field, static constant) are **FAIL** — Spring will not inject correctly.
+`BidderDepsAssembler` (`spring/config/bidder/util/BidderDepsAssembler.java`, verified at `e3ffd57`) exposes exactly four public members — see [framework-utilities-java.md §1.1a](../shared/framework-utilities-java.md). Anything else is a compile error.
+
+1. **`.usersyncerCreator(UsersyncerCreator.create(externalUrl))` — FAIL / HIGH BLOCKING.** Neither the method nor the `UsersyncerCreator` class exists; both were deleted in `2880782f` (PR #4464, merged 2026-07-09). The assembler derives the `Usersyncer` itself, in its private `usersyncer(CFG)` method, from `configProperties.getUsersync()` via `UsersyncerUtil.create(usersync)`. **A bidder with a full `usersync:` YAML block therefore has NO usersync line in its Configuration class at all** — canonical anchor: `AdprimeConfiguration.java`, whose `bidder-config/adprime.yaml` declares both `usersync.iframe` and `usersync.redirect` while its assembler chain is `forBidder → withConfig → bidderCreator → assemble`.
+2. **`.bidderInfo(...)` — FAIL / HIGH BLOCKING.** The F-new-57b trap; `BidderInfo` is built internally in `coreDeps()` via `BidderInfoCreator.create(configProperties)`.
+3. **Do NOT require an `externalUrl` parameter for usersync.** `@NotBlank @Value("${external-url}") String externalUrl` is needed only when the *endpoint* embeds `{PREBID_SERVER_ENDPOINT}` and a `resolveEndpoint(...)` helper consumes it (canonical: `AaxConfiguration`). A Configuration class for a bidder with usersync but no endpoint macro takes no `externalUrl` at all — `AdprimeConfiguration` and `KoblerConfiguration` both omit it. Flagging its absence as a usersync defect is a false positive.
+4. **Removing a stale `.usersyncerCreator(...)` line is a correct change, not a regression.** If a PR deletes one from an existing Configuration class, that is the repo catching up to `#4464` — PASS.
 
 ### Workflow: bidderCreator Lambda (HIGH PRIORITY — F-new-57 trap)
 
@@ -493,22 +506,27 @@ This is the **highest-priority** workflow in the Spring DI side because it bridg
    - `externalUrl` parameter is `String`.
    - Any helper service (`PriceFloorResolver`, `PrebidVersionProvider`, `UUIDIdGenerator`, etc.) requires the matching constructor parameter type. Cross-reference [../../../read/skills/shared/framework-utilities-java.md](../../../read/skills/shared/framework-utilities-java.md) for the canonical service list.
 4. **Argument order match**: The lambda's arguments MUST appear in the same ORDER as the constructor expects. Mismatch is **FAIL** (compile error OR — worse — silent runtime misbinding when types coincidentally line up).
-5. **`resolveEndpoint(...)` indirection (when present)**: When the Configuration class declares a `private String resolveEndpoint(String, String)` helper (canonical: AaxConfiguration line 44), the lambda should pass `resolveEndpoint(config.getEndpoint(), externalUrl)` rather than `config.getEndpoint()` directly. This indirection substitutes the `{{PREBID_SERVER_ENDPOINT}}` macro at startup. If the helper is declared but the lambda calls `config.getEndpoint()` directly, the macro will leak into runtime URLs — **FAIL**.
-6. **No `.bidderInfo(...)` call on `BidderDepsAssembler` (F-new-57b — HIGH BLOCKING FAIL)**: `BidderDepsAssembler` exposes only `forBidder`, `withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble` as its public builder methods. There is NO public `.bidderInfo(...)` method. A `.bidderInfo(BidderInfoCreator.create(mapper)::create)` line is a COMPILE ERROR — verified against `BidderDepsAssembler.java` at SHA `a1fe64e123d6`. The framework auto-creates `BidderInfo` internally inside `BidderDepsAssembler.coreDeps()` from the `@ConfigurationProperties`'d YAML; per-bidder Configuration files MUST NOT call `BidderInfoCreator.create(...)` directly nor chain `.bidderInfo(...)` on the assembler. Flag any such call as **FAIL** (port-go2java emit trap; will not compile).
+5. **`resolveEndpoint(...)` indirection (when present)**: When the Configuration class declares a `private String resolveEndpoint(String configEndpoint, String externalUrl)` helper (canonical: `AaxConfiguration.java`), the lambda should pass `resolveEndpoint(config.getEndpoint(), externalUrl)` rather than `config.getEndpoint()` directly. This expands the `{PREBID_SERVER_ENDPOINT}` variable at bean-construction time. If the helper is declared but the lambda calls `config.getEndpoint()` directly, the template reaches the adapter unexpanded — **FAIL**.
+6. **No extra methods on the `BidderDepsAssembler` chain (F-new-57b — HIGH BLOCKING FAIL)**: the complete public surface is `forBidder`, `withConfig`, `bidderCreator`, `assemble` — verified against `BidderDepsAssembler.java` at SHA `e3ffd57`. A `.bidderInfo(BidderInfoCreator.create(mapper)::create)` or `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` line is a COMPILE ERROR. `BidderInfo` and `Usersyncer` are both derived internally; per-bidder Configuration files MUST NOT call `BidderInfoCreator.create(...)` or `UsersyncerUtil.create(...)` directly. Flag as **FAIL** and route to [Assembler Chain Surface](#workflow-assembler-chain-surface).
 7. **No `BidderUtil.*` non-existent method calls (F-new-90)**: The Rule 30 framework-default mapping for HTTP status handling, error wrapping, and bidresponse parsing means the Configuration class should NOT include `BidderUtil.handleStatusCode(...)` / `BidderUtil.wrapError(...)` / similar method calls — these do not exist in the framework. Calls to `BidderUtil.*` non-existent methods are **FAIL** (compile error; CI catches but pre-flag).
 
 ### Workflow: resolveEndpoint Helper
 
 **Triggers when:** the `private String resolveEndpoint(String, String)` method is added or modified.
 
-1. **Method signature canonical**: `private String resolveEndpoint(String configEndpoint, String externalUrl)`. Parameter names may vary but types and order are fixed.
-2. **Body uses `HttpUtil.encodeUrl(externalUrl)`**: The canonical form (canonical: AaxConfiguration line 45) — `configEndpoint.replace(EXTERNAL_URL_MACRO, HttpUtil.encodeUrl(externalUrl))`. Direct `String.replace(macro, externalUrl)` without `HttpUtil.encodeUrl` is **WARN** — URL-encoding ensures special characters in the external URL don't break the bid URL.
-3. **`EXTERNAL_URL_MACRO` constant**: Declared as `private static final String EXTERNAL_URL_MACRO = "{{PREBID_SERVER_ENDPOINT}}";`. Hardcoded check.
+Only two Configuration classes declare this helper at `e3ffd57` — `AaxConfiguration.java:42` and `MedianetConfiguration.java:42` — and both use the identical shape below. Treat that shape as authoritative.
+
+1. **Method signature canonical**: `private String resolveEndpoint(String configEndpoint, String externalUrl)` — a **2-arg private instance method**, not a 1-arg static one. Parameter names may vary; the arity, types, and order are fixed.
+2. **Body is `Uri.of(configEndpoint).replaceMacro(EXTERNAL_URL_MACRO, externalUrl).expand()`** (verbatim at `AaxConfiguration.java:43`). Reviewer checks:
+   - `Uri.of(...)` — not `String.replace(...)`. Zero files under `src/main/java` use `String.replace("{{…}}", …)` for macro substitution at `e3ffd57`; `Uri.of(` appears in 125 and `replaceMacro` in 94.
+   - **No `HttpUtil.encodeUrl(...)` wrapper.** `UriTemplate` expansion handles escaping. Zero files under `src/main/java/org/prebid/server/spring/config/bidder/` call `encodeUrl` — requiring it is a stale rule, and an added `encodeUrl(externalUrl)` double-encodes. Flag as **WARN**, not the absence.
+   - `.expand()` terminates the chain and returns `String`. Missing it is a compile error (the method would return `Uri.ParameterizedUri`).
+3. **`EXTERNAL_URL_MACRO` constant is the BARE variable name**: `private static final String EXTERNAL_URL_MACRO = "PREBID_SERVER_ENDPOINT";` — **no braces**. `replaceMacro` keys on the variable name; a braced constant (`"{{PREBID_SERVER_ENDPOINT}}"` or `"{PREBID_SERVER_ENDPOINT}"`) never matches, and `expand()` then throws `NoSuchElementException` on the unfilled variable. A braced constant is **FAIL**.
 4. **Called from `bidderCreator` lambda**: The lambda MUST invoke `resolveEndpoint(...)` — otherwise the helper is dead code. Cross-reference [bidderCreator Lambda](#workflow-biddercreator-lambda) Step 5.
 
 ### Workflow: Typed-Config Subclass
 
-**Triggers when:** an inner `private static class {X}ConfigurationProperties extends BidderConfigurationProperties` (or a separate `{X}BidderConfigurationProperties.java` file) is added or modified.
+**Triggers when:** a nested `private static class {X}ConfigurationProperties extends BidderConfigurationProperties` is added or modified inside `{X}Configuration.java` / `{X}BidderConfiguration.java` — the form all 16 upstream instances use at `e3ffd57`. Also triggers on a standalone `{X}BidderConfigurationProperties.java` if a PR ships one (no upstream example exists).
 
 This is Rule 35: typed-config subclass for bidders that need extra config fields beyond the framework default. **Canonical case: Kobler's `dev-endpoint`** (the Java port promoted Go's hardcoded `DEV_ENDPOINT` constant into Spring config). When this skill detects Rule 35 surface, also surface the cross-language port concern: this subclass is the Java-side resolution of the source spec's `hardcoded-config-as-anti-pattern` quirk.
 
@@ -518,10 +536,10 @@ This is Rule 35: typed-config subclass for bidders that need extra config fields
    - `@Data` is REQUIRED — Spring's bean form needs setters. `@Value` (immutable) is **FAIL**.
    - `@NoArgsConstructor` is REQUIRED — Spring needs the default constructor.
    - `@EqualsAndHashCode(callSuper = true)` is REQUIRED — without `callSuper = true`, the equals/hashCode would ignore base-class fields. Missing or `callSuper = false` is **WARN** (correctness issue; rarely test-observable).
-   - `@Validated` (Spring) is REQUIRED on the subclass when any field declares jakarta validation annotations. Optional otherwise (canonical: present on KoblerConfigurationProperties and RubiconConfigurationProperties).
+   - `@Validated` (Spring) is REQUIRED on the subclass when any field declares jakarta validation annotations. Optional otherwise (canonical: present on the nested `KoblerConfigurationProperties` and `MagniteConfigurationProperties`).
 4. **Field-level annotations**:
    - `@NotBlank` on required `String` fields. Canonical: Kobler's `private String devEndpoint` has `@NotBlank` — the dev URL is REQUIRED when this subclass is used.
-   - `@NotNull` on required object fields. Canonical: Rubicon's `private XAPI xapi = new XAPI()` has `@NotNull` plus `@Valid` to cascade validation into the nested type.
+   - `@NotNull` on required object fields. Canonical: `MagniteConfiguration.java`'s nested `MagniteConfigurationProperties`, whose `private XAPI xapi = new XAPI()` carries `@Valid` + `@NotNull` to cascade validation into the nested `XAPI` type. (This class was named `RubiconConfiguration` / `RubiconConfigurationProperties` before PR #4573, "Magnite adapter: Rebrand Rubicon adapter into Magnite adapter", merged 2026-07-27; the annotation convention is unchanged, only the names. No `Rubicon*` file exists at `e3ffd57`.)
    - `@Min` / `@Max` on numeric fields with declared ranges. Use when the YAML semantics demand a range.
    - All annotations come from `jakarta.validation.constraints.*` (NOT `javax.validation.*` — javax is the pre-Java-9 namespace and will not compile in current upstream).
 5. **F-new-59 import group order**: The Lombok `@Data` import block follows the canonical 3-group order: external libraries (lombok.*, org.springframework.*, org.prebid.server.*) → blank line → `java|jakarta` imports. Already template-fixed in current SKILLs; flag as **FAIL** if hand-authored PR has them out of order (checkstyle ImportOrder will catch it).
@@ -532,7 +550,7 @@ This is Rule 35: typed-config subclass for bidders that need extra config fields
 
 ### Workflow: Import Order Pre-Check
 
-**Triggers when:** any added Java line in `{X}Configuration.java` or `{X}BidderConfigurationProperties.java` is an `import ...;` statement.
+**Triggers when:** any added Java line in `{X}Configuration.java` / `{X}BidderConfiguration.java` (or a standalone `{X}BidderConfigurationProperties.java`, if a PR ships one) is an `import ...;` statement.
 
 The checkstyle `ImportOrder` rule enforces a 3-group structure: external libraries → blank line → `java|jakarta` imports. This is the F-new-58/59 trap zone: the port-go2java template historically emitted imports in incorrect order.
 
@@ -572,7 +590,7 @@ This is the **F-new-79 trap** zone: checkstyle's `OuterTypeFilename` requires th
 After reviewing individual fields, verify these cross-field constraints. Apply ONLY when the cross-referenced fields are touched in the same PR or one of them is being added/changed and depends on an existing unchanged field:
 
 1. **YAML `adapters.{x}` key ↔ `{X}Configuration.java` BIDDER_NAME constant**: MUST match (lowercase). Drives every Spring binding.
-2. **YAML `endpoint:` macros ↔ `resolveEndpoint(...)` substitutions**: Every `{{TOKEN}}` in the YAML endpoint that uses framework-level macros (like `{{PREBID_SERVER_ENDPOINT}}`) MUST have a matching substitution in the Configuration class's `resolveEndpoint` method. Per-bidder template tokens (like `{{adUnitId}}`) are NOT resolved by the Configuration class — they pass through to the adapter and are resolved by `{X}Bidder.java` (cross-skill READ).
+2. **YAML `endpoint:` macros ↔ `resolveEndpoint(...)` substitutions**: Every single-brace `{Token}` in the YAML endpoint that is a framework-level macro (i.e. `{PREBID_SERVER_ENDPOINT}`) MUST have a matching `replaceMacro` call in the Configuration class's `resolveEndpoint` method, keyed on the **bare** name. Per-bidder template tokens (like `{adUnitId}`) are NOT resolved by the Configuration class — they pass through to the adapter and are resolved by `{X}Bidder.java` (cross-skill READ). Double-braced macros in an `endpoint:` value are **FAIL** regardless of which side would resolve them.
 3. **`@Bean("{x}ConfigurationProperties")` name ↔ `bidderDeps(...)` parameter name**: MUST match. Spring autowires by name.
 4. **`@ConfigurationProperties("adapters.{x}")` prefix ↔ YAML wrapper key**: MUST match. Spring binds zero fields on mismatch.
 5. **`resolveEndpoint` declared ↔ `bidderCreator` lambda uses it**: If the helper is declared, the lambda MUST call it. Otherwise dead code (and macro leaks).
@@ -580,9 +598,9 @@ After reviewing individual fields, verify these cross-field constraints. Apply O
 7. **Rule 35 subclass field `@NotBlank` ↔ YAML field present + non-empty**: Spring validation will fail at startup if the YAML field is missing.
 8. **YAML capabilities ↔ `{X}Bidder.java`'s handled media types**: Cross-skill READ; this skill records the YAML side, bidder-class-pr-review owns the code-side check.
 9. **YAML aliases ↔ `test-application.properties` registry entries**: Cross-skill READ; pr-triage-java owns the registry check, this skill records the YAML side.
-10. **YAML usersync GPP macros (implicit GPP-support signal)**: When `{{gpp}}` / `{{gpp_sid}}` appear in usersync URLs, the bidder is implicitly claiming GPP support — verify against source-spec's `gpp-supported` claim (Go side). There is NO Java `ortb.gpp-supported` boolean to flip. Macros-without-source-spec-claim: **INFO**; source-spec-claim-without-macros: **WARN**.
-11. **Alias endpoint macros ↔ parent's `resolveEndpoint` capability**: Every `{{TOKEN}}` in an alias's overridden endpoint MUST be a token the parent's `resolveEndpoint` resolves OR a per-bidder template token the parent's `{X}Bidder` consumes. Otherwise the literal leaks. (Cross-skill concern 5a from pr-triage-java.)
-12. **`white-label-only: true` + alias presence**: When parent declares `white-label-only: true` (Java kebab-case key), an `aliases:` block MUST be present (it's the whole point). Empty `aliases:` block on a whitelabel parent: **WARN**.
+10. **YAML usersync GPP macros (implicit GPP-support signal)**: When `{gpp}` / `{gpp_sid}` (single brace) appear in usersync URLs, the bidder is implicitly claiming GPP support — verify against source-spec's `gpp-supported` claim (Go side). There is NO Java `ortb.gpp-supported` boolean to flip. Macros-without-source-spec-claim: **INFO**; source-spec-claim-without-macros: **WARN**.
+11. **Alias endpoint macros ↔ parent's `resolveEndpoint` capability**: Every single-brace `{Token}` in an alias's overridden endpoint MUST be a variable the parent's `resolveEndpoint` supplies OR a per-bidder template token the parent's `{X}Bidder` consumes. Otherwise `Uri.expand()` throws at request time. (Cross-skill concern 5a from pr-triage-java.)
+12. **Framework-macro brace count**: every `{gdpr}` / `{gdpr_consent}` / `{us_privacy}` / `{gpp}` / `{gpp_sid}` / `{redirect_url}` in `usersync.*.url`, and every macro in `endpoint:`, uses ONE brace. `uid-macro:` values are exempt (bidder-owned; may be `{{…}}`). **FAIL** on a double-braced framework macro; **no finding** on a double-braced `uid-macro` value.
 
 ---
 

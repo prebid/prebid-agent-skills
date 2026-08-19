@@ -17,7 +17,7 @@ The Java-side analog of `prebid-server-go/review/skills/pr-triage/references/rou
 
 **Current major:** `prebid-server` Maven `<artifactId>` at `3.x` (baseline pinned in `prebid-server-java/read/skills/shared/framework-utilities-java.md`).
 
-For framework-wide concerns (Lombok annotation conventions, Spring DI quartet, JacksonMapper, Vert.x ban-list, checkstyle ruleset, Jacoco coverage gates, JUnit5 + AssertJ conventions, alias inversion semantics, IT test harness contract), see [../../shared/framework-utilities-java.md](../../shared/framework-utilities-java.md). The pr-triage-java drift checks reference this file; downstream reviewer skills read it for anti-pattern catalogs and verbatim policy quotes.
+For framework-wide concerns (Lombok annotation conventions, Spring DI quartet, JacksonMapper, Vert.x ban-list, checkstyle ruleset, coverage expectations — jacoco is report-only, with no gate, JUnit5 + AssertJ conventions, alias inversion semantics, IT test harness contract), see [../../shared/framework-utilities-java.md](../../shared/framework-utilities-java.md). The pr-triage-java drift checks reference this file; downstream reviewer skills read it for anti-pattern catalogs and verbatim policy quotes.
 
 ---
 
@@ -28,8 +28,8 @@ For framework-wide concerns (Lombok annotation conventions, Spring DI quartet, J
 | Pattern | Example | Notes |
 |---------|---------|-------|
 | `src/main/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidder.java` | Adapter implementation + helpers (request/response models, custom mappers) co-located in the bidder's package |
-| `src/test/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidderTest.java` | Unit tests (JUnit5 + AssertJ; feed Jacoco ≥90% line gate) |
-| `src/test/java/org/prebid/server/it/{X}Test.java` | `…/it/AaxTest.java` | The IT test class (`extends IntegrationTest`, WireMock-driven). Per-alias IT classes also land here — Adverxo aliases ship `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java` as TitleCase classroots of the alias name |
+| `src/test/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidderTest.java` | Unit tests (JUnit5 + AssertJ). They run under surefire inside `build (25)`; jacoco records a report but enforces no threshold — the 90% figure is a PR-template checkbox, not a build gate |
+| `src/test/java/org/prebid/server/it/{X}Test.java` | `…/it/AaxTest.java` | The IT test class (`extends IntegrationTest`, WireMock-driven). Per-alias IT classes also land here — Adverxo's three aliases at `e3ffd57` are `adport`, `bidsmind`, `harrenmedia`, giving TitleCase classroots of the alias name |
 
 ### bidder-config-pr-review
 
@@ -38,7 +38,7 @@ For framework-wide concerns (Lombok annotation conventions, Spring DI quartet, J
 | `src/main/resources/bidder-config/{x}.yaml` | `bidder-config/aax.yaml` | UNIFIED bidder-info + endpoint + aliases + usersync. Aliases live INSIDE the parent (`aliases: { adport: ~ }`), inverted from Go's per-alias `aliasOf:` (port-translation Rule 33) |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}Configuration.java` | `…/config/bidder/AaxConfiguration.java` | Spring `@Configuration` factory: `@Bean` declaring `BidderConfigurationProperties` + `BidderDeps` via `BidderDepsAssembler` |
 | `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfiguration.java` | `…/config/bidder/AdverxoBidderConfiguration.java` | Filename naming is BIMODAL upstream — both `{X}Configuration.java` and `{X}BidderConfiguration.java` are accepted. Reviewers do NOT flag the choice; the `OuterTypeFilename` checkstyle rule enforces internal class name matches filename root |
-| `src/main/java/org/prebid/server/spring/config/bidder/{X}BidderConfigurationProperties.java` | (design-permitted; no upstream example at SHA `a1fe64e123d6`) | The Rule 35 typed-config subclass when shipped as a separate file. Present ONLY when the bidder needs extra YAML fields beyond the framework default (e.g., `dev-endpoint`, `pixel-url`, `region-prefix`). Lombok `@Data`, extends `BidderConfigurationProperties`. In current upstream practice this subclass is always an inner `private static class` declared inside `{X}Configuration.java` (canonical: Kobler, TheTradeDesk, Adnuntius). The separate-file form is reviewer-accepted but unused upstream |
+| A nested `class {X}ConfigurationProperties extends BidderConfigurationProperties` inside `{X}Configuration.java` / `{X}BidderConfiguration.java` | `KoblerConfiguration.java` → nested `KoblerConfigurationProperties` | **The Rule 35 typed-config subclass — this is the only form upstream ships (16/16 at `e3ffd57`).** It arrives in the diff as a hunk inside the Configuration file, so **route on the nested declaration, not on a filename**. Present ONLY when the bidder needs extra YAML fields beyond the framework default (e.g. `dev-endpoint`, `xapi`, `apex-renderer-url`). Lombok `@Data` + `@EqualsAndHashCode(callSuper = true)` + `@NoArgsConstructor`. Canonical: Kobler, Magnite, Appnexus, Adnuntius, TheTradeDesk. A standalone `{X}BidderConfigurationProperties.java` is design-permitted and routes here too, but **no upstream example exists at `e3ffd57`** — the only files with that name suffix are the framework's own `model/BidderConfigurationProperties.java` and `model/DefaultBidderConfigurationProperties.java` |
 
 ### bidder-params-java-pr-review
 
@@ -47,7 +47,7 @@ For framework-wide concerns (Lombok annotation conventions, Spring DI quartet, J
 | `src/main/resources/static/bidder-params/{x}.json` | `…/static/bidder-params/aax.json` | The draft-04 JSON Schema for imp.ext params. **Byte-identical to the Go-side `static/bidder-params/{x}.json`** for paired bidders per Rule 38; divergence is a `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` finding |
 | `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/ExtImp{X}.java` | `…/ext/request/aax/ExtImpAax.java` | The Lombok `@Value @Builder` POJO matching the JSON schema |
 | `src/main/java/org/prebid/server/proto/openrtb/ext/request/{x}/*.java` (sibling protos) | `…/ext/request/aax/ExtImpAaxBidExt.java` | Helper protos in the same package when the schema has nested objects |
-| `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` | `…/it/openrtb2/aax/test-aax-bid-request.json` | The 4-file Rule 36 fixture set per scenario: `test-{name}-{bid-request,bid-response,auction-request,auction-response}.json`. The IT class references these by filename pattern |
+| `src/test/resources/org/prebid/server/it/openrtb2/{x}/*.json` | `…/it/openrtb2/aax/test-aax-bid-request.json` | The 4-file Rule 36 fixture set per scenario: `test-auction-{name}-request.json`, `test-auction-{name}-response.json`, `test-{name}-bid-request.json`, `test-{name}-bid-response.json`. The IT class references these by exact filename |
 
 ### pr-triage-java (shared / multi-bidder files)
 
@@ -65,14 +65,14 @@ For framework-wide concerns (Lombok annotation conventions, Spring DI quartet, J
 
 ## IT Fixture Directory Conventions
 
-Java's IT test framework (`it/{X}Test.java extends IntegrationTest`) references fixtures from `src/test/resources/org/prebid/server/it/openrtb2/{x}/`. The Rule 36 4-file split per scenario:
+Java's IT test framework (`it/{X}Test.java extends IntegrationTest`) references fixtures from `src/test/resources/org/prebid/server/it/openrtb2/{x}/`. The Rule 36 4-file split per scenario. **Note the word order differs between the two pairs** — `auction` comes BEFORE the name in the auction pair and AFTER it in the bid pair. Verified at `e3ffd57` against `…/it/openrtb2/kobler/` and `…/it/openrtb2/adprime/`:
 
 | File | Role | Owner |
 |------|------|-------|
 | `test-{name}-bid-request.json` | Outbound bid-request body sent to the bidder's mocked endpoint | bidder-params-java-pr-review |
 | `test-{name}-bid-response.json` | Mocked bidder response (WireMock returns this) | bidder-params-java-pr-review |
-| `test-{name}-auction-request.json` | Inbound auction request from upstream client (the PBS entry point) | bidder-params-java-pr-review |
-| `test-{name}-auction-response.json` | Final auction response the IT asserts against | bidder-params-java-pr-review |
+| `test-auction-{name}-request.json` | Inbound auction request from upstream client (the PBS entry point) | bidder-params-java-pr-review |
+| `test-auction-{name}-response.json` | Final auction response the IT asserts against | bidder-params-java-pr-review |
 
 Some bidders ship multiple scenarios (e.g., `simple-banner`, `simple-video`); each scenario uses the same 4-file shape. The IT class' `@Test` method names typically follow `scenarioFor{Source}{Name}` camelCase (the F-new-60 trap — snake_case test method names violate Java convention).
 
@@ -99,8 +99,8 @@ Mismatches surface as `IT-REGISTRY:` findings in the manifest's cross-skill conc
 
 | Diff Content | Owner |
 |-------------|-------|
-| Changes to `BidderCatalog.java` public API (`bidders()`, `bidderInfoByName(...)`, `nameByAlias(...)`) | `unowned:framework`; pr-triage drift `framework-spring-di` |
-| Changes to `BidderDepsAssembler.<T>forBidder(...)` (typed form) or its builder methods (`withConfig`, `usersyncerCreator`, `bidderCreator`, `assemble`) | `unowned:framework`; pr-triage drift `framework-spring-di` |
+| Changes to `BidderCatalog.java` public API — the drift-watched signatures at `e3ffd57` are `names()`, `bidderInfoByName(String)`, `resolveBaseBidder(String)`, `isAlias(String)`. **`bidders()` and `nameByAlias(...)` do not exist on this class**; a check keyed on them matches nothing | `unowned:framework`; pr-triage drift `framework-spring-di` |
+| Changes to `BidderDepsAssembler` — its complete public surface at `e3ffd57` is `forBidder`, `withConfig`, `bidderCreator`, `assemble` (four members; `usersyncerCreator` was deleted in `2880782f`, PR #4464) | `unowned:framework`; pr-triage drift `framework-spring-di` |
 | Changes to `BidderConfigurationProperties` base class fields | `unowned:framework`; pr-triage drift `bidder-config`; **TRIGGERS schema-migration sub-label** |
 
 Drift output is consumed by downstream skills, NOT routed as a file.
@@ -245,7 +245,7 @@ A PR is classified as `bidder-rename` if:
 - AND/OR `bidder-config/{old_x}.yaml` deleted with `bidder-config/{new_x}.yaml` added
 - AND/OR a YAML's top-level adapter key is renamed inside an existing file (rare; same-file rename)
 
-Renames are breaking changes typically deferred to the next major release; pr-triage records `RENAME: {old} → {new}` and flags INFO. Mirror Go-side guidance (PR #4456 progx → programmaticX, PR #4639 adoppler → elementaltv).
+Renames are breaking changes typically deferred to the next major release; pr-triage records `RENAME: {old} → {new}` and flags INFO. Precedents: Java PR #4326 (`adoppler` → `elementaltv`, merged 2026-01-12, old name kept as an alias), Java PR #4573 (`rubicon` → `magnite`, merged 2026-07-27), Go PR #4639 (`adoppler` → `elementaltv`, merged 2026-03-04).
 
 ### Framework-Only
 
@@ -315,7 +315,7 @@ A PR may bundle multiple alias-only changes WITHOUT triggering `infrastructure` 
 5. The only Java files added are per-alias `it/{Alias}Test.java` IT classes (no new `{X}Bidder.java`, no new `ExtImp{X}.java`, no new `bidder-params/{x}.json` — aliases inherit the parent's adapter class)
 6. Identical YAML key set across all aliases (no per-alias userSync, no per-alias capabilities overrides, no per-alias gvlVendorID divergence)
 
-**Canonical Java case**: Adverxo with `adport`, `bidsmind`, `mobupps` per-alias IT classes shipped in `bidder-config/adverxo.yaml`'s `aliases:` block. The Java reviewer convention (per pr-triage-java's One-Alias-Per-PR Rule section) treats this as acceptable because Java's nested-alias model means N aliases for the same parent are a single-file YAML diff — low cognitive cost.
+**Canonical Java case**: Adverxo, whose `bidder-config/adverxo.yaml` `aliases:` block carries `adport`, `bidsmind`, `harrenmedia` (the three alias keys at `e3ffd57`), with a per-alias IT class each. The Java reviewer convention (per pr-triage-java's One-Alias-Per-PR Rule section) treats this as acceptable because Java's nested-alias model means N aliases for the same parent are a single-file YAML diff — low cognitive cost.
 
 OUTSIDE this exception (e.g., aliases for DIFFERENT parents, or aliases bundled with adapter-modification work for the parent), the Go-side `pm-isha-bharti` one-alias-per-PR preference applies; pr-triage records `BULK-PR: {N} alias entries bundled across {N_parents} different parents — reviewer may request split for changelog clarity.` at WARN severity.
 
@@ -325,7 +325,7 @@ The Go-side analog is PR #4651 (5 Limelight aliases). The Java mechanics differ 
 
 ## Whitelabel Policy
 
-`whiteLabelOnly: true` at the adapter top-level of `bidder-config/{parent}.yaml` marks the parent as available only as an alias-parent — but does NOT preclude an `{X}Bidder.java` on the parent. The Java analog of Go's TeqBlaze / SmartHub convention: parents with `whiteLabelOnly: true` AND Java adapter code (the code serves the aliases).
+**There is no white-label flag on the Java side.** `whiteLabelOnly` is a Go-only `static/bidder-info/*.yaml` key; at `e3ffd57` neither `whiteLabelOnly` nor `white-label-only` appears anywhere under `prebid-server-java/src/`, and `BidderConfigurationProperties` declares no such field, so Spring relaxed-binding would silently discard the key if a PR added it. The Java equivalent of Go's TeqBlaze / SmartHub arrangement is simply a parent that has both `{X}Bidder.java` and an `aliases:` block — recognizable from structure, not from a flag. Detection is therefore diff-shape-based, per the trigger list below.
 
 For NEW PRs: when a full adapter is being added that resembles an existing adapter (similar endpoint, comparable params, copy-paste-style `{X}Bidder.java`), reviewers redirect contributor to use `aliases: { newName: ... }` inside an existing parent's YAML. pr-triage's Step 5g flags PRs where:
 - Type is `new-adapter`

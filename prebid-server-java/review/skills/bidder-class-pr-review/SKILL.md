@@ -23,7 +23,7 @@ This skill activates when a PR adds, modifies, or removes any file matching:
 
 - `src/main/java/org/prebid/server/bidder/{x}/*.java` — adapter implementation + co-located helpers (custom request/response DTOs that live inside the bidder package, util classes like `MediasquareUtil.java`, `KueezExtractor.java`)
 - `src/test/java/org/prebid/server/bidder/{x}/*.java` — unit tests (`{X}BidderTest.java` plus any helper test fixtures in the same package)
-- `src/test/java/org/prebid/server/it/{X}Test.java` — the IT test class (per-alias IT classes too: `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java`)
+- `src/test/java/org/prebid/server/it/{X}Test.java` — the IT test class (per-alias IT classes too; Adverxo's three aliases at `e3ffd57` are `adport`, `bidsmind`, `harrenmedia`)
 
 This skill does **NOT** activate on its own — `pr-triage-java` runs first and routes files via the manifest defined in [`../pr-triage-java/SKILL.md`](../pr-triage-java/SKILL.md) Step 6.
 
@@ -71,14 +71,16 @@ If the manifest reports `checkstyle.xml` drift, factor the new/changed rule into
 
 **1c. Handle CI status.**
 
-If CI status is `blocked`, acknowledge in the summary and note that review findings are preliminary until CI passes. For a `checkstyle` job failure, harvest the `output.annotations` (`file`:`line` + `message`) — these become high-confidence findings that supplement diff-derived ones. If the failure is in `Build / Test` (the JUnit + Jacoco gate), the affected unit-test or IT changes need extra scrutiny in Step 4.
+If CI status is `blocked`, acknowledge in the summary and note that review findings are preliminary until CI passes.
+
+**Check-run names** — see [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) §8.2. This repo has no `Build / Test`, no `checkstyle`, and no `JaCoCo Coverage` check-run. Everything that matters to this skill lands on **`build (25)`** (`mvn -B package --file extra/pom.xml`: checkstyle at `validate`, then javac, then surefire). When it fails, harvest its `output.annotations` (`file`:`line` + `message`) — checkstyle violations arrive there and become high-confidence findings that supplement diff-derived ones; a surefire failure means the affected unit-test or IT changes need extra scrutiny in Step 4. An **empty** check-run list is a finding (`INFO / NOTE`), not a pass.
 
 **1d. Incorporate reviewer feedback.**
 
 Cross-reference reviewer comments from the manifest against your review findings:
 
 - If a reviewer has already flagged an issue you also find, surface it as `Previously flagged by {reviewer}` and reference the comment URL
-- If a CI bot report indicates a failure relevant to your scope (`checkstyle`, `Build / Test`), use it as additional evidence for your verification steps
+- If a CI bot report indicates a failure relevant to your scope (a failing `build (25)` — checkstyle, compile, or unit test), use it as additional evidence for your verification steps
 - If the author has responded to reviewer feedback with fixes, check whether the current diff reflects those fixes
 
 **1e. Fetch full file content when verification requires context beyond the diff.**
@@ -222,7 +224,7 @@ Java's analog of Go's `Builder` function is the public constructor — Spring DI
 5. **`Objects.requireNonNull` on helper collaborators**: Constructor should null-check `JacksonMapper`, `CurrencyConversionService`, `IdGenerator`, `Clock`, and other framework-injected helpers. The Adverxo pattern (raw `this.mapper = mapper;` without null-check) is acceptable in practice but **INFO** — Kobler / AdkernelAdn use `Objects.requireNonNull(mapper)`.
 6. **No request-scoped state**: The adapter class instance is a singleton (Spring `@Bean`). Constructor must not store request-specific state. Acceptable fields: `endpointUrl` (String), `devEndpoint` (String, Rule 35), `mapper` (JacksonMapper), `currencyConversionService` (CurrencyConversionService), `templateProcessor`-like immutable helpers. Mutable state (Maps, ArrayLists holding request data, mutable counters) is a **FAIL**.
 7. **Field declarations**: All fields backing constructor params should be `private final`. Non-final fields are an immutability anti-pattern and a checkstyle `FinalLocalVariable`-adjacent smell — **WARN**.
-8. **Template macros declared as constants**: When the adapter uses endpoint templates (`{{adUnitId}}`, `{{auth}}`, `{{PublisherID}}`), they should be declared as `private static final String` constants (canonical: Adverxo's `ADUNIT_MACROS_ENDPOINT`, AdkernelAdn's `URL_PUBLISHER_ID_MACRO`). Inline string literals in `String.replace(...)` calls are a **WARN**.
+8. **Template macros declared as constants, with BARE names**: When the adapter uses endpoint templates (`{adUnitId}`, `{auth}`, `{PublisherID}` in the YAML), the Java constant holds the **bare** variable name — no braces. Verified at `e3ffd57`: `ADUNIT_MACROS_ENDPOINT = "adUnitId"` / `AUTH_MACROS_ENDPOINT = "auth"` (`AdverxoBidder.java:42-43`), `URL_PUBLISHER_ID_MACRO = "PublisherID"` (`AdkernelAdnBidder.java:44`). A braced constant is **FAIL** — `Uri.replaceMacro` keys on the bare name, so it never matches and `expand()` throws. Inline string literals instead of a named constant are a **WARN**.
 9. **Rule 35 typed-config constructor**: When the bidder uses a typed-config subclass (`{X}BidderConfigurationProperties.java` exists), the constructor accepts additional String / primitive args derived from the subclass getters (canonical: Kobler's `String devEndpoint`). Verify these are properly stored as `private final` and used in `makeHttpRequests`. Cross-skill: `bidder-config-pr-review` verifies the YAML binding and `{X}Configuration.java` wires the subclass.
 10. **No exported types**: The bidder class itself is the only `public` type in the bidder package. Co-located helpers should be package-private unless they're DTOs the framework reflects on (Jackson can reflect on package-private classes; default to package-private). **WARN** on unjustified public.
 
@@ -247,7 +249,7 @@ Java's analog of Go's `Builder` function is the public constructor — Spring DI
 7. **Error types**: Use `BidderError.badInput(msg)` for invalid request data (publisher's fault). Use `BidderError.badServerResponse(msg)` ONLY in `makeBids`. `BidderError.generic(msg)` for unknown errors. Errors generated within an impression loop should include the impression ID for log diagnosability — e.g., `"Invalid imp with id=%s. Expected imp.banner or imp.video".formatted(imp.getId())` (canonical AdkernelAdn pattern).
 8. **Currency conversion**: When the adapter converts bid floors, use `currencyConversionService.convertCurrency(value, bidRequest, fromCur, toCur)` — Java's 4-arg form (the `bidRequest` arg carries time-context for currency-rate lookup, the canonical cross-language asymmetry vs Go's 3-arg `reqInfo.ConvertCurrency`). Wrap in `BidderUtil.shouldConvertBidFloor(price, DEFAULT_BID_CURRENCY)` to guard against the no-op case (canonical Kobler / Adverxo pattern). Set `DEFAULT_BID_CURRENCY = "USD"` as a class-level constant.
 9. **Multi-impression handling**: If the adapter sends one request per impression, verify each request has a correct single-impression slice. If batching (canonical AdkernelAdn `dispatchImpressions` grouping by `pubId`), verify the grouping logic AND that bidder-info `meta-info.app-media-types` / `site-media-types` aligns with what the grouping retains.
-10. **Endpoint resolution**: Java's analog of Go's `text/template` is `String.replace(...)` or `String.format(...)` for simple substitutions; `URIBuilder` for query-param construction; a custom resolver class only when complexity demands it. Verify every `{{TOKEN}}` macro in the endpoint URL has a corresponding `.replace("{{TOKEN}}", ...)` call. Unresolved macros leave the literal in the URL at runtime — common port-go2java trap.
+10. **Endpoint resolution**: Java's analog of Go's `text/template` is **`org.prebid.server.util.Uri`** (Vert.x `UriTemplate`, RFC 6570), adopted in `bc0409271` (PR #4444). The adapter stores the endpoint as a `Uri` field (`this.endpointUrl = Uri.of(endpointUrl);`) and substitutes with `endpointUrl.replaceMacro(NAME, value).expand()`; `Uri.addQueryParam(...)` covers query-param construction. Verify every single-brace `{Token}` in the endpoint has a matching `replaceMacro(NAME, ...)` keyed on the **bare** name — an unsupplied variable makes `expand()` throw `NoSuchElementException` at request time. `String.replace("{{TOKEN}}", ...)` on an endpoint is **FAIL**: zero files under `src/main/java` do it at `e3ffd57`. (Exception: `${AUCTION_PRICE}`-style bid-post-processing macros on `adm`/`nurl`/`burl` legitimately use `String.replace` and keep their delimiters — see references/bidder-class-index.md §1.3.)
 11. **No redundant PBS-core checks**: The framework already filters:
     - Empty `imp` list (filtered upstream by `org.prebid.server.auction.requestfactory`)
     - Endpoint emptiness (Spring `@PropertySource` + `@NotBlank` validation at startup)
@@ -267,8 +269,8 @@ Java's analog of Go's `Builder` function is the public constructor — Spring DI
 5. **Bid type resolution**: Must determine bid type for each bid. Resolution chains (use the first the bidder actually populates):
    - From `bid.MType` (OpenRTB 2.6 markup type field) — `1 → banner`, `2 → video`, `3 → audio`, `4 → native`
    - From `bid.ext → "prebid" → ObjectNode → ExtBidPrebid.type` (canonical Kobler pattern: `Optional.ofNullable(bid.getExt()).map(ext -> ext.get(EXT_PREBID)).filter(JsonNode::isObject)...`)
-   - From impression lookup (match `bid.getImpid()` to the original imp and check which media type is non-null, canonical AdkernelAdn `getType(impId, imps)`)
-   - **Multiformat adapters MUST resolve from `bid.getMtype()` first (impression lookup is fallback only).** When the bidder's `bidder-config/{x}.yaml` `meta-info.{app,site,dooh}-media-types` declares more than one media type (multiformat), a single imp can carry co-present formats, so imp-lookup with fixed priority mis-types every bid that isn't the first-priority format. If bid-type resolution is *primarily* imp-lookup on a multiformat adapter, flag **FAIL** and require switching on `bid.getMtype()` first with imp lookup as the fallback. This is the Teal #4765 `postindustria-code` finding (Go side; the Java `getBidType` imp-lookup shape carries the identical latent bug and Java has no vouching surface to excuse it). Single-format adapters are exempt (imp lookup is unambiguous). Orthogonal to the constant-fallback calibration below.
+   - From impression lookup (match `bid.getImpid()` to the original imp and check which media type is non-null, canonical AdkernelAdn `getType(impId, imps)`). The framework helper `BidderUtil.getBidType(bid, impIdToImpMap)` implements this chain — but it is **single-format only**; see the multiformat rule immediately below and [references/bidder-class-index.md](references/bidder-class-index.md) §5.2.
+   - **Multiformat adapters MUST resolve from `bid.getMtype()` first (impression lookup is fallback only).** When the bidder's `bidder-config/{x}.yaml` `meta-info.{app,site,dooh}-media-types` declares more than one media type (multiformat), a single imp can carry co-present formats, so imp-lookup with fixed priority mis-types every bid that isn't the first-priority format. If bid-type resolution is *primarily* imp-lookup on a multiformat adapter, flag **FAIL** and require switching on `bid.getMtype()` first with imp lookup as the fallback. **This applies to `BidderUtil.getBidType(bid, impIdToImpMap)` too** — the framework helper is a fixed-priority imp lookup that also returns `BidType.banner` for a missing imp (`BidderUtil.java:112-129`), so calling it as the primary resolver on a multiformat adapter is the same FAIL as hand-rolling one. This is the Teal #4765 `postindustria-code` finding (Go side; the Java `getBidType` imp-lookup shape carries the identical latent bug and Java has no vouching surface to excuse it). Single-format adapters are exempt (imp lookup is unambiguous). Orthogonal to the constant-fallback calibration below.
    - **Unresolved type should surface an error, not silently default.** The robust pattern adds a `BidderError.badServerResponse(...)` and skips the bid (or throws `PreBidException`) when no chain resolves the type, rather than silently assigning `BidType.banner`. Severity calibration (per the **Review disposition system** tie-breaker in [../shared/framework-utilities-java.md](../shared/framework-utilities-java.md) — a source-fidelity argument like "the Go original defaults to banner" does NOT lower it):
      - **FAIL** when a constant fallback can MIS-TYPE a YAML-declared media type — the bidder declares video/native/audio but unresolved bids silently become `banner`, mislabeling a real non-banner bid. This is the F-new-64 trap ("drops alternative resolution paths") and the Teal #4765 latent-bug class.
      - **WARN** when `.orElse(BidType.banner)` is a likely-unreachable safety net on a bidder whose primary chain (`bid.MType` / `bid.ext.prebid.type`) already covers every declared type — recommend erroring on the unreachable branch and confirm the chain's coverage. (This is the widespread empire-bidder pattern; do NOT auto-FAIL it — see the no-auto-promote guard.)
@@ -311,7 +313,7 @@ The bidder class itself (`{X}Bidder`) almost never carries Lombok annotations �
 
 Co-located helper DTOs (request/response models living inside the bidder package) follow the Java convention:
 
-- `@Value @Builder @Jacksonized` for immutable POJOs — the default
+- `@Value` for immutable POJOs — the default (`@Value(staticConstructor = "of")` is the canonical ExtImp form; plain `@Value` and `@Value @Builder` are accepted variants). **`@Jacksonized` is not used upstream** — zero occurrences across the 226 ExtImp POJOs at `e3ffd57` — so do NOT flag its absence next to `@Builder`. See [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) §2.0 / §2.8.
 - `@Data` is ONLY acceptable on classes that need Spring property injection (which is a `bidder-config-pr-review` concern, not this skill's surface). Flag `@Data` on bidder-package DTOs as **WARN** — they should be immutable.
 - `@Slf4j` is acceptable on the bidder class when logging is genuinely needed; rare.
 
@@ -325,7 +327,7 @@ When the diff toggles `@Value` ↔ `@Data`, this changes the bean's mutability c
 2. **Package statement**: Must match `package org.prebid.server.bidder.{x};` (lowercase, no underscores). Mismatch is a `PackageName` checkstyle violation — pre-flag here. (Distinct from the F-new-50 family, which covers `resolveEndpoint()` placeholder traps; see [Workflow: Private Helper Changed](#workflow-private-helper-changed) for that scope.)
 3. **Visibility**: Default to package-private (Java idiom for "internal to this package"). `public` requires justification.
 4. **No mutable static state**: Static fields holding mutable collections / counters are a **FAIL**.
-5. **Test colocation**: A `{X}Util.java` typically has a `{X}UtilTest.java` sibling in the test tree. When the helper has non-trivial logic, flag missing test coverage as **WARN** — Jacoco enforces 90% line coverage, so untested helpers tank coverage.
+5. **Test colocation**: A `{X}Util.java` typically has a `{X}UtilTest.java` sibling in the test tree. When the helper has non-trivial logic and the PR adds no test exercising it, flag as **INFO / NOTE** — name the untested branch, and cite the PR-template checkbox "Does your test coverage exceed 90%?" (`.github/pull_request_template.md`). **Do not claim a Jacoco gate**: jacoco declares no `check` goal and no `<rules>` anywhere in this build, so coverage cannot fail CI (see [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) §5.1). Escalate to **WARN / ASK** only when a specific changed branch is demonstrably unexercised.
 
 ### Workflow: Unit Test Changed
 
@@ -369,7 +371,7 @@ When the diff toggles `@Value` ↔ `@Data`, this changes the bean's mutability c
                    jsonFrom("openrtb2/{x}/test-{x}-bid-response.json"))));
    ```
 
-   - `urlPathEqualTo` matches the `/{x}-exchange` path (must match the YAML `endpoint:` + `test-application.properties` `adapters.{x}.endpoint=http://localhost:8090/{x}-exchange` value). Mismatch is the F-new-96 trap.
+   - `urlPathEqualTo` matches the `/{x}-exchange` path (must match the YAML `endpoint:` + `test-application.properties` `adapters.{x}.endpoint=http://localhost:8090/{x}-exchange` value). Mismatch means WireMock never serves the stub and the IT fails on an empty response. This is the **IT-registry misalignment** concern (pr-triage-java cross-skill code 5i), NOT F-new-96 — §8 defines F-new-96 as the checkstyle `UnusedImports` violation. Severity: **FAIL**.
    - `equalToJson(...)` does strict JSON equality against the bidder-bid-request fixture
    - The response body comes from the bidder-bid-response fixture
 
@@ -397,7 +399,7 @@ When the diff toggles `@Value` ↔ `@Data`, this changes the bean's mutability c
 
 ### Workflow: Per-Alias IT Class Added
 
-**Triggers when:** A new `it/{Alias}Test.java` is added for an alias of an existing parent bidder (canonical: Adverxo's empire — `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java`).
+**Triggers when:** A new `it/{Alias}Test.java` is added for an alias of an existing parent bidder (canonical: Adverxo's empire — the `adport`, `bidsmind`, `harrenmedia` alias keys in `bidder-config/adverxo.yaml` at `e3ffd57`).
 
 All [IT Class Changed](#workflow-it-class-changed) checks apply. Additional per-alias verifications:
 
@@ -412,10 +414,10 @@ All [IT Class Changed](#workflow-it-class-changed) checks apply. Additional per-
 
 **Triggers as a PR-level check on any added Java file in scope.**
 
-Without simulating checkstyle, pre-flag these patterns from the diff. These are the most-common port-go2java emit traps from D2.8 cross-canary findings (F-new-50, F-new-56/57/58/59/60, F-new-79, F-new-96):
+Without simulating checkstyle, pre-flag these patterns from the diff. These are the most-common port-go2java emit traps from D2.8 cross-canary findings (F-new-50, F-new-56/57/58/59/60, F-new-79, F-new-96). Where a check maps to an F-new trap, the number cited here is the one [`../shared/framework-utilities-java.md`](../shared/framework-utilities-java.md) §8 defines; checks with no F-new entry are cited by their checkstyle rule id instead.
 
 1. **`ImportOrder` violation (F-new-58 / F-new-59)**: Imports must be in 3 groups: `*` (everything else) then a blank line then `java|jakarta`. Within each group, alphabetical not enforced; case-sensitive ordering. Specifically: `org.prebid.server.*`, `com.iab.*`, `com.fasterxml.*`, `org.apache.*`, `io.vertx.*` all live in the first `*` group. `java.util.*`, `java.io.*`, `java.math.*`, `jakarta.validation.*` live in the second group. Wrong-group imports (e.g., `java.util.List` placed before `org.prebid.server.bidder.Bidder`) fail checkstyle `ImportOrder`. Pre-flag added imports that violate.
-2. **Banned `io.vertx.core.json.Json` (F-new-56)**: Pre-flag any added `import io.vertx.core.json.Json;` — checkstyle `BanVertxJsonImport` will fail CI. Use `JacksonMapper` instead.
+2. **Banned `io.vertx.core.json.Json` (checkstyle `IllegalImport id="BanVertxJsonImport"`)**: Pre-flag any added `import io.vertx.core.json.Json;` — checkstyle fails at the `validate` phase, failing the `build (25)` check-run. Use `JacksonMapper` instead. Severity: **FAIL**. (This is NOT F-new-56 — §8 defines F-new-56 as the unreachable `JsonProcessingException` multi-catch on `mapper.decodeValue()`, a different defect on a different line. Cite the checkstyle rule id here.)
 3. **`OuterTypeFilename` mismatch (F-new-79)**: Extract `public class Xxx` declaration from each added `*.java` file and verify it matches the filename root. `AdverxoBidder.java` must declare `public class AdverxoBidder`; `KoblerTest.java` must declare `public class KoblerTest`. Mismatch fails CI.
 4. **`LineLength` > 120 (F-new-61)**: Any added line exceeding 120 chars (excluding URLs in `@see`, `//` comments, `package`, `import`). Use the checkstyle `ignorePattern` from `checkstyle.xml` (verbatim: `^package.*|^import.*|a href|href|http://|https://|@see|//`) to determine what's exempt. Canonical D2.8 emit defect: long IT-test fixture-path string literals and scenario method invocations exceeding 120 chars.
 5. **`MethodName` snake_case (F-new-60)**: In added `*Test.java` files, flag `@Test` methods with `_` in the name. checkstyle's `MethodName` is `^[a-z][a-zA-Z0-9]*$` by default.
