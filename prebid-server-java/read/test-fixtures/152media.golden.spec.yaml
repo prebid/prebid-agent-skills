@@ -39,8 +39,11 @@ bidder_info:
   endpoint: "http://pbs.adksrv.com/hb?zone=%s"
   endpoint_construction:
     kind: single-token-substitution
-    macros_used:
-      - "%s"
+    # `%s` is a String.format placeholder, not a macro name -- this endpoint has
+    # no macros to name. (Upstream migrated it to `{ZoneId}` with a ZONE_ID_MACRO
+    # constant after this golden's pinned commit; refreshing the endpoint is the
+    # drift pass, not this field.)
+    macros_used: []
     placeholders_unresolved: []
   endpoint_compression: gzip
   ortb_version: null

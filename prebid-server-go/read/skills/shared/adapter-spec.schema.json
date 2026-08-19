@@ -833,6 +833,26 @@
               }
             }
           }
+        },
+        "macros_used": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Macro names the code substitutes, as BARE identifiers -- `SupplyId`, not `{{SupplyId}}` and not `{SupplyId}`. R8 recognises an endpoint placeholder only when it appears here (or in `bidder_info.endpoint_construction.macros_used`, the same claim recorded at the other path), so this is the spec's record that a substitution exists. It covers all three upstream Java shapes -- a named constant in the bidder class, one in the Configuration class, and an inline literal at the `replaceMacro` call site -- where `bidder_class.static_fields[]` covers only the first. Declared here as of 2.0.0; it was populated by 8 goldens while `endpoint_resolution` was an implicit-open object, which is how two spellings and two prose formats coexisted unnoticed."
+        },
+        "macro_field_set": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "The subset of the framework's macro parameter set this endpoint actually substitutes. On Go that is a subset of macros.EndpointTemplateParams's 22 fields. Same bare-identifier rule as `macros_used`. Prefer `macros_used`; both keys are read by R8 because the corpus uses both, which is a consistency defect in the goldens rather than a distinction."
         }
       }
     },

@@ -41,7 +41,12 @@ bidder_info:
   endpoint_construction:
     kind: single-token-substitution
     macros_used:
-      - "{{AdUnit}}"                              # Custom Java macro (NOT the Go-template-style {{.AdUnit}}); resolved via String.replace at request time using imp.ext.bidder.adunit.
+      # BARE identifier per the rule: the wrapper belongs to the endpoint string,
+      # not to the name. ElementalTVBidder substitutes it with an inline literal
+      # -- `endpoint.replaceMacro("AdUnit", extImp.getAdunit())` -- so there is no
+      # class constant for static_fields[] to record, which is why this field is
+      # the one R8 relies on.
+      - AdUnit
     placeholders_unresolved: []
   endpoint_compression: null
   ortb_version: "2.6"
@@ -158,7 +163,9 @@ code:
       mechanism_go: null
       mechanism_java: string-replace              # endpointTemplate.replace("{{AdUnit}}", HttpUtil.encodeUrl(extImp.getAdunit())) at lines 88-89.
       macro_field_set:
-        - "{{AdUnit}}"                            # Bidder-defined macro form (custom-Java-style); not part of the canonical macros.EndpointTemplateParams set.
+        # Bidder-defined, so not a member of macros.EndpointTemplateParams. Bare
+        # identifier, matching bidder_info.endpoint_construction.macros_used.
+        - AdUnit
       template_params_struct_field_count: null
     helpers:
       - name: parseAndValidateImpExt

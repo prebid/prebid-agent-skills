@@ -1235,7 +1235,7 @@ ENDPOINT_MACROS_PATH = os.path.join(
 def _load_endpoint_macros() -> Dict[str, frozenset]:
     """Load the four R8 macro registries from endpoint-macros.yaml.
 
-    Returns a dict with keys go_template_macros, java_template_macros,
+    Returns a dict with keys go_template_macros, java_conventional_macros,
     user_sync_macros, openrtb_macros — each mapped to a frozenset of
     macro names. Raises FileNotFoundError if the YAML is missing (a
     deeply-broken state; the script can't run R8 without the registry).
@@ -1248,7 +1248,7 @@ def _load_endpoint_macros() -> Dict[str, frozenset]:
     with open(ENDPOINT_MACROS_PATH, "r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
     out: Dict[str, frozenset] = {}
-    for key in ("go_template_macros", "java_template_macros",
+    for key in ("go_template_macros", "java_conventional_macros",
                 "user_sync_macros", "openrtb_macros"):
         values = data.get(key) or []
         if not isinstance(values, list):
@@ -1262,11 +1262,32 @@ def _load_endpoint_macros() -> Dict[str, frozenset]:
 
 _MACRO_REGISTRIES = _load_endpoint_macros()
 GO_TEMPLATE_MACROS = _MACRO_REGISTRIES["go_template_macros"]
-JAVA_TEMPLATE_MACROS = _MACRO_REGISTRIES["java_template_macros"]
+JAVA_CONVENTIONAL_MACROS = _MACRO_REGISTRIES["java_conventional_macros"]
 USER_SYNC_MACROS = _MACRO_REGISTRIES["user_sync_macros"]
 OPENRTB_MACROS = _MACRO_REGISTRIES["openrtb_macros"]
 del _MACRO_REGISTRIES
-PLACEHOLDER_RE = re.compile(r"\{\{\.?([A-Za-z_][A-Za-z0-9_]*)\}\}|#\{([A-Za-z_][A-Za-z0-9_]*)\}#|\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+# Placeholder forms R8 recognises, in match order. The alternation order matters:
+# `{{Host}}` must match the double-brace arm, not the single-brace one, and
+# `${AUCTION_PRICE}` must match the dollar arm.
+#
+#   {{.Host}}          Go text/template
+#   {{Host}}           Java, pre-UriTemplate
+#   #{REGION}#         deploy-time token
+#   ${AUCTION_PRICE}   OpenRTB
+#   {Host}             Java, POST-UriTemplate -- added late, and its absence
+#                      made R8 blind to every current Java endpoint. Upstream
+#                      migrated to single-brace in #4444 (2026-07-20); the
+#                      corpus goldens still carry the double-brace form because
+#                      they were read before that, which is why the gap did not
+#                      show up as a corpus failure. A freshly-read Java adapter
+#                      with an unsubstituted macro would have reported "all
+#                      placeholders recognised".
+PLACEHOLDER_RE = re.compile(
+    r"\{\{\.?([A-Za-z_][A-Za-z0-9_]*)\}\}"
+    r"|#\{([A-Za-z_][A-Za-z0-9_]*)\}#"
+    r"|\$\{([A-Za-z_][A-Za-z0-9_]*)\}"
+    r"|\{([A-Za-z_][A-Za-z0-9_]*)\}"
+)
 
 
 def _collect_endpoint_strings(spec: Spec) -> List[Tuple[str, str]]:
@@ -1328,6 +1349,131 @@ def _collect_endpoint_strings(spec: Spec) -> List[Tuple[str, str]]:
     return out
 
 
+def _substituted_java_macros(spec: Spec) -> frozenset:
+    """Macro names this Java spec records the code substituting.
+
+    Upstream substitutes an endpoint macro in three shapes, and only one of them
+    is a class-level constant:
+
+      1. a named constant in the bidder class -- `SUPPLY_ID_MACRO = "SupplyId"`
+         then `replaceMacro(SUPPLY_ID_MACRO, ...)`  (thetradedesk)
+      2. a named constant in the CONFIGURATION class -- AaxConfiguration's
+         `EXTERNAL_URL_MACRO = "PREBID_SERVER_ENDPOINT"`
+      3. an inline literal at the call site -- ElementalTVBidder's
+         `endpoint.replaceMacro("AdUnit", extImp.getAdunit())`, no constant at all
+
+    So `bidder_class.static_fields[]` answers the question for shape 1 only. The
+    field that covers all three is `endpoint_resolution.macros_used`, the read's
+    record of what the call sites substitute -- 7 Java goldens populate it, and
+    smarthub's lists exactly the three macros its endpoint uses even though its
+    static_fields records none of them.
+
+    `macro_field_set` is accepted as the same thing under the other key: the
+    corpus uses both, which is itself a defect worth fixing in the goldens.
+    Brace-wrapped entries are normalised, because elementaltv records
+    `['{{AdUnit}}']` where every other golden records bare names.
+    """
+    out = set()
+    # The corpus records this at TWO paths and they are not interchangeable:
+    # `bidder_info.endpoint_construction.macros_used` is populated in nearly every
+    # golden, while `code.make_requests.endpoint_resolution.macros_used` is
+    # populated in a minority (28 of 42 goldens have one and not the other).
+    # Reading only one makes recognition depend on which reader filled which
+    # field, so both are read. R8b below reports the two disagreeing.
+    sources = [
+        ((spec.raw.get("bidder_info") or {}).get("endpoint_construction") or {}),
+        (((spec.raw.get("code") or {}).get("make_requests") or {})
+         .get("endpoint_resolution") or {}),
+    ]
+    for er in sources:
+        for key in ("macros_used", "macro_field_set"):
+            for entry in (er.get(key) or []):
+                if not isinstance(entry, str):
+                    continue
+                token = entry.strip()
+                matched = False
+                for m in PLACEHOLDER_RE.finditer(token):
+                    name = m.group(1) or m.group(2) or m.group(3) or m.group(4)
+                    if name:
+                        out.add(name)
+                        matched = True
+                if not matched:
+                    # A bare name is the form replaceMacro takes. Anything with
+                    # whitespace is prose, not a macro name (emxdigital and
+                    # cadent_aperture_mx record sentences here) -- admitting it
+                    # would let prose silence R8.
+                    bare = token.strip("{}.")
+                    if bare and not any(c.isspace() for c in bare):
+                        out.add(bare)
+
+    # Shape 1 as well: a constant whose value IS the macro.
+    for field in ((spec.raw.get("bidder_class") or {}).get("static_fields") or []):
+        if not isinstance(field, dict):
+            continue
+        value = field.get("value")
+        if not isinstance(value, str):
+            continue
+        token = value.strip()
+        for m in PLACEHOLDER_RE.finditer(token):
+            name = m.group(1) or m.group(2) or m.group(3) or m.group(4)
+            if name:
+                out.add(name)
+    return frozenset(out)
+
+
+def _macro_record_disagreement(spec: Spec) -> Optional[str]:
+    """The two macros_used copies, when both populated, must name the same set.
+
+    `bidder_info.endpoint_construction.macros_used` and
+    `code.make_requests.endpoint_resolution.macros_used` are the same claim
+    recorded twice. Nothing compared them, and they diverge: limelightDigital
+    lists the same two names in a different order (harmless), while
+    cadent_aperture_mx and emxdigital hold bare names at one path and prose
+    sentences at the other -- "ts (Instant.now().getEpochSecond() -- NO
+    testing-mode override...)" is not a macro name, and R8 must not be able to
+    admit a placeholder because prose happened to contain the right substring.
+
+    One path being absent is NOT a disagreement: 28 of 42 goldens populate one
+    and leave the other null, which is a read-completeness question for the
+    golden refresh rather than a contradiction. Only two populated lists that
+    name different things are reported here.
+    """
+    a = ((spec.raw.get("bidder_info") or {}).get("endpoint_construction") or {}).get("macros_used")
+    b = (((spec.raw.get("code") or {}).get("make_requests") or {})
+         .get("endpoint_resolution") or {}).get("macros_used")
+    if not isinstance(a, list) or not isinstance(b, list) or not a or not b:
+        return None
+
+    def norm(items):
+        out = set()
+        for it in items:
+            if not isinstance(it, str):
+                continue
+            token = it.strip()
+            hit = False
+            for m in PLACEHOLDER_RE.finditer(token):
+                name = m.group(1) or m.group(2) or m.group(3) or m.group(4)
+                if name:
+                    out.add(name)
+                    hit = True
+            if not hit:
+                bare = token.strip("{}.")
+                # Keep only the leading identifier, so "t (TMax milliseconds...)"
+                # compares as "t" -- otherwise every prose entry reads as a
+                # different macro and the check says nothing useful.
+                head = bare.split()[0].strip("{}.,") if bare.split() else ""
+                if head:
+                    out.add(head)
+        return out
+
+    sa, sb = norm(a), norm(b)
+    if sa == sb:
+        return None
+    return (f"macros_used disagrees between paths: "
+            f"bidder_info.endpoint_construction={sorted(sa)} vs "
+            f"code.make_requests.endpoint_resolution={sorted(sb)}")
+
+
 def r8_check(spec: Spec) -> List[Finding]:
     """Wave 11b B5 #7: expanded from single-field walk (bidder_info.endpoint)
     to recursive collection across user-sync URLs, hardcoded static-field
@@ -1336,7 +1482,23 @@ def r8_check(spec: Spec) -> List[Finding]:
     leaves = _collect_endpoint_strings(spec)
     if not leaves:
         return [Finding("R8", spec.label, SEV_PASS, "no endpoint-bearing strings to check")]
-    macros = GO_TEMPLATE_MACROS if spec.language == "go" else JAVA_TEMPLATE_MACROS
+    if spec.language == "go":
+        # Closed by construction: macros.EndpointTemplateParams is a struct, and
+        # text/template resolves against its fields, so a name outside the set
+        # cannot resolve.
+        macros = GO_TEMPLATE_MACROS
+    else:
+        # Open by construction: each Java bidder declares its own macro name as a
+        # constant and calls Uri.replaceMacro(NAME, value); Uri.java holds no name
+        # registry. So "not on a list" is not a finding -- what is checkable is
+        # whether this spec shows the bidder declaring the macro it uses.
+        #
+        # JAVA_CONVENTIONAL_MACROS deliberately does NOT admit. Letting it would
+        # make the hint list the authority its own comment says it is not, and it
+        # would hide the real gap: smarthub's endpoint uses Host/AccountID/SourceId,
+        # SmarthubBidder declares a constant for each, and the golden records none
+        # of them. It is used below to tell a reviewer the name is a known spelling.
+        macros = _substituted_java_macros(spec)
     warnings = spec.get("provenance.warnings") or []
     has_warning = any(
         (w.get("type") or "") == "endpoint-placeholder-unresolved"
@@ -1354,7 +1516,7 @@ def r8_check(spec: Spec) -> List[Finding]:
             tok = t.get("token")
             if isinstance(tok, str):
                 for m in PLACEHOLDER_RE.finditer(tok):
-                    n = m.group(1) or m.group(2) or m.group(3)
+                    n = m.group(1) or m.group(2) or m.group(3) or m.group(4)
                     if n:
                         deploy_token_names.add(n)
 
@@ -1370,7 +1532,7 @@ def r8_check(spec: Spec) -> List[Finding]:
         if "user_sync" in path:
             path_macros |= USER_SYNC_MACROS
         for m in PLACEHOLDER_RE.finditer(value):
-            name = m.group(1) or m.group(2) or m.group(3)
+            name = m.group(1) or m.group(2) or m.group(3) or m.group(4)
             if not name:
                 continue
             if name in path_macros or name in deploy_token_names:
@@ -1382,10 +1544,23 @@ def r8_check(spec: Spec) -> List[Finding]:
                     f"placeholder {{{{.{name}}}}} at {path} unrecognised but warning emitted",
                 ))
             else:
-                findings.append(Finding(
-                    "R8", spec.label, SEV_WARN,
-                    f"placeholder {{{{.{name}}}}} at {path} not in macro registry and no provenance warning",
-                ))
+                if spec.language == "go":
+                    detail = (f"placeholder {{{{.{name}}}}} at {path} is not a field of "
+                              f"macros.EndpointTemplateParams, so text/template cannot "
+                              f"resolve it, and no provenance warning documents the deviation")
+                else:
+                    hint = (" It is a conventional Java macro spelling, so the likely cause "
+                            "is an incomplete read rather than a missing substitution."
+                            if name in JAVA_CONVENTIONAL_MACROS else "")
+                    detail = (f"placeholder {{{name}}} at {path} is not recorded as substituted: "
+                              f"absent from endpoint_resolution.macros_used and from any "
+                              f"bidder_class.static_fields[] value, so on this spec nothing "
+                              f"calls replaceMacro for it and it would reach the exchange "
+                              f"literally.{hint}")
+                findings.append(Finding("R8", spec.label, SEV_WARN, detail))
+    disagreement = _macro_record_disagreement(spec)
+    if disagreement:
+        findings.append(Finding("R8", spec.label, SEV_WARN, disagreement))
     if not findings:
         findings.append(Finding(
             "R8", spec.label, SEV_PASS,

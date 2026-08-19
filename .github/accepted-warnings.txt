@@ -22,7 +22,7 @@
 #
 # Review the resulting diff — it is the record of what was accepted.
 #
-# Entries: 61
+# Entries: 47
 
 port-lint | Rule 36 | limelightDigital | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
 port-lint | Rule 36 | teqblaze | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
@@ -71,15 +71,3 @@ round-trip-ci | R7 | go/kobler | bidder-constant-mismatch warning at adapters/ko
 round-trip-ci | R7 | go/kobler | bidder-constant-mismatch warning at adapters/kobler/params_test.go:<n>: validato
 round-trip-ci | R7 | java/kobler | bidder-constant-mismatch quirk: bidder-constant-mismatch-params-test — params_te
 round-trip-ci | R7 | java/kobler | bidder-constant-mismatch quirk: bidder-constant-mismatch-test — kobler_test.go c
-round-trip-ci | R8 | java/adkerneladn | placeholder {{.PublisherID}} at bidder_class.static_fields[URL_PUBLISHER_ID_MACR
-round-trip-ci | R8 | java/adkerneladn | placeholder {{.PublisherID}} at bidder_info.endpoint not in macro registry and n
-round-trip-ci | R8 | java/adverxo | placeholder {{.adUnitId}} at bidder_class.static_fields[ADUNIT_MACROS_ENDPOINT].
-round-trip-ci | R8 | java/adverxo | placeholder {{.adUnitId}} at bidder_info.endpoint not in macro registry and no p
-round-trip-ci | R8 | java/adverxo | placeholder {{.auth}} at bidder_class.static_fields[AUTH_MACROS_ENDPOINT].value 
-round-trip-ci | R8 | java/adverxo | placeholder {{.auth}} at bidder_info.endpoint not in macro registry and no prove
-round-trip-ci | R8 | java/limelightDigital | placeholder {{.PublisherID}} at bidder_class.static_fields[URL_PUBLISHER_ID_MACR
-round-trip-ci | R8 | java/limelightDigital | placeholder {{.PublisherID}} at bidder_info.endpoint not in macro registry and n
-round-trip-ci | R8 | java/smarthub | placeholder {{.AccountID}} at bidder_info.endpoint not in macro registry and no 
-round-trip-ci | R8 | java/smarthub | placeholder {{.SourceId}} at bidder_info.endpoint not in macro registry and no p
-round-trip-ci | R8 | java/thetradedesk | placeholder {{.SupplyId}} at bidder_class.static_fields[SUPPLY_ID_MACRO].value n
-round-trip-ci | R8 | java/thetradedesk | placeholder {{.SupplyId}} at bidder_info.endpoint not in macro registry and no p

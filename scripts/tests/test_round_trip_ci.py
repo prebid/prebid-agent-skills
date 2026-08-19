@@ -840,21 +840,111 @@ class TestR3bRegistryHardening(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestEndpointMacrosRegistry(unittest.TestCase):
-    """Wave 11b post-review (3d): the four R8 macro registries are now
-    loaded from `prebid-server-go/read/skills/shared/endpoint-macros.yaml`
-    at module-import time. Verify the loader works + each frozenset
-    contains the canonical core entries (regression gate against
-    accidental YAML edits that would silently drop macros)."""
+    """The R8 macro sets load from
+    `prebid-server-go/read/skills/shared/endpoint-macros.yaml` at import time.
+
+    `java_template_macros` was renamed `java_conventional_macros` because the old
+    name promised something Java does not have. Go's set is closed by
+    construction -- macros.EndpointTemplateParams is a struct and text/template
+    resolves against its fields -- while every Java macro name is a per-bidder
+    constant, so no list can be complete. The Java set is now a spelling hint
+    that does NOT admit; recognition comes from the spec's own record of what the
+    code substitutes."""
 
     def test_endpoint_macros_yaml_loads(self):
-        """The YAML loader returns the four expected keys."""
         registries = rtci._load_endpoint_macros()
         self.assertEqual(set(registries.keys()),
-                         {"go_template_macros", "java_template_macros",
+                         {"go_template_macros", "java_conventional_macros",
                           "user_sync_macros", "openrtb_macros"})
         for key, values in registries.items():
             self.assertIsInstance(values, frozenset, key)
             self.assertGreater(len(values), 0, f"{key} must be non-empty")
+
+    def test_the_java_hint_set_does_not_admit(self):
+        """If the hint list admitted, it would be the authority its own comment
+        says it is not -- and it would hide the case that motivated the change:
+        smarthub's endpoint uses Host/AccountID/SourceId, all three conventional
+        spellings, and its `bidder_class.static_fields[]` records none of them."""
+        spec = make_spec(language="java", raw={
+            "meta": {"bidder_name": "probe"},
+            "bidder_info": {"endpoint": "https://x.example/{Host}"},
+        })
+        findings = rtci.r8_check(spec)
+        self.assertIn("Host", rtci.JAVA_CONVENTIONAL_MACROS)
+        warns = [f for f in findings if f.severity == rtci.SEV_WARN]
+        self.assertTrue(warns, "a conventional spelling with no substitution record "
+                               "must still warn")
+        self.assertIn("not recorded as substituted", warns[0].detail)
+
+    def test_a_recorded_substitution_admits(self):
+        """All three upstream shapes reduce to this: the spec says the code
+        substitutes the macro. A named constant in the bidder class, one in the
+        Configuration class, and an inline literal at the replaceMacro call site
+        are indistinguishable from the spec, and only the first is a
+        static_field -- so macros_used is what carries it."""
+        spec = make_spec(language="java", raw={
+            "meta": {"bidder_name": "probe"},
+            "bidder_info": {
+                "endpoint": "https://x.example/{AdUnit}",
+                "endpoint_construction": {"macros_used": ["AdUnit"]},
+            },
+        })
+        warns = [f for f in rtci.r8_check(spec) if f.severity == rtci.SEV_WARN]
+        self.assertEqual([], [w.detail for w in warns])
+
+    def test_prose_in_macros_used_does_not_admit(self):
+        """cadent_aperture_mx and emxdigital record sentences in this field. A
+        sentence containing the macro name must not silence the check."""
+        spec = make_spec(language="java", raw={
+            "meta": {"bidder_name": "probe"},
+            "bidder_info": {
+                "endpoint": "https://x.example/{AdUnit}",
+                "endpoint_construction": {
+                    "macros_used": ["AdUnit is substituted from extImp.getAdunit()"]},
+            },
+        })
+        warns = [f for f in rtci.r8_check(spec) if f.severity == rtci.SEV_WARN]
+        self.assertTrue(warns, "prose admitted a macro")
+
+    def test_go_arm_stays_closed(self):
+        """The Go registry IS the vocabulary, so an unlisted name is a real
+        finding there and no per-spec record can admit it."""
+        spec = make_spec(language="go", raw={
+            "meta": {"bidder_name": "probe"},
+            "bidder_info": {
+                "endpoint": "https://x.example/{{.NotAField}}",
+                "endpoint_construction": {"macros_used": ["NotAField"]},
+            },
+        })
+        warns = [f for f in rtci.r8_check(spec) if f.severity == rtci.SEV_WARN]
+        self.assertTrue(warns, "the Go arm must not accept a per-spec claim")
+        self.assertIn("macros.EndpointTemplateParams", warns[0].detail)
+
+    def test_the_two_macro_records_must_agree_when_both_are_populated(self):
+        spec = make_spec(language="java", raw={
+            "meta": {"bidder_name": "probe"},
+            "bidder_info": {
+                "endpoint": "https://x.example/{A}{B}",
+                "endpoint_construction": {"macros_used": ["A", "B"]},
+            },
+            "code": {"make_requests": {"endpoint_resolution": {"macros_used": ["A", "C"]}}},
+        })
+        details = " | ".join(f.detail for f in rtci.r8_check(spec))
+        self.assertIn("macros_used disagrees between paths", details)
+
+    def test_one_path_absent_is_not_a_disagreement(self):
+        """28 of 42 goldens populate one path and leave the other null. That is a
+        read-completeness question for the golden refresh, not a contradiction."""
+        spec = make_spec(language="java", raw={
+            "meta": {"bidder_name": "probe"},
+            "bidder_info": {
+                "endpoint": "https://x.example/{A}",
+                "endpoint_construction": {"macros_used": ["A"]},
+            },
+            "code": {"make_requests": {"endpoint_resolution": {"macros_used": None}}},
+        })
+        details = " | ".join(f.detail for f in rtci.r8_check(spec))
+        self.assertNotIn("disagrees", details)
 
     def test_go_template_macros_contains_canonical_set(self):
         """Spot-check: the canonical Go endpoint macros are still listed."""
