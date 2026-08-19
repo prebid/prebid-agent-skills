@@ -1094,9 +1094,16 @@ sections:
       \ field: `VastModifier` (Java) only rewrites VAST when the flag is true — a flipped default changes\
       \ wire behavior on every video bid. Live-corpus evidence that this class is systemic, not theoretical:\
       \ the adkernelAdn, adverxo, and thetradedesk Go↔Java pairs are divergent upstream TODAY (Go-effective\
-      \ false, Java-effective true, all video-capable) and all three pass R5 spec-strict because both\
-      \ readers record the raw file value. Master sample: rtbstack (caught by the review gauntlet before\
-      \ submission; Java PR #4552 ships explicit `false`). Template wiring: `port-go2java` `bidder-config.yaml.j2`\
+      \ false, Java-effective true, all video-capable) and all three pass R5 spec-strict. The reason is\
+      \ NOT that both readers record the raw file value: measured 2026-08-19 against the pinned commits,\
+      \ 14 of the 20 Java goldens carrying this field have no key upstream and record `false`, which is\
+      \ neither the file value nor the Java-effective value. It comes from the Java reader's own\
+      \ documented absent-key default, which states `false` where `application.yaml:102` says `true`. So\
+      \ the pairs compare equal because one side fabricates a default, and the fix depends on which\
+      \ value the field is supposed to hold — a corpus-wide decision deferred in ADR-010. Master sample:\
+      \ rtbstack (Java PR #4552 ships explicit `false`; the pre-submission review gauntlet caught the\
+      \ omission, and upstream review then rejected a different part of the same emission — see Rule 48).\
+      \ Template wiring: `port-go2java` `bidder-config.yaml.j2`\
       \ emits `modifying-vast-xml-allowed` explicitly with the source-effective value in BOTH polarities\
       \ (F-new-105 retired the inverted emit-only-when-true arm). See ADR-010."
 - kind: rules
