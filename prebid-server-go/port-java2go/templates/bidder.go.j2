@@ -433,6 +433,15 @@ Inputs (mirror of bidder.java.j2 ctx):
 {%- set _forms = ctx.naming_form_resolution or {} -%}
 {%- set _go_package_name = _forms.get('go_package_name') or ctx.package_name -%}
 {%- set _imp_ext_class_root = ctx.imp_ext_class_root or _forms.get('go_constant_root') -%}
+{#- Upstream Go uses TWO naming conventions for the imp-ext struct, measured at
+    prebid-server 0ba35231 over openrtb_ext/imp_*.go: 170 `ExtImp{Bidder}` and 78
+    `ImpExt{Bidder}` -- so the minority form is 31% of the corpus, not a rare
+    exception (adverxo is `ImpExtAdverxo`, vungle is `ImpExtVungle`, while kobler is
+    `ExtImpKobler`). Hardcoding one prefix emits a type name that disagrees with the
+    vendor's existing Go file for roughly a third of bidders. ctx.imp_ext_type_name
+    carries the whole name when the reader recorded it; the default stays the
+    69% form. -#}
+{%- set _imp_ext_type = ctx.imp_ext_type_name or ("ExtImp" ~ _imp_ext_class_root) -%}
 {# F-new-7 EXT-A: per-key batching. Compute once so helper-name + helper-emit
    + MakeRequests body + composition-with-F-new-2 stay in sync. The per-key
    branch is structurally distinct from single-batched / per-imp / max-imps —
@@ -801,19 +810,19 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 }
 
 {% if _emit_parse_imp_ext %}
-func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ _imp_ext_class_root }}, error) {
+func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.{{ _imp_ext_type }}, error) {
 {% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
 	var bidderExt adapters.ExtImpBidder
 	if err := jsonutil.Unmarshal(imp.Ext, &bidderExt); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
 	}
-	var ext openrtb_ext.ExtImp{{ _imp_ext_class_root }}
+	var ext openrtb_ext.{{ _imp_ext_type }}
 	if err := jsonutil.Unmarshal(bidderExt.Bidder, &ext); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext.bidder: %w", imp.ID, err)
 	}
 	return &ext, nil
 {% else %}
-	var ext openrtb_ext.ExtImp{{ _imp_ext_class_root }}
+	var ext openrtb_ext.{{ _imp_ext_type }}
 	if err := jsonutil.Unmarshal(imp.Ext, &ext); err != nil {
 		return nil, fmt.Errorf("imp %s: failed parsing imp.ext: %w", imp.ID, err)
 	}
@@ -851,7 +860,7 @@ func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.ExtImp{{ _imp_ext_class_root }
    The body skips the request.Imp[0] re-parse since the caller already
    has the parsed ext in hand. #}
 {% if _is_per_key %}
-func (a *adapter) resolveEndpoint(impExt *openrtb_ext.ExtImp{{ _imp_ext_class_root }}) (string, error) {
+func (a *adapter) resolveEndpoint(impExt *openrtb_ext.{{ _imp_ext_type }}) (string, error) {
 {% if _endpoint_macros_list | length > 0 %}
 	endpointParams := macros.EndpointTemplateParams{
 {% for m in _endpoint_macros_list %}
@@ -1124,13 +1133,24 @@ func getBidType(bid *openrtb2.Bid, imps []openrtb2.Imp) openrtb_ext.BidType {
 	return openrtb_ext.{{ _bid_type_short_to_go[_default_const] }}{{ _ok_suffix }}
 {% endif %}
 {% endfor %}
-{# Reviewer H2 correction: emit a terminal catchall return after the chain.
-   When every step's fallback_action is "next" (no throw, no return-default),
-   the function would otherwise compile-fail with "missing return at end".
-   Catchall uses ctx.bid_type_fallback_value (default "banner"). For an
-   error-returning signature, the catchall returns the default + nil. #}
+{# Terminal catchall after the chain. It exists for the case where every step's
+   fallback_action is "next" (no throw, no return-default), which would otherwise
+   compile-fail with "missing return at end".
+
+   It must NOT be emitted when the chain's last step already ends in an
+   unconditional return, or the result is two consecutive returns and the second
+   is dead. That is not merely untidy: upstream `validate.sh` runs `go vet ./...`
+   and CI invokes it, so `unreachable code` fails the build. Caught by compiling
+   the emitted aax adapter, whose chain ends in a throw and which therefore got
+   both an error return and this catchall. #}
+{%- set _last_step = _bid_type_chain[-1] if _bid_type_chain else none -%}
+{%- set _chain_returns = _last_step and (
+      _last_step.method in ("throw", "hardcoded")
+      or _last_step.fallback_action in ("throw", "return-default")) -%}
+{% if not _chain_returns %}
 {% set _final_default = ctx.bid_type_fallback_value or "banner" %}
 	return openrtb_ext.{{ _bid_type_short_to_go[_final_default] }}{{ _ok_suffix }}
+{% endif %}
 {% else %}
 	// TODO[port-java2go]: bid_type_resolution={{ ctx.bid_type_resolution }}
 	// requires per-bidder customization (Rule 23-25).
@@ -1178,7 +1198,7 @@ func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) e
 {% endif %}
 {% if _is_per_key %}
 
-// {{ _per_key_helper_name }} groups imps by their parsed openrtb_ext.ExtImp{{ _imp_ext_class_root }}
+// {{ _per_key_helper_name }} groups imps by their parsed openrtb_ext.{{ _imp_ext_type }}
 {% if _per_key_field %}// value (e.g. by `{{ _per_key_field }}`), returning one map bucket per unique
 {% else %}// value, returning one map bucket per unique
 {% endif %}
@@ -1189,10 +1209,10 @@ func convertImpCurrency(imp *openrtb2.Imp, reqInfo *adapters.ExtraRequestInfo) e
 // the returned slice — caller may surface them via the per-request errors
 // channel.
 //
-// Constraint: ExtImp{{ _imp_ext_class_root }} MUST be Go-comparable (no slice/map/func
-// fields) for the map[ExtImp{{ _imp_ext_class_root }}] usage to compile.
-func {{ _per_key_helper_name }}(imps []openrtb2.Imp) (map[openrtb_ext.ExtImp{{ _imp_ext_class_root }}][]openrtb2.Imp, []error) {
-	groups := make(map[openrtb_ext.ExtImp{{ _imp_ext_class_root }}][]openrtb2.Imp)
+// Constraint: {{ _imp_ext_type }} MUST be Go-comparable (no slice/map/func
+// fields) for the map[{{ _imp_ext_type }}] usage to compile.
+func {{ _per_key_helper_name }}(imps []openrtb2.Imp) (map[openrtb_ext.{{ _imp_ext_type }}][]openrtb2.Imp, []error) {
+	groups := make(map[openrtb_ext.{{ _imp_ext_type }}][]openrtb2.Imp)
 	errs := make([]error, 0)
 	for i := range imps {
 		impExt, err := parseImpExt(&imps[i])

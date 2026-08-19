@@ -3200,5 +3200,78 @@ class TestRequiredArtifacts(unittest.TestCase):
             )
 
 
+
+
+class TestEmittedGoCompilesCleanly(unittest.TestCase):
+    """Two defects found by handing the emitted Go to a compiler.
+
+    Neither was reachable by reading the template or by asserting on rendered
+    substrings, which is why both survived until `go build` and `go vet` ran.
+    """
+
+    def test_no_unreachable_return_after_a_terminating_chain(self):
+        """`go vet` reports `unreachable code`, and upstream gates on it:
+        `validate.sh` runs `go vet ./...` and both CI workflows invoke
+        `validate.sh`. So this is a build failure upstream, not a style nit.
+
+        The terminal catchall after the method-chain walker was emitted
+        unconditionally. When the chain's last step already returns -- method
+        `throw`/`hardcoded`, or fallback_action `throw`/`return-default` -- the
+        result was two consecutive returns with the second dead. aax is the
+        corpus case: its chain ends in a throw.
+        """
+        rendered = _render("bidder.go.j2", _aax_bidder_go_ctx())
+        body = rendered[rendered.index("func getBidType"):] if "func getBidType" in rendered else rendered
+        # the error return must not be immediately followed by another return
+        lines = [l.strip() for l in body.splitlines() if l.strip()]
+        for i, line in enumerate(lines[:-1]):
+            if line.startswith("return ") and lines[i + 1].startswith("return "):
+                self.fail(f"two consecutive returns -- `go vet` calls the second "
+                          f"unreachable:\n    {line}\n    {lines[i + 1]}")
+
+    def test_chain_without_a_terminating_step_still_gets_a_catchall(self):
+        """The other direction: the catchall exists so a chain whose every step
+        falls through still compiles. Removing it entirely would trade
+        `unreachable code` for `missing return at end of function`."""
+        ctx = _aax_bidder_go_ctx()
+        chain = ctx.get("bid_type_method_chain") or ctx.get("bid_type_chain")
+        if not chain:
+            self.skipTest("this ctx does not carry an inspectable method chain")
+        for step in chain:
+            if isinstance(step, dict):
+                step["fallback_action"] = "next"
+                if step.get("method") in ("throw", "hardcoded"):
+                    step["method"] = "imp-id-correlation"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("return openrtb_ext.BidType", rendered,
+                      "a fully falling-through chain must still end in a return")
+
+    def test_imp_ext_type_name_is_not_hardcoded_to_the_ExtImp_prefix(self):
+        """Upstream Go uses two conventions for the imp-ext struct. Measured at
+        prebid-server 0ba35231 over openrtb_ext/imp_*.go: 170 `ExtImp{Bidder}`
+        and 78 `ImpExt{Bidder}`, so the minority form is 31% of the corpus --
+        `ImpExtAdverxo`, `ImpExtVungle` against `ExtImpKobler`. Hardcoding one
+        prefix emits a type name that disagrees with the vendor's existing Go
+        file for roughly a third of bidders."""
+        ctx = _adverxo_bidder_go_ctx()
+        ctx["imp_ext_type_name"] = "ImpExtAdverxo"
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("openrtb_ext.ImpExtAdverxo", rendered)
+        self.assertNotIn("openrtb_ext.ExtImpAdverxo", rendered)
+
+    def test_imp_ext_type_name_defaults_to_the_majority_form(self):
+        ctx = _adverxo_bidder_go_ctx()
+        ctx.pop("imp_ext_type_name", None)
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("openrtb_ext.ExtImp", rendered)
+
+    def test_pojo_template_honours_the_same_type_name(self):
+        """The POJO and the bidder must agree, or the emitted pair does not
+        compile against each other."""
+        ctx = _kobler_imp_ext_pojo_ctx()
+        ctx["imp_ext_type_name"] = "ImpExtKobler"
+        rendered = _render("imp-ext-pojo.go.j2", ctx)
+        self.assertIn("type ImpExtKobler struct {", rendered)
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

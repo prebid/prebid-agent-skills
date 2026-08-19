@@ -7,6 +7,12 @@ struct here.
 
 Inputs:
   ctx.bidder_class_root  : str  — PascalCase struct root (e.g., "Kobler", "AdkernelAdn")
+  ctx.imp_ext_type_name  : str|null — the WHOLE struct name when the vendor's Go file
+                           does not use the `ExtImp{Root}` form. Upstream at 0ba35231
+                           carries 170 `ExtImp*` and 78 `ImpExt*` types under
+                           openrtb_ext/, so the minority form is 31% of the corpus
+                           (`ImpExtAdverxo`, `ImpExtVungle`). Defaults to
+                           `ExtImp{bidder_class_root}`.
   ctx.fields             : list[dict]  — per-field; each:
       go_name        : str  — Go field name (PascalCase, exported)
       json_tag       : str  — JSON wire-format property name
@@ -43,7 +49,7 @@ import (
 {% if ctx.javadoc_summary %}
 // {{ ctx.javadoc_summary }}
 {% endif %}
-type ExtImp{{ ctx.bidder_class_root }} struct {
+type {{ ctx.imp_ext_type_name or ('ExtImp' ~ ctx.bidder_class_root) }} struct {
 {% for field in ctx.fields %}
 {% if field.notes %}
 	// {{ field.notes }}
