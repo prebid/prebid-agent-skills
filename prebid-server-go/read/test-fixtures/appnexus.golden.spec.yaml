@@ -199,6 +199,11 @@ bidder_params_json: |
       "required": ["placementId", "invCode", "member"]
     }
   }
+bidder_params_ref:
+  path: static/bidder-params/appnexus.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 20a3f193c62b1b3d6d2a0daf5dfaa3935a045c52b83af236693ebe9c3459106d
+  bytes: 3778
 bidder_params_sha256: 20a3f193c62b1b3d6d2a0daf5dfaa3935a045c52b83af236693ebe9c3459106d
 
 params:

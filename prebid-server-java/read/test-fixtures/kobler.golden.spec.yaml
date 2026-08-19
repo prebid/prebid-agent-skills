@@ -70,6 +70,11 @@ bidder_params_json: |
       }
     }
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/kobler.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
+  bytes: 431
 bidder_params_sha256: 125fef34c3c83c63342e94c74b7ac9f98d026ada4e6a0112157387d787c7b685
 
 params:

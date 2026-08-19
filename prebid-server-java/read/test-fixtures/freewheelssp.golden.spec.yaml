@@ -93,6 +93,11 @@ bidder_params_json: |
       "zoneId"
     ]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/freewheelssp.json
+  resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+  sha256: 5e64e612fccea314ee7625fb7e9e7984522cf84b1c8b2a87f14fe1914034cf10
+  bytes: 357
 bidder_params_sha256: 5e64e612fccea314ee7625fb7e9e7984522cf84b1c8b2a87f14fe1914034cf10
 
 params:

@@ -79,6 +79,11 @@ bidder_params_json: |-
       }
     }
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/generic.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: a3e2925fd8108a627621d767cb74d09c690001d2b743b7befa942baa5e93b526
+  bytes: 339
 bidder_params_sha256: a3e2925fd8108a627621d767cb74d09c690001d2b743b7befa942baa5e93b526
 
 params:

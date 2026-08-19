@@ -185,6 +185,11 @@ bidder_params_json: |
       "zoneId"
     ]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/rubicon.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: 382bb51ff23caa9305f4351b15c0f1fe7f249bdbf1308398cd912c95ce10d41f
+  bytes: 2610
 bidder_params_sha256: 382bb51ff23caa9305f4351b15c0f1fe7f249bdbf1308398cd912c95ce10d41f
 
 params:

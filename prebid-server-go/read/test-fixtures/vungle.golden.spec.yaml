@@ -85,6 +85,11 @@ bidder_params_json: |-
       "placement_reference_id"
     ]
   }
+bidder_params_ref:
+  path: static/bidder-params/vungle.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: 437c5b5b81115bca701113d4324392e04a539b2119919d4f33b8e1a13dfb6308
+  bytes: 535
 bidder_params_sha256: 437c5b5b81115bca701113d4324392e04a539b2119919d4f33b8e1a13dfb6308
 
 params:

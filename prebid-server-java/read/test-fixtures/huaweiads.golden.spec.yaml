@@ -113,6 +113,11 @@ bidder_params_json: |
       "adtype"
     ]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/huaweiads.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: ce8ea45365697938314e3667010585ac119ce7902fe64ae00f580a70e2de945b
+  bytes: 868
 bidder_params_sha256: ce8ea45365697938314e3667010585ac119ce7902fe64ae00f580a70e2de945b
 
 params:

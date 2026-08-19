@@ -92,6 +92,11 @@ bidder_params_json: |
     },
     "required": ["adUnitId", "auth"]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/adverxo.json
+  resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+  sha256: 3f9eb07e582e01aab5fb772a15e130a4ffcabad3176c81f9b4588d082443d31a
+  bytes: 562
 bidder_params_sha256: 3f9eb07e582e01aab5fb772a15e130a4ffcabad3176c81f9b4588d082443d31a
 
 params:

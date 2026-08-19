@@ -91,6 +91,11 @@ bidder_params_json: |
   	},
   	"required": ["publisherId"]
   }
+bidder_params_ref:
+  path: static/bidder-params/thetradedesk.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: 769d92e699416dc3e30f16c8383f9c21dfb568adb323b9f9d953fe6968818845
+  bytes: 538
 bidder_params_sha256: 769d92e699416dc3e30f16c8383f9c21dfb568adb323b9f9d953fe6968818845
 
 params:

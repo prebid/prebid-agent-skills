@@ -94,6 +94,11 @@ bidder_params_json: |
       "code"
     ]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/mediasquare.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: 946207d8154ae56cf5b08d007b746cf75d4921a9650d2be5d6cf2f1893bf55a8
+  bytes: 527
 bidder_params_sha256: 946207d8154ae56cf5b08d007b746cf75d4921a9650d2be5d6cf2f1893bf55a8
 
 params:

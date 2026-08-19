@@ -244,6 +244,11 @@ bidder_params_json: |
       ]
     }
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/appnexus.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: 5946ec7d034be6f6f4033913751d074ffe75dacd9df542b30e1a44f41333ee12
+  bytes: 4190
 bidder_params_sha256: 5946ec7d034be6f6f4033913751d074ffe75dacd9df542b30e1a44f41333ee12
 
 params:

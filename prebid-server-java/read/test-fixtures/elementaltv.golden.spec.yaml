@@ -82,6 +82,11 @@ bidder_params_json: |
     },
     "required": ["adunit"]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/elementaltv.json
+  resolved_commit: 69b1993c39ed3212ca63012a8c0924fdfa0b5d4a
+  sha256: 2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0
+  bytes: 352
 bidder_params_sha256: 2b83fa36727d98f34537a7561b13f27165b7f1b002127e4d337b513d690223a0
 
 params:

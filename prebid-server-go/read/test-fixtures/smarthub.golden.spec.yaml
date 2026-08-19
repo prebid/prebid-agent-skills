@@ -94,6 +94,11 @@ bidder_params_json: |-
       "token"
     ]
   }
+bidder_params_ref:
+  path: static/bidder-params/smarthub.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: 6d0d79e63f17e65beac23cb9dab6a7ad90e3eb729f333b725a106cc14415b000
+  bytes: 621
 bidder_params_sha256: 6d0d79e63f17e65beac23cb9dab6a7ad90e3eb729f333b725a106cc14415b000
 
 params:

@@ -88,6 +88,11 @@ bidder_params_json: |
     },
     "required": ["zoneId"]
   }
+bidder_params_ref:
+  path: static/bidder-params/adkernel.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed
+  bytes: 373
 bidder_params_sha256: 388942de93197dd52ce21151cf3f7fddbe499d594f89a5d88ef47a296130f4ed
 
 params:

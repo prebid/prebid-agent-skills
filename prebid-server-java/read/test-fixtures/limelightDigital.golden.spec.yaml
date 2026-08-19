@@ -109,6 +109,11 @@ bidder_params_json: |
       "publisherId"
     ]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/limelightDigital.json
+  resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+  sha256: b72e79654cfa5afe7105855d7cdaa67d93340a69dfc96d49ae95e7965b1c468f
+  bytes: 620
 bidder_params_sha256: b72e79654cfa5afe7105855d7cdaa67d93340a69dfc96d49ae95e7965b1c468f
 
 params:

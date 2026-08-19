@@ -104,7 +104,12 @@ bidder_params_json: |
       { "required": ["appId"] }
     ]
   }
-bidder_params_sha256: 8bb5485afd62744d46625253b49058a58dcdbb00f43b9f04c6ef9b06c1a46311
+bidder_params_ref:
+  path: static/bidder-params/beachfront.json
+  resolved_commit: 615e5dfa5fd9a9925a607e1f0e80591f21d41778
+  sha256: daacf0dfb115173e0d3c43d3777c85568995eade6151bbcab16d4f578491a11d
+  bytes: 2612
+bidder_params_sha256: daacf0dfb115173e0d3c43d3777c85568995eade6151bbcab16d4f578491a11d
 
 params:
   schema_interpretation:

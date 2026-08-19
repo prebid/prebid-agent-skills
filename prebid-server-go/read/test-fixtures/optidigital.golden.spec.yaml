@@ -67,6 +67,11 @@ bidder_info:
 # ("  \n") and no terminal newline; both nuances would be lost by a `|` block. The double-quoted
 # form makes sha256(bidder_params_json) == bidder_params_sha256 exactly (R2 contract).
 bidder_params_json: "{\n    \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n    \"title\": \"Optidigital Adapter Params\",\n    \"description\": \"A schema which validates params accepted by the Optidigital adapter\",\n    \"type\": \"object\",\n  \n    \"properties\": {\n        \"publisherId\": {\n            \"type\": \"string\",\n            \"minLength\": 2,\n            \"description\": \"Publisher ID\"\n        },\n        \"placementId\": {\n            \"type\": \"string\",\n            \"minLength\": 1,\n            \"description\": \"Placement ID\"\n        },\n        \"divId\": {\n            \"type\": \"string\",\n            \"description\": \"Div ID\"\n        },\n        \"pageTemplate\": {\n            \"type\": \"string\",\n            \"description\": \"Page Template\"\n        }\n    },\n\n    \"required\":[\n        \"publisherId\",\n        \"placementId\"\n    ]\n  }"
+bidder_params_ref:
+  path: static/bidder-params/optidigital.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31
+  bytes: 794
 bidder_params_sha256: 6bc977807ee6d779cd6fa167f9e152219cc2af6d151fac90606dcae1045eda31
 
 params:

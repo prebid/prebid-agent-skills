@@ -93,6 +93,11 @@ bidder_params_json: |
     },
     "required": ["tagid"]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/emx_digital.json
+  resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+  sha256: 0e1252c73f997b35a99dbfaabc83ccf602a0c60de8e9253c0eecdac971dfd6de
+  bytes: 466
 bidder_params_sha256: 0e1252c73f997b35a99dbfaabc83ccf602a0c60de8e9253c0eecdac971dfd6de
 
 params:

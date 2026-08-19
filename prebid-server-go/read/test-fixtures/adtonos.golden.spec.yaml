@@ -74,6 +74,11 @@ bidder_info:
 # terminal newline and risk clipping the indented blank line; the double-quoted form
 # makes sha256(bidder_params_json) == bidder_params_sha256 exactly (R2 contract).
 bidder_params_json: "{\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n  \"title\": \"AdTonos Adapter Params\",\n  \"description\": \"A schema which validates params accepted by the AdTonos adapter\",\n  \n  \"type\": \"object\",\n  \"properties\": {\n    \"supplierId\": {\n      \"type\": \"string\",\n      \"description\": \"ID of the supplier account in AdTonos platform\"\n    }\n  },\n  \"required\": [\"supplierId\"]\n}"
+bidder_params_ref:
+  path: static/bidder-params/adtonos.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 47dece96fbd30bea3639faa2b9c504cf1b9501bf564674218aa745d5898f89cc
+  bytes: 375
 bidder_params_sha256: 47dece96fbd30bea3639faa2b9c504cf1b9501bf564674218aa745d5898f89cc
 
 params:

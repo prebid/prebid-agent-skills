@@ -149,6 +149,11 @@ bidder_params_json: |-
       }
     ]
   }
+bidder_params_ref:
+  path: static/bidder-params/msft.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: f0f5e273bbe4598198aca62942e81de1290d3d111d9a22a9e059a08c1ee20999
+  bytes: 2193
 bidder_params_sha256: f0f5e273bbe4598198aca62942e81de1290d3d111d9a22a9e059a08c1ee20999
 
 params:

@@ -22,11 +22,13 @@
 #
 # Review the resulting diff — it is the record of what was accepted.
 #
-# Entries: 59
+# Entries: 61
 
 port-lint | Rule 36 | limelightDigital | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
 port-lint | Rule 36 | teqblaze | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
 port-lint | Rule 36 | vungle | fixture-inventory asymmetry: java has <n> fixtures, go has <n>; per Rule <n> exp
+round-trip-ci | R2 | go/beachfront | deprecated bidder_params_json does not match the referenced bytes (inline 8bb548
+round-trip-ci | R2 | java/beachfront | deprecated bidder_params_json does not match the referenced bytes (inline 9b142b
 round-trip-ci | R5 | pair/152media | bidder_info.endpoint: MACRO FORM DIVERGENCE: Go uses the canonical Go-template f
 round-trip-ci | R5 | pair/152media | bidder_info.gvl_vendor_id differs across languages
 round-trip-ci | R5 | pair/152media | bidder_params_sha256 byte-only divergence (byte-only): go=<hash> java=<hash>

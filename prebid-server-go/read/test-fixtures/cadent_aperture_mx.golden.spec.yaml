@@ -90,6 +90,11 @@ bidder_params_json: |
 
       "required": ["tagid"]
     }
+bidder_params_ref:
+  path: static/bidder-params/cadent_aperture_mx.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: 737b0ab2b135ac90a610212736bc1915e98b5a452d87cdebaee7c682e51957a6
+  bytes: 513
 bidder_params_sha256: 737b0ab2b135ac90a610212736bc1915e98b5a452d87cdebaee7c682e51957a6
 
 params:

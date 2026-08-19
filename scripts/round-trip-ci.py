@@ -24,6 +24,7 @@ import argparse
 import dataclasses
 import glob
 import hashlib
+from pathlib import Path
 import json
 import os
 import re
@@ -533,29 +534,81 @@ def gh_path_exists(
 # ---------------------------------------------------------------------------
 
 
+def _blobs_dir_for(spec: Spec) -> Path:
+    """Content-addressed store beside the golden that references it."""
+    return Path(spec.path).resolve().parent / "blobs"
+
+
 def r2_check(spec: Spec) -> List[Finding]:
-    text = spec.raw.get("bidder_params_json")
+    """Params integrity, split three ways.
+
+    The old R2 hashed `bidder_params_json` -- the reader's own output -- so a
+    lossy transcription produced a self-consistent hash. Two beachfront goldens
+    dropped ~30 bytes from a description and passed. Self-consistency is not
+    fidelity, so the check is now:
+
+      R2a  the stored blob hashes to bidder_params_ref.sha256
+      R2b  the stored blob's length equals bidder_params_ref.bytes -- an
+           independent witness, because a length cannot be re-derived from
+           transcribed text the way a hash can
+      R2c  ref.sha256 equals upstream at ref.resolved_commit  (NOT here: needs
+           the network, so it runs in the weekly upstream-sync job)
+
+    While `bidder_params_json` survives the migration it is compared against the
+    blob as a WARN: it is deprecated and non-normative, so a mismatch is a golden
+    to refresh rather than a reason to fail the build.
+    """
+    findings: List[Finding] = []
+    ref = spec.raw.get("bidder_params_ref")
     declared = spec.raw.get("bidder_params_sha256")
-    if not isinstance(text, str) or not isinstance(declared, str):
-        return [
-            Finding(
-                "R2",
-                spec.label,
-                SEV_FAIL,
-                "bidder_params_json or bidder_params_sha256 missing or non-string",
-            )
-        ]
-    actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    if actual != declared:
-        return [
-            Finding(
-                "R2",
-                spec.label,
-                SEV_FAIL,
-                f"sha mismatch: computed={actual} declared={declared}",
-            )
-        ]
-    return [Finding("R2", spec.label, SEV_PASS, f"sha={actual[:12]}")]
+    inline = spec.raw.get("bidder_params_json")
+
+    if ref is None:
+        # Aliases legitimately have neither: they inherit the parent's params.
+        if (spec.raw.get("meta") or {}).get("is_alias"):
+            return [Finding("R2", spec.label, SEV_PASS, "alias inherits parent params")]
+        return [Finding("R2", spec.label, SEV_FAIL, "bidder_params_ref missing")]
+
+    for field in ("path", "resolved_commit", "sha256", "bytes"):
+        if ref.get(field) in (None, ""):
+            return [Finding("R2", spec.label, SEV_FAIL,
+                            f"bidder_params_ref.{field} missing")]
+
+    blob = _blobs_dir_for(spec) / str(ref["sha256"])
+    if not blob.is_file():
+        return [Finding("R2", spec.label, SEV_FAIL,
+                        f"blob {ref['sha256']} absent from "
+                        f"{_blobs_dir_for(spec).name}/ -- nothing to verify against")]
+    data = blob.read_bytes()
+
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != ref["sha256"]:
+        findings.append(Finding("R2", spec.label, SEV_FAIL,
+                                f"R2a blob content hashes {actual} but ref declares "
+                                f"{ref['sha256']}"))
+    else:
+        findings.append(Finding("R2", spec.label, SEV_PASS, f"R2a blob sha={actual[:12]}"))
+
+    if len(data) != int(ref["bytes"]):
+        findings.append(Finding("R2", spec.label, SEV_FAIL,
+                                f"R2b blob is {len(data)}B, ref declares {ref['bytes']}B"))
+    else:
+        findings.append(Finding("R2", spec.label, SEV_PASS, f"R2b bytes={len(data)}"))
+
+    if declared != ref["sha256"]:
+        findings.append(Finding("R2", spec.label, SEV_FAIL,
+                                f"bidder_params_sha256 {declared} does not mirror "
+                                f"bidder_params_ref.sha256 {ref['sha256']}"))
+
+    if isinstance(inline, str):
+        inline_sha = hashlib.sha256(inline.encode("utf-8")).hexdigest()
+        if inline_sha != ref["sha256"]:
+            findings.append(Finding(
+                "R2", spec.label, SEV_WARN,
+                "deprecated bidder_params_json does not match the referenced bytes "
+                f"(inline {inline_sha[:12]} vs upstream {str(ref['sha256'])[:12]}); the "
+                "inline copy is non-normative and is dropped in 2.0.0"))
+    return findings
 
 
 # ---------------------------------------------------------------------------

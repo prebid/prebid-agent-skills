@@ -63,6 +63,11 @@ bidder_info:
 # A `|` block would clip the leading blank-line nuance and force a terminal newline,
 # breaking sha256(bidder_params_json) == bidder_params_sha256 (R2 contract).
 bidder_params_json: "\n{\n    \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n    \"title\": \"33Across Adapter Params\",\n    \"description\": \"A schema which validates params accepted by the 33Across adapter\",\n  \n    \"type\": \"object\",\n    \"properties\": {\n      \"productId\": {\n        \"type\": \"string\",\n        \"description\": \"Product type\"\n      },\n      \"siteId\": {\n        \"type\": \"string\",\n        \"description\": \"Site Id\"\n      },\n      \"zoneId\": {\n        \"type\": \"string\",\n        \"description\": \"Zone Id\"\n      }\n    },\n    \"anyOf\": [\n      { \"required\": [\"productId\", \"siteId\"] },\n      { \"required\": [\"productId\", \"zoneId\"] }\n    ]\n  }"
+bidder_params_ref:
+  path: static/bidder-params/33across.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 7e6b4be5de0aae3391c197f98d6aa172c586eb82769ba5036b9cd43475052cf9
+  bytes: 622
 bidder_params_sha256: 7e6b4be5de0aae3391c197f98d6aa172c586eb82769ba5036b9cd43475052cf9
 
 params:

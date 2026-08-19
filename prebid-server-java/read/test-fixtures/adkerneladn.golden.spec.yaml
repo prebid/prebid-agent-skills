@@ -90,6 +90,11 @@ bidder_params_json: |
       "pubId"
     ]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/adkernelAdn.json
+  resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+  sha256: 9e1a7d940698082d00922618710331010c8316735c4da6b71d9a34039e620120
+  bytes: 374
 bidder_params_sha256: 9e1a7d940698082d00922618710331010c8316735c4da6b71d9a34039e620120
 
 params:

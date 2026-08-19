@@ -26,6 +26,9 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import hashlib
+import pathlib
+import tempfile
 import unittest
 from typing import Any, Dict, Optional
 
@@ -166,22 +169,81 @@ class TestR1(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestR2(unittest.TestCase):
+    """R2 verifies the REFERENCED bytes, not the reader's transcription of them.
+
+    The old form hashed `bidder_params_json` and compared it to
+    `bidder_params_sha256` -- both written by the same reader -- so a lossy
+    transcription was self-consistent and passed. This class keeps the original
+    test's intent (a mismatch must print full digests, so the reader can compare
+    them) against the new contract.
+    """
+
     def test_full_sha_in_mismatch_message(self):
-        """R2 must print the full 64-char SHA on mismatch (not truncated)."""
-        # bidder_params_json is "{}" → sha256 = 44f683...28d33adf
-        # We declare a different SHA so R2 reports the mismatch.
-        bogus_sha = "deadbeef" * 8  # 64 chars
-        spec = make_spec(raw={
-            "bidder_params_json": "{}",
-            "bidder_params_sha256": bogus_sha,
-        })
-        findings = rtci.r2_check(spec)
+        """A mirror mismatch must print both 64-char SHAs, never truncated."""
+        bogus_sha = "deadbeef" * 8
+        real = hashlib.sha256(b"{}").hexdigest()
+        with tempfile.TemporaryDirectory() as td:
+            blobs = pathlib.Path(td) / "blobs"
+            blobs.mkdir()
+            (blobs / real).write_bytes(b"{}")
+            spec = make_spec(raw={
+                "bidder_params_ref": {
+                    "path": "static/bidder-params/x.json",
+                    "resolved_commit": "a" * 40,
+                    "sha256": real,
+                    "bytes": 2,
+                },
+                "bidder_params_sha256": bogus_sha,
+            })
+            spec.path = str(pathlib.Path(td) / "x.golden.spec.yaml")
+            findings = rtci.r2_check(spec)
         fails = [f for f in findings if f.severity == rtci.SEV_FAIL]
-        self.assertTrue(fails, f"Expected R2 to FAIL; got: {findings}")
-        fail = fails[0]
-        # Both SHAs (declared + computed) must appear in full
-        self.assertIn(bogus_sha, fail.detail,
-            f"Expected full declared SHA in detail; got: {fail.detail}")
+        self.assertTrue(fails, f"Expected R2 to FAIL on a mirror mismatch; got: {findings}")
+        detail = " ".join(f.detail for f in fails)
+        self.assertIn(bogus_sha, detail, f"declared SHA not printed in full: {detail}")
+        self.assertIn(real, detail, f"referenced SHA not printed in full: {detail}")
+
+    def test_corrupt_blob_fails_even_though_the_ref_is_self_consistent(self):
+        """The whole point: bytes that do not hash to their own ref are caught.
+
+        Under the old check this was invisible -- nothing compared stored bytes to
+        a digest derived from anywhere but themselves."""
+        with tempfile.TemporaryDirectory() as td:
+            blobs = pathlib.Path(td) / "blobs"
+            blobs.mkdir()
+            claimed = hashlib.sha256(b"the real upstream bytes").hexdigest()
+            (blobs / claimed).write_bytes(b"tampered")          # content != name
+            spec = make_spec(raw={
+                "bidder_params_ref": {"path": "static/bidder-params/x.json",
+                                      "resolved_commit": "a" * 40,
+                                      "sha256": claimed, "bytes": 23},
+                "bidder_params_sha256": claimed,
+            })
+            spec.path = str(pathlib.Path(td) / "x.golden.spec.yaml")
+            findings = rtci.r2_check(spec)
+        details = " ".join(f.detail for f in findings if f.severity == rtci.SEV_FAIL)
+        self.assertIn("R2a", details, f"content mismatch not caught: {details}")
+        self.assertIn("R2b", details, f"byte-length mismatch not caught: {details}")
+
+    def test_missing_blob_is_a_failure_not_a_pass(self):
+        """Nothing to verify against must never read as verified."""
+        with tempfile.TemporaryDirectory() as td:
+            (pathlib.Path(td) / "blobs").mkdir()
+            sha = "b" * 64
+            spec = make_spec(raw={
+                "bidder_params_ref": {"path": "static/bidder-params/x.json",
+                                      "resolved_commit": "a" * 40, "sha256": sha, "bytes": 1},
+                "bidder_params_sha256": sha,
+            })
+            spec.path = str(pathlib.Path(td) / "x.golden.spec.yaml")
+            findings = rtci.r2_check(spec)
+        self.assertTrue([f for f in findings if f.severity == rtci.SEV_FAIL])
+
+    def test_alias_without_a_ref_passes(self):
+        """An alias inherits its parent's params and has no upstream file."""
+        spec = make_spec(raw={"meta": {"is_alias": True}})
+        findings = rtci.r2_check(spec)
+        self.assertTrue(all(f.severity == rtci.SEV_PASS for f in findings), findings)
 
 
 # ---------------------------------------------------------------------------

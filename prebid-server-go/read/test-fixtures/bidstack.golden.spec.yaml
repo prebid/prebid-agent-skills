@@ -79,6 +79,11 @@ bidder_params_json: |
     },
     "required" : [ "publisherId" ]
   }
+bidder_params_ref:
+  path: static/bidder-params/bidstack.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 4d5a3385be499b3bdf544c20a43e8300176d165162b5db6d0fa6b5988755bae3
+  bytes: 651
 bidder_params_sha256: 4d5a3385be499b3bdf544c20a43e8300176d165162b5db6d0fa6b5988755bae3
 
 params:

@@ -85,6 +85,11 @@ bidder_params_json: |-
           "crid"
       ]
   }
+bidder_params_ref:
+  path: static/bidder-params/aax.json
+  resolved_commit: d7f8515b86258688304b0d9b6668c6a0e258bc9e
+  sha256: 543bb3ef8a6e7fe06b0d73f43f90548a4040f8f67f765c8552ce3de5b3a83525
+  bytes: 578
 bidder_params_sha256: 543bb3ef8a6e7fe06b0d73f43f90548a4040f8f67f765c8552ce3de5b3a83525
 
 params:

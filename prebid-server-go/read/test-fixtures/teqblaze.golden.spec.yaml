@@ -85,6 +85,11 @@ bidder_params_json: |-
       { "required": ["endpointId"] }
     ]
   }
+bidder_params_ref:
+  path: static/bidder-params/teqblaze.json
+  resolved_commit: 2fae16f31693452b62dd2a0924b78e71bbec43ec
+  sha256: ef396f97c184f14224d0006d6277c6982e7afea42f650e43f31af2c79e8b53bb
+  bytes: 531
 bidder_params_sha256: ef396f97c184f14224d0006d6277c6982e7afea42f650e43f31af2c79e8b53bb
 
 params:

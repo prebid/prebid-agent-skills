@@ -105,6 +105,11 @@ bidder_params_json: |
       }
     ]
   }
+bidder_params_ref:
+  path: src/main/resources/static/bidder-params/teqblaze.json
+  resolved_commit: a1fe64e123d65a3eb146787e93790ddabb3b4988
+  sha256: cf4b60b8f32e1379fe25290858433b8f03041384eabca6380dad1c91b0363f2a
+  bytes: 584
 bidder_params_sha256: cf4b60b8f32e1379fe25290858433b8f03041384eabca6380dad1c91b0363f2a
 
 params:
