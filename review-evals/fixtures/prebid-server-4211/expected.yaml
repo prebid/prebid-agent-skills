@@ -41,3 +41,15 @@ forbidden:
       the Prebid.js bidder name; adtg_org merged with the underscore intact. As
       above, the forbidden verdict is a blocking one; observing the underscore at
       INFO is tolerated.
+
+# Findings this repo's own documented rules require, that no maintainer raised on
+# this PR. A citation must match the rule AS CURRENTLY SCOPED, not merely name it;
+# see review-evals/README.md for the two ordering rules.
+additional:
+  - id: adtg-alias-omits-maintainer-email
+    path: static/bidder-info/adtg_org.yaml
+    anchor: 'aliasOf: "limelightDigital"'
+    family: maintainer-metadata
+    severity: WARN
+    rule: >-
+      bidder-info-pr-review/SKILL.md:175 step 6 — alias completeness, maintainer.email. WARN is the sanctioned severity when the alias appears to be an independent organization; the heuristic is a distinct endpoint domain not sharing a stem with the parent's, and adtarget.org does not share one with the parent's ortb.net

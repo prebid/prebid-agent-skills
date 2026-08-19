@@ -50,3 +50,26 @@ expected:
     why_it_matters: The invalid set never exercises a wrong-typed uid or keywords, so the JSON schema's type constraints are asserted by nothing.
 
 forbidden: []
+
+# Findings this repo's own documented rules require, that no maintainer raised on
+# this PR. A citation must match the rule AS CURRENTLY SCOPED, not merely name it;
+# see review-evals/README.md for the two ordering rules.
+#  - WARN on the `Unsupported MType` error message. The note cites "MakeBids step 4
+#    final bullet -- error messages MUST include the bid.ImpID"; no such rule text
+#    exists in the suite.
+#  - WARN on `headers.Set("X-Openrtb-Version", "2.6")`. Cross-field rule 12 does
+#    exist (bidder-info-pr-review/SKILL.md:645) but escalates to WARN "only when the
+#    adapter's own code depends on a field ConvertDownTo25 moves or clears", and the
+#    note does not establish that condition.
+#  - INFO on `NewBidderResponseWithBidsCapacity`. Step 5 says the constructor "is
+#    not required -- the capacity argument is not a finding".
+#  - WARN on no-content-response.json. Same 204 graceful-degradation exclusion as
+#    prebid-server-4287 and prebid-server-4765.
+additional:
+  - id: trustx-go-ext-struct-tag-companion
+    path: openrtb_ext/imp_trustx.go
+    anchor: Uid      int             `json:"uid"`
+    family: cross-file-consistency
+    severity: INFO
+    rule: >-
+      adapter-code-pr-review/SKILL.md:137 — cross-file JSON tag consistency when the PR includes both openrtb_ext/imp_{bidder}.go and adapter Go files; INFO at most

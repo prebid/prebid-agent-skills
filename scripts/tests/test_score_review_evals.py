@@ -821,6 +821,60 @@ class TestRealCorpus(unittest.TestCase):
 
 
 
+class TestEveryResidualIsAccountedFor(unittest.TestCase):
+    """A finding left in `unexpected` carries a written reason.
+
+    `unexpected` is the noise class, and noise nobody has looked at is
+    indistinguishable from noise somebody decided to keep. Each of the ten residual
+    findings names a rule that does not admit it — three over the sanctioned
+    severity, four citing rule text that does not exist or a condition the note does
+    not establish, two on subjects the rule explicitly calls "not a defect" / "not a
+    finding", and one carrying no citation at all.
+
+    The count is a ratchet. A new residual finding must be classified as
+    `additional` with a rule citation, or excluded with a written reason.
+    """
+
+    BULLET = "#  - "
+
+    def test_residual_count_matches_recorded_exclusions(self):
+        import importlib
+        fixtures = scorer.discover_fixtures(scorer.FIXTURES_DIR)
+        residual = recorded = 0
+        detail = []
+        for fid in sorted(fixtures):
+            actual_path = REPO_ROOT / "review-evals" / "actual" / f"{fid}.yaml"
+            if not actual_path.exists():
+                continue
+            fx = scorer.load_fixture(fid, scorer.FIXTURES_DIR)
+            res = scorer.score_fixture(fx, scorer.load_actual(actual_path, fid))
+            n = res["unexpected"]
+            text = (scorer.FIXTURES_DIR / fid / "expected.yaml").read_text(encoding="utf-8")
+            bullets = text.count(self.BULLET)
+            residual += n
+            recorded += bullets
+            if n != bullets:
+                detail.append(f"{fid}: {n} unexpected but {bullets} recorded exclusion(s)")
+        self.assertEqual([], detail,
+                         "every residual unexpected finding needs a written reason:\n  "
+                         + "\n  ".join(detail))
+        self.assertEqual(residual, recorded)
+
+    def test_the_residual_count_does_not_grow(self):
+        """Ratchet. Ten at the point the corpus was first fully classified."""
+        fixtures = scorer.discover_fixtures(scorer.FIXTURES_DIR)
+        residual = 0
+        for fid in sorted(fixtures):
+            actual_path = REPO_ROOT / "review-evals" / "actual" / f"{fid}.yaml"
+            if not actual_path.exists():
+                continue
+            fx = scorer.load_fixture(fid, scorer.FIXTURES_DIR)
+            residual += scorer.score_fixture(fx, scorer.load_actual(actual_path, fid))["unexpected"]
+        self.assertLessEqual(residual, 10,
+                             f"residual unexpected findings grew to {residual}; classify the new "
+                             f"one as additional with a rule citation, or record why it is excluded")
+
+
 class TestRuleEpochs(unittest.TestCase):
     """A rule whose upstream fact postdates a PR could not have been raised on it.
 
