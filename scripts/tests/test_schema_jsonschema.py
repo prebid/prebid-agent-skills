@@ -688,5 +688,53 @@ class TestEmittedSpecVersion(unittest.TestCase):
 
 
 
+class TestTaxonomyVersionFloor(unittest.TestCase):
+    """`behavior-taxonomy.yaml`'s `adapter_spec_version_min` is a real floor.
+
+    It was carried as "used by tooling, not rendered" with nothing reading it --
+    the same shape as `rules_version` before the renderer started emitting it.
+    The value is correct: the taxonomy's enums are unaffected by the 2.0.0 params
+    change, so 1.0.0 is genuinely the floor. Only the claim was empty, so this
+    makes it true rather than deleting the field.
+    """
+
+    def _floor(self) -> tuple[int, int, int]:
+        doc = yaml.safe_load(
+            (SHARED_DIR / "behavior-taxonomy.yaml").read_text(encoding="utf-8"))
+        raw = doc.get("adapter_spec_version_min")
+        self.assertIsInstance(raw, str, "adapter_spec_version_min must be a SemVer string")
+        parts = raw.split(".")
+        self.assertEqual(3, len(parts), f"not SemVer: {raw!r}")
+        return tuple(int(x) for x in parts)
+
+    def test_the_floor_is_semver(self):
+        self._floor()
+
+    def test_no_golden_declares_a_version_below_the_floor(self):
+        floor = self._floor()
+        goldens = sorted(
+            list((REPO_ROOT / "prebid-server-go" / "read" / "test-fixtures").glob("*.golden.spec.yaml"))
+            + list((REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures").glob("*.golden.spec.yaml")))
+        self.assertTrue(goldens, "no goldens discovered -- an empty scan is a setup error")
+        below = []
+        for f in goldens:
+            raw = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("adapter_spec_version")
+            if not isinstance(raw, str):
+                below.append(f"{f.name}: adapter_spec_version is {raw!r}")
+                continue
+            got = tuple(int(x) for x in raw.split("."))
+            if got < floor:
+                below.append(f"{f.name}: {raw} < taxonomy floor {'.'.join(map(str, floor))}")
+        self.assertEqual([], below, "\n  ".join(below))
+
+    def test_the_floor_does_not_exceed_the_current_version(self):
+        """A floor above what readers emit would reject every new spec."""
+        floor = self._floor()
+        current = tuple(int(x) for x in CURRENT_SPEC_VERSION.split("."))
+        self.assertLessEqual(floor, current,
+                             f"taxonomy floor {floor} is above the version readers emit "
+                             f"({CURRENT_SPEC_VERSION})")
+
+
 if __name__ == "__main__":
     unittest.main()
