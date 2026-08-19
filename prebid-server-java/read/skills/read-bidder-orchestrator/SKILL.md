@@ -207,7 +207,7 @@ The Java orchestrator MIRRORS the Go orchestrator's 7-step workflow but with the
 | Review expectations | per-repo | Derived from each repo's own upstream source, config, and merged-PR corpus. NO review-pattern transfer between languages, and no check keyed on reviewer identity — see `shared/review-pattern-transfer-policy.md`. Emit `cross_language.reviewer_cohort` as null; the field is inert and slated for removal in the next schema major. |
 | Skill output sharing | The schema is identical; the populated blocks differ. Both languages read the SAME `adapter-spec.md`, `behavior-taxonomy.md`, `port-translation-rules.md`. |
 
-The reviewer cohort disjointness is documented at `../../README.md` (Java suite README). When a port pair is read in both languages, the dual-spec assertions enforce R5 cross-language structural parity. Review-pattern matchers MUST be encoded per-language and never transferred — the master plan explicitly bans this.
+The reviewer cohort disjointness is documented at [`../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md`](../../../../prebid-server-go/read/skills/shared/review-pattern-transfer-policy.md) §1, with the consumer-facing summary at [`../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md`](../../../../prebid-server-go/read/skills/shared/cross-skill-integration.md) §8.4. When a port pair is read in both languages, the dual-spec assertions enforce R5 cross-language structural parity. Review-pattern matchers MUST be encoded per-language and never transferred — the master plan explicitly bans this.
 
 ## Verification
 

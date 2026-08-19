@@ -306,7 +306,7 @@ claims:
       untested code passed on a guarantee that does not exist.
     sites:
       - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
-        assert: "report-only"
+        assert: "### 5.1 Jacoco is a REPORT, not a gate"
 
   - id: java.jacoco.excludes-spring-config
     kind: enforcement
@@ -382,3 +382,36 @@ claims:
     sites:
       - path: prebid-server-java/review/skills/pr-triage-java/references/routing-rules.md
         assert: "Java PR #4573 (`rubicon` → `magnite`, merged 2026-07-27)"
+
+  - id: java.coverage.90-percent-is-required-but-unenforced
+    kind: enforcement
+    repo: java
+    enforced: true
+    artifacts: [docs/developers/contributing.md]
+    construct: "90% coverage in the changed code"
+    why: >
+      Upstream states the requirement normatively: "All pull requests must have
+      90% coverage in the changed code." It is real policy, not a PR-template
+      checkbox -- which is how this repo described it while correcting the
+      separate, and true, claim that NOTHING ENFORCES IT (see
+      java.jacoco.has-no-coverage-gate). Both halves must be stated together: a
+      reviewer has to judge coverage precisely because CI will not.
+    sites:
+      - path: prebid-server-java/review/skills/shared/framework-utilities-java.md
+        assert: "90% coverage in the changed code"
+
+  - id: go.coverage.90-percent-is-required-but-unenforced
+    kind: enforcement
+    repo: go
+    enforced: true
+    artifacts: [docs/developers/contributing.md]
+    construct: "90% coverage in the changed code"
+    why: >
+      The Go repo carries the same requirement, which this branch missed
+      entirely while registering only the 30% per-package warning in
+      check_coverage.sh. The 30% figure is a floor that emits a warning; the 90%
+      figure is the stated bar for changed code. Registering only the first made
+      the corpus look like Go had a laxer rule than Java when both state 90%.
+    sites:
+      - path: prebid-server-go/review/skills/shared/framework-utilities.md
+        assert: "90% coverage in the changed code"

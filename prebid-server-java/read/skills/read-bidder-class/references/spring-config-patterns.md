@@ -19,7 +19,6 @@ The `@Configuration` class is the entry point for Spring's Bean discovery. Canon
 ```java
 @Configuration
 @PropertySource(value = "classpath:/bidder-config/kobler.yaml", factory = YamlPropertySourceFactory.class)
-@ConditionalOnProperty(name = "adapters.kobler.enabled", havingValue = "true")
 public class KoblerConfiguration {
 
     private static final String BIDDER_NAME = "kobler";
@@ -33,20 +32,27 @@ public class KoblerConfiguration {
     @Bean
     BidderDeps koblerBidderDeps(KoblerConfigurationProperties config,
                                 CurrencyConversionService currencyConversionService,
-                                @NotBlank @Value("${external-url}") String externalUrl,
                                 JacksonMapper mapper) {
+
         return BidderDepsAssembler.<KoblerConfigurationProperties>forBidder(BIDDER_NAME)
                 .withConfig(config)
-                .usersyncerCreator(UsersyncerCreator.create(externalUrl))
                 .bidderCreator(cfg -> new KoblerBidder(
                         cfg.getEndpoint(),
                         cfg.getDevEndpoint(),
                         currencyConversionService,
                         mapper))
                 .assemble();
+
     }
 }
 ```
+
+Verbatim from `src/main/java/org/prebid/server/spring/config/bidder/KoblerConfiguration.java` on `prebid/prebid-server-java` (commit `e3ffd57`), minus the inner `KoblerConfigurationProperties` class documented in the next section.
+
+Two shapes that older revisions of this file taught are NOT part of the current API — reject them if a spec or a port emission carries them:
+
+- **`.usersyncerCreator(UsersyncerCreator.create(externalUrl))`.** `UsersyncerCreator` was deleted upstream in `2880782f` (#4464) and no longer exists. `BidderDepsAssembler`'s complete public surface is `forBidder` / `withConfig` / `bidderCreator` / `assemble` (`src/main/java/org/prebid/server/spring/config/bidder/util/BidderDepsAssembler.java:59,65,70,75`). The assembler now derives the usersyncer itself from the bidder's own YAML `usersync` block, via a private helper (`BidderDepsAssembler.java:127,132-136`) — the factory class passes nothing.
+- **`@ConditionalOnProperty` on the class, and a `@Value("${external-url}") String externalUrl` bean parameter.** Neither appears on any class under `src/main/java/org/prebid/server/spring/config/bidder/`; the `externalUrl` parameter existed only to feed the deleted `UsersyncerCreator`. Enablement is expressed in the bidder's YAML, not by a Spring conditional.
 
 ### Extraction rules
 

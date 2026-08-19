@@ -254,7 +254,7 @@ Each gate is binary (PASS/FAIL) with a documented PARTIAL state for gate 3 only.
 
 **Coverage trajectory across D3.8:** 51% (kobler v1) → 65% (kobler v2) → 76% (vungle) → 79% (aax) → 70% (adverxo) → 79% (thetradedesk) → **81%** (adkernelAdn — first to clear) → **95%** (teal canary 8 with full Phase D polish).
 
-**Direction-flipped (Go→Java).** Java side uses JaCoCo coverage; threshold is 80% for new bidders per Java contributing.md. Predicted: structural-PARTIAL-by-default for the same reasons (1 IT scenario per bidder), supplementals come from JUnit `@ParameterizedTest` instead of JSON fixtures.
+**Direction-flipped (Go→Java).** Java side uses JaCoCo coverage. Upstream asks for **90% on the changed code**, not 80% and not scoped to new bidders — `docs/developers/contributing.md:17` ("All pull requests must have 90% coverage in the changed code. Check the code coverage with your IDE or external tools."), echoed by the PR-template checkbox `.github/pull_request_template.md:34`. Nothing enforces it mechanically: JaCoCo runs `prepare-agent` + `report` only (`extra/pom.xml:325-344`), with no `check` goal and no coverage step in `pr-java-ci.yml`, so this gate is measured locally and read by a human. Predicted: structural-PARTIAL-by-default for the same reasons (1 IT scenario per bidder), supplementals come from JUnit `@ParameterizedTest` instead of JSON fixtures.
 
 ### Gate 4a — `gofmt -s -l`
 

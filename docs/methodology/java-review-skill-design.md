@@ -39,7 +39,7 @@ Mirror of the Go-side routing rules at `prebid-server-go/review/skills/pr-triage
 | Pattern | Example | Notes |
 |---|---|---|
 | `src/main/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidder.java` | Adapter implementation + helpers (request/response models, custom mappers) co-located with the class |
-| `src/test/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidderTest.java` | Unit tests (JUnit5 + AssertJ; @Test method counts feed into Jacoco gates) |
+| `src/test/java/org/prebid/server/bidder/{x}/*.java` | `…/bidder/aax/AaxBidderTest.java` | Unit tests (JUnit5 + AssertJ; what these cover drives the Jacoco report — see §5.5, which is a review expectation, not a build gate) |
 | `src/test/java/org/prebid/server/it/{X}Test.java` | `…/it/AaxTest.java` | The IT test class. Per-alias IT classes also land here (Adverxo aliases ship `AdportTest.java`, `BidsmindTest.java`, `MobuppsTest.java`) — each lives at `it/{X}Test.java` where `X` is the TitleCase classroot of the alias name |
 
 ### bidder-config-pr-review
@@ -117,7 +117,7 @@ The following Java framework features have **no Go analog** and demand reviewer 
    - `FileLength` max=2024 (5x Go's typical adapter, but bidders should still fit comfortably)
    - `MultipleVariableDeclarations`, `SimplifyBooleanExpression`, `SimplifyBooleanReturn`, `EqualsHashCode`, `MissingOverride`, `StringLiteralEquality` (`==` on strings)
    - Suppressions for `*Test.java`: `AvoidStaticImport` and `FileLength` off (AssertJ uses static imports heavily; test files can be long)
-   - **Jacoco line-coverage ≥ 90%** per `pom.xml` (D2.3 gate 3). Reviewers must confirm new code is covered.
+   - (Coverage is NOT part of this checkstyle list, and not a build gate at all — see §5.5.)
 
 4. **IT tests as a separate concept.** Go has unit tests (`{bidder}_test.go`) + JSON fixtures under `{bidder}test/exemplary/` and `supplemental/` — one test runner, multiple fixtures. Java has TWO test surfaces:
    - **Unit tests**: `src/test/java/org/prebid/server/bidder/{x}/{X}BidderTest.java` — hand-written `@Test` methods (10–50 typically), AssertJ assertions, Mockito for `JacksonMapper`/`CurrencyConversionService`. Owned by `bidder-class-pr-review`.
@@ -204,17 +204,17 @@ public class {X}Configuration {
 
     @Bean
     BidderDeps {x}BidderDeps(BidderConfigurationProperties {x}ConfigurationProperties,
-                             @NotBlank @Value("${external-url}") String externalUrl,
                              JacksonMapper mapper) {
 
         return BidderDepsAssembler.forBidder(BIDDER_NAME)
                 .withConfig({x}ConfigurationProperties)
-                .usersyncerCreator(UsersyncerCreator.create(externalUrl))
                 .bidderCreator(config -> new {X}Bidder(config.getEndpoint(), mapper))
                 .assemble();
     }
 }
 ```
+
+`forBidder` / `withConfig` / `bidderCreator` / `assemble` is the assembler's complete public surface (`BidderDepsAssembler.java:59,65,70,75` at `e3ffd57`). Earlier revisions of this document showed a `.usersyncerCreator(UsersyncerCreator.create(externalUrl))` link and the `@NotBlank @Value("${external-url}") String externalUrl` parameter that feeds it; `UsersyncerCreator` was deleted upstream in `2880782f` (#4464), and the assembler now derives the `Usersyncer` from the bidder's own YAML `usersync` block (`BidderDepsAssembler.java:127,132-136`). A review skill must flag that chain link as a compile error, not accept it.
 
 Variations:
 - **Filename naming.** Upstream uses BOTH `{X}Configuration.java` (e.g., `AaxConfiguration`, `KoblerConfiguration`) AND `{X}BidderConfiguration.java` (e.g., `AdverxoBidderConfiguration`). The bidder-config skill must accept either form; reviewers should NOT flag the choice but MUST flag when the internal `public class` name does not match the filename (checkstyle `OuterTypeFilename` enforces this, but reviewers should pre-flag because the F-new-79 trap shows port-go2java emits this wrong).
@@ -236,7 +236,11 @@ Variations:
 
 ### 5.5 Jacoco
 
-Line coverage ≥ 90% per `pom.xml` (Jacoco plugin). Per-method coverage not enforced (`MethodLength` checkstyle is separately enforced). New code must clear this gate; reviewers should flag when a PR adds a method without a corresponding test.
+Upstream asks for **90% coverage on the changed code**, and says so twice: `docs/developers/contributing.md:17` ("All pull requests must have 90% coverage in the changed code. Check the code coverage with your IDE or external tools.") and the PR-template checkbox `.github/pull_request_template.md:34` ("Does your test coverage exceed 90%?").
+
+It is a **human requirement, not a build gate.** Jacoco is wired for measurement only: the parent pom declares exactly two executions, `prepare-agent` and `report` (`extra/pom.xml:325-344`), and the root `pom.xml:516-531` adds only `<configuration>` (a `skip` flag plus package excludes). There is no `check` goal and no `<rules>`/`<limit>` block anywhere, and `.github/workflows/pr-java-ci.yml` runs no coverage step — so coverage cannot fail CI. The contrast is deliberate and visible in the same file: checkstyle DOES bind `<goal>check</goal>` (`extra/pom.xml:302`), which is what a real hard gate looks like in this pom.
+
+Consequences for a review skill: never report coverage as "CI will catch it". The reviewer IS the enforcement — flag a PR that adds a method without a corresponding test, and read the coverage number from a local `mvn` run or an IDE rather than expecting a red check. Per-method coverage is not measured at all (`MethodLength` checkstyle is a separate, unrelated rule).
 
 ### 5.6 mvn-checkstyle (canonical ruleset, summarized)
 

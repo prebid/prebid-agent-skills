@@ -1,6 +1,6 @@
 # Adapter Code Patterns (read-time classification)
 
-Read-time classification rules that map Go source-code shapes to Adapter Specification enum values. The master-truth canonical helpers (`EndpointTemplateParams` 18-field list, `errortypes.*` constructors, `jsonutil.*` helpers, `adapters.*` status helpers) are documented at [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md) — this file does NOT re-list them. The review-time prescriptions for the same code live at [../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md](../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md).
+Read-time classification rules that map Go source-code shapes to Adapter Specification enum values. The master-truth canonical helpers (`EndpointTemplateParams` 22-field list, `errortypes.*` constructors, `jsonutil.*` helpers, `adapters.*` status helpers) are documented at [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md) — this file does NOT re-list them. The review-time prescriptions for the same code live at [../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md](../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md).
 
 This file is the read-time companion: which structural cue maps to which spec enum value. It is consumed by `read-adapter-code/SKILL.md` Steps 5–8.
 
@@ -131,7 +131,7 @@ The kind is semantic (cross-language); the mechanism is Go-specific implementati
 | `dev-prod-toggle` | Endpoint chosen between two literal URLs based on a request-time flag (kobler). | `string-concat` (no template engine) |
 | `custom` | Anything else. REQUIRES a quirk entry. | language-specific |
 
-`macro_field_set` lists the subset of `macros.EndpointTemplateParams` 18 fields actually substituted (the canonical 18-field list is at [../../../../review/skills/shared/framework-utilities.md#endpoint-template-macros](../../../../review/skills/shared/framework-utilities.md#endpoint-template-macros)). `template_params_struct_field_count` records `len(macro_field_set)`.
+`macro_field_set` lists the subset of `macros.EndpointTemplateParams` 22 fields actually substituted (the canonical machine-readable list is at [../../shared/endpoint-macros.yaml](../../shared/endpoint-macros.yaml) `go_template_macros`; the annotated table is at [../../../../review/skills/shared/framework-utilities.md#endpoint-template-macros](../../../../review/skills/shared/framework-utilities.md#endpoint-template-macros)). `template_params_struct_field_count` records `len(macro_field_set)`.
 
 ### `currency.{converts_currency, conversion_helper, overwrite_safety}` (in `make_requests`)
 
@@ -240,7 +240,7 @@ If no lookup is performed: `storage_kind: none` and all other fields null (defau
 
 ## Cross-references
 
-- Master-truth helpers + 18-field macro list + error type taxonomy + anti-pattern list: [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md).
+- Master-truth helpers + 22-field macro list + error type taxonomy + anti-pattern list: [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md).
 - Review-time prescriptions for the same code: [../../../../review/skills/adapter-code-pr-review/SKILL.md](../../../../review/skills/adapter-code-pr-review/SKILL.md), [../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md](../../../../review/skills/adapter-code-pr-review/references/adapter-code-index.md).
 - Canonical schema with worked Kobler example: [../../shared/adapter-spec.md](../../shared/adapter-spec.md).
 - Enum source-of-truth: [../../shared/behavior-taxonomy.md](../../shared/behavior-taxonomy.md).

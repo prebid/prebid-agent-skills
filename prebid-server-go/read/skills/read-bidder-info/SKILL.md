@@ -12,7 +12,7 @@ This skill parses a single `static/bidder-info/{xyz}.yaml` file from `prebid/pre
 
 1. Recognizes every canonical `BidderInfo` Go-struct field — full list mastered in [../../../review/skills/bidder-info-pr-review/references/field-index.md](../../../review/skills/bidder-info-pr-review/references/field-index.md). This skill REUSES that index; it does NOT re-list the fields.
 2. Classifies the endpoint URL into a deterministic `endpoint_construction.kind` enum.
-3. Detects `EndpointTemplateParams` macro usage — the canonical 18-field set lives in [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section). Do NOT re-enumerate.
+3. Detects `EndpointTemplateParams` macro usage — the canonical machine-readable field set lives in [../shared/endpoint-macros.yaml](../shared/endpoint-macros.yaml) (`go_template_macros`, 22 entries); the annotated table is in [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section). Do NOT re-enumerate.
 4. Detects deploy-time placeholder tokens (`#{REGION}#`) distinct from runtime macros.
 5. Detects YAML field-name typo regressions (`endpointCompression` vs `endpoint-compression`).
 6. Preserves unknown YAML keys verbatim under `yaml_extra_fields` so round-trip writes can reconstruct the file byte-for-byte.
@@ -76,9 +76,9 @@ Note: this skill only reads the YAML. Detection of patterns that require adapter
 ### Step 4: Detect macros (`endpoint_construction.macros_used[]` + `macro_syntax`)
 
 - Regex-extract every `{{.<Identifier>}}` substring from the `endpoint:` string.
-- For each captured identifier, check membership against the canonical 18-field set documented at [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section — fields: `Host`, `PublisherID`, `ZoneID`, `SourceId`, `AccountID`, `AdUnit`, `MediaType`, `GvlID`, `PageID`, `SupplyId`, `ImpID`, `SspId`, `SspID`, `SeatID`, `TokenID`, `PartnerId`, `Region`, `PlacementID`).
-- Identifiers in the canonical 18-field list -> append the BARE identifier (no `{{.X}}` wrapper) to `endpoint_construction.macros_used[]`. The delimiter convention is captured separately via `endpoint_construction.macro_syntax`.
-- Identifiers NOT in the canonical 18-field list -> append the bare identifier to `endpoint_construction.placeholders_unresolved[]` AND emit warning of type `endpoint-placeholder-unresolved` (Validation Rule R8). These will silently resolve to empty string at runtime.
+- For each captured identifier, check CASE-SENSITIVE membership against the canonical 22-field set. The machine-readable list is [../shared/endpoint-macros.yaml](../shared/endpoint-macros.yaml) (`go_template_macros`); the annotated table is at [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md) (Endpoint Template Macros section). Both track `macros.EndpointTemplateParams` at `macros/macros.go:9-32`. Read the set from the YAML — do not re-enumerate it here.
+- Identifiers in the canonical 22-field list -> append the BARE identifier (no `{{.X}}` wrapper) to `endpoint_construction.macros_used[]`. The delimiter convention is captured separately via `endpoint_construction.macro_syntax`.
+- Identifiers NOT in the canonical 22-field list -> append the bare identifier to `endpoint_construction.placeholders_unresolved[]` AND emit warning of type `endpoint-placeholder-unresolved` (Validation Rule R8). These do NOT resolve to an empty string: `text/template` fails the field lookup, so `config.validateAdapterEndpoint` (`config/bidderinfo.go:492-507`) records an error and `TestBidderInfoFiles` fails — the adapter cannot ship in this state.
 - Set `endpoint_construction.macro_syntax`:
   - `go-template` when the source endpoint uses `{{.Identifier}}` form (Go canonical) — applies to all Go-source specs.
   - `null` when `macros_used` is empty.
@@ -170,7 +170,7 @@ This skill covers the following Go edge cases:
 | Edge case | Plan ref | Captured by |
 |---|---|---|
 | Three endpoint construction routes (static, template-macro, custom-toggle) | Go #10 | `bidder_info.endpoint_construction.kind` (Step 3) |
-| EndpointTemplateParams macro field usage | Go #16 | `endpoint_construction.macros_used[]` (Step 4); subset of the canonical 18-field set |
+| EndpointTemplateParams macro field usage | Go #16 | `endpoint_construction.macros_used[]` (Step 4); subset of the canonical 22-field set |
 | Deploy-time tokens (`#{REGION}#`) | Cross-language | `endpoint_construction.placeholders_unresolved[]` + spec-top-level `deploy_time_tokens[]` (Step 5) |
 | `endpoint-compression` typo regression | Java #34 / Cross-language | Step 8 typo registry |
 | `default_enabled` (Java opt-in pattern) | Java #30 | Step 2 emits `bidder_info.default_enabled` (Go YAMLs typically never trigger this; default `true`) |
@@ -231,7 +231,8 @@ read-adapter-orchestrator --bidder=ogury-typo-test --source-mode=local --format=
 - Taxonomy: [../shared/behavior-taxonomy.md](../shared/behavior-taxonomy.md) (the `quirks edge_case_taxon` registry — `yaml-field-name-typo`, `endpoint-compression-typo`).
 - Port translation rules: [../shared/port-translation-rules.md](../shared/port-translation-rules.md) (Rule 34 — YAML unification asymmetry; Rule 14 / Rule 11–15 — endpoint resolution; Rule 33 — aliases inversion).
 - Field index (master truth for `BidderInfo` Go struct): [../../../review/skills/bidder-info-pr-review/references/field-index.md](../../../review/skills/bidder-info-pr-review/references/field-index.md). REUSED — not duplicated.
-- Framework utilities (master truth for `EndpointTemplateParams` 18-field list, deploy-time-token policy, endpointCompression case-sensitivity): [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md). REUSED — not duplicated.
+- Endpoint macros (canonical machine-readable `EndpointTemplateParams` field set, 22 entries): [../shared/endpoint-macros.yaml](../shared/endpoint-macros.yaml) (`go_template_macros`). REUSED — not duplicated.
+- Framework utilities (annotated `EndpointTemplateParams` table, deploy-time-token policy, endpointCompression case-sensitivity): [../../../review/skills/shared/framework-utilities.md](../../../review/skills/shared/framework-utilities.md). REUSED — not duplicated.
 - Sibling review skill: [../../../review/skills/bidder-info-pr-review/SKILL.md](../../../review/skills/bidder-info-pr-review/SKILL.md).
 - Endpoint classification decision tree: [references/endpoint-classification.md](references/endpoint-classification.md).
 - Golden specs:

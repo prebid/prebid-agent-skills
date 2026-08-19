@@ -450,7 +450,7 @@ sections:
       }
       ```
 
-      **Notes**: Go parses the template at Builder time (signal: `template_parsed_at_build: true` in spec). Java uses string replace. The macro field set MUST be a subset of `macros.EndpointTemplateParams` (18-field list — see `review/skills/shared/framework-utilities.md`). When porting, a porter must verify the Java `replace()` covers ALL macros the Go template accepts — silent missing macros resolve to empty string at runtime.
+      **Notes**: Go parses the template at Builder time (signal: `template_parsed_at_build: true` in spec). Java uses string replace. The macro field set MUST be a subset of `macros.EndpointTemplateParams` (22-field list — canonical machine-readable copy at `read/skills/shared/endpoint-macros.yaml` `go_template_macros`; annotated table at `review/skills/shared/framework-utilities.md`). When porting, a porter must verify the Java side supplies EVERY macro the endpoint declares. Neither language degrades quietly on a missing macro: Go's `text/template` fails the field lookup so `config.validateAdapterEndpoint` (`config/bidderinfo.go:492-507`) rejects the endpoint, and Java's `Uri.expand()` (`org/prebid/server/util/Uri.java:134-135`) expands with `ExpandOptions.setAllowVariableMiss(false)` and throws `NoSuchElementException`.
   - id: 12
     title: Query parameter augmentation
     pattern: Endpoint URL has query params appended at request time.
@@ -1647,7 +1647,7 @@ summary: |-
   - **Read skills** — emit specs that satisfy the rules' field drivers; flag quirks for cross-language asymmetries that cannot be auto-translated.
   - **Future `diff-spec` skill** — compares two specs for the same bidder across commits or languages, citing rule numbers in the output.
 
-  For framework-level reference (helpers, error types, anti-patterns, EndpointTemplateParams 18-field list), see `review/skills/shared/framework-utilities.md`. For canonical schema, see `adapter-spec.md`. For enumerated values used in the spec, see `behavior-taxonomy.md`.
+  For framework-level reference (helpers, error types, anti-patterns, EndpointTemplateParams 22-field list — canonical machine-readable copy at `read/skills/shared/endpoint-macros.yaml`), see `review/skills/shared/framework-utilities.md`. For canonical schema, see `adapter-spec.md`. For enumerated values used in the spec, see `behavior-taxonomy.md`.
 sources:
 - 'Phase 2 reconnaissance findings (in conversation): 17 Go edge cases + 17 Java edge cases identified across `optidigital,
   kobler, 33across, mediasquare, msft, appnexus, adkernel` (Go) and `kobler, adverxo, ogury, feedad, seedtag, optidigital,

@@ -110,7 +110,7 @@ states).
 - `mvn -B compile --file extra/pom.xml`: passes
 - `mvn -B checkstyle:check`: passes
 - `mvn -B test -Dtest={Bidder}BidderTest`: passes
-- Jacoco line-coverage on `{Bidder}Bidder.java`: {N}% (≥ 90% required by upstream Quality check)
+- Jacoco line-coverage on `{Bidder}Bidder.java`: {N}% (≥ 90%, the level upstream asks contributors to self-certify — `docs/developers/contributing.md:17` and the PR-template checkbox; measured locally, since no CI job checks it)
 - `{Bidder}Test` integration test scenarios: {list of fixture pair names}
 - Pre-submit rebase against `master` at `{pre_submit_rebase.base_sha_at_submit}`: clean (no conflicts)
 

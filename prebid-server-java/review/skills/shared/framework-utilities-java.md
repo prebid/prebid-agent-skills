@@ -619,11 +619,17 @@ Consequence: **a coverage shortfall cannot fail CI, and reviewers MUST NOT write
 
 ### 5.2 Where the 90% figure actually comes from
 
-`.github/pull_request_template.md:34` — an author-attested checkbox under "🏎 Quality check":
+Upstream states it normatively, in `docs/developers/contributing.md:17`:
+
+> All pull requests must have **90% coverage in the changed code**. Check the code coverage with your IDE or external tools.
+
+`.github/pull_request_template.md:34` is the author's attestation of that rule, not the rule itself:
 
 > - [ ] Does your test coverage exceed 90%?
 
-That is the whole basis. It is a merge-bar convention (ADR-009: severity is set by the target repo's merge bar), not a mechanical control. Reviewer disposition when a PR ships an obviously untested code path:
+So there are two true statements and they must be given together. The requirement is real and normative — "self-certify with your IDE" is exactly what the contributing guide asks for, because nothing computes it in CI. And nothing enforces it: jacoco is report-only (§5.1) and no workflow runs a coverage step. Describing the 90% as merely a checkbox understates a genuine merge-bar requirement; describing it as a gate overstates a control that does not exist.
+
+The practical consequence for a reviewer: coverage is **yours to judge**, precisely because CI will not do it for you. Reviewer disposition when a PR ships an obviously untested code path:
 
 - **INFO / NOTE** by default — cite the PR-template checkbox, ask the author to confirm it.
 - **WARN / ASK** when a *specific* changed branch in `{X}Bidder.java` has no corresponding `@Test` — name the branch, not a percentage.

@@ -314,7 +314,7 @@ D2 considers the skill production-ready only when, for each MVP pair:
 
 1. Emitted Java compiles cleanly via `mvn -B compile --file extra/pom.xml`.
 2. Emitted unit tests pass via `mvn -B test -Dtest={Bidder}BidderTest`.
-3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90%.
+3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90%. This is OUR acceptance bar, measured from a local `mvn` run. It matches the level upstream asks contributors to self-certify (`docs/developers/contributing.md:17`; PR-template checkbox), but upstream declares Jacoco `prepare-agent` + `report` only (`extra/pom.xml:325-344`) with no `check` goal and no coverage step in `pr-java-ci.yml` — so a green upstream CI run is not evidence for this gate.
 4. `mvn -B checkstyle:check` exits 0.
 5. Runtime validation via Java's `BidderParamValidator.java` accepts the emitted bidder-params JSON. NOTE: the literal schema files `bidder-info-schema.json` and `static/bidder-params/_schema.json` referenced in earlier drafts of `docs/execution-plan-phase-d.md` §183 do NOT exist in upstream `prebid-server-java`; Java validates via runtime code, not JSON schema files. Tracked as F-new-62 (LOW; doc gap, not a SKILL defect). For D2.8 this gate is N/A pending an execution-plan rewrite to invoke `BidderParamValidator` at mvn-test time.
 6. `port-report.json` schema-validates against `port-report.schema.json` v0.2.0.

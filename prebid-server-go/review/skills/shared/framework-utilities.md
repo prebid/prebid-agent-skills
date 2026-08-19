@@ -513,6 +513,16 @@ Unacceptable: full URL from `imp.ext` or other publisher-controlled input. **Sev
 
 ---
 
+## Test coverage — required, not enforced
+
+Upstream states the bar in `docs/developers/contributing.md:22`:
+
+> All pull requests must have **90% coverage in the changed code**. Check the code coverage with: `./scripts/coverage.sh --html`
+
+Nothing enforces it. `./validate.sh --cov` runs `scripts/check_coverage.sh`, whose `COV_MIN=30` produces a *warning* line per package and never exits non-zero, so a PR at 40% coverage passes CI while failing the stated requirement. The 30% figure is a floor that emits a warning; the 90% figure is the requirement for changed code. They are different numbers doing different jobs, and neither blocks a merge.
+
+Reviewer disposition: judge coverage on the changed code and cite `contributing.md`. Never assert that CI enforces it, and never treat a green `validate` job as evidence of coverage.
+
 ## Maintainer email policy
 
 `static/bidder-info/{bidder}.yaml` `maintainer.email`:
