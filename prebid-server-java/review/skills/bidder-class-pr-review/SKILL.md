@@ -202,7 +202,10 @@ After all tasks are complete, produce a review summary:
 - Files changed (with category: added/modified/removed)
 - Items changed per file
 - Verification steps executed
-- Issues found (critical / warning / info)
+- Issues found (critical / warning / info). Record each with the quoted line it is
+  anchored on and its check family, so a recorded run can be scored against
+  `review-evals/` — a finding with no anchor cannot be matched to anything, and a
+  whole-file finding with no family cannot be matched at all.
 - Cross-skill concerns surfaced (forwarded to `bidder-config-pr-review` or `bidder-params-java-pr-review` as appropriate)
 - Cross-language port-fidelity findings (when `prior_source_spec` was loaded)
 - Recommendation: **approve** / **request changes** / **comment**
@@ -294,6 +297,20 @@ Java's analog of Go's `Builder` function is the public constructor — Spring DI
 5. **Package-private visibility**: Private helpers should be `private` unless tests need access. Package-private is acceptable for test-targeted helpers; `protected` / `public` on a helper is a **WARN** unless justified.
 6. **Static when possible**: Helpers that don't reference `this` (instance fields) should be `static` (canonical AdkernelAdn: `validateImp`, `dispatchImpressions`, `compatImpression`, `createBidRequest`). Non-static helpers that don't reference `this` are a **WARN** — minor but consistent reviewer feedback.
 7. **No dead or commented-out code**: Blocks of commented-out Java code are a **WARN** — should be deleted, not commented. Debug-print remnants (`System.out.println`, `log.debug` with local variables) are banned in production paths.
+8. **Helper name matches the local convention** (family `naming-conventions`): an imp-ext parse helper is `parseImpExt`. Counted at `e3ffd57`: 152 bidder classes declare `parseImpExt`, 18 `parseExtImp`, 13 `parseAndValidateImpExt`, and **zero** carry a `try` prefix — returning `null` on failure is what these helpers already do, so `tryX` adds a prefix the corpus does not use. Flag a novel spelling as **INFO** with the count, never as a blocker; the convention is strong but it is a convention. Regenerate:
+
+   ```bash
+   git grep -lP '\bparseImpExt\s*\(' -- 'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | wc -l
+   git grep -hoP "private\s+(?:static\s+)?\S+\s+(\w*[Pp]arse\w*)\s*\(" \
+     -- 'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | sort | uniq -c | sort -rn
+   ```
+
+9. **Redundant construction**: three shapes, each **INFO**, each requiring the method body AND its caller to be read — a grep cannot decide any of them, and none is a blocker. All three were raised on one PR (`prebid/prebid-server-java#4428`) and none was caught by this suite before this check existed:
+
+   - **A builder that reproduces its input** (family `framework-idiom`). `modifyImpExt` rebuilt an identical object when its one conditional input was null (`.gpid(adSlot != null ? adSlot : impExt.getGpid())` with every other field copied). Returning the input unchanged lets the caller skip the `imp.toBuilder()` rebuild entirely. Ask: on some input path, does this builder produce a value equal to what it was given?
+   - **A guard for a state the path cannot reach** (family `error-handling`). `Stream.ofNullable(bidResponse)` guarded a value produced by a helper whose only failure mode is a throw — `decodeBodyToBidResponse` returns `mapper.decodeValue(...)` or raises `PreBidException`, so `null` never arrives. The guard is not merely redundant: it says the method handles a case it does not, which is why the reviewer flagged it. Note the distinction — 225 bidder classes DO guard `bidResponse == null`, and they are right to, because their value comes from somewhere that can yield null. What decides it is where the value came from, not the guard.
+   - **A local bound once and used once** (family `framework-idiom`). `makeHeaders` bound `final Device device = request.getDevice();` and then read it a single time. Inline it, or keep the local only when it is used more than once or the expression is long enough that naming it helps.
+
 
 ### Workflow: Adapter Field Changed
 

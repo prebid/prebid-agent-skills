@@ -613,3 +613,41 @@ claims:
     sites:
       - path: prebid-server-go/read/skills/shared/behavior-taxonomy.yaml
         assert: zero instances after it
+
+  # ---------------------------------------------------------------------------
+  # The imp-ext parse-helper naming convention. The Java review suite had no
+  # naming check at all and missed a `tryParseImpExt` on prebid-server-java#4428;
+  # the count is what makes the check citable rather than an assertion of taste.
+  - id: java.bidder.parse-imp-ext-helper-name
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    mode: files
+    pattern: '\bparseImpExt\s*\('
+    expect: 155
+    why: >
+      152 declare it as a private helper and three more reference it, against 18
+      `parseExtImp` and 13 `parseAndValidateImpExt`. What must not drift is that a
+      `try` prefix has no instance -- these helpers already return null on
+      failure, so the prefix names something the corpus does not distinguish.
+    regenerate: |
+      git grep -lP '\bparseImpExt\s*\(' \
+        -- 'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | wc -l
+    sites:
+      - path: prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md
+        assert: 152 bidder classes declare `parseImpExt`
+
+  - id: java.bidder.no-try-prefixed-parse-helper
+    kind: absence
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    absent: 'tryParseImpExt'
+    why: >
+      The spelling the review missed. Pinned as absent so the INFO check keeps a
+      referent: if a `try`-prefixed helper ever merges, the convention changed and
+      the check should soften rather than keep citing a count.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md
+        assert: '**zero** carry a `try` prefix'
