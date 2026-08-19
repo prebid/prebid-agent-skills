@@ -1,6 +1,6 @@
 ---
 name: port-java2go
-description: Translates a Java-source Adapter Spec (prebid-server-java/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/java/{bidder}.yaml) into Go artifacts under prebid-server-go/adapters/{bidder}/ plus paired YAML, bidder-params, exemplary fixtures, and registry entries. USE WHEN porting a new (or existing) Java bid adapter to the Go codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
+description: Translates a Java-source Adapter Spec (prebid-server-java/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/java/{bidder}.yaml) into Go artifacts under prebid-server-go/adapters/{bidder}/ plus paired YAML, bidder-params, exemplary fixtures, and registry entries. USE WHEN porting a new (or existing) Java bid adapter to the Go codebase. Walks the 49 port-translation rules, applies the 7-step pipeline, emits port-report.json.
 version: 1.0.0
 ---
 
@@ -22,7 +22,7 @@ version: 1.0.0
 
 ## What this skill does
 
-Takes a structured Java-source Adapter Spec (read by `prebid-server-java/read/skills/read-bidder-orchestrator`) and emits the Go artifacts that satisfy R5-strict cross-language equivalence at port time. Applies the 46 port-translation rules from `../read/skills/shared/port-translation-rules.yaml` in **inverse direction** (Java → Go). Emits a `port-report.json` documenting what was applied, what was novel, and what needs human review.
+Takes a structured Java-source Adapter Spec (read by `prebid-server-java/read/skills/read-bidder-orchestrator`) and emits the Go artifacts that satisfy R5-strict cross-language equivalence at port time. Applies the 49 port-translation rules from `../read/skills/shared/port-translation-rules.yaml` in **inverse direction** (Java → Go). Emits a `port-report.json` documenting what was applied, what was novel, and what needs human review.
 
 **Source** (this skill consumes): `prebid-server-java/read/specs/{bidder}/latest.yaml`, or transient at `.tmp/full-loop/{run-id}/java/{bidder}.yaml` when running under the Teal flow.
 
@@ -308,7 +308,7 @@ These two states are direction-specific — a `fail-source-omits` in one directi
 ```json
 {
   "port_report_version": "0.2.0",
-  "port_translation_rules_version": "0.3.0",
+  "port_translation_rules_version": "0.4.0",
   "port_run": {
     "run_id": "2026-05-05T0426Z-9f2a",
     "source_lang": "java",
@@ -375,7 +375,7 @@ D3 considers the skill production-ready only when, for each MVP pair:
 
 - **Design doc**: [`../../docs/methodology/port-skills-design.md`](../../docs/methodology/port-skills-design.md) — 7-step pipeline + conflict resolution + novel-pattern handling.
 - **Execution plan**: [`../../docs/execution-plan-phase-d.md`](../../docs/execution-plan-phase-d.md) — D3 acceptance criteria + per-pair expectations.
-- **Rules corpus**: [`../read/skills/shared/port-translation-rules.yaml`](../read/skills/shared/port-translation-rules.yaml) — 46 rules at v0.3.0; the SKILL pins to this version. 0.3.0 restates Rule 38 as materialise-from-`bidder_params_ref`: a skill pinned at 0.2.0 would copy an inline string that is now non-normative. Round-Trip Safety section pre-declares lossy-direction asymmetries.
+- **Rules corpus**: [`../read/skills/shared/port-translation-rules.yaml`](../read/skills/shared/port-translation-rules.yaml) — 49 rules at v0.4.0; the SKILL pins to this version. 0.4.0 adds Rules 47 (grouped-by-key imp batching), 48 (param-derived endpoint macros) and 49 (opposite-framework-default config keys). 0.3.0 restates Rule 38 as materialise-from-`bidder_params_ref`: a skill pinned at 0.2.0 would copy an inline string that is now non-normative. Round-Trip Safety section pre-declares lossy-direction asymmetries.
 - **Output schema**: [`../read/skills/shared/port-report.schema.json`](../read/skills/shared/port-report.schema.json) — port-report contract (v0.2.0).
 - **Source-spec schema**: [`../read/skills/shared/adapter-spec.schema.json`](../read/skills/shared/adapter-spec.schema.json) — what the source spec must satisfy.
 - **R5 lib**: [`../../scripts/lib/r5_check.py`](../../scripts/lib/r5_check.py) — R5 comparator (Phase D0.1).

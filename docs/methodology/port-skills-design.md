@@ -13,7 +13,7 @@ Status: **proposed design** (Phase D not yet started; no implementation in this 
 | `port-java2go` | Java → Go | `prebid-server-java/read/specs/{bidder}/latest.yaml` (or `.tmp/full-loop/{run-id}/java/{bidder}.yaml`) | `prebid-server-go/adapters/{bidder}/**/*.go` plus YAML/static files plus tests | `prebid-server-go/port-java2go/SKILL.md` (lives under the Go tree because it produces Go artifacts; the SOURCE is Java but the artifact-language is Go) |
 | `port-go2java` | Go → Java | `prebid-server-go/read/specs/{bidder}/latest.yaml` (or transient) | `prebid-server-java/src/main/java/org/prebid/server/bidder/{bidder}/**/*.java` plus YAML plus IT fixtures | `prebid-server-java/port-go2java/SKILL.md` |
 
-**Scope** (in scope for both): take a structured Adapter Specification and emit the destination-language artifacts that satisfy R5-strict cross-language equivalence at port time. Apply the 46 port-translation rules. Emit a `port-report.json` documenting what was applied, what was novel, and what needs human review.
+**Scope** (in scope for both): take a structured Adapter Specification and emit the destination-language artifacts that satisfy R5-strict cross-language equivalence at port time. Apply the 49 port-translation rules. Emit a `port-report.json` documenting what was applied, what was novel, and what needs human review.
 
 **Out of scope**: writing new adapters from scratch (that's `write/`, future); reviewing the ported code post-merge (that's `review/`, future composition); cross-language regression detection (that's `pr-triage` via `prior_source_spec`, see Wave 5).
 

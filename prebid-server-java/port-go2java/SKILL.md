@@ -1,6 +1,6 @@
 ---
 name: port-go2java
-description: Translates a Go-source Adapter Spec (prebid-server-go/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/go/{bidder}.yaml) into Java artifacts under prebid-server-java/src/main/java/org/prebid/server/bidder/{bidder}/ plus paired YAML, bidder-params, IT fixtures, and Spring config. USE WHEN porting a new (or existing) Go bid adapter to the Java codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
+description: Translates a Go-source Adapter Spec (prebid-server-go/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/go/{bidder}.yaml) into Java artifacts under prebid-server-java/src/main/java/org/prebid/server/bidder/{bidder}/ plus paired YAML, bidder-params, IT fixtures, and Spring config. USE WHEN porting a new (or existing) Go bid adapter to the Java codebase. Walks the 49 port-translation rules, applies the 7-step pipeline, emits port-report.json.
 version: 0.5.0
 ---
 
@@ -10,7 +10,7 @@ version: 0.5.0
 
 ## What this skill does
 
-Takes a structured Go-source Adapter Spec (read by `prebid-server-go/read/skills/read-adapter-orchestrator`) and emits the Java artifacts that satisfy R5-strict cross-language equivalence at port time. Applies the 46 port-translation rules from `../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`. Emits a `port-report.json` documenting what was applied, what was novel, and what needs human review.
+Takes a structured Go-source Adapter Spec (read by `prebid-server-go/read/skills/read-adapter-orchestrator`) and emits the Java artifacts that satisfy R5-strict cross-language equivalence at port time. Applies the 49 port-translation rules from `../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`. Emits a `port-report.json` documenting what was applied, what was novel, and what needs human review.
 
 **Source** (this skill consumes): `prebid-server-go/read/specs/{bidder}/latest.yaml`, or transient at `.tmp/full-loop/{run-id}/go/{bidder}.yaml` when running under the Teal flow.
 
@@ -289,7 +289,7 @@ report = {
     "pre_submit_rebase": pre_submit_rebase_result_or_null,
     "human_todos": human_todos,                 # accumulated across Steps 3, 5, 6
     "unresolved_translations": unresolved_translations,
-    "port_translation_rules_version": "0.3.0",
+    "port_translation_rules_version": "0.4.0",
 }
 ```
 

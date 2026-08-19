@@ -155,13 +155,15 @@ class TestPortRulesRenderDrift(unittest.TestCase):
                         port skill pinned at 0.2.0 would copy an inline string
                         that is now non-normative -- so the pin has to move even
                         though no rule was added.
-
-        NOTE for the open PR that also claims 0.3.0 (Rules 47/48/49): this landed
-        first, so that branch rebases onto 0.4.0.
+        0.3.0 -> 0.4.0  Rules 47/48/49 added, 46 -> 49, incorporated from the F6
+                        rtbstack canary branch. Rule 48's Java example was rewritten
+                        on the way in: it carried the canary's chained String.replace
+                        with a per-parameter HttpUtil.encodeUrl, which upstream review
+                        rejected as a FAIL on the very PR the rule was minted from.
         """
         data = render_port_rules.load_yaml()
-        self.assertEqual(data["rules_version"], "0.3.0",
-                         f"Expected rules_version 0.3.0 (Rule 38 ref contract), got {data['rules_version']!r}")
+        self.assertEqual(data["rules_version"], "0.4.0",
+                         f"Expected rules_version 0.4.0 (Rules 47/48/49), got {data['rules_version']!r}")
 
     def test_render_rejects_unknown_yaml_keys(self):
         """Wave 11b B4 C4: render() must raise ValueError when the YAML grows

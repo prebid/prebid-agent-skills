@@ -795,9 +795,11 @@
             "dynamic-template-string",
             "dev-prod-toggle",
             "runtime-region-selection",
+            "param-derived-endpoint-macros",
             "multi-endpoint-by-mediatype",
             "multi-endpoint-by-shape"
-          ]
+          ],
+          "description": "`param-derived-endpoint-macros` (added 2.0.x with port-translation Rule 48): the macros are filled by PARSING a publisher-supplied param value rather than by substituting a field, and the parsed components are validated against a code-level allow-list first. Pairs with a quirk taxon of the same name."
         },
         "mechanism_go": {
           "type": [
