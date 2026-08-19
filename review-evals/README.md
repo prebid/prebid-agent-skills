@@ -26,6 +26,30 @@ scripts/tests/test_score_review_evals.py   self-tests for the scorer
 
 ---
 
+## The four dispositions
+
+An actual finding lands in exactly one of these, in this order:
+
+| class | what it means | counts toward |
+|---|---|---|
+| `expected` | a maintainer raised it on that PR | recall |
+| `forbidden` | a maintainer ruled it out. `forbidden_at_or_above: WARN` forbids only a blocking verdict, leaving a note tolerated | a hard false positive |
+| `additional` | this repo's own documented rules require it and no maintainer raised it on that PR. Each entry MUST cite the rule in `rule:` | nothing; reported |
+| `unexpected` | the residual | the false-positive ceiling |
+
+`additional` exists because the ceiling was measuring the wrong thing. On
+`prebid-server-4765` all ten findings scored as unexpected cited a rule that exists
+in the skills — the alias-GVL rule, the two re-validation anti-patterns, the
+destructive-clobber rule — so the gate was penalising the suite for finding true
+things the maintainers did not. A review assistant exceeding the human review is the
+point, not a defect.
+
+The `rule:` citation is what separates classifying a finding from raising the
+ceiling. An entry without one is an instrument error, not a pass.
+
+`additional` describes what a correct review MAY report, never what it must: an
+unreported `additional` entry does not reduce recall. Only `expected` does.
+
 ## The corpus
 
 Nine fixtures. Six Go, three Java; six carry defects a maintainer raised, three

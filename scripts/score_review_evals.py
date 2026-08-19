@@ -188,6 +188,7 @@ def load_fixture(fixture_id: str, fixtures_dir: pathlib.Path) -> dict:
         "files": files,
         "expected": expected.get("expected") or [],
         "forbidden": expected.get("forbidden") or [],
+        "additional": expected.get("additional") or [],
         "patches": {normalize_path(f["filename"]): normalize_patch(f.get("patch"))
                     for f in files},
         "neutralised_families": _neutral,
@@ -215,7 +216,14 @@ def validate_fixture(fx: dict) -> list[str]:
                 problems.append(
                     f"{fx['id']}/{key}/{entry.get('id', '?')}: anchor not present in the "
                     f"captured patch for {path}: {anchor!r}")
-    if key_dupes := _dupes([e["id"] for e in fx["expected"] + fx["forbidden"] if e.get("id")]):
+    for entry in fx["additional"]:
+        if not str(entry.get("rule") or "").strip():
+            problems.append(
+                f"{fx['id']}/{entry.get('id', '?')}: an `additional` entry must cite the "
+                f"documented rule it rests on in `rule:`. Without one it is indistinguishable "
+                f"from raising the unexpected ceiling.")
+    if key_dupes := _dupes([e["id"] for e in fx["expected"] + fx["forbidden"] + fx["additional"]
+                            if e.get("id")]):
         problems.append(f"{fx['id']}: duplicate finding ids {sorted(key_dupes)}")
     for entry in fx["forbidden"]:
         floor = entry.get("forbidden_at_or_above")
@@ -375,7 +383,10 @@ def score_fixture(fx: dict, actual: dict) -> dict:
                               "tolerated_below": want})
             del forb_matched[fid]
 
-    unexpected = [f for i, f in enumerate(remaining) if i not in forb_used]
+    after_forbidden = [f for i, f in enumerate(remaining) if i not in forb_used]
+    add_matched, add_used = assign(fx.get("additional") or [], after_forbidden)
+    additional = [f for i, f in enumerate(after_forbidden) if i in add_used]
+    unexpected = [f for i, f in enumerate(after_forbidden) if i not in add_used]
 
     # A rule whose upstream fact postdates this PR could not have been raised on
     # it. Such findings are neutralised: they do not count against the unexpected
@@ -445,6 +456,11 @@ def score_fixture(fx: dict, actual: dict) -> dict:
         "recall": recall,
         "forbidden_total": len(fx["forbidden"]),
         "forbidden_hits": sorted(forb_matched),
+        "additional_total": len(fx.get("additional") or []),
+        "additional_matched": len(add_matched),
+        "additional_detail": [
+            f"{f.get('severity')} {f.get('path')} {str(f.get('anchor'))[:60]}"
+            for f in additional],
         "tolerated": len(tolerated),
         "tolerated_detail": [
             f"{t.get('severity')} {t.get('path')} {str(t.get('anchor'))[:60]!r} "
@@ -580,6 +596,8 @@ def render_table(results: list[dict], baseline: dict, breaches: list[str]) -> st
         for u in r["unexpected_detail"]:
             lines.append(f"UNEXPECTED {r['fixture']}: {u['severity'] or '?'} {u['path']} "
                          f"{u['anchor']}")
+        for a in r.get("additional_detail") or []:
+            lines.append(f"ADDITIONAL {r['fixture']}: {a}")
         for t in r.get("tolerated_detail") or []:
             lines.append(f"TOLERATED {r['fixture']}: {t}")
     if any(r["scan_note"] or r["forbidden_hits"] or r["unexpected_detail"]

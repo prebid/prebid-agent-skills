@@ -128,3 +128,80 @@ expected:
     why_it_matters: An alias riding along with a brand-new adapter widens the PR's blast radius; the maintainer required it in its own PR after the parent merged.
 
 forbidden: []
+
+# Findings this repo's own documented rules require and no maintainer raised on
+# this PR. Counted separately from `unexpected`, which is the residual: a review
+# assistant finding something a human did not is the point, not a defect, so the
+# unexpected ceiling must not absorb it. Each entry cites the rule it rests on;
+# without a citation it is indistinguishable from raising the ceiling.
+additional:
+  - id: teal-alias-omits-gvl
+    path: static/bidder-info/tealplus.yaml
+    anchor: 'aliasOf: teal'
+    family: alias-inheritance
+    severity: WARN
+    rule: >-
+      bidder-info-pr-review/references/field-index.md — GVL vendor ID is NEVER inherited by an alias; omission where the parent has one is WARN
+  - id: teal-alias-omits-maintainer-email
+    path: static/bidder-info/tealplus.yaml
+    anchor: 'disabled: true'
+    family: maintainer-metadata
+    severity: INFO
+    rule: >-
+      bidder-info-pr-review/SKILL.md — alias maintainer.email expectations
+  - id: teal-standalone-unit-test-duplicates-json
+    path: adapters/teal/teal_test.go
+    anchor: <file>
+    family: canonical-artifacts
+    severity: WARN
+    rule: >-
+      adapter-code-pr-review — large stand-alone Go unit-test file duplicating JSON-fixture coverage
+  - id: teal-revalidates-core-validated-endpoint
+    path: adapters/teal/teal.go
+    anchor: if cfg.Endpoint == "" {
+    family: framework-idiom
+    severity: WARN
+    rule: >-
+      shared/framework-utilities.md — `if config.Endpoint == "" { return error }` in Builder; the YAML loader validates endpoint at startup
+  - id: teal-revalidates-schema-validated-params
+    path: adapters/teal/teal.go
+    anchor: if isBlank(ext.Account) {
+    family: framework-idiom
+    severity: WARN
+    rule: >-
+      adapter-code-pr-review/SKILL.md:246 — re-validating bidder-params with minLength/regex/required; schema validation runs upstream
+  - id: teal-request-key-from-first-imp
+    path: adapters/teal/teal.go
+    anchor: account = ext.Account
+    family: request-mutation
+    severity: WARN
+    rule: >-
+      adapter-code-pr-review — request-level value derived from the first valid imp while divergent siblings are ignored
+  - id: teal-destructive-write-stored-request
+    path: adapters/teal/teal.go
+    anchor: storedRequest["id"] = placementJSON
+    family: request-mutation
+    severity: WARN
+    rule: >-
+      adapter-code-pr-review/SKILL.md:252 — destructive write to caller-provided ext/JSON; document the intentional clobber
+  - id: teal-204-fixture-declares-no-expectation
+    path: adapters/teal/tealtest/supplemental/status-204.json
+    anchor: <file>
+    family: test-coverage
+    severity: WARN
+    rule: >-
+      adapter-code-pr-review — supplemental fixture declaring neither expectedMakeRequestsErrors nor expectedMakeBidsErrors
+  - id: teal-ext-struct-companion-note
+    path: openrtb_ext/imp_teal.go
+    anchor: Account   string  `json:"account"`
+    family: cross-file-consistency
+    severity: INFO
+    rule: >-
+      pr-triage/SKILL.md:362 — openrtb_ext/imp_{bidder}.go is a tracked companion artifact
+  - id: teal-invalidparams-primitive-coverage
+    path: adapters/teal/params_test.go
+    anchor: var invalidParams = []string{
+    family: test-coverage
+    severity: INFO
+    rule: >-
+      bidder-params-pr-review/SKILL.md:240 — invalidParams coverage, INFO by design (31% of upstream params_test.go carry the full primitive list)

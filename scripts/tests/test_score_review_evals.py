@@ -82,7 +82,7 @@ class HarnessTestCase(unittest.TestCase):
     # -- corpus construction ------------------------------------------------
 
     def make_fixture(self, fid="demo", outcome="defective", expected=None, forbidden=None,
-                     files=None):
+                     files=None, additional=None):
         d = self.fixtures / fid
         files = files if files is not None else [{
             "filename": "adapters/demo/demo.go", "status": "added",
@@ -101,7 +101,8 @@ class HarnessTestCase(unittest.TestCase):
             """))
         body = {"pr": "prebid/prebid-server#1",
                 "expected": expected if expected is not None else [DEFAULT_EXPECTED],
-                "forbidden": forbidden or []}
+                "forbidden": forbidden or [],
+                "additional": additional or []}
         write(d / "expected.yaml", _yaml(body))
         return fid
 
@@ -341,6 +342,71 @@ class TestFalsePositives(HarnessTestCase):
         rc = self.run_scorer()
         self.assertNotEqual(scorer.EXIT_PASS, rc,
                             "an invalid floor must not read as a clean run")
+
+    def test_an_additional_finding_is_not_unexpected(self):
+        """`additional` is what this repo's own rules require and no maintainer
+        raised on that PR.
+
+        On `prebid-server-4765` all ten so-called unexpected findings cite a rule
+        that exists in the skills — the alias GVL rule, the two re-validation
+        anti-patterns, the destructive-clobber rule, and so on. Counting them
+        against `max_unexpected` penalised the suite for finding true things the
+        human did not, which for a review assistant is the point.
+        """
+        additional = [{
+            "id": "demo-documented-but-unraised",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "rule": "shared/framework-utilities.md — the documented anti-pattern",
+        }]
+        fid = self.make_fixture(additional=additional)
+        hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+               "family": "endpoint-config", "severity": "WARN"}
+        self.write_actual(fid, [MATCHING_FINDING, hit])
+        summary = self.tmp / "summary.json"
+        rc = self.run_scorer("--json", str(summary))
+        data = json.loads(summary.read_text())
+        self.assertEqual(0, data["corpus"]["unexpected"],
+                         "a classified additional finding must not count as unexpected")
+        self.assertEqual(0, data["corpus"]["forbidden_hits"])
+        self.assertEqual(scorer.EXIT_PASS, rc)
+
+    def test_an_additional_entry_without_a_rule_citation_is_an_error(self):
+        """A citation is what separates classifying a finding from raising the
+        ceiling. Without one the class is a blank cheque."""
+        additional = [{
+            "id": "demo-uncited",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+        }]
+        fid = self.make_fixture(additional=additional)
+        self.write_actual(fid, [MATCHING_FINDING])
+        rc = self.run_scorer()
+        self.assertEqual(scorer.EXIT_ERROR, rc)
+
+    def test_an_unmatched_additional_entry_is_not_a_miss(self):
+        """`additional` describes what a correct review MAY report, not what it
+        must. Recall is measured against `expected` alone."""
+        additional = [{
+            "id": "demo-not-reported",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "rule": "shared/framework-utilities.md — the documented anti-pattern",
+        }]
+        fid = self.make_fixture(additional=additional)
+        self.write_actual(fid, [MATCHING_FINDING])
+        summary = self.tmp / "summary.json"
+        rc = self.run_scorer("--json", str(summary))
+        data = json.loads(summary.read_text())
+        self.assertEqual(1.0, data["corpus"]["recall"],
+                         "an unreported additional finding must not reduce recall")
+        self.assertEqual(scorer.EXIT_PASS, rc)
 
     def test_clean_fixture_with_no_findings_passes(self):
         """The pass arm of the false-positive gate: saying nothing about a PR
