@@ -15,9 +15,16 @@ Inputs:
       bean_param   : str  — full Spring annotation form (e.g., "CurrencyConversionService currencyConversionService")
       lambda_arg   : str  — what the bidderCreator lambda passes through (e.g., "currencyConversionService")
   ctx.bidder_creator_extra_args: str|null — additional comma-separated args for the bidderCreator's `new {Bidder}Bidder(...)` call beyond `config.getEndpoint(), mapper`
-  ctx.user_sync                : dict|null — user-sync configuration; null → omit usersyncerCreator(...) line and the externalUrl param
-                                              the bidder lambda's signature; emit usersyncerCreator(UsersyncerCreator.create(externalUrl))
-                                              when present.
+  ctx.user_sync                : dict|null — user-sync configuration. Declared in bidder-config YAML ONLY.
+                                              The Configuration class takes no usersync argument: BidderDepsAssembler
+                                              derives the Usersyncer internally from the bound properties
+                                              (`UsersyncerUtil.create`). Upstream deleted `UsersyncerCreator` in
+                                              2880782f (#4464, 2026-07-09); emitting it does not compile.
+                                              Canonical shape with usersync present: AdprimeConfiguration.java.
+  ctx.endpoint_external_url_macro : bool — endpoint template contains the {PREBID_SERVER_ENDPOINT} macro, so the
+                                              bean needs `@NotBlank @Value("${external-url}") String externalUrl`
+                                              to resolve it (canonical: AaxConfiguration.java; 4 of 255 upstream
+                                              configs). Default false — usersync does NOT require this parameter.
   ctx.javadoc_summary          : str|null  — class-level Javadoc summary; null → no Javadoc
 
 Canonical shape per references/java-artifact-shapes.md §9 (Adverxo "BidderConfiguration"
@@ -45,9 +52,10 @@ import org.prebid.server.json.JacksonMapper;
 import org.prebid.server.spring.config.bidder.model.BidderConfigurationProperties;
 {% endif %}
 import org.prebid.server.spring.config.bidder.util.BidderDepsAssembler;
-import org.prebid.server.spring.config.bidder.util.UsersyncerCreator;
 import org.prebid.server.spring.env.YamlPropertySourceFactory;
+{% if ctx.endpoint_external_url_macro %}
 import org.springframework.beans.factory.annotation.Value;
+{% endif %}
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -55,8 +63,10 @@ import org.springframework.context.annotation.PropertySource;
 {% if ctx.has_typed_config_props %}
 import org.springframework.validation.annotation.Validated;
 {% endif %}
+{% if ctx.endpoint_external_url_macro %}
 
 import jakarta.validation.constraints.NotBlank;
+{% endif %}
 
 {% set config_class = ctx.config_class_name if ctx.config_class_name else (ctx.bidder_class_root ~ 'Configuration') %}
 {% if ctx.javadoc_summary %}
@@ -90,7 +100,9 @@ public class {{ config_class }} {
 {% else %}
             BidderConfigurationProperties {{ ctx.bidder_name }}ConfigurationProperties,
 {% endif %}
+{% if ctx.endpoint_external_url_macro %}
             @NotBlank @Value("${external-url}") String externalUrl,
+{% endif %}
 {% if ctx.uses_currency_conversion %}
             CurrencyConversionService currencyConversionService,
 {% endif %}
@@ -103,7 +115,6 @@ public class {{ config_class }} {
 
         return BidderDepsAssembler.forBidder(BIDDER_NAME)
                 .withConfig({{ ctx.bidder_name }}ConfigurationProperties)
-                .usersyncerCreator(UsersyncerCreator.create(externalUrl))
                 .bidderCreator(config -> new {{ ctx.bidder_class_root }}Bidder(config.getEndpoint(){% if ctx.uses_currency_conversion %}, currencyConversionService{% endif %}{% if ctx.bidder_creator_extra_args %}, {{ ctx.bidder_creator_extra_args }}{% endif %}, mapper))
                 .assemble();
     }

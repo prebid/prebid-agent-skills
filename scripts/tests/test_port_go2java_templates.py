@@ -318,6 +318,47 @@ class TestConfigurationJ2(unittest.TestCase):
         self.assertIn("@Validated", typed)
         self.assertIn("import org.springframework.validation.annotation.Validated;", typed)
 
+    def test_never_emits_deleted_usersyncer_creator(self):
+        """`UsersyncerCreator` was deleted upstream in 2880782f (#4464,
+        2026-07-09); `BidderDepsAssembler` never had a `usersyncerCreator`
+        method. Emitting either does not compile. The Usersyncer is derived
+        internally from the bound properties, so a bidder WITH usersync still
+        gets no argument for it — canonical: AdprimeConfiguration.java, whose
+        bidder-config declares iframe+redirect usersync."""
+        ctx = _kobler_configuration_ctx()
+        ctx["user_sync"] = {
+            "cookie_family_name": "kobler",
+            "iframe": {"url": "https://sync.example.com?redir={redirect_url}"},
+        }
+        rendered = _render("configuration.java.j2", ctx)
+        self.assertNotIn("UsersyncerCreator", rendered)
+        self.assertNotIn("usersyncerCreator", rendered)
+        self.assertIn(".withConfig(koblerConfigurationProperties)", rendered)
+        self.assertIn(".bidderCreator(", rendered)
+
+    def test_external_url_param_gated_on_endpoint_macro(self):
+        """`external-url` is an endpoint-macro concern, not a usersync one:
+        4 of 255 upstream configs take it, all to resolve
+        {PREBID_SERVER_ENDPOINT} (canonical: AaxConfiguration.java). Absent the
+        flag, the parameter and BOTH of its imports must be omitted, or
+        checkstyle UnusedImports fails the build."""
+        without = _render("configuration.java.j2", _kobler_configuration_ctx())
+        self.assertNotIn("externalUrl", without)
+        self.assertNotIn("import org.springframework.beans.factory.annotation.Value;", without)
+        self.assertNotIn("jakarta", without)
+
+        ctx = _kobler_configuration_ctx()
+        ctx["endpoint_external_url_macro"] = True
+        with_macro = _render("configuration.java.j2", ctx)
+        self.assertIn('@NotBlank @Value("${external-url}") String externalUrl,', with_macro)
+        self.assertIn("import org.springframework.beans.factory.annotation.Value;", with_macro)
+        # ImportOrder groups="*,/^java|^jakarta/" — jakarta sits in the LAST group.
+        lines = with_macro.splitlines()
+        jakarta_at = next(i for i, l in enumerate(lines) if l.startswith("import jakarta."))
+        last_star_at = max(i for i, l in enumerate(lines) if l.startswith("import org."))
+        self.assertGreater(jakarta_at, last_star_at)
+        self.assertEqual("", lines[jakarta_at - 1], "jakarta group must be blank-line separated")
+
 
 def _kobler_bidder_ctx() -> Dict[str, Any]:
     """Synthetic kobler-equivalent context for bidder.java.j2.
