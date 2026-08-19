@@ -108,7 +108,7 @@ if extra_info is parseable JSON AND extra_info has key matching /(region|country
        emit warning type=endpoint-malformed-url severity=FAIL
    if endpoint_str begins with "http://":
        emit warning type=endpoint-http-not-https severity=INFO
-       # HTTP is permitted (per bsardo PR #4211) but HTTPS preferred.
+       # HTTP is permitted (PR #4211) but HTTPS preferred.
 STOP
 ```
 
@@ -324,4 +324,4 @@ Typo pass-through: the FOUND key (verbatim, with its typo'd casing) is preserved
 - Port translation rules: [../../shared/port-translation-rules.md](../../shared/port-translation-rules.md) (Rules 11–15 for endpoint resolution; Rule 33 for aliases inversion; Rule 34 for YAML unification).
 - Field index (master truth for canonical keys): [../../../../review/skills/bidder-info-pr-review/references/field-index.md](../../../../review/skills/bidder-info-pr-review/references/field-index.md).
 - Framework utilities (master truth for `EndpointTemplateParams` 18-field list and deploy-time token policy from PR #4502): [../../../../review/skills/shared/framework-utilities.md](../../../../review/skills/shared/framework-utilities.md).
-- Reviewer practice: PR #4502 (appStockSSP `#{REGION}#`); PR #4211 (`bsardo`'s HTTP-tolerance quote); Ogury `endpointCompression` regression (Java edge case 34).
+- Reviewer practice: PR #4502 (appStockSSP `#{REGION}#`); PR #4211 (HTTP-tolerance: "While https is strongly preferred, http is still permitted"); Ogury `endpointCompression` regression (Java edge case 34).

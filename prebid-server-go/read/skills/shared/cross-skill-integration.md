@@ -323,9 +323,9 @@ The Appnexus pair has the same divergence (Java spec line 21–24): Java raw SHA
 
 Consumers MUST treat R5 failures as port-fidelity warnings, not hard errors — most port pairs in the wild fail it.
 
-### 8.4 Reviewer cohort is per-language
+### 8.4 Review expectations are per-repo
 
-The Go and Java reviewer cohorts are wholly disjoint (only @bretg crosses both as cross-language coordinator). Review-pattern matchers (a hypothetical mechanism that "this reviewer always asks for X") MUST NOT be auto-transferred between languages. See [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) for the explicit ban. This affects a `pr-triage` style review skill but does NOT affect read/, write/, or port-{lang2lang}/ — those skills are language-aware by construction.
+An expectation derived from one repo's review history is evidence about that repo's merge bar only: the two servers differ in framework, test harness, style enforcement, and what CI blocks on. Review-pattern matchers (any encoding of "reviewers here always ask for X") MUST NOT be auto-transferred between languages, and review skills must not key checks on reviewer identity. Framework-agnostic defect classes DO transfer. See [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) for the explicit ban. This affects a `pr-triage` style review skill but does NOT affect read/, write/, or port-{lang2lang}/ — those skills are language-aware by construction.
 
 ### 8.5 Custom quirks may exceed the taxonomy
 
@@ -408,7 +408,7 @@ Don't translate the R-rules into per-skill `script_eval` entries. The result wou
 - Canonical schema: [`adapter-spec.md`](adapter-spec.md) — full Adapter Specification format with worked Kobler dual-spec example.
 - Port translation rules: [`port-translation-rules.md`](port-translation-rules.md) — 46 explicit Go ↔ Java rules indexed by spec field driver.
 - Behavior taxonomy: [`behavior-taxonomy.md`](behavior-taxonomy.md) — enumerated values for behavioral fields and the `quirks[].edge_case_taxon` registry.
-- Review-pattern transfer policy: [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) — disjoint reviewer-cohort finding and the transfer ban.
+- Review-pattern transfer policy: [`review-pattern-transfer-policy.md`](review-pattern-transfer-policy.md) — the per-repo transfer ban, what does and does not carry across languages, and the prohibition on encoding reviewer identity.
 - Sibling Go orchestrator: [`../read-adapter-orchestrator/SKILL.md`](../read-adapter-orchestrator/SKILL.md) — discovery, fetch, dispatch, assembly, validation, emission for prebid-server-go.
 - Sibling Java orchestrator: [`../../../../prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md`](../../../../prebid-server-java/read/skills/read-bidder-orchestrator/SKILL.md) — same role for prebid-server-java with Spring DI / unified YAML / inverted-alias / 4-file-split divergences.
 - Opt-in hook in pr-triage: [`../../../review/skills/pr-triage/SKILL.md`](../../../review/skills/pr-triage/SKILL.md) — `## Optional: Prior-Spec Comparison (read/ integration)` section.
