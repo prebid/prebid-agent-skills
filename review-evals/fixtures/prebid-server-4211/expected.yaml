@@ -1,0 +1,31 @@
+# prebid/prebid-server#4211 "New Adapter: AdTarget.org - Limelight Alias".
+#
+# CLEAN-outcome fixture. Two reviewers opened exactly the findings a
+# rule-literal reviewer would open -- an http:// endpoint and an underscore in
+# the bidder name -- and both were adjudicated as PERMITTED before merge. The
+# file merged unchanged: the review SHA 6511cc2b91da IS the merged head.
+#
+# The corpus needs this shape. Recall alone rewards a reviewer that flags
+# everything; a named non-finding is the only thing that punishes it.
+
+pr: prebid/prebid-server#4211
+review_sha: 6511cc2b91da507b3d827d266f88571ae9b5fc43
+
+expected: []
+
+forbidden:
+  - id: adtg-http-endpoint-is-permitted
+    path: static/bidder-info/adtg_org.yaml
+    anchor: 'endpoint: "http://ads-pbs.rtb.adtarget.org/openrtb/{{.PublisherID}}?host={{.Host}}"'
+    family: endpoint-config
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4211#discussion_r1989888655
+    why_it_matters: "@bsardo settled it on this line: https is strongly preferred but http is still permitted. Blocking on it contradicts the merge bar the maintainers apply."
+
+  - id: adtg-underscore-in-bidder-name-is-permitted
+    path: static/bidder-info/adtg_org.yaml
+    anchor: "<file>"
+    family: naming-conventions
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4211#discussion_r2010721315
+    why_it_matters: "@bretg ruled underscores allowed server-side for parity with the Prebid.js bidder name; adtg_org merged with the underscore intact."

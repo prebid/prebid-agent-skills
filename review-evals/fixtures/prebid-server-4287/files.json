@@ -1,0 +1,110 @@
+[
+  {
+    "filename": "adapters/optidigital/optidigital.go",
+    "status": "added",
+    "additions": 79,
+    "deletions": 0,
+    "changes": 79,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,79 @@\n+package optidigital\n+\n+import (\n+\t\"fmt\"\n+\t\"net/http\"\n+\n+\t\"github.com/prebid/openrtb/v20/openrtb2\"\n+\t\"github.com/prebid/prebid-server/v3/adapters\"\n+\t\"github.com/prebid/prebid-server/v3/config\"\n+\t\"github.com/prebid/prebid-server/v3/errortypes\"\n+\t\"github.com/prebid/prebid-server/v3/openrtb_ext\"\n+\t\"github.com/prebid/prebid-server/v3/util/jsonutil\"\n+)\n+\n+type adapter struct {\n+\tendpoint string\n+}\n+\n+// Builder builds a new instance of the optidigital adapter for the given bidder with the given config.\n+func Builder(bidderName openrtb_ext.BidderName, config config.Adapter, server config.Server) (adapters.Bidder, error) {\n+\tbidder := &adapter{\n+\t\tendpoint: config.Endpoint,\n+\t}\n+\treturn bidder, nil\n+}\n+\n+func (a *adapter) MakeRequests(request *openrtb2.BidRequest, requestInfo *adapters.ExtraRequestInfo) ([]*adapters.RequestData, []error) {\n+\trequestJSON, err := jsonutil.Marshal(request)\n+\tif err != nil {\n+\t\treturn nil, []error{err}\n+\t}\n+\n+\trequestData := &adapters.RequestData{\n+\t\tMethod: \"POST\",\n+\t\tUri:    a.endpoint,\n+\t\tBody:   requestJSON,\n+\t\tImpIDs: openrtb_ext.GetImpIDs(request.Imp),\n+\t}\n+\n+\treturn []*adapters.RequestData{requestData}, nil\n+}\n+\n+func (a *adapter) MakeBids(request *openrtb2.BidRequest, requestData *adapters.RequestData, responseData *adapters.ResponseData) (*adapters.BidderResponse, []error) {\n+\tif responseData.StatusCode == http.StatusNoContent {\n+\t\treturn nil, nil\n+\t}\n+\n+\tif responseData.StatusCode == http.StatusBadRequest {\n+\t\terr := &errortypes.BadInput{\n+\t\t\tMessage: \"Unexpected status code: 400. Bad request from publisher. Run with request.debug = 1 for more info.\",\n+\t\t}\n+\t\treturn nil, []error{err}\n+\t}\n+\n+\tif responseData.StatusCode != http.StatusOK {\n+\t\terr := &errortypes.BadServerResponse{\n+\t\t\tMessage: fmt.Sprintf(\"Unexpected status code: %d. Run with request.debug = 1 for more info.\", responseData.StatusCode),\n+\t\t}\n+\t\treturn nil, []error{err}\n+\t}\n+\n+\tvar response openrtb2.BidResponse\n+\tif err := jsonutil.Unmarshal(responseData.Body, &response); err != nil {\n+\t\treturn nil, []error{err}\n+\t}\n+\n+\tbidResponse := adapters.NewBidderResponseWithBidsCapacity(len(request.Imp))\n+\tbidResponse.Currency = response.Cur\n+\n+\tfor _, seatBid := range response.SeatBid {\n+\t\tfor i := range seatBid.Bid {\n+\t\t\tbidResponse.Bids = append(bidResponse.Bids, &adapters.TypedBid{\n+\t\t\t\tBid:     &seatBid.Bid[i],\n+\t\t\t\tBidType: openrtb_ext.BidTypeBanner,\n+\t\t\t})\n+\t\t}\n+\t}\n+\treturn bidResponse, nil\n+}"
+  },
+  {
+    "filename": "adapters/optidigital/optidigital_test.go",
+    "status": "added",
+    "additions": 21,
+    "deletions": 0,
+    "changes": 21,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,21 @@\n+package optidigital\n+\n+import (\n+\t\"testing\"\n+\n+\t\"github.com/prebid/prebid-server/v3/adapters/adapterstest\"\n+\t\"github.com/prebid/prebid-server/v3/config\"\n+\t\"github.com/prebid/prebid-server/v3/openrtb_ext\"\n+)\n+\n+func TestJsonSamples(t *testing.T) {\n+\tbidder, buildErr := Builder(openrtb_ext.BidderOptidigital, config.Adapter{\n+\t\tEndpoint: \"https://pbs.optidigital.com/bidder/openrtb2\",\n+\t}, config.Server{})\n+\n+\tif buildErr != nil {\n+\t\tt.Fatalf(\"Builder returned unexpected error %v\", buildErr)\n+\t}\n+\n+\tadapterstest.RunJSONBidderTest(t, \"optidigitaltest\", bidder)\n+}"
+  },
+  {
+    "filename": "adapters/optidigital/optidigitaltest/exemplary/banner.json",
+    "status": "added",
+    "additions": 107,
+    "deletions": 0,
+    "changes": 107,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,107 @@\n+{\n+  \"mockBidRequest\": {\n+    \"id\": \"request-id\",\n+    \"imp\": [\n+      {\n+        \"id\": \"imp-id\",\n+        \"banner\": {\n+          \"format\": [\n+            {\n+              \"w\": 300,\n+              \"h\": 250\n+            }\n+          ]\n+        },\n+        \"ext\": {\n+          \"bidder\": {\n+            \"publisherId\": \"p123\",\n+            \"placementId\": \"my-placement-id\"\n+          }\n+        }\n+      }\n+    ]\n+  },\n+  \"httpCalls\": [\n+    {\n+      \"expectedRequest\": {\n+        \"uri\": \"https://pbs.optidigital.com/bidder/openrtb2\",\n+        \"body\": {\n+          \"id\": \"request-id\",\n+          \"imp\": [\n+            {\n+              \"id\": \"imp-id\",\n+              \"banner\": {\n+                \"format\": [\n+                  {\n+                    \"w\": 300,\n+                    \"h\": 250\n+                  }\n+                ]\n+              },\n+              \"ext\": {\n+                \"bidder\": {\n+                  \"publisherId\": \"p123\",\n+                  \"placementId\": \"my-placement-id\"\n+                }\n+              }\n+            }\n+          ]\n+        },\n+        \"impIDs\": [\"imp-id\"]\n+      },\n+      \"mockResponse\": {\n+        \"status\": 200,\n+        \"body\": {\n+          \"id\": \"request-id\",\n+          \"seatbid\": [\n+            {\n+              \"seat\": \"958\",\n+              \"bid\": [\n+                {\n+                  \"id\": \"bid-id\",\n+                  \"impid\": \"imp-id\",\n+                  \"price\": 0.5,\n+                  \"adid\": \"29681110\",\n+                  \"adm\": \"some-test-ad\",\n+                  \"adomain\": [\n+                    \"foo.com\"\n+                  ],\n+                  \"crid\": \"29681110\",\n+                  \"h\": 250,\n+                  \"w\": 300,\n+                  \"dealid\": \"test deal\"\n+                }\n+              ]\n+            }\n+          ],\n+          \"bidid\": \"request-id\",\n+          \"cur\": \"USD\"\n+        }\n+      }\n+    }\n+  ],\n+  \"expectedBidResponses\": [\n+    {\n+      \"currency\": \"USD\",\n+      \"bids\": [\n+        {\n+          \"bid\": {\n+            \"id\": \"bid-id\",\n+            \"impid\": \"imp-id\",\n+            \"price\": 0.5,\n+            \"adid\": \"29681110\",\n+            \"adm\": \"some-test-ad\",\n+            \"adomain\": [\n+              \"foo.com\"\n+            ],\n+            \"crid\": \"29681110\",\n+            \"w\": 300,\n+            \"h\": 250,\n+            \"dealid\": \"test deal\"\n+          },\n+          \"type\": \"banner\"\n+        }\n+      ]\n+    }\n+  ]\n+}\n\\ No newline at end of file"
+  },
+  {
+    "filename": "adapters/optidigital/optidigitaltest/supplemental/bad_request.json",
+    "status": "added",
+    "additions": 63,
+    "deletions": 0,
+    "changes": 63,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,63 @@\n+{\n+  \"mockBidRequest\": {\n+    \"id\": \"request-id\",\n+    \"imp\": [\n+      {\n+        \"id\": \"imp-id\",\n+        \"banner\": {\n+          \"format\": [\n+            {\n+              \"w\": 300,\n+              \"h\": 250\n+            }\n+          ]\n+        },\n+        \"ext\": {\n+          \"bidder\": {\n+            \"publisherId\": \"p123\",\n+            \"placementId\": \"my-placement-id\"\n+          }\n+        }\n+      }\n+    ]\n+  },\n+  \"httpCalls\": [\n+    {\n+      \"expectedRequest\": {\n+        \"uri\": \"https://pbs.optidigital.com/bidder/openrtb2\",\n+        \"body\": {\n+          \"id\": \"request-id\",\n+          \"imp\": [\n+            {\n+              \"id\": \"imp-id\",\n+              \"banner\": {\n+                \"format\": [\n+                  {\n+                    \"w\": 300,\n+                    \"h\": 250\n+                  }\n+                ]\n+              },\n+              \"ext\": {\n+                \"bidder\": {\n+                  \"publisherId\": \"p123\",\n+                  \"placementId\": \"my-placement-id\"\n+                }\n+              }\n+            }\n+          ]\n+        },\n+        \"impIDs\": [\"imp-id\"]\n+      },\n+      \"mockResponse\": {\n+        \"status\": 400\n+      }\n+    }\n+  ],\n+  \"expectedMakeBidsErrors\": [\n+    {\n+      \"value\": \"Unexpected status code: 400. Bad request from publisher. Run with request.debug = 1 for more info.\",\n+      \"comparison\": \"literal\"\n+    }\n+  ]\n+}\n\\ No newline at end of file"
+  },
+  {
+    "filename": "adapters/optidigital/optidigitaltest/supplemental/no_response.json",
+    "status": "added",
+    "additions": 57,
+    "deletions": 0,
+    "changes": 57,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,57 @@\n+{\n+  \"mockBidRequest\": {\n+    \"id\": \"request-id\",\n+    \"imp\": [\n+      {\n+        \"id\": \"imp-id\",\n+        \"banner\": {\n+          \"format\": [\n+            {\n+              \"w\": 300,\n+              \"h\": 250\n+            }\n+          ]\n+        },\n+        \"ext\": {\n+          \"bidder\": {\n+            \"publisherId\": \"p123\",\n+            \"placementId\": \"my-placement-id\"\n+          }\n+        }\n+      }\n+    ]\n+  },\n+  \"httpCalls\": [\n+    {\n+      \"expectedRequest\": {\n+        \"uri\": \"https://pbs.optidigital.com/bidder/openrtb2\",\n+        \"body\": {\n+          \"id\": \"request-id\",\n+          \"imp\": [\n+            {\n+              \"id\": \"imp-id\",\n+              \"banner\": {\n+                \"format\": [\n+                  {\n+                    \"w\": 300,\n+                    \"h\": 250\n+                  }\n+                ]\n+              },\n+              \"ext\": {\n+                \"bidder\": {\n+                  \"publisherId\": \"p123\",\n+                  \"placementId\": \"my-placement-id\"\n+                }\n+              }\n+            }\n+          ]\n+        },\n+        \"impIDs\": [\"imp-id\"]\n+      },\n+      \"mockResponse\": {\n+        \"status\": 204\n+      }\n+    }\n+  ]\n+}\n\\ No newline at end of file"
+  },
+  {
+    "filename": "adapters/optidigital/optidigitaltest/supplemental/other_error.json",
+    "status": "added",
+    "additions": 63,
+    "deletions": 0,
+    "changes": 63,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,63 @@\n+{\n+  \"mockBidRequest\": {\n+    \"id\": \"request-id\",\n+    \"imp\": [\n+      {\n+        \"id\": \"imp-id\",\n+        \"banner\": {\n+          \"format\": [\n+            {\n+              \"w\": 300,\n+              \"h\": 250\n+            }\n+          ]\n+        },\n+        \"ext\": {\n+          \"bidder\": {\n+            \"publisherId\": \"p123\",\n+            \"placementId\": \"my-placement-id\"\n+          }\n+        }\n+      }\n+    ]\n+  },\n+  \"httpCalls\": [\n+    {\n+      \"expectedRequest\": {\n+        \"uri\": \"https://pbs.optidigital.com/bidder/openrtb2\",\n+        \"body\": {\n+          \"id\": \"request-id\",\n+          \"imp\": [\n+            {\n+              \"id\": \"imp-id\",\n+              \"banner\": {\n+                \"format\": [\n+                  {\n+                    \"w\": 300,\n+                    \"h\": 250\n+                  }\n+                ]\n+              },\n+              \"ext\": {\n+                \"bidder\": {\n+                  \"publisherId\": \"p123\",\n+                  \"placementId\": \"my-placement-id\"\n+                }\n+              }\n+            }\n+          ]\n+        },\n+        \"impIDs\": [\"imp-id\"]\n+      },\n+      \"mockResponse\": {\n+        \"status\": 500\n+      }\n+    }\n+  ],\n+  \"expectedMakeBidsErrors\": [\n+    {\n+      \"value\": \"Unexpected status code: 500. Run with request.debug = 1 for more info.\",\n+      \"comparison\": \"literal\"\n+    }\n+  ]\n+}\n\\ No newline at end of file"
+  },
+  {
+    "filename": "adapters/optidigital/params_test.go",
+    "status": "added",
+    "additions": 62,
+    "deletions": 0,
+    "changes": 62,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,62 @@\n+package optidigital\n+\n+import (\n+\t\"encoding/json\"\n+\t\"testing\"\n+\n+\t\"github.com/prebid/prebid-server/v3/openrtb_ext\"\n+)\n+\n+// This file actually intends to test static/bidder-params/optidigital.json\n+//\n+// These also validate the format of the external API: request.imp[i].ext.prebid.bidder.optidigital\n+\n+// TestValidParams makes sure that the optidigital schema accepts all imp.ext fields which we intend to support.\n+func TestValidParams(t *testing.T) {\n+\tvalidator, err := openrtb_ext.NewBidderParamsValidator(\"../../static/bidder-params\")\n+\tif err != nil {\n+\t\tt.Fatalf(\"Failed to fetch the json-schemas. %v\", err)\n+\t}\n+\n+\tfor _, validParam := range validParams {\n+\t\tif err := validator.Validate(openrtb_ext.BidderOptidigital, json.RawMessage(validParam)); err != nil {\n+\t\t\tt.Errorf(\"Schema rejected optidigital params: %s \\n Error: %s\", validParam, err)\n+\t\t}\n+\t}\n+}\n+\n+// TestInvalidParams makes sure that the optidigital schema rejects all the imp.ext fields we don't support.\n+func TestInvalidParams(t *testing.T) {\n+\tvalidator, err := openrtb_ext.NewBidderParamsValidator(\"../../static/bidder-params\")\n+\tif err != nil {\n+\t\tt.Fatalf(\"Failed to fetch the json-schemas. %v\", err)\n+\t}\n+\n+\tfor _, invalidParam := range invalidParams {\n+\t\tif err := validator.Validate(openrtb_ext.BidderOptidigital, json.RawMessage(invalidParam)); err == nil {\n+\t\t\tt.Errorf(\"Schema allowed unexpected params: %s\", invalidParam)\n+\t\t}\n+\t}\n+}\n+\n+var validParams = []string{\n+\t`{\"publisherId\":\"p123\",\"placementId\":\"foo-placement\"}`,\n+\t`{\"publisherId\":\"p123\",\"placementId\":\"foo-placement\",\"divId\":\"\"}`,\n+\t`{\"publisherId\":\"p123\",\"placementId\":\"foo-placement\",\"divId\":\"foo-div\"}`,\n+\t`{\"publisherId\":\"p123\",\"placementId\":\"foo-placement\",\"divId\":\"foo-div\",\"pageTemplate\":\"\"}`,\n+\t`{\"publisherId\":\"p123\",\"placementId\":\"foo-placement\",\"divId\":\"foo-div\",\"pageTemplate\":\"foo-page-template\"}`,\n+}\n+\n+var invalidParams = []string{\n+\t``,\n+\t`null`,\n+\t`true`,\n+\t`5`,\n+\t`4.2`,\n+\t`[]`,\n+\t`{}`,\n+\t`{\"publisherId\":\"\"}`,\n+\t`{\"publisherId\":\"p123\",\"placementId\":\"\"}`,\n+\t`{\"publisherId\":\"\",\"placementId\":\"foo-placement\"}`,\n+\t`{\"publisherId\":\"p\",\"placementId\":\"foo-placement\"}`,\n+}"
+  },
+  {
+    "filename": "exchange/adapter_builders.go",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -163,6 +163,7 @@ import (\n \t\"github.com/prebid/prebid-server/v3/adapters/openweb\"\n \t\"github.com/prebid/prebid-server/v3/adapters/openx\"\n \t\"github.com/prebid/prebid-server/v3/adapters/operaads\"\n+\t\"github.com/prebid/prebid-server/v3/adapters/optidigital\"\n \t\"github.com/prebid/prebid-server/v3/adapters/oraki\"\n \t\"github.com/prebid/prebid-server/v3/adapters/orbidder\"\n \t\"github.com/prebid/prebid-server/v3/adapters/outbrain\"\n@@ -413,6 +414,7 @@ func newAdapterBuilders() map[openrtb_ext.BidderName]adapters.Builder {\n \t\topenrtb_ext.BidderOpenWeb:           openweb.Builder,\n \t\topenrtb_ext.BidderOpenx:             openx.Builder,\n \t\topenrtb_ext.BidderOperaads:          operaads.Builder,\n+\t\topenrtb_ext.BidderOptidigital:       optidigital.Builder,\n \t\topenrtb_ext.BidderOraki:             oraki.Builder,\n \t\topenrtb_ext.BidderOrbidder:          orbidder.Builder,\n \t\topenrtb_ext.BidderOutbrain:          outbrain.Builder,"
+  },
+  {
+    "filename": "openrtb_ext/bidders.go",
+    "status": "modified",
+    "additions": 2,
+    "deletions": 0,
+    "changes": 2,
+    "previous_filename": null,
+    "patch": "@@ -181,6 +181,7 @@ var coreBidderNames []BidderName = []BidderName{\n \tBidderOpenWeb,\n \tBidderOpenx,\n \tBidderOperaads,\n+\tBidderOptidigital,\n \tBidderOraki,\n \tBidderOrbidder,\n \tBidderOutbrain,\n@@ -535,6 +536,7 @@ const (\n \tBidderOpenWeb           BidderName = \"openweb\"\n \tBidderOpenx             BidderName = \"openx\"\n \tBidderOperaads          BidderName = \"operaads\"\n+\tBidderOptidigital       BidderName = \"optidigital\"\n \tBidderOraki             BidderName = \"oraki\"\n \tBidderOrbidder          BidderName = \"orbidder\"\n \tBidderOutbrain          BidderName = \"outbrain\""
+  },
+  {
+    "filename": "openrtb_ext/imp_optidigital.go",
+    "status": "added",
+    "additions": 8,
+    "deletions": 0,
+    "changes": 8,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,8 @@\n+package openrtb_ext\n+\n+type ImpExtOptidigital struct {\n+\tPublisherID  string `json:\"publisherId\"`\n+\tPlacementID  string `json:\"placementId\"`\n+\tPageTemplate string `json:\"pageTemplate,omitempty\"`\n+\tDivID        string `json:\"divId,omitempty\"`\n+}"
+  },
+  {
+    "filename": "static/bidder-info/optidigital.yaml",
+    "status": "added",
+    "additions": 23,
+    "deletions": 0,
+    "changes": 23,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,23 @@\n+endpoint: \"https://pbs.optidigital.com/bidder/openrtb2\"\n+endpointCompression: gzip\n+maintainer:\n+  email: \"prebid@optidigital.com\"\n+gvlVendorID: 915\n+openrtb:\n+  version: 2.6\n+capabilities:\n+  app:\n+    mediaTypes:\n+      - banner\n+  site:\n+    mediaTypes:\n+      - banner\n+  dooh:\n+    mediaTypes:\n+      - banner\n+userSync:\n+  supports:\n+    - iframe\n+  iframe:\n+    url: \"https://scripts.opti-digital.com/js/presyncs2s.html?endpoint=optidigital&gdpr={{.GDPR}}&gdpr_consent={{.GDPRConsent}}&us_privacy={{.USPrivacy}}&redir={{.RedirectURL}}\"\n+    userMacro: \"$UID\"\n\\ No newline at end of file"
+  },
+  {
+    "filename": "static/bidder-params/optidigital.json",
+    "status": "added",
+    "additions": 32,
+    "deletions": 0,
+    "changes": 32,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,32 @@\n+{\n+    \"$schema\": \"http://json-schema.org/draft-04/schema#\",\n+    \"title\": \"Optidigital Adapter Params\",\n+    \"description\": \"A schema which validates params accepted by the Optidigital adapter\",\n+    \"type\": \"object\",\n+  \n+    \"properties\": {\n+        \"publisherId\": {\n+            \"type\": \"string\",\n+            \"minLength\": 2,\n+            \"description\": \"Publisher ID\"\n+        },\n+        \"placementId\": {\n+            \"type\": \"string\",\n+            \"minLength\": 1,\n+            \"description\": \"Placement ID\"\n+        },\n+        \"divId\": {\n+            \"type\": \"string\",\n+            \"description\": \"Div ID\"\n+        },\n+        \"pageTemplate\": {\n+            \"type\": \"string\",\n+            \"description\": \"Page Template\"\n+        }\n+    },\n+\n+    \"required\":[\n+        \"publisherId\",\n+        \"placementId\"\n+    ]\n+  }\n\\ No newline at end of file"
+  }
+]

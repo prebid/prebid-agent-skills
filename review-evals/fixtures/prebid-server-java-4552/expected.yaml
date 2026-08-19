@@ -1,0 +1,39 @@
+# prebid/prebid-server-java#4552 "RTBStack: New Adapter (Port from GO)" -- Go -> Java port.
+#
+# OPEN at capture time with CHANGES_REQUESTED (2026-08-07, @CTMBNara). The
+# review carries no inline comments: both findings come from the review body
+# plus a merged-diff fact about master. That makes this the corpus's test of
+# whether a review can reach a finding the PR's own thread does not spell out
+# line by line.
+
+pr: prebid/prebid-server-java#4552
+review_sha: ed297b01c602da5e75ac4eebe284f7a7d3c1c464
+
+expected:
+  - id: rtbstack-macro-substitution-instead-of-uri
+    path: src/main/java/org/prebid/server/bidder/rtbstack/RtbStackBidder.java
+    anchor: ".replace(SSP_ID_MACRO, HttpUtil.encodeUrl(ssp))"
+    symbol: buildEndpointUrl
+    family: framework-idiom
+    severity: FAIL
+    source: https://github.com/prebid/prebid-server-java/pull/4552#pullrequestreview-4886843924
+    why_it_matters: Hand-substituted macros with per-parameter HttpUtil.encodeUrl double-encode once Uri.java is used; the target repo builds bidder URLs through Uri, which encodes every param itself.
+
+  - id: rtbstack-usersyncercreator-deleted-upstream
+    path: src/main/java/org/prebid/server/spring/config/bidder/RtbStackConfiguration.java
+    anchor: "UsersyncerCreator.create(externalUrl)"
+    symbol: rtbstackBidderDeps
+    family: upstream-api-drift
+    severity: FAIL
+    source: https://github.com/prebid/prebid-server-java/pull/4552#pullrequestreview-4886843924
+    why_it_matters: UsersyncerCreator was removed from master by 2880782f ("Update cookie sync to use bidder name instead of cookie family", #4464), so this configuration does not compile against the current base.
+
+  - id: rtbstack-branch-behind-master
+    path: src/test/resources/org/prebid/server/it/test-application.properties
+    anchor: "<file>"
+    family: upstream-api-drift
+    severity: WARN
+    source: https://github.com/prebid/prebid-server-java/pull/4552#pullrequestreview-4886843924
+    why_it_matters: The reviewer's first instruction was to update the branch with latest master; the integration-test registration is the file that breaks when bidder wiring moves upstream.
+
+forbidden: []

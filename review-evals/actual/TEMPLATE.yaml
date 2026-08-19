@@ -1,0 +1,56 @@
+# Template for an actual-findings file.
+#
+# Copy to review-evals/actual/<fixture-id>.yaml -- the filename IS the binding;
+# the scorer looks up `<fixture-id>.yaml` and does not search.
+#
+# Produce the contents by running the review skills against
+# review-evals/fixtures/<fixture-id>/files.json, then transcribing what they
+# emitted. Transcribe, do not curate: an actual-findings file edited to match
+# expected.yaml measures your editing, not the skills.
+
+fixture: prebid-server-4502
+
+# REQUIRED. The scan set: how many of the fixture's changed files the run
+# actually examined. 0 is an ERROR, never a clean verdict -- a review that
+# looked at nothing has not cleared anything. Must not exceed the fixture's
+# own file count.
+files_scanned: 1
+
+# Optional provenance. Recording it makes a score reproducible and makes a
+# later regression attributable.
+run:
+  skills: [pr-triage, bidder-info-pr-review]
+  skills_commit: 0000000000000000000000000000000000000000
+  model: unrecorded
+  date: 2026-08-18
+
+# REQUIRED, may be empty. `findings: []` asserts the run examined
+# `files_scanned` files and reached no finding. Omitting the key is an ERROR:
+# absent is not the same as empty.
+findings:
+  - path: static/bidder-info/appStockSSP.yaml   # REQUIRED
+
+    # A symbol or a quoted line. Never a line number -- line numbers rot and
+    # the matcher never reads one. Whitespace is normalized on both sides, so
+    # copy the line as the skill printed it.
+    anchor: 'endpoint: "https://#{REGION}#.al-ad.com/pserver"'
+
+    # Optional. Matches an expected finding on its own when the quoted lines
+    # differ but both findings are about the same function.
+    symbol: null
+
+    # FAIL | WARN | INFO -- the repository's own disposition ladder
+    # (FAIL=BLOCK, WARN=ASK, INFO=NOTE). Omit only if the run did not rate it;
+    # unrated findings are excluded from severity agreement rather than
+    # counted as agreeing.
+    severity: FAIL
+
+    # Optional for line-anchored findings (used only for the per-family
+    # breakdown), REQUIRED for a finding about a whole file, where there is no
+    # line to quote and family is the only thing distinguishing it.
+    family: endpoint-config
+
+    # Free text. Not matched on; it is there for whoever reads a red run.
+    note: >-
+      #{REGION}# is not a PBS macro; the host must substitute it per
+      datacenter, so the bidder must ship disabled by default.

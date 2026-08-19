@@ -1,0 +1,31 @@
+# prebid/prebid-server#4502 "New Adapter: appStockSSP" -- alias bidder-info only.
+#
+# Captured at 5a5e38ebcc44, the state @SyntaxNode reviewed on 2025-09-04. The
+# YAML declares an endpoint carrying a deploy-time token the host must fill in
+# (`#{REGION}#`) with no `disabled: true` and no record of the legal values.
+# Both requirements landed in the merged file.
+#
+# Single-file, single-family fixture: it isolates whether the bidder-info check
+# fires at all, without any adapter Go code to distract a reviewer.
+
+pr: prebid/prebid-server#4502
+review_sha: 5a5e38ebcc4442948b4ef7dde00ca71fb0ba4ce5
+
+expected:
+  - id: appstockssp-deploy-time-token-requires-disabled
+    path: static/bidder-info/appStockSSP.yaml
+    anchor: 'endpoint: "https://#{REGION}#.al-ad.com/pserver"'
+    family: endpoint-config
+    severity: FAIL
+    source: https://github.com/prebid/prebid-server/pull/4502#discussion_r2321081085
+    why_it_matters: "#{REGION}# is not a PBS endpoint macro: it must be substituted per datacenter at deploy time, so the bidder has to ship disabled by default or every default host boots a broken endpoint."
+
+  - id: appstockssp-region-values-undocumented
+    path: static/bidder-info/appStockSSP.yaml
+    anchor: 'endpoint: "https://#{REGION}#.al-ad.com/pserver"'
+    family: endpoint-config
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4502#discussion_r2321081085
+    why_it_matters: A host operator has no way to learn the legal REGION values; the reviewer required them in the bidder docs or in a comment in this file, and a comment block is what merged.
+
+forbidden: []

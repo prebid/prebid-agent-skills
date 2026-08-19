@@ -1,0 +1,23 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-4502
+repo: prebid/prebid-server
+pr_number: 4502
+title: 'New Adapter: appStockSSP'
+language: go
+base_ref: master
+review_sha: 5a5e38ebcc4442948b4ef7dde00ca71fb0ba4ce5
+merge_base_sha: c48d94d9b24f883e93a7676d94c5109c36c46911
+head_sha: ca83a702268f5f821e1036a16223ed25d6b712ac
+merge_state: merged
+merged_at: '2025-10-23'
+review_decision: APPROVED -> APPROVED
+outcome: defective
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server/compare/master...5a5e38ebcc4442948b4ef7dde00ca71fb0ba4ce5
+file_count: 1
+truncation:
+  patch_char_limit: 20000
+  truncated_files: []
+  compare_file_limit_hit: false

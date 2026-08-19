@@ -4,7 +4,7 @@
 # live in scripts/ and scripts/tests/. The Makefile is a thin convenience
 # layer; the scripts themselves are the authoritative entry points.
 
-.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules lint-java-roles verify-claims verify-claims-upstream clean
+.PHONY: help install ci test audit-goldens audit-pr coverage sync render-taxonomy render-port-rules lint-port-rules lint-java-roles verify-claims verify-claims-upstream review-evals clean
 
 help:
 	@echo "Available targets:"
@@ -21,6 +21,7 @@ help:
 	@echo "  lint-java-roles    Wave 4 file-role enum gate (Java + Go via --include-go)"
 	@echo "  verify-claims      Hermetic: registered upstream claims are still anchored in the skills"
 	@echo "  verify-claims-upstream GO=<checkout> JAVA=<checkout>  Re-derive every claim from upstream source"
+	@echo "  review-evals       Score a recorded review run against the eval corpus (corpus integrity when none recorded)"
 	@echo "  clean              Remove __pycache__ and .pyc files"
 
 install:
@@ -32,6 +33,7 @@ ci: test
 	python3 scripts/coverage-report.py --check
 	python3 scripts/tests/test_schema_contract.py
 	python3 scripts/verify-upstream-claims.py --check-sites
+	python3 scripts/score_review_evals.py --validate-only
 	@PAIRS=$$(grep -vE '^\s*(#|$$)' .github/known-broken-pairs.txt | tr '\n' ',' | sed 's/,$$//'); \
 	python3 scripts/round-trip-ci.py --strict-r3 --allow-known-broken-pairs "$$PAIRS"; \
 	EXIT=$$?; \
@@ -75,6 +77,15 @@ lint-port-rules:
 
 lint-java-roles:
 	python3 scripts/lib/lint-java-roles.py --include-go
+
+review-evals:
+	python3 scripts/score_review_evals.py --validate-only
+	@if ls review-evals/actual/*.yaml 2>/dev/null | grep -qv TEMPLATE; then \
+		python3 scripts/score_review_evals.py --actual review-evals/actual \
+			--json scripts/output/review-evals.json; \
+	else \
+		echo "review-evals: no recorded run in review-evals/actual/ -- corpus integrity only"; \
+	fi
 
 verify-claims:
 	python3 scripts/verify-upstream-claims.py --check-sites

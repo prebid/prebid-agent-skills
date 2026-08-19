@@ -1,0 +1,43 @@
+# prebid/prebid-server#4651 "New Limelight Adapters" -- five aliases in one PR.
+#
+# CLEAN fixture, zero expected findings. @przemkaczmarek verified each of the
+# five endpoints inline ("works", with a response screenshot) and approved the
+# same day; @ccorbo approved on 2026-02-11. No change was requested and the
+# merged head equals the review SHA.
+#
+# The three named non-findings here are the direct counterweights to findings
+# that ARE correct elsewhere in this corpus. The pr-scope entry in particular
+# opposes teal-alias-shipped-with-new-adapter (#4765): a bundle of aliases from
+# one parent organisation is routine, an alias riding along with a brand-new
+# adapter is not. A reviewer that cannot tell those apart will fail one fixture
+# or the other whichever way it is calibrated.
+
+pr: prebid/prebid-server#4651
+review_sha: cce65869b48e98c75dae4b9603eece5759df8021
+
+expected: []
+
+forbidden:
+  - id: limelight-bundle-http-endpoint-is-permitted
+    path: static/bidder-info/altstar.yaml
+    anchor: 'endpoint: "http://ads-pbs.ads-altstarmedia.com/openrtb/{{.PublisherID}}?host={{.Host}}"'
+    family: endpoint-config
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4651#discussion_r2687309989
+    why_it_matters: The reviewer exercised this exact http endpoint, posted the successful response, and approved; http is permitted for the whole Limelight alias family.
+
+  - id: limelight-bundle-alias-inherits-maintainer-email
+    path: static/bidder-info/oveeo.yaml
+    anchor: "<file>"
+    family: maintainer-metadata
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4651#discussion_r2687318111
+    why_it_matters: None of the five aliases declares maintainer.email; the parent's contact was accepted for all of them without objection, so a missing-field block is wrong here.
+
+  - id: limelight-bundle-multi-alias-single-pr-is-permitted
+    path: static/bidder-info/smootai.yaml
+    anchor: "<file>"
+    family: pr-scope
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4651#discussion_r2687322291
+    why_it_matters: Five aliases of one parent shipped in one PR and merged; requiring one PR per alias here would misapply the rule that kept tealplus out of #4765.

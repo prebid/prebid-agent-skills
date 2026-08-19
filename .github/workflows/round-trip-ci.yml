@@ -7,11 +7,16 @@ name: round-trip-ci
 #    (Go-source and Java-source discrimination via if/then/else).
 #  - R1–R10 round-trip CI + dual-spec assertions: respects .github/known-broken-pairs.txt
 #    so the aax pair (the one historically-broken pair) is downgraded fail→warn.
-#  - Mechanizable port-rule lints (Phase 2.6) for Rules 5, 9, 33, 36, 38, 44, 46.
+#  - Mechanizable port-rule lints for Rules 5, 9, 33, 36, 44, 46 (Rule 38's lint
+#    was deleted in Wave 11b).
 #  - Schema-contract test: all SKILL-cited dotted paths exist in the schema.
 #  - Unit tests: full discovery across scripts/tests/ for the harness internals.
-#  - Description-length lint (informational): SKILL frontmatter description
-#    over 600 chars triggers an info-level annotation (not blocking).
+#  - Upstream-claims anchors: every registered claim about upstream is still
+#    anchored in the skill text that depends on it (hermetic half; the networked
+#    half re-derives each claim in upstream-sync.yml).
+#  - Review-eval corpus integrity: fixtures parse and their anchors resolve.
+#  - SKILL body/description budgets, the accepted-warning baseline, and the
+#    known-broken-pair expiry all run under the unit-test step.
 
 on:
   pull_request:
@@ -92,6 +97,9 @@ jobs:
       - name: Unit tests (full harness)
         run: python3 -m unittest discover -s scripts/tests -v
 
+      - name: Review-eval corpus integrity
+        run: python3 scripts/score_review_evals.py --validate-only
+
       - name: Round-trip CI (R1–R10 + dual-spec assertions)
         run: |
           set +e
@@ -118,21 +126,3 @@ jobs:
           set -e
           # Exit codes: 0=all pass, 1=fail, 2=warn-only.
           if [ "$EXIT" -eq 0 ] || [ "$EXIT" -eq 2 ]; then exit 0; else exit "$EXIT"; fi
-
-      - name: Description-length lint (informational)
-        run: |
-          # Phase 4.7 informational gate: warn when a SKILL's frontmatter
-          # `description:` exceeds 600 chars. Doesn't block; just surfaces.
-          set +e
-          OVERLONG=0
-          for f in $(find prebid-server-go/read/skills prebid-server-java/read/skills -name 'SKILL.md'); do
-            DESC=$(awk '/^description: /,/^[a-z_]+: /' "$f" | head -n -1 | sed 's/^description: //' | tr -d '\n')
-            LEN=${#DESC}
-            if [ "$LEN" -gt 600 ]; then
-              echo "::notice file=$f::SKILL description is $LEN chars (soft limit 600); consider tightening for at-a-glance dispatch."
-              OVERLONG=$((OVERLONG + 1))
-            fi
-          done
-          echo "Description-length lint: $OVERLONG SKILLs exceed the 600-char soft limit."
-          # Always exit 0 — informational only.
-          exit 0

@@ -1,0 +1,29 @@
+# prebid/prebid-server#4216 "New Adapter: Admatic GMBH - Admatic alias".
+#
+# CLEAN outcome: no blocking finding. One non-blocking INFO was real (the alias
+# repeats its parent's maintainer.email, which it would inherit), and the
+# six-character-prefix rule was raised and then explicitly waived.
+#
+# This fixture pairs recall and false-positive pressure on the same three-line
+# file, so a reviewer cannot score well by simply saying nothing.
+
+pr: prebid/prebid-server#4216
+review_sha: d19d760113e2dc360008886422416d062e6251fd
+
+expected:
+  - id: admaticde-redundant-inherited-maintainer-email
+    path: static/bidder-info/admaticde.yaml
+    anchor: 'email: "prebid@admatic.com.tr"'
+    family: maintainer-metadata
+    severity: INFO
+    source: https://github.com/prebid/prebid-server/pull/4216#discussion_r1989895584
+    why_it_matters: The address is identical to the aliased parent's, so declaring it adds a second place to update; the alias inherits it when the field is omitted.
+
+forbidden:
+  - id: admaticde-six-char-prefix-waived
+    path: static/bidder-info/admaticde.yaml
+    anchor: "<file>"
+    family: naming-conventions
+    severity: WARN
+    source: https://github.com/prebid/prebid-server/pull/4216#discussion_r1989899991
+    why_it_matters: "@bsardo raised the first-six-characters-unique guideline and waived it in the same comment because the collision is with the very bidder being aliased; it merged as admaticde."

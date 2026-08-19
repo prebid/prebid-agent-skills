@@ -1,0 +1,24 @@
+# Captured by review-evals/capture_fixture.py. Do not hand-edit.
+# review_sha is the commit the maintainers REVIEWED, not the merged head:
+# scoring against a merged head measures a diff whose defects are already fixed.
+fixture_id: prebid-server-java-4428
+repo: prebid/prebid-server-java
+pr_number: 4428
+title: 'New Adapter: TrustX'
+language: java
+base_ref: master
+review_sha: ec94fed0814d6f794a7b4268f94da9a5068e8225
+merge_base_sha: 5926c922ba211307371d70eaad9478606b19a779
+head_sha: 689b561206dcc3e68172f64223305b2a892da63b
+merge_state: merged
+merged_at: '2026-03-23'
+review_decision: CHANGES_REQUESTED -> APPROVED -> APPROVED
+outcome: defective
+captured_at: '2026-08-18'
+capture_command: gh api repos/prebid/prebid-server-java/compare/master...ec94fed0814d6f794a7b4268f94da9a5068e8225
+file_count: 16
+truncation:
+  patch_char_limit: 20000
+  truncated_files:
+  - src/test/java/org/prebid/server/bidder/trustx/TrustxBidderTest.java
+  compare_file_limit_hit: false

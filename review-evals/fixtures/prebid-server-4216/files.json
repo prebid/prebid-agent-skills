@@ -1,0 +1,11 @@
+[
+  {
+    "filename": "static/bidder-info/admaticde.yaml",
+    "status": "added",
+    "additions": 3,
+    "deletions": 0,
+    "changes": 3,
+    "previous_filename": null,
+    "patch": "@@ -0,0 +1,3 @@\n+aliasOf: \"admatic\"\n+maintainer:\n+  email: \"prebid@admatic.com.tr\"\n\\ No newline at end of file"
+  }
+]
