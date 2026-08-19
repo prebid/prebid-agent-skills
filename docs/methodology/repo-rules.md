@@ -135,7 +135,15 @@ the target branch against upstream `master` HEAD immediately before
 opening the PR; if any of the listed PRs land between port-emit and
 PR-open, regenerate the affected goldens.
 
-- **`prebid/prebid-server-java#4126` — "Bidder Configuration Fixes & URL Validation"** (state: OPEN as of 2026-05-04; baseRef=`master`, headRef=`bidder-configs-fixes`). Adds URL-validation gates that may reject port-emitted endpoint formats. D2 pre-submit rebase MUST verify post-rebase emission still passes upstream Java `mvn -B compile`. URL: <https://github.com/prebid/prebid-server-java/pull/4126>.
+_None currently tracked._
+
+Retired: **`prebid/prebid-server-java#4126` — "Bidder Configuration Fixes & URL
+Validation"** was tracked here as OPEN as of 2026-05-04. It closed unmerged on
+2026-07-20 with CHANGES_REQUESTED, so its URL-validation gates never landed and
+no rebase precaution is owed to it.
+
+Entries in this section pin a live upstream state and go stale silently. Re-check
+each listed PR's state before relying on it, and remove it once it merges or closes.
 
 ## Known data-only drifts (operator-ack pending)
 

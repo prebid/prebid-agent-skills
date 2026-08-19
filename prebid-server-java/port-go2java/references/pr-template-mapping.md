@@ -138,7 +138,7 @@ The upstream template's checks above are necessary but not sufficient — the po
   normalization (Rule 46 + ADR-005); alias-empire flavor coherence (Rule 44
   if applicable); IAB-cat translation (Rule 42 if applicable).
 - Companion docs PR drafted at `prebid/prebid.github.io::dev-docs/bidders/{bidder}.md`
-  (mandatory per BeOp #4660 review pattern); see `companion_docs_pr_draft`
+  (recommended; see §6 for the evidence base); see `companion_docs_pr_draft`
   in port-report.json.
 ```
 
@@ -146,7 +146,13 @@ This sub-section is NOT part of the upstream template. The operator pastes it be
 
 ## 6. Companion docs PR (`prebid/prebid.github.io`)
 
-Maintainer-mandatory per BeOp #4660 review pattern. The port skill emits `port-report.json::companion_docs_pr_draft` populated against the source spec:
+Recommended companion artifact. Evidence base: the request is a **Go-repo**
+review pattern (`prebid/prebid-server#4660`, BeOp, merged 2026-03-03 — a reviewer
+asked for a documentation PR linked from the description). `prebid/prebid-server-java#4660`
+does not exist, and no equivalent request appears on recent merged Java new-adapter PRs
+(#4476 BeOp, #4502, #4428, #4310), so this is NOT a verified Java maintainer requirement.
+Emit the draft as a courtesy and let the operator decide; do not assert it as mandatory in
+the PR body. The port skill emits `port-report.json::companion_docs_pr_draft` populated against the source spec:
 
 ```yaml
 companion_docs_pr_draft:
@@ -188,7 +194,7 @@ pre_submit_rebase:
   conflicts_summary: null
 ```
 
-If conflicts surface (e.g., upstream PR #4126 URL validation lands between port-emit and PR-open), abort with operator notification and let the operator resolve before submit. See [`../../../docs/methodology/repo-rules.md`](../../../docs/methodology/repo-rules.md) "In-flight upstream changes" for current PRs in flight.
+If conflicts surface (an upstream PR touching bidder-config shape landing between port-emit and PR-open), abort with operator notification and let the operator resolve before submit. See [`../../../docs/methodology/repo-rules.md`](../../../docs/methodology/repo-rules.md) "In-flight upstream changes" for current PRs in flight.
 
 ## See also
 
