@@ -17,6 +17,107 @@ Entries reference the ADRs (`docs/decisions/`) that drove the change.
 
 ---
 
+## [adapter_spec_version 2.0.0] · [taxonomy_version 1.2.0] · [port_translation_rules_version 0.4.0] · [port_report_version 0.2.0] — 2026-08-19 (Rules 47/48/49 and their wiring)
+
+Three rules from the rtbstack Go → Java port, the templates and SKILL contract
+that make them usable, and corrections to four references a porter follows.
+ADR-010 carries the decision record.
+
+### Added — rules corpus 0.3.0 → 0.4.0 (MINOR, additive: 46 → 49 rules)
+
+- **Rule 47 — grouped-by-key imp batching.** One request per distinct
+  `imp.ext.bidder.<key>`, first-seen key order. Go needs an explicit order slice
+  beside the map; Java gets the same semantics from `LinkedHashMap`. Two-level
+  error isolation: a bad imp skips itself, a bad group key rejects only its group.
+- **Rule 48 — param-derived endpoint macros.** All macros filled by parsing one
+  publisher-supplied param, validated against a code-level allow-list, with the
+  parent domain pinned in bidder config. Deliberately not template-mapped: the
+  parse helper is vendor-specific.
+- **Rule 49 — opposite-framework-default config keys.** When a key's absent-key
+  semantics differ between frameworks, declare the source-effective value
+  explicitly. Canonical case: `modifying_vast_xml_allowed`, where absent means
+  `false` in Go and `true` in Java.
+
+### Added — taxonomy 1.1.0 → 1.2.0 (MINOR, additive)
+
+- `param-derived-endpoint-macros` as an `endpoint_resolution.kind` enum row, a
+  quirk taxon, and the matching `EndpointResolution.kind` value in
+  `adapter-spec.schema.json`. Without the schema value a spec using Rule 48's own
+  driver would fail validation.
+- The Java endpoint mechanism table now lists `uri-template` and
+  `uri-template-at-bean-construction`, with `string-replace` kept as historical:
+  upstream #4444 moved endpoint macros to Vert.x `UriTemplate` and `{{X}}` to
+  `{X}`.
+
+### Added — template arms and their guards
+
+- `bidder.java.j2` gains the Rule 47 `grouped-by-key` branch and
+  `ctx.bid_type_error_tolerance ∈ {abort-all, per-bid-skip}`. Tolerance is read
+  off the source's bid loop, never chosen by taste; `per-bid-skip` paired with any
+  resolution other than `by-bid-mtype` fails at render.
+- `bidder-config.yaml.j2` emits `modifying-vast-xml-allowed` in both polarities.
+  A ctx missing the field fails at render rather than rendering `false`, which is
+  the polarity that is wrong to guess.
+- Three render guards where the previous shape defaulted silently: a missing
+  `batching_per_key.key_field`, a `key_field` that is not a lower-camelCase Java
+  identifier, and the tolerance/resolution mismatch above.
+
+### Fixed — instructions a porter would follow into a broken artifact
+
+- **port_lineage was schema-invalid.** Step 4 told the porter to emit
+  `port_translation_rules_version` and `port_skill_version` inside a closed
+  `additionalProperties: false` object that declares neither.
+- **The IT-properties insertion point was end-of-file.** The contiguous
+  `adapters.*` block ends mid-file; the remaining 61 lines are unrelated settings.
+- **Import order was shown inverted.** `checkstyle.xml` groups
+  `*,/^java|^jakarta/` with `option="bottom"`, so `java.*` comes last. `javax.*`
+  does not match the second group, and `ordered="false"` makes within-group
+  alphabetical order convention rather than enforcement.
+- **Three phantom bidder-config keys.** `gvl-vendor-id`, `user-sync` and
+  `yaml-extra-fields` appear in zero of the 255 upstream bidder-config files; the
+  live keys are `vendor-id` and `usersync`, and what `yaml_extra_fields` records
+  lands as an ordinary adapter-level key. A key that does not bind is silently
+  ignored at startup.
+- **Rule 49's explanation of its own corpus evidence.** The rule said the three
+  divergent pairs pass R5 because both readers record the raw file value.
+  Measured: 14 of 20 Java goldens record `false` for a key absent upstream,
+  because the Java reader's documented absent-key default says `false` where the
+  framework says `true`. The pairs compare equal because one side fabricates a
+  default. The reader-side fix is deferred in ADR-010 with that cost stated.
+- **`coverage-report.py --check` was environment-sensitive.** Default discovery
+  included a gitignored `.tmp/` glob, so the committed report could depend on
+  state no one else has.
+
+### Added — gates for the classes above
+
+- A rule claiming a port skill wires a `ctx.X` variable or names a `.j2` file must
+  resolve against that skill's templates directory. Rules 47 and 49 shipped with
+  claims their templates did not satisfy.
+- Review-skill evidence citations must resolve: a dual-spec key path against the
+  pair file, a canary finding id against a heading in the named trace. Line-anchored
+  dual-spec citations now fail, because every pair-file edit renumbers them.
+- The topmost CHANGELOG header must match the live corpus versions. This entry
+  exists because a rules bump to 0.4.0 and a taxonomy bump to 1.2.0 landed without
+  one, and nothing noticed.
+- Three upstream claims pinning the phantom-key measurements.
+
+### Changed — review skills
+
+- The three Go review skills (1.0.0 → 1.1.0) now consume the
+  `--- PRIOR SOURCE SPEC COMPARISON ---` block that `pr-triage` was authoring and
+  no Go skill was reading, plus `--- PRIOR AGENT FINDINGS ---`. Policy lives once,
+  in `framework-utilities.md`'s Cross-Language Port-Fidelity Hook Contract.
+
+### Unchanged — port-go2java stays at 0.5.0
+
+The green-field validation canary ran and cleared every local gate, and its
+submission (`prebid/prebid-server-java#4552`) is OPEN at CHANGES_REQUESTED with
+three FAIL-class defects: two the reviewer raised, one this repo's own rules
+require and nobody raised. All three are fixed at the skill level. Promotion waits
+on a submission that clears review, not on the gates.
+
+---
+
 ## [adapter_spec_version 2.0.0] · [taxonomy_version 1.0.0] · [port_translation_rules_version 0.3.0] · [port_report_version 0.2.0] — 2026-08-19
 
 First MAJOR. Two fields are removed and one is required in their place.
