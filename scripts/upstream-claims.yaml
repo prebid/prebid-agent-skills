@@ -280,7 +280,11 @@ claims:
       vendor-owned VAST behavior.
     sites:
       - path: prebid-server-java/port-go2java/templates/bidder-config.yaml.j2
-        assert: "modifying-vast-xml-allowed"
+        # Anchored on the emit line, not the bare key: the key now also appears
+        # in the template's header note (which quotes application.yaml), and a
+        # bare-key anchor cannot go stale on the regression this claim exists to
+        # catch -- a revert to `{% if ctx.modifying_vast_xml %}` omit-when-false.
+        assert: "modifying-vast-xml-allowed: {{ 'true' if ctx.modifying_vast_xml else 'false' }}"
 
   - id: java.adapter-defaults.multiformat-supported
     kind: config_value
