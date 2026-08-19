@@ -19,7 +19,7 @@ Static helpers for common adapter operations:
 | Method | Purpose | Port-skill usage |
 |---|---|---|
 | `defaultRequest(BidRequest, URL, byte[], Map<String,String>)` | Construct an `HttpRequest<BidRequest>` with default `Content-Type: application/json` + `Accept: application/json` headers. | The most common call from `makeHttpRequests` — emit this when source spec's `code.make_requests.batching.rules` is `single-batched` and headers are standard. |
-| `headers(MultiMap)` | Convert Vert.x `MultiMap` to a flat `Map<String,String>`. | Rare; emitted when source spec's `headers_constructed.collapse_helper` is true. |
+| `headers(MultiMap)` | Convert Vert.x `MultiMap` to a flat `Map<String,String>`. | Rare; emitted when the source spec's `code.make_requests.headers_constructed.has_only_standard_headers` is true (Rule 19). `HeadersConstructed` is a closed object -- there is no `collapse_helper` field. |
 
 ### 2.2 `BidderDeps` + `BidderDepsAssembler`
 
