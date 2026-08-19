@@ -67,7 +67,7 @@ Legacy form (msft only): `adapters/{xyz}/test/` + `adapters/{xyz}/test-extrainfo
 
 - `src/test/java/org/prebid/server/it/{Name}Test.java` — required IT class per bidder.
 - `src/test/resources/org/prebid/server/it/openrtb2/{xyz}/` — fixture folder. The 4-file Wiremock pattern: `test-{xyz}-bid-request.json`, `test-{xyz}-bid-response.json`, `test-auction-{name}-request.json`, `test-auction-{name}-response.json`.
-- `src/test/resources/test-application.properties` — central registry; every adapter appends 2–4 lines (`adapters.{xyz}.enabled=true`, `adapters.{xyz}.endpoint=...`).
+- `src/test/resources/org/prebid/server/it/test-application.properties` — central registry; every adapter adds exactly 2 lines (`adapters.{xyz}.enabled=true`, `adapters.{xyz}.endpoint=...`), inserted at the end of the contiguous `adapters.*` block rather than at end-of-file, since the file's tail carries non-adapter settings. The path previously omitted the `org/prebid/server/it/` segment.
 
 Per-alias amplification (Rule 37): each Java alias requires its own IT
 class + fixture set + registry append (~7 files per alias). Go aliases
