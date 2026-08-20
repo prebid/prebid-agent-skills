@@ -361,6 +361,66 @@ DISCOVERY_PATTERNS = {
 }
 
 
+# A `path:line` citation into an upstream file is the one citation form with no
+# legitimate ambiguity: either the file has that many lines or the citation has
+# drifted. Registered claims do not cover these -- the manifest holds symbols,
+# counts and absences, while a line number sits in prose -- so a citation could
+# rot silently. It did: an AppnexusBidder.java LOC example read 561 against a
+# file that upstream had shrunk to 553.
+#
+# Path-only citations are deliberately NOT failed here. A skill legitimately
+# cites the pre-rename side of a documented rename (adoppler -> elementaltv), a
+# file a port is instructed to create (rtbstack on the Java side), and
+# placeholder names in worked examples. Failing those would bury the signal.
+CITATION_RX = re.compile(
+    r"`(?P<path>(?:adapters|openrtb_ext|config|exchange|usersync|endpoints|macros|util)/[\w/.-]+\.go"
+    r"|src/(?:main|test)/(?:java|resources)/[\w/.$-]+\.(?:java|json|yaml)"
+    r"|static/bidder-(?:info|params)/[\w.-]+\.(?:yaml|json))"
+    r":(?P<lo>\d+)(?:[-\u2013](?P<hi>\d+))?`"
+)
+
+
+def check_line_citations(roots: dict[str, Path]) -> list[Result]:
+    """Verify every line-numbered upstream citation in the skill trees resolves."""
+    out: list[Result] = []
+    checked = 0
+    for tree in DISCOVERY_TREES:
+        for f in sorted((REPO_ROOT / tree).rglob("*.md")):
+            rel = f.relative_to(REPO_ROOT)
+            for lineno, line in enumerate(
+                    f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                for m in CITATION_RX.finditer(line):
+                    path, lo, hi = m.group("path"), int(m.group("lo")), m.group("hi")
+                    hi = int(hi) if hi else lo
+                    # A Java path cited from a Go-side doc is a legitimate
+                    # cross-reference, so try every supplied checkout.
+                    hits = [r / path for r in roots.values() if (r / path).is_file()]
+                    cid = f"citation.{rel}:{lineno}"
+                    if not hits:
+                        out.append(Result(cid, WARN,
+                                          f"{path}:{lo} -- path not in any supplied checkout "
+                                          f"(a documented rename or a file the port creates "
+                                          f"is expected here)"))
+                        continue
+                    checked += 1
+                    total = len(hits[0].read_text(encoding="utf-8",
+                                                  errors="replace").splitlines())
+                    if hi > total:
+                        out.append(Result(cid, FAIL,
+                                          f"{path}:{m.group('lo')}"
+                                          f"{'-' + m.group('hi') if m.group('hi') else ''} "
+                                          f"cited, file has {total} lines"))
+    if checked == 0:
+        # An empty scan is a setup error, not a pass.
+        out.append(Result("citation.sweep", FAIL,
+                          "no resolvable line-numbered citations were found -- "
+                          "the sweep reached nothing"))
+    else:
+        out.append(Result("citation.sweep", PASS,
+                          f"{checked} line-numbered citation(s) resolved and in range"))
+    return out
+
+
 def discover(manifest: dict) -> tuple[list[Result], dict[str, set[str]]]:
     """Report claim-shaped strings that are not registered, so coverage grows."""
     registered = set()
@@ -425,6 +485,7 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write("ERROR: --upstream needs --go-checkout and/or --java-checkout\n")
             return 3
         results += check_upstream(manifest, roots)
+        results += check_line_citations(roots)
     if args.discover:
         disc, hits = discover(manifest)
         results += disc

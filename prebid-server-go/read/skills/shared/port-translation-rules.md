@@ -557,23 +557,30 @@ private String chooseEndpoint(BidRequest bidRequest) {
 **Pattern**: Endpoint URL has a non-Go-template placeholder that the operator substitutes pre-deployment.
 **Spec field driver**: `endpoint_resolution.kind: deploy-time-token` + `deploy_time_tokens[]`
 
-**Go code**:
+**Go code** (appStockSSP — one of the three `static/bidder-info` files carrying this token at 0ba35231):
 ```yaml
-# static/bidder-info/rubicon.yaml — REGION token left for operator.
-endpoint: "https://prebid-server.rubiconproject.com/openrtb2/auction?tk_xint=#{REGION}#"
-disabled: true   # MUST be true while a deploy-time token is unresolved.
+# static/bidder-info/appStockSSP.yaml
+disabled: true
+# We have the following regional endpoint domains:  'lb' - for US_EAST, 'ortb-eu' - for EU, 'ortb-apac' - for APAC
+# Please deploy this config in each of your datacenters with the appropriate regional subdomain
+endpoint: "https://#{REGION}#.al-ad.com/pserver"
 ```
 
-**Java code**:
+**Java code** (the same bidder, expressed as a teqblaze alias — the Java side has no standalone entry for it):
 ```yaml
-# src/main/resources/bidder-config/rubicon.yaml — same token shape.
-adapters:
-  rubicon:
-    endpoint: "https://prebid-server.rubiconproject.com/openrtb2/auction?tk_xint=#{REGION}#"
-    enabled: false
+# src/main/resources/bidder-config/teqblaze.yaml:42
+      appStockSSP:
+        enabled: false
+        # We have the following regional endpoint domains:  'lb' - for US_EAST, 'ortb-eu' - for EU, 'ortb-apac' - for APAC
+        # Please deploy this config in each of your datacenters with the appropriate regional subdomain
+        endpoint: https://#{REGION}#.al-ad.com/pserver
 ```
 
-**Notes**: `#{REGION}#` is NOT a Go template macro — it's a placeholder the deployment operator substitutes via shell substitution / config templating before PBS starts. Adapters with unresolved deploy-time tokens MUST set `disabled: true` (Go) / `enabled: false` (Java) in YAML and include a comment block enumerating valid REGION values. Reference: PR #4502 appStockSSP `#{REGION}#`. The token surfaces in `deploy_time_tokens[]`, NOT `endpoint_construction.macros_used` (which is for runtime macros).
+**Notes**: `#{REGION}#` is NOT a Go template macro — it's a placeholder the deployment operator substitutes via shell substitution / config templating before PBS starts. Reference: PR #4502 appStockSSP. The token surfaces in `deploy_time_tokens[]`, NOT `endpoint_construction.macros_used` (which is for runtime macros).
+
+Two spellings exist upstream and they are not interchangeable. The delimited form `#{REGION}#` appears on three Go endpoints (`appStockSSP.yaml:5`, `m152.yaml:4`, `selectmedia.yaml:5`) and one Java endpoint (`teqblaze.yaml:42`, the appStockSSP alias). The bare form `REGION` appears on `static/bidder-info/rubicon.yaml:4` (`https://REGION.rubiconproject.com/a/api/exchange`) and in four Java configs including `magnite.yaml`. A port MUST carry over the spelling the source uses; substituting one for the other changes what the operator's templating has to match.
+
+The disable flag holds for standalone entries, not for aliases. Both standalone Go carriers of the delimited form set it (`appStockSSP.yaml`, `selectmedia.yaml`), as does `rubicon.yaml` for the bare form; `m152.yaml` does not, and does not need to, because it is `aliasOf: "teqblaze"` and inherits the parent's state. The Java side expresses these bidders as aliases, where the flag sits on the alias entry (`enabled: false`). So: a standalone entry with an unresolved deploy-time token MUST set `disabled: true` (Go) / `enabled: false` (Java); an alias entry inherits in Go and carries the flag in Java. Include the comment block enumerating valid REGION values either way — all four carriers do.
 
 ### Rule 48: Param-derived endpoint macros (parse a publisher param to fill macros)
 

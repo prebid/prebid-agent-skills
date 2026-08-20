@@ -238,17 +238,17 @@ When the IT folder has 6 files matching the 4 standard + 2 cache patterns, set `
 
 ---
 
-## Multi-folder pattern (Rubicon)
+## Multi-folder pattern (huaweiads)
 
-Rubicon-style adapters split fixtures into multiple sibling folders for different test flows:
+A few adapters split fixtures into sibling folders, one per scenario. Only two do at e3ffd57: `openrtb2/huaweiads/` with 23 subfolders and `openrtb2/epsilon/` with one (`alias`). huaweiads is the canonical case:
 
 ```
-src/test/resources/org/prebid/server/it/openrtb2/rubicon/auction/
-src/test/resources/org/prebid/server/it/openrtb2/rubicon/amp/
-src/test/resources/org/prebid/server/it/openrtb2/rubicon/video/
+src/test/resources/org/prebid/server/it/openrtb2/huaweiads/banner_ch_endpoint/
+src/test/resources/org/prebid/server/it/openrtb2/huaweiads/banner_eu_endpoint/
+src/test/resources/org/prebid/server/it/openrtb2/huaweiads/native_single_image/
 ```
 
-Set `tests.integration_test_pattern: multi-folder` and `tests.java_it_folder_naming: multi-folder`. Record fixtures from all subfolders, each with its parent folder noted (e.g., `auction/test-rubicon-bid-request.json`).
+Set `tests.integration_test_pattern: multi-folder` and `tests.java_it_folder_naming: multi-folder`. Record fixtures from all subfolders, each with its parent folder noted (e.g., `banner_ch_endpoint/test-huaweiads-bid-request.json`).
 
 ---
 
@@ -260,7 +260,7 @@ When the parent's YAML declares aliases, EACH alias requires its own IT class + 
 src/test/java/org/prebid/server/it/AdverxoTest.java
 src/test/java/org/prebid/server/it/AdportTest.java
 src/test/java/org/prebid/server/it/BidsmindTest.java
-src/test/java/org/prebid/server/it/MobuppsTest.java
+src/test/java/org/prebid/server/it/HarrenmediaTest.java
 ```
 
 Each alias has its own IT class AND its own fixture folder:
@@ -269,7 +269,7 @@ Each alias has its own IT class AND its own fixture folder:
 src/test/resources/org/prebid/server/it/openrtb2/adverxo/test-adverxo-bid-request.json (etc.)
 src/test/resources/org/prebid/server/it/openrtb2/adport/test-adport-bid-request.json (etc.)
 src/test/resources/org/prebid/server/it/openrtb2/bidsmind/test-bidsmind-bid-request.json (etc.)
-src/test/resources/org/prebid/server/it/openrtb2/mobupps/test-mobupps-bid-request.json (etc.)
+src/test/resources/org/prebid/server/it/openrtb2/harrenmedia/test-harrenmedia-bid-request.json (etc.)
 ```
 
 ### Detection rules

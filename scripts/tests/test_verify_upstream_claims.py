@@ -203,6 +203,106 @@ class TestAbsence(unittest.TestCase):
             self.assertIn("scope not found", detail)
 
 
+class TestLineCitations(unittest.TestCase):
+    """`path:line` citations into upstream are the one citation form with no
+    legitimate ambiguity, and no registered claim covers them -- the manifest
+    holds symbols, counts and absences while a line number sits in prose. One had
+    already rotted: an AppnexusBidder.java LOC example cited 561 against a file
+    upstream had shrunk to 553.
+    """
+
+    @contextlib.contextmanager
+    def _skill_tree(self, doc_body: str):
+        """Point the sweep at a temporary skill tree instead of the real one."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _write(root, "prebid-server-go/review/skills/x/SKILL.md", doc_body)
+            saved_root, saved_trees = vuc.REPO_ROOT, vuc.DISCOVERY_TREES
+            vuc.REPO_ROOT = root
+            vuc.DISCOVERY_TREES = ("prebid-server-go/review/skills",)
+            try:
+                yield root
+            finally:
+                vuc.REPO_ROOT, vuc.DISCOVERY_TREES = saved_root, saved_trees
+
+    def test_fails_when_the_cited_line_is_past_end_of_file(self):
+        with self._skill_tree("See `adapters/foo/foo.go:99` for the check.\n"):
+            with tempfile.TemporaryDirectory() as up:
+                upr = Path(up)
+                _write(upr, "adapters/foo/foo.go", "package foo\n")
+                results = vuc.check_line_citations({"go": upr})
+        fails = [r for r in results if r.status == vuc.FAIL]
+        self.assertEqual(len(fails), 1, [r.detail for r in results])
+        self.assertIn("file has 1 lines", fails[0].detail)
+
+    def test_passes_when_the_cited_line_exists(self):
+        with self._skill_tree("See `adapters/foo/foo.go:2` for the check.\n"):
+            with tempfile.TemporaryDirectory() as up:
+                upr = Path(up)
+                _write(upr, "adapters/foo/foo.go", "package foo\n\nvar x = 1\n")
+                results = vuc.check_line_citations({"go": upr})
+        self.assertEqual([r for r in results if r.status == vuc.FAIL], [])
+        self.assertIn("1 line-numbered citation", results[-1].detail)
+
+    def test_a_range_is_checked_at_its_upper_bound(self):
+        with self._skill_tree("See `adapters/foo/foo.go:1-9` for the check.\n"):
+            with tempfile.TemporaryDirectory() as up:
+                upr = Path(up)
+                _write(upr, "adapters/foo/foo.go", "package foo\n")
+                results = vuc.check_line_citations({"go": upr})
+        self.assertTrue([r for r in results if r.status == vuc.FAIL])
+
+    def test_a_java_path_cited_from_a_go_side_doc_resolves(self):
+        """Cross-language references are legitimate, so every supplied checkout
+        is tried rather than the one matching the doc's own tree."""
+        cite = "`src/main/java/org/prebid/server/bidder/Foo.java:1`"
+        with self._skill_tree(f"See {cite}.\n"):
+            with tempfile.TemporaryDirectory() as gj:
+                jr = Path(gj)
+                _write(jr, "src/main/java/org/prebid/server/bidder/Foo.java", "class Foo {}\n")
+                results = vuc.check_line_citations({"java": jr})
+        self.assertEqual([r for r in results if r.status == vuc.FAIL], [])
+
+    def test_a_path_only_citation_is_not_swept(self):
+        """A skill legitimately cites the pre-rename side of a documented rename,
+        a file a port is told to create, and placeholder names. Failing those
+        would bury the signal, so only line-numbered citations are checked."""
+        with self._skill_tree("`adapters/adoppler/adoppler.go` moved to elementaltv.\n"
+                              "See `adapters/foo/foo.go:1`.\n"):
+            with tempfile.TemporaryDirectory() as up:
+                upr = Path(up)
+                _write(upr, "adapters/foo/foo.go", "package foo\n")
+                results = vuc.check_line_citations({"go": upr})
+        self.assertEqual([r for r in results if r.status != vuc.PASS], [])
+
+    def test_a_missing_path_with_a_line_warns_rather_than_fails(self):
+        with self._skill_tree("See `adapters/gone/gone.go:5` and `adapters/foo/foo.go:1`.\n"):
+            with tempfile.TemporaryDirectory() as up:
+                upr = Path(up)
+                _write(upr, "adapters/foo/foo.go", "package foo\n")
+                results = vuc.check_line_citations({"go": upr})
+        self.assertEqual([r for r in results if r.status == vuc.FAIL], [])
+        self.assertEqual(len([r for r in results if r.status == vuc.WARN]), 1)
+
+    def test_a_sweep_that_reaches_nothing_is_a_failure_not_a_pass(self):
+        with self._skill_tree("No citations here at all.\n"):
+            with tempfile.TemporaryDirectory() as up:
+                results = vuc.check_line_citations({"go": Path(up)})
+        fails = [r for r in results if r.status == vuc.FAIL]
+        self.assertEqual(len(fails), 1)
+        self.assertIn("reached nothing", fails[0].detail)
+
+    def test_the_real_skill_trees_carry_citations_for_the_sweep_to_check(self):
+        """Guards the sweep's scope: if DISCOVERY_TREES stops matching where the
+        skills live, the sweep would reach nothing and this names why."""
+        found = 0
+        for tree in vuc.DISCOVERY_TREES:
+            for f in (vuc.REPO_ROOT / tree).rglob("*.md"):
+                found += len(vuc.CITATION_RX.findall(
+                    f.read_text(encoding="utf-8", errors="replace")))
+        self.assertGreater(found, 50, "the skill trees should carry many line citations")
+
+
 class TestEnforcement(unittest.TestCase):
     """The kind that exists because two 'upstream enforces X' claims were false."""
 

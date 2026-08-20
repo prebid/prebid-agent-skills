@@ -39,7 +39,7 @@ For each `*.java` file under the bidder package (`src/main/java/org/prebid/serve
 
 Blank lines, comments, license headers, and import blocks all count. `wc -l` counts `\n` occurrences, so a file with no terminal newline reports one less than its visible line count — record what the command prints, without a correction term, and leave the terminal-newline question to the `bytes` witness on that file's reference. Record as `code.file_layout.files[].loc`. Examples (each reproducible with the command above):
 
-- `src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java:561` (appnexus golden spec).
+- `src/main/java/org/prebid/server/bidder/appnexus/AppnexusBidder.java:553` at e3ffd57 (appnexus golden spec). LOC drifts with upstream, so the pin is part of the claim — this example read 561 against an earlier commit.
 - `src/main/java/org/prebid/server/bidder/kobler/KoblerBidder.java` — run the command; the Go-side counterpart `kobler.go` prints 177. LOC is per-file, so the two languages are not expected to agree, and neither number may be copied from the other spec.
 
 ---
