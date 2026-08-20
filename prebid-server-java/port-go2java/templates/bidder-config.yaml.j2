@@ -52,7 +52,7 @@ adapters:
       - {{ region }}
 {% endfor %}
 {% if ctx.modifying_vast_xml is undefined or ctx.modifying_vast_xml is none %}
-{{ {}.rule49_modifying_vast_xml_is_required__a_missing_key_would_render_false_and_read_as_deliberate.fail }}
+{{ ERROR_rule49_modifying_vast_xml_is_required__a_missing_key_would_render_false_and_read_as_deliberate() }}
 {% endif %}
     modifying-vast-xml-allowed: {{ 'true' if ctx.modifying_vast_xml else 'false' }}
     meta-info:

@@ -336,10 +336,10 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {%- if group_key_field -%}
 {%- set _JAVA_IDENT_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' -%}
 {%- if (group_key_field | reject('in', _JAVA_IDENT_CHARS) | list) or group_key_field[0] not in 'abcdefghijklmnopqrstuvwxyz' -%}
-{{ {}.rule47_key_field_must_be_a_lower_camelCase_java_identifier__normalize_it_in_the_skill.fail }}
+{{ ERROR_rule47_key_field_must_be_a_lower_camelCase_java_identifier__normalize_it_in_the_skill() }}
 {%- endif -%}
 {%- if not _per_key.key_type -%}
-{{ {}.rule47_key_field_requires_key_type__upstream_uses_String_Integer_and_enum_keys_so_String_cannot_be_assumed.fail }}
+{{ ERROR_rule47_key_field_requires_key_type__upstream_uses_String_Integer_and_enum_keys_so_String_cannot_be_assumed() }}
 {%- endif -%}
 {%- endif -%}
 {%- set group_key_type = _per_key.key_type if group_key_field else ("ExtImp" ~ ctx.imp_ext_class_root) -%}
@@ -573,7 +573,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
    resolution is selected for a multiformat adapter (mirrors the Go template
    guard; Java has no vouching surface to excuse a silent constant). #}
 {%- if (ctx.multiformat_supported | default(false)) and ctx.bid_type_resolution == "imp-mediatype-introspection" -%}
-{{ {}.multiformat_adapter_must_use_by_bid_mtype_resolution.fail }}
+{{ ERROR_multiformat_adapter_must_use_by_bid_mtype_resolution() }}
 {%- endif -%}
 {# Tolerance guard (F-new-108). "per-bid-skip" threads an errors list through
    extractBids and returns null for an unresolved type; only the by-bid-mtype
@@ -582,7 +582,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
    errors parameter unused (checkstyle would flag it). Any other pairing is a
    context-assembly bug, so fail at render rather than emit it. #}
 {%- if (ctx.bid_type_error_tolerance | default("abort-all")) == "per-bid-skip" and ctx.bid_type_resolution != "by-bid-mtype" -%}
-{{ {}.per_bid_skip_tolerance_requires_by_bid_mtype_resolution.fail }}
+{{ ERROR_per_bid_skip_tolerance_requires_by_bid_mtype_resolution() }}
 {%- endif -%}
 {% if ctx.bid_type_error_tolerance == "per-bid-skip" %}
     private BidType resolveBidType(Bid bid, List<BidderError> errors) {

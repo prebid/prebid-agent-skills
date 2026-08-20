@@ -695,6 +695,92 @@ class TestRule35NestedSubclass(unittest.TestCase):
         self.assertNotIn('"adapters." + BIDDER_NAME', rendered)
 
 
+class TestTypedConfigTypeWitness(unittest.TestCase):
+    """`BidderDepsAssembler.<Props>forBidder` -- required, not stylistic.
+
+    `forBidder` is `<CFG extends BidderConfigurationProperties>
+    BidderDepsAssembler<CFG>`. With no witness CFG infers to the bound, so the
+    bidderCreator's function parameter is a plain BidderConfigurationProperties
+    and any subclass getter read off it does not resolve.
+
+    Grounded by compiling the upstream tree at e3ffd57 rather than by matching
+    it: all 12 witness-carrying configs compile unmodified, and all 12 fail with
+    only `.<Props>` removed (Magnite 6 errors, the rest 1 each). Adding a witness
+    to the 4 bare Rule-35 configs leaves them at 0 errors, so bare is the
+    minimal form, not a requirement -- which is why the population count
+    (243/255 bare) cannot decide this and the declared getters must.
+    """
+
+    def _typed(self, **overrides):
+        ctx = _adverxo_typed_config_ctx()
+        ctx.update(overrides)
+        return _render("configuration.java.j2", ctx)
+
+    def test_witness_emitted_when_the_creator_reads_a_typed_getter(self):
+        rendered = self._typed(typed_config_lambda_getters=["auctionEndpoint"])
+        self.assertIn("BidderDepsAssembler.<AdverxoConfigurationProperties>forBidder(BIDDER_NAME)",
+                      rendered)
+
+    def test_no_witness_when_no_typed_getter_is_declared(self):
+        """The corpus default. 243 of 255 upstream configs are bare."""
+        rendered = self._typed()
+        self.assertIn("BidderDepsAssembler.forBidder(BIDDER_NAME)", rendered)
+        self.assertNotIn("BidderDepsAssembler.<", rendered)
+
+    def test_declared_getters_are_threaded_into_the_creator_call(self):
+        """Emitting the witness without the read, or the read without the
+        witness, is what does not compile -- so one ctx key drives both."""
+        rendered = self._typed(typed_config_lambda_getters=["auctionEndpoint",
+                                                           "registrationEndpoint"])
+        self.assertIn("config.getEndpoint(), config.getAuctionEndpoint(), "
+                      "config.getRegistrationEndpoint()", rendered)
+
+    def test_witness_and_getter_reads_are_emitted_together(self):
+        """The coupling is the invariant: every rendering either has both or
+        neither. A rendering with one is the shape javac rejects."""
+        for getters in ([], ["auctionEndpoint"], ["auctionEndpoint", "registrationEndpoint"]):
+            rendered = self._typed(typed_config_lambda_getters=getters)
+            has_witness = "BidderDepsAssembler.<" in rendered
+            has_reads = "config.getAuctionEndpoint()" in rendered
+            self.assertEqual(has_witness, has_reads,
+                             f"witness={has_witness} reads={has_reads} for {getters}")
+
+    def test_witness_type_defaults_to_the_bidder_root_suffix(self):
+        rendered = self._typed(typed_config_class_name=None,
+                               typed_config_lambda_getters=["auctionEndpoint"])
+        self.assertIn("BidderDepsAssembler.<AdverxoConfigurationProperties>forBidder", rendered)
+
+    def test_getters_without_a_subclass_is_a_hard_error(self):
+        """There is no subclass to read them from, so the emission would not
+        compile. Fail at render rather than hand a reviewer broken Java.
+
+        typed_fields is cleared so the neighbouring
+        `typed_fields_supplied_but_has_typed_config_props_is_false` guard cannot
+        fire first -- its message also contains has_typed_config_props, so a
+        substring assertion passes while this guard is absent.
+        """
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            self._typed(has_typed_config_props=False, typed_fields=None,
+                        typed_config_constraint_imports=None, typed_config_javadoc=None,
+                        typed_config_lambda_getters=["auctionEndpoint"])
+        self.assertIn("ERROR_typed_config_lambda_getters_requires_has_typed_config_props",
+                      str(cm.exception))
+
+    def test_a_config_getter_in_free_form_extra_args_is_a_hard_error(self):
+        """bidder_creator_extra_args is pasted through verbatim, so a subclass
+        getter hidden in it needs the witness the template was not told to
+        emit. Upstream Magnite is this shape: 4 typed reads in the creator."""
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            self._typed(bidder_creator_extra_args="config.getAuctionEndpoint()")
+        self.assertIn("ERROR_bidder_creator_extra_args_reads_a_config_getter",
+                      str(cm.exception))
+
+    def test_extra_args_without_a_config_getter_still_renders(self):
+        """The guard must not fire on args that read something else."""
+        rendered = self._typed(bidder_creator_extra_args="versionInfo.getVersion()")
+        self.assertIn("versionInfo.getVersion()", rendered)
+
+
 class TestBidderJ2(unittest.TestCase):
     """Tests for templates/bidder.java.j2 — the heaviest port-go2java template."""
 
