@@ -87,7 +87,7 @@ GO_MODULE_VERSION = "v4"
 # builds the adapter with the endpoint from the bidder-test ctx and then compares
 # the request the adapter produced against each fixture's expectedRequest.uri, so
 # a placeholder in any one of these contexts fails the run with
-# `httpRequest[0].uri ... does not match expected`. 241 of the 247 upstream
+# `httpRequest[0].uri ... does not match expected`. 241 of the 246 upstream
 # adapters that have both a Builder endpoint and exemplary uris match (97%).
 KOBLER_ENDPOINT = "https://bid.essrtb.com/bid/prebid_server_rtb_call"
 
@@ -130,7 +130,7 @@ def _kobler_params_test_ctx() -> Dict[str, Any]:
 
 
 def _kobler_exemplary_fixture_ctx() -> Dict[str, Any]:
-    # Each imp carries ext.bidder. 1369 of 1413 upstream exemplary fixtures with
+    # Each imp carries ext.bidder. 1369 of 1412 upstream exemplary fixtures with
     # an imp do (96%), and 173 of the 215 adapters that unmarshal imp.Ext (80%)
     # do it unguarded -- so an imp without ext makes MakeRequests return
     # `failed parsing imp.ext` and RunJSONBidderTest fails on the fixture the
@@ -160,11 +160,11 @@ def _kobler_exemplary_fixture_ctx() -> Dict[str, Any]:
                 "status": 200,
                 # The mock response sets `cur`. bidder.go.j2 assigns
                 # bidderResponse.Currency = bidResponse.Cur unguarded, which is
-                # the corpus norm (101 of 141 adapters, 71%), so it clobbers the
-                # "USD" that NewBidderResponse seeds. Among those 101 adapters'
-                # 515 exemplary fixtures, 290 (56%) set `cur` to match the
-                # asserted currency and 214 (41%) assert no currency; only 11
-                # (2%) assert one the mock never sets, and that pair fails
+                # the corpus norm (100 of 140 adapters, 71%), so it clobbers the
+                # "USD" that NewBidderResponse seeds. Among those 100 adapters'
+                # 514 exemplary fixtures, 290 (56%) set `cur` to match the
+                # asserted currency and 214 (41%) assert no currency; only 10
+                # (1%) assert one the mock never sets, and that pair fails
                 # RunJSONBidderTest with `Got , expected USD`.
                 "response": {"id": "resp-1", "cur": "USD",
                              "seatbid": [{"bid": [{"id": "bid-1", "impid": "imp-1", "price": 1.5}]}]},
@@ -2381,7 +2381,7 @@ class TestModuleVersionInOtherTemplates(unittest.TestCase):
 def _supplemental_fixture_ctx(scenario_kind: str) -> Dict[str, Any]:
     """Synthetic kobler-equivalent context for supplemental-fixture.json.j2."""
     # imp.ext.bidder for the same reason as the exemplary ctx: an adapter that
-    # unmarshals imp.Ext unguarded (173 of 215, 80%) returns
+    # unmarshals imp.Ext unguarded (172 of 214, 80%) returns
     # `failed parsing imp.ext` and the scenario under test never runs.
     request = {
         "id": "test-request-id",
@@ -3290,8 +3290,8 @@ class TestEmittedGoAdapterRunsUnderAdapterstest(unittest.TestCase):
         then compares the request it produced against each fixture's
         expectedRequest.uri. The template hardcoded "https://test.example.com/bid",
         so every emitted adapter failed with `httpRequest[0].uri ... does not match
-        expected`. 241 of the 247 upstream adapters that have both a Builder
-        endpoint and exemplary uris match (97%); of the 6 that do not, two pass a
+        expected`. 241 of the 246 upstream adapters that have both a Builder
+        endpoint and exemplary uris match (97%); of the 5 that do not, two pass a
         deliberately invalid endpoint and one leaves macros unexpanded."""
         rendered = _render("bidder-test.go.j2", _kobler_bidder_test_ctx())
         self.assertIn(KOBLER_ENDPOINT, rendered)
@@ -3317,7 +3317,7 @@ class TestEmittedGoAdapterRunsUnderAdapterstest(unittest.TestCase):
         """173 of the 215 upstream adapters that unmarshal imp.Ext do it unguarded
         (80%), and the emitted adapter is in that group, so an imp without
         ext.bidder makes MakeRequests return `failed parsing imp.ext` before the
-        scenario under test runs. 1369 of 1413 upstream exemplary fixtures with an
+        scenario under test runs. 1369 of 1412 upstream exemplary fixtures with an
         imp carry ext.bidder (96%)."""
         for ctx in (_kobler_exemplary_fixture_ctx(),
                     _supplemental_fixture_ctx("status-204")):
@@ -3334,10 +3334,10 @@ class TestEmittedGoAdapterRunsUnderAdapterstest(unittest.TestCase):
 
     def test_fixture_currency_is_set_by_the_mock_response(self):
         """bidder.go.j2 assigns bidderResponse.Currency = bidResponse.Cur
-        unguarded, which is the corpus norm (101 of 141, 71%), so it overwrites
+        unguarded, which is the corpus norm (100 of 140, 71%), so it overwrites
         the "USD" that NewBidderResponse seeds. A fixture that asserts a currency
         its mock response never sets fails with `Got , expected USD`; 290 of the
-        515 exemplary fixtures belonging to those 101 adapters set `cur` to match
+        514 exemplary fixtures belonging to those 100 adapters set `cur` to match
         (56%) and 214 assert no currency (41%)."""
         ctx = _kobler_exemplary_fixture_ctx()
         expected = ctx["expected_currency"]

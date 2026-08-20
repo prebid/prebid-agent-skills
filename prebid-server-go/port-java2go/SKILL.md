@@ -367,7 +367,7 @@ D3 considers the skill production-ready only when, for each MVP pair:
 3. Adapter-coverage report (per upstream `./scripts/check_coverage.sh`) ≥ 80% (real-world median; well above the 30% CI minimum).
 4. `gofmt -s -l` exits with no diff; `go vet ./adapters/{bidder}/...` exits clean.
 5. `TestBidderUniquenessGatekeeping` passes (first-6-letter prefix unique against current `coreBidderNames`).
-6. Emitted YAML validates against Go's `static/bidder-info/_schema.json`; emitted JSON validates against the bidder-params schema convention.
+6. Emitted YAML and JSON validate through Go's runtime validators, not against schema files. There is no `static/bidder-info/_schema.json` in upstream `prebid-server` — bidder-info YAML is checked by the `validate*` functions in `config/bidderinfo.go` (`validateInfo`, `validateMaintainer`, `validateCapabilities`, `validateGeoscope`, `validateAdapterEndpoint`, `validateSyncer`, and the alias pair `validateAliases` / `validateAliasCapabilities`), which `config/bidderinfo_test.go` exercises over every file on disk via `TestBidderInfoFiles` and `TestBidderInfoValidationPositive`. Emitted bidder-params JSON is checked by `openrtb_ext.NewBidderParamsValidator(schemaDirectory)` (`openrtb_ext/bidders.go:783`), which compiles each file as a JSON Schema at startup. So the gate is `go test ./config/... ./openrtb_ext/...`, not a schema-file diff. This mirrors the same correction already recorded on the Java side, where the literal schema files named in earlier drafts do not exist either.
 7. `port-report.json` schema-validates against `port-report.schema.json` v0.2.0.
 8. `r5_check.state` matches the per-pair expectation in `docs/execution-plan-phase-d.md` §D3.3.
 

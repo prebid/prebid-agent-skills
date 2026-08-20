@@ -376,13 +376,40 @@ CITATION_RX = re.compile(
     r"`(?P<path>(?:adapters|openrtb_ext|config|exchange|usersync|endpoints|macros|util)/[\w/.-]+\.go"
     r"|src/(?:main|test)/(?:java|resources)/[\w/.$-]+\.(?:java|json|yaml)"
     r"|static/bidder-(?:info|params)/[\w.-]+\.(?:yaml|json))"
-    r":(?P<lo>\d+)(?:[-\u2013](?P<hi>\d+))?`"
+    r"(?::(?P<lo>\d+)(?:[-\u2013](?P<hi>\d+))?)?`"
 )
+
+ALLOWLIST = REPO_ROOT / ".github" / "accepted-missing-citations.txt"
+
+
+def _load_citation_allowlist() -> dict[str, str]:
+    """path -> "kind | reason". A path-only citation that does not resolve is not
+    automatically rot: a skill legitimately names the pre-rename side of a rename,
+    a file it is recording as absent, or a file the port creates. No heuristic
+    separates those from drift, so each one is listed with its reason and the
+    sweep fails on anything unlisted -- and on a listing that now resolves, since
+    a stale exemption waves a real regression through."""
+    out: dict[str, str] = {}
+    if not ALLOWLIST.is_file():
+        return out
+    for line in ALLOWLIST.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        path, _, rest = line.partition("|")
+        out[path.strip()] = rest.strip()
+    return out
 
 
 def check_line_citations(roots: dict[str, Path]) -> list[Result]:
-    """Verify every line-numbered upstream citation in the skill trees resolves."""
+    """Verify every upstream citation in the skill trees resolves.
+
+    Line-numbered citations are failed outright. Path-only citations are checked
+    against .github/accepted-missing-citations.txt, in both directions.
+    """
     out: list[Result] = []
+    allow = _load_citation_allowlist()
+    seen_unresolved: set[str] = set()
     checked = 0
     for tree in DISCOVERY_TREES:
         for f in sorted((REPO_ROOT / tree).rglob("*.md")):
@@ -390,17 +417,23 @@ def check_line_citations(roots: dict[str, Path]) -> list[Result]:
             for lineno, line in enumerate(
                     f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
                 for m in CITATION_RX.finditer(line):
-                    path, lo, hi = m.group("path"), int(m.group("lo")), m.group("hi")
-                    hi = int(hi) if hi else lo
+                    path = m.group("path")
+                    lo = int(m.group("lo")) if m.group("lo") else None
+                    hi = int(m.group("hi")) if m.group("hi") else lo
                     # A Java path cited from a Go-side doc is a legitimate
                     # cross-reference, so try every supplied checkout.
                     hits = [r / path for r in roots.values() if (r / path).is_file()]
                     cid = f"citation.{rel}:{lineno}"
                     if not hits:
-                        out.append(Result(cid, WARN,
-                                          f"{path}:{lo} -- path not in any supplied checkout "
-                                          f"(a documented rename or a file the port creates "
-                                          f"is expected here)"))
+                        seen_unresolved.add(path)
+                        if path in allow:
+                            continue
+                        out.append(Result(cid, FAIL,
+                                          f"{path} does not resolve in any supplied checkout and "
+                                          f"is not in {ALLOWLIST.name}; add it with its kind and "
+                                          f"reason, or fix the citation"))
+                        continue
+                    if lo is None:
                         continue
                     checked += 1
                     total = len(hits[0].read_text(encoding="utf-8",
@@ -410,6 +443,11 @@ def check_line_citations(roots: dict[str, Path]) -> list[Result]:
                                           f"{path}:{m.group('lo')}"
                                           f"{'-' + m.group('hi') if m.group('hi') else ''} "
                                           f"cited, file has {total} lines"))
+    stale = sorted(p for p in allow if p not in seen_unresolved)
+    for path in stale:
+        out.append(Result("citation.allowlist", FAIL,
+                          f"{ALLOWLIST.name} exempts {path}, which now resolves or is no longer "
+                          f"cited -- drop the entry so a real regression cannot hide behind it"))
     if checked == 0:
         # An empty scan is a setup error, not a pass.
         out.append(Result("citation.sweep", FAIL,
@@ -417,7 +455,8 @@ def check_line_citations(roots: dict[str, Path]) -> list[Result]:
                           "the sweep reached nothing"))
     else:
         out.append(Result("citation.sweep", PASS,
-                          f"{checked} line-numbered citation(s) resolved and in range"))
+                          f"{checked} line-numbered citation(s) resolved and in range; "
+                          f"{len(allow)} path-only exemption(s) all still needed"))
     return out
 
 

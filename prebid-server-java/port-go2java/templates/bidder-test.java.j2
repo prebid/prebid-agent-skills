@@ -108,7 +108,7 @@ public class {{ ctx.bidder_class_root }}BidderTest extends VertxTest {
     Go semantic that cannot hold: decoding "" throws DecodeException and the bidder
     returns badServerResponse.
 
-    Corpus: 1 of 772 upstream bidder test directories feeds 204 to makeBids
+    Corpus: 1 of 254 upstream bidder test directories feeds 204 to makeBids
     (sparteo/SparteoBidderTest.java), and it asserts an ERROR, not an empty result,
     because SparteoBidder carries no 204 guard either. Rule 30 keeps the guard out
     of the emitted bidder; this keeps the contradicting test out of the emitted

@@ -1132,7 +1132,7 @@ class TestEmittedJavaTestsExecute(unittest.TestCase):
         DecodeException and the bidder returns badServerResponse, so the emitted
         suite failed its own emitted bidder.
 
-        Corpus: 1 of 772 upstream bidder test directories feeds 204 to makeBids
+        Corpus: 1 of 254 upstream bidder test directories feeds 204 to makeBids
         (sparteo), and it asserts an error, not an empty result.
         """
         rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())

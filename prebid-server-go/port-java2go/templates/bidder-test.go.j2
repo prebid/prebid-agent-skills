@@ -33,9 +33,9 @@ import (
 
 func TestJsonSamples(t *testing.T) {
 {# The Builder endpoint must be the one the exemplary fixtures' expectedRequest.uri
-    was built from, so it comes from the spec, not from a placeholder. 241 of the 247
+    was built from, so it comes from the spec, not from a placeholder. 241 of the 246
     upstream adapters that have both a Builder endpoint and exemplary uris match
-    (97%); of the 6 that do not, two (alkimi, amx) pass a deliberately invalid
+    (97%); of the 5 that do not, two (alkimi, amx) pass a deliberately invalid
     endpoint and one (mobfoxpb) leaves macros unexpanded. A hardcoded placeholder
     puts every emitted adapter in that group and fails RunJSONBidderTest with
     `httpRequest[0].uri ... does not match expected`. #}

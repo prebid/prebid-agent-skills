@@ -877,7 +877,7 @@ claims:
       'src/test/java/org/prebid/server/bidder/**/*BidderTest.java' | wc -l
     sites:
       - path: prebid-server-java/port-go2java/templates/bidder-test.java.j2
-        assert: "1 of 772 upstream bidder test directories feeds 204 to makeBids"
+        assert: "1 of 254 upstream bidder test directories feeds 204 to makeBids"
 
   - id: go.bidder-info.deploy-time-token-delimited
     kind: count
