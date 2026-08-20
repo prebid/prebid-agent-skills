@@ -358,7 +358,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {%- endif -%}
 {%- endif -%}
 {%- set group_key_type = _per_key.key_type if group_key_field else ("ExtImp" ~ ctx.imp_ext_class_root) -%}
-{%- set group_key_expr = ("extImp.get" ~ group_key_field[0] | upper ~ group_key_field[1:] ~ "()") if group_key_field else "extImp" -%}
+{%- set group_key_expr = ("extImp.get" ~ group_key_field[0] | upper ~ group_key_field[1:] ~ "()") if group_key_field else "extImp" %}
         // Rule 47 — grouped-by-key batching: one outgoing request per distinct
 {% if group_key_field %}
         // imp.ext.bidder.{{ group_key_field }}.

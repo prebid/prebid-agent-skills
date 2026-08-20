@@ -502,14 +502,20 @@ import (
 {% if ctx.javadoc_summary %}
 // {{ ctx.javadoc_summary }}
 {% endif %}
+{#- gofmt aligns the type column inside a struct block, and `validate.sh` runs
+    `gofmt -s -l`, so an unaligned field list is an upstream CI failure rather than
+    a style preference. The field set is variable here, so the padding is computed
+    from the widest name present instead of hardcoded: with only `endpoint` the
+    single space is already correct, which is why a one-field emission looked clean.
+    Measured: 4 of 6 rendered variants failed `gofmt -s -l` on this block alone. -#}
+{%- set _fields = [("endpoint", "string")]
+      + ([("EndpointTemplate", "*template.Template")] if _endpoint_needs_macros_resolution else [])
+      + ([("extraInfo", "extraInfo")] if ctx.has_extra_info else []) -%}
+{%- set _w = _fields | map(attribute=0) | map("length") | max -%}
 type adapter struct {
-	endpoint string
-{% if _endpoint_needs_macros_resolution %}
-	EndpointTemplate *template.Template
-{% endif %}
-{% if ctx.has_extra_info %}
-	extraInfo extraInfo
-{% endif %}
+{% for _n, _t in _fields %}
+	{{ _n }}{{ " " * (_w - _n | length + 1) }}{{ _t }}
+{% endfor %}
 }
 
 {% if ctx.has_extra_info %}
@@ -825,8 +831,8 @@ func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData
 	return bidderResponse, nil
 {% endif %}
 }
-
 {% if _emit_parse_imp_ext %}
+
 func parseImpExt(imp *openrtb2.Imp) (*openrtb_ext.{{ _imp_ext_type }}, error) {
 {% if ctx.imp_ext_unmarshal_kind == "standard-two-phase" %}
 	var bidderExt adapters.ExtImpBidder

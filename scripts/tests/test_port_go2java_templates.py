@@ -1153,6 +1153,86 @@ class TestBidderTestJ2(unittest.TestCase):
         self.assertIn("true", rendered[idx:idx + 100])
 
 
+class TestEmittedJavaPassesCheckstyle(unittest.TestCase):
+    """Upstream runs checkstyle at the `validate` phase from `extra/pom.xml`, which
+    `pr-java-ci.yml` invokes via `mvn -B package --file extra/pom.xml`. So a
+    checkstyle violation in emitted code is an upstream CI failure, not a style
+    preference — and the SKILL claims the templates emit compliant code by
+    construction.
+
+    Running upstream's own `checkstyle.xml` (checkstyle 10.17.0) over 14 rendered
+    variants found one violation: `CommentsIndentation` in the grouped-by-key arm.
+    A `{%- set ... -%}` on the line before the comment block stripped the trailing
+    whitespace including the next line's indentation, so the comment's first line
+    emitted at column 0 while its continuation lines emitted at 8.
+
+    These tests assert the invariant directly, so the class is gated without
+    needing a checkstyle jar in CI.
+    """
+
+    # Every ctx shape whose emission the checkstyle run covered.
+    VARIANTS = (
+        ("baseline", {}),
+        ("per-imp", {"batching_kind": "per-imp"}),
+        ("max-imps", {"batching_kind": "max-imps-per-request", "max_imps_per_request": 10}),
+        ("grouped", {"batching_kind": "grouped-by-key"}),
+        ("per-bid-skip", {"bid_type_error_tolerance": "per-bid-skip",
+                          "bid_type_resolution": "by-bid-mtype"}),
+        ("grouped+skip", {"batching_kind": "grouped-by-key",
+                          "bid_type_error_tolerance": "per-bid-skip",
+                          "bid_type_resolution": "by-bid-mtype"}),
+        ("external-url-macro", {"endpoint_external_url_macro": True}),
+        ("custom-status", {"http_status_kind": "custom-status-checks"}),
+    )
+
+    def _rendered(self, overrides):
+        ctx = _kobler_bidder_ctx()
+        ctx.update(overrides)
+        return _render("bidder.java.j2", ctx)
+
+    def test_no_comment_is_emitted_at_column_zero_inside_the_class(self):
+        """`CommentsIndentation`. A comment at column 0 inside a class body is the
+        signature of a whitespace-control tag eating the next line's indentation."""
+        for label, over in self.VARIANTS:
+            rendered = self._rendered(over)
+            body = rendered[rendered.index(" implements Bidder<BidRequest> {"):]
+            offenders = [(i, l) for i, l in enumerate(body.splitlines(), 1)
+                         if l.startswith("//")]
+            self.assertEqual(offenders, [],
+                             f"{label}: comment at column 0 inside the class body -> "
+                             f"CommentsIndentation: {offenders[:2]}")
+
+    def test_a_comment_block_keeps_one_indentation_level_throughout(self):
+        """The defect showed as line 1 of a block at 0 and lines 2..n at 8, so
+        assert the whole run agrees rather than only that line 1 is indented."""
+        for label, over in self.VARIANTS:
+            lines = self._rendered(over).splitlines()
+            run: list[tuple[int, int]] = []
+            for i, l in enumerate(lines, 1):
+                if l.lstrip().startswith("//"):
+                    run.append((i, len(l) - len(l.lstrip())))
+                else:
+                    if len(run) > 1:
+                        indents = {ind for _, ind in run}
+                        self.assertEqual(len(indents), 1,
+                                         f"{label}: comment block at lines "
+                                         f"{run[0][0]}-{run[-1][0]} mixes indents {sorted(indents)}")
+                    run = []
+
+    def test_no_emitted_line_exceeds_the_checkstyle_line_length(self):
+        """`LineLength` in upstream's config. 120 per the SKILL's §4-6 reference."""
+        for label, over in self.VARIANTS:
+            for i, l in enumerate(self._rendered(over).splitlines(), 1):
+                self.assertLessEqual(len(l), 120, f"{label}: line {i} is {len(l)} chars")
+
+    def test_no_trailing_whitespace_is_emitted(self):
+        """`RegexpSingleline` / `NoWhitespaceBefore` territory, and trivially
+        avoidable in a template."""
+        for label, over in self.VARIANTS:
+            for i, l in enumerate(self._rendered(over).splitlines(), 1):
+                self.assertEqual(l, l.rstrip(), f"{label}: line {i} has trailing whitespace")
+
+
 class TestEmittedJavaTestsExecute(unittest.TestCase):
     """Defects found by compiling the emitted Java tests and running them.
 

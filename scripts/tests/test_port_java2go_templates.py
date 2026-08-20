@@ -13,6 +13,7 @@ Run from repo root:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import unittest
@@ -2744,6 +2745,10 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
 def _vungle_bidder_go_ctx() -> Dict[str, Any]:
     """Vungle canary v3 ctx (B1 constant + B2 currency + B3 custom-headers)."""
     return {
+        # Upstream spells this type `ImpExtVungle`, the minority form used by 78 of
+        # the 248 imp-ext types. Without it the emission references a type that
+        # does not exist upstream and `go build` fails on the vendor's own name.
+        "imp_ext_type_name": "ImpExtVungle",
         "package_name": "vungle",
         "bidder_class_root": "Vungle",
         "uses_currency_conversion": True,
@@ -2808,6 +2813,10 @@ def _adverxo_bidder_go_ctx() -> Dict[str, Any]:
     (compile-clean stub), not the eventual macro-resolution emission
     (F-new-26)."""
     return {
+        # Upstream spells this type `ImpExtAdverxo`, the minority form used by 78 of
+        # the 248 imp-ext types. Without it the emission references a type that
+        # does not exist upstream and `go build` fails on the vendor's own name.
+        "imp_ext_type_name": "ImpExtAdverxo",
         "package_name": "adverxo",
         "bidder_class_root": "Adverxo",
         "uses_currency_conversion": True,
@@ -3271,6 +3280,82 @@ class TestRequiredArtifacts(unittest.TestCase):
             )
 
 
+
+
+class TestEmittedGoIsGofmtClean(unittest.TestCase):
+    """`gofmt -s -l` is an upstream gate — `validate.sh` runs it and both CI
+    workflows invoke `validate.sh` — so a formatting difference is a build failure,
+    not a preference.
+
+    Running it over 6 rendered variants found two defects. Neither appears in a
+    one-field, parseImpExt-emitting shape, which is why the kobler-only run that
+    preceded this looked clean:
+
+    - The `type adapter struct` field list was emitted without padding. gofmt
+      aligns the type column, so any variant with a second field (4 of 6) failed.
+    - The blank line separating `parseImpExt` from what follows was emitted
+      unconditionally, so when that helper is not emitted the blank survived and
+      paired with the next one — two consecutive blank lines, which gofmt removes.
+    """
+
+    VARIANTS = ("_kobler_bidder_go_ctx", "_aax_bidder_go_ctx", "_adverxo_bidder_go_ctx",
+                "_vungle_bidder_go_ctx", "_thetradedesk_bidder_go_ctx",
+                "_adkerneladn_bidder_go_ctx")
+
+    def _rendered(self, name):
+        return _render("bidder.go.j2", globals()[name]())
+
+    def test_struct_field_types_are_column_aligned(self):
+        """gofmt aligns the type column within a struct block."""
+        for name in self.VARIANTS:
+            rendered = self._rendered(name)
+            m = re.search(r'type adapter struct \{\n(.*?)\n\}', rendered, re.S)
+            self.assertIsNotNone(m, f"{name}: no adapter struct emitted")
+            rows = [l for l in m.group(1).splitlines() if l.strip()]
+            cols = set()
+            for l in rows:
+                field = l.lstrip("\t")
+                parts = field.split(None, 1)
+                self.assertEqual(len(parts), 2, f"{name}: unparsable field row {l!r}")
+                # Measure the whitespace run after the name. `field.index(type)`
+                # is wrong when the type equals the name -- aax emits
+                # `extraInfo extraInfo`, where index() returns the name's offset.
+                rest = field[len(parts[0]):]
+                cols.add(len(parts[0]) + len(rest) - len(rest.lstrip()))
+            self.assertEqual(len(cols), 1,
+                             f"{name}: struct type column not aligned, offsets {sorted(cols)} "
+                             f"in {rows}")
+
+    def test_no_two_consecutive_blank_lines(self):
+        """gofmt collapses them, so emitting them fails `gofmt -s -l`."""
+        for name in self.VARIANTS:
+            lines = self._rendered(name).splitlines()
+            for i in range(1, len(lines)):
+                if lines[i] == "" and lines[i - 1] == "":
+                    self.fail(f"{name}: consecutive blank lines at {i}-{i+1}; "
+                              f"next is {lines[i+1][:60]!r}")
+
+    def test_no_line_has_trailing_whitespace(self):
+        for name in self.VARIANTS:
+            for i, l in enumerate(self._rendered(name).splitlines(), 1):
+                self.assertEqual(l, l.rstrip(), f"{name}: line {i} trails whitespace")
+
+    def test_indentation_is_tabs_not_spaces(self):
+        """Go is tab-indented; a space-indented line is a gofmt diff."""
+        for name in self.VARIANTS:
+            for i, l in enumerate(self._rendered(name).splitlines(), 1):
+                if l.startswith(" ") and l.strip() and not l.lstrip().startswith("*"):
+                    self.fail(f"{name}: line {i} is space-indented: {l[:60]!r}")
+
+    def test_fixture_contexts_name_the_type_upstream_actually_uses(self):
+        """adverxo and vungle use the minority `ImpExt{Bidder}` form. A context that
+        leaves it at the default emits a type that does not exist upstream, and the
+        emission fails `go build` on the vendor's own name."""
+        for name, expected in (("_adverxo_bidder_go_ctx", "ImpExtAdverxo"),
+                               ("_vungle_bidder_go_ctx", "ImpExtVungle")):
+            ctx = globals()[name]()
+            self.assertEqual(ctx.get("imp_ext_type_name"), expected, name)
+            self.assertIn(f"openrtb_ext.{expected}", self._rendered(name))
 
 
 class TestEmittedGoAdapterRunsUnderAdapterstest(unittest.TestCase):
