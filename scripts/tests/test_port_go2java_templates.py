@@ -1079,11 +1079,15 @@ class TestBidderTestJ2(unittest.TestCase):
         )
 
     def test_baseline_test_methods_present(self):
-        """The four canonical baseline @Test methods (constructor invariants,
-        204 no-content, malformed-response error, valid single-bid) all emit."""
+        """The three canonical baseline @Test methods emit: constructor
+        invariants, malformed-response error, valid single-bid.
+
+        There is no 204 method. It used to be emitted and it asserted a Go
+        semantic that cannot hold in Java -- see
+        TestEmittedJavaTestsExecute.test_no_204_case_is_emitted_against_makeBids.
+        """
         rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
         self.assertIn("public void creationShouldFailOnInvalidEndpointUrl()", rendered)
-        self.assertIn("public void makeBidsShouldReturnEmptyResultOn204NoContent()", rendered)
         self.assertIn("public void makeBidsShouldReturnErrorOnMalformedResponse()", rendered)
         self.assertIn("public void makeBidsShouldReturnSingleBannerBidForCanonicalResponse()", rendered)
 
@@ -1107,6 +1111,54 @@ class TestBidderTestJ2(unittest.TestCase):
         self.assertGreater(idx, 0, "ExtImpKobler.of( call must be emitted")
         # The default value should be within the call's arg span (~100 char window)
         self.assertIn("true", rendered[idx:idx + 100])
+
+
+class TestEmittedJavaTestsExecute(unittest.TestCase):
+    """Defects found by compiling the emitted Java tests and running them.
+
+    bidder-test.java.j2 and it-test.java.j2 had never been handed to a compiler.
+    Both compile clean against upstream at e3ffd57 (javac 25.0.2, Lombok
+    annotation processing on, 3093 main + 949 test classes). Executing the unit
+    test surfaced one behavioural defect that no substring assertion on the
+    rendered text would have caught.
+    """
+
+    def test_no_204_case_is_emitted_against_makeBids(self):
+        """A Go-ism. Go hands MakeBids the status code, so a Go adapter checks
+        http.StatusNoContent -- and the emitted Go bidder does. Java does not:
+        HttpBidderRequester short-circuits NO_CONTENT before makeBids is invoked
+        (HttpBidderRequester.java:303 and :322). The emitted test asserted an
+        empty result on 204, which cannot hold -- decoding "" throws
+        DecodeException and the bidder returns badServerResponse, so the emitted
+        suite failed its own emitted bidder.
+
+        Corpus: 1 of 772 upstream bidder test directories feeds 204 to makeBids
+        (sparteo), and it asserts an error, not an empty result.
+        """
+        rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
+        self.assertNotIn("givenHttpCall(204", rendered)
+        self.assertNotIn("204NoContent", rendered)
+
+    def test_the_go_direction_keeps_its_204_check(self):
+        """The mirror must not be 'fixed' the same way: in Go the status check
+        belongs in the adapter, so removing it there would be the defect."""
+        go_tpl = (REPO_ROOT / "prebid-server-go" / "port-java2go" / "templates"
+                  / "bidder.go.j2").read_text()
+        self.assertIn("http.StatusNoContent", go_tpl)
+
+    def test_scenario_scaffolds_fail_by_construction(self):
+        """The remaining failure in a fresh emission is deliberate: one @Test per
+        fixture_inventory.exemplary[] entry whose body the operator fills. They
+        fail rather than pass-vacuously, so an unfilled scaffold cannot be
+        mistaken for coverage -- which is why the acceptance gate on emitted
+        tests is a post-fill gate, not a property of a fresh emission."""
+        ctx = _kobler_bidder_test_ctx()
+        scenarios = ctx.get("scenario_methods") or []
+        if not scenarios:
+            self.skipTest("this ctx declares no scenario_methods")
+        rendered = _render("bidder-test.java.j2", ctx)
+        self.assertEqual(rendered.count("not yet implemented"), len(scenarios))
+        self.assertIn("TODO[port-go2java]", rendered)
 
 
 class TestItTestJ2(unittest.TestCase):

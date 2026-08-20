@@ -363,7 +363,7 @@ A port-time R5 fail is a `human_todos[]` entry, not a CI failure. The port still
 D3 considers the skill production-ready only when, for each MVP pair:
 
 1. Emitted Go compiles cleanly via `go build ./adapters/{bidder}/...`.
-2. Emitted tests pass via `go test ./adapters/{bidder}/...`.
+2. Emitted tests pass via `go test ./adapters/{bidder}/...`. Unlike the Java direction there are no failing scaffolds in the emitted test file, so a complete emission passes as emitted — verified for the kobler shape against upstream at 0ba35231: `TestJsonSamples`, `TestValidParams` and `TestInvalidParams` over one exemplary and five supplemental fixtures, with `gofmt -s -l` and `go vet` clean. Note the emitted adapter and its fixtures are one unit: the Builder endpoint, each fixture's `expectedRequest.uri`, `impIDs`, `imp.ext.bidder`, the mock response's `cur` and `http_status_kind` must all agree, or `adapterstest` fails the fixture before reaching the behaviour under test.
 3. Adapter-coverage report (per upstream `./scripts/check_coverage.sh`) ≥ 80% (real-world median; well above the 30% CI minimum).
 4. `gofmt -s -l` exits with no diff; `go vet ./adapters/{bidder}/...` exits clean.
 5. `TestBidderUniquenessGatekeeping` passes (first-6-letter prefix unique against current `coreBidderNames`).

@@ -194,12 +194,25 @@ Inputs (mirror of bidder.java.j2 ctx):
                                         no macro values yet).
                                         Affects ~19% of corpus (adkernelAdn, adverxo,
                                         thetradedesk + others under analysis).
-  ctx.http_status_kind        : str  — "canonical-helpers" | "legacy-raw" |
-                                        "legacy-raw-go". The "legacy-raw-go"
-                                        variant emits the same baseline 204+200
-                                        check as "legacy-raw" but additionally
-                                        consumes ctx.legacy_raw_status_handlers
-                                        for per-status branching (see below).
+  ctx.http_status_kind        : str  — the source spec's
+                                        code.make_bids.http_status_handling.kind,
+                                        passed through unchanged. The taxonomy's
+                                        Go-side values are "canonical-go-helpers",
+                                        "legacy-raw-go", "custom-status-checks" and
+                                        "custom" (behavior-taxonomy.md). Only the
+                                        first emits the canonical helpers; the rest
+                                        emit raw status checks. "canonical-helpers"
+                                        is accepted as a historical alias for
+                                        "canonical-go-helpers"; any other value is
+                                        a hard error, because silently falling
+                                        through to raw checks emits the pattern
+                                        Rule 30 tells a Java-to-Go porter NOT to
+                                        use, for the one spec value that means
+                                        "use the helpers".
+                                        "legacy-raw-go" emits the baseline 204+200
+                                        check and additionally consumes
+                                        ctx.legacy_raw_status_handlers for
+                                        per-status branching (see below).
   ctx.legacy_raw_status_handlers : list[{status_code: int, error_kind: str}] |
                                         None — Per-status branches inserted
                                         between the 204 short-circuit and the
@@ -729,7 +742,11 @@ func (a *adapter) MakeRequests(request *openrtb2.BidRequest, reqInfo *adapters.E
 }
 
 func (a *adapter) MakeBids(request *openrtb2.BidRequest, _ *adapters.RequestData, responseData *adapters.ResponseData) (*adapters.BidderResponse, []error) {
-{% if ctx.http_status_kind == "canonical-helpers" %}
+{% set _canonical_status_helpers = ctx.http_status_kind in ("canonical-go-helpers", "canonical-helpers") %}
+{% if ctx.http_status_kind and ctx.http_status_kind not in ("canonical-go-helpers", "canonical-helpers", "legacy-raw-go", "custom-status-checks", "custom") %}
+{{ ERROR_unknown_http_status_kind__expected_a_behavior_taxonomy_value_canonical_go_helpers_legacy_raw_go_custom_status_checks_or_custom() }}
+{% endif %}
+{% if _canonical_status_helpers %}
 	if adapters.IsResponseStatusCodeNoContent(responseData) {
 		return nil, nil
 	}

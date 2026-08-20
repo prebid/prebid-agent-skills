@@ -48,7 +48,7 @@ def _render(template_name: str, ctx: Dict[str, Any]) -> str:
 def _kobler_bidder_info_ctx() -> Dict[str, Any]:
     """Synthetic kobler-equivalent context for bidder-info.yaml.j2 (Go side)."""
     return {
-        "endpoint": "https://bid.essrtb.com/bid/prebid_server_rtb_call",
+        "endpoint": KOBLER_ENDPOINT,
         "maintainer_email": "bidding-support@kobler.no",
         "gvl_vendor_id": 0,
         "endpoint_compression": "gzip",
@@ -83,6 +83,20 @@ def _kobler_imp_ext_pojo_ctx() -> Dict[str, Any]:
 # Centralized so a future v5 bump is a one-line change.
 GO_MODULE_VERSION = "v4"
 
+# One endpoint for every kobler-shape fixture in this module. RunJSONBidderTest
+# builds the adapter with the endpoint from the bidder-test ctx and then compares
+# the request the adapter produced against each fixture's expectedRequest.uri, so
+# a placeholder in any one of these contexts fails the run with
+# `httpRequest[0].uri ... does not match expected`. 241 of the 247 upstream
+# adapters that have both a Builder endpoint and exemplary uris match (97%).
+KOBLER_ENDPOINT = "https://bid.essrtb.com/bid/prebid_server_rtb_call"
+
+# bidder.go.j2 and supplemental-fixture.json.j2 both branch on this. The fixture's
+# expectations only match the emitted adapter when both read the same value, so it
+# is declared once. "canonical-go-helpers" is the behavior-taxonomy spelling that a
+# source spec's code.make_bids.http_status_handling.kind actually carries.
+KOBLER_HTTP_STATUS_KIND = "canonical-go-helpers"
+
 
 def _kobler_bidder_test_ctx() -> Dict[str, Any]:
     return {
@@ -90,6 +104,10 @@ def _kobler_bidder_test_ctx() -> Dict[str, Any]:
         "bidder_constant": "openrtb_ext.BidderKobler",
         "bidder_class_root": "Kobler",
         "module_version": GO_MODULE_VERSION,
+        # Must equal _kobler_exemplary_fixture_ctx()'s http_calls[0].uri --
+        # RunJSONBidderTest builds the adapter with this endpoint and then
+        # compares the request it produced against the fixture's uri.
+        "endpoint": KOBLER_ENDPOINT,
     }
 
 
@@ -112,17 +130,44 @@ def _kobler_params_test_ctx() -> Dict[str, Any]:
 
 
 def _kobler_exemplary_fixture_ctx() -> Dict[str, Any]:
+    # Each imp carries ext.bidder. 1369 of 1413 upstream exemplary fixtures with
+    # an imp do (96%), and 173 of the 215 adapters that unmarshal imp.Ext (80%)
+    # do it unguarded -- so an imp without ext makes MakeRequests return
+    # `failed parsing imp.ext` and RunJSONBidderTest fails on the fixture the
+    # same skill emitted. Omitting it is only safe for the 19% that nil-guard,
+    # which upstream kobler happens to be.
+    request = {
+        "id": "req-1",
+        "imp": [{
+            "id": "imp-1",
+            "banner": {"format": [{"w": 300, "h": 250}]},
+            "ext": {"bidder": {"test": False}},
+        }],
+    }
     return {
-        "mock_bid_request": {
-            "id": "req-1",
-            "imp": [{"id": "imp-1", "banner": {"format": [{"w": 300, "h": 250}]}}],
-        },
+        "mock_bid_request": request,
         "http_calls": [
             {
-                "uri": "https://bid.essrtb.com/bid/prebid_server_rtb_call",
-                "body": {"id": "req-1"},
+                "uri": KOBLER_ENDPOINT,
+                # The emitted kobler-shape adapter forwards the request
+                # unmodified, so the body it sends is the request it was given.
+                # A stub body here ({"id": "req-1"}) makes the harness report
+                # `Expected RequestData was not returned` on a correct adapter.
+                "body": request,
+                # adapterstest rejects a fixture whose expectedRequest has no
+                # impIDs before comparing anything (test_json.go:359).
+                "imp_ids": ["imp-1"],
                 "status": 200,
-                "response": {"id": "resp-1", "seatbid": [{"bid": [{"id": "bid-1", "impid": "imp-1", "price": 1.5}]}]},
+                # The mock response sets `cur`. bidder.go.j2 assigns
+                # bidderResponse.Currency = bidResponse.Cur unguarded, which is
+                # the corpus norm (101 of 141 adapters, 71%), so it clobbers the
+                # "USD" that NewBidderResponse seeds. Among those 101 adapters'
+                # 515 exemplary fixtures, 290 (56%) set `cur` to match the
+                # asserted currency and 214 (41%) assert no currency; only 11
+                # (2%) assert one the mock never sets, and that pair fails
+                # RunJSONBidderTest with `Got , expected USD`.
+                "response": {"id": "resp-1", "cur": "USD",
+                             "seatbid": [{"bid": [{"id": "bid-1", "impid": "imp-1", "price": 1.5}]}]},
             },
         ],
         "expected_bids": [
@@ -145,7 +190,7 @@ def _kobler_bidder_go_ctx() -> Dict[str, Any]:
         "batching_kind": "single-batched",
         "batching_max_imps": None,
         "endpoint_resolution_kind": "dev-prod-toggle",
-        "http_status_kind": "canonical-helpers",
+        "http_status_kind": KOBLER_HTTP_STATUS_KIND,
         "bid_type_resolution": "imp-mediatype-introspection",
         "has_extra_info": False,
         "module_version": GO_MODULE_VERSION,
@@ -161,7 +206,7 @@ class TestBidderInfoYamlJ2(unittest.TestCase):
         rendered = _render("bidder-info.yaml.j2", _kobler_bidder_info_ctx())
         parsed = yaml.safe_load(rendered)
         self.assertIsNotNone(parsed)
-        self.assertEqual(parsed["endpoint"], "https://bid.essrtb.com/bid/prebid_server_rtb_call")
+        self.assertEqual(parsed["endpoint"], KOBLER_ENDPOINT)
 
     def test_camel_case_keys(self):
         """Go uses camelCase YAML keys, NOT kebab-case (Java side)."""
@@ -290,7 +335,7 @@ class TestExemplaryFixtureJ2(unittest.TestCase):
         self.assertEqual(len(parsed["httpCalls"]), 1)
         call = parsed["httpCalls"][0]
         self.assertEqual(call["expectedRequest"]["uri"],
-                         "https://bid.essrtb.com/bid/prebid_server_rtb_call")
+                         KOBLER_ENDPOINT)
         self.assertEqual(call["mockResponse"]["status"], 200)
 
     def test_expected_bids_emit_with_currency(self):
@@ -309,15 +354,35 @@ class TestExemplaryFixtureJ2(unittest.TestCase):
         parsed = json.loads(rendered)
         self.assertEqual(parsed["httpCalls"][0]["expectedRequest"]["impIDs"], ["imp_id"])
 
-    def test_imp_ids_omitted_when_absent(self):
-        """Backward compat: existing ctx without imp_ids must still render
-        a valid expectedRequest (the Go test framework will still error since
-        impIDs is required, but the template must not blow up on missing key)."""
+    def test_imp_ids_are_required_not_optional(self):
+        """adapterstest rejects a fixture whose expectedRequest carries no
+        impIDs before it compares anything:
+
+            if len(expected.ImpIDs) < 1 {
+                return fmt.Errorf(`expected.ImpIDs must contain at least one imp ID`)
+            }
+
+        (adapters/adapterstest/test_json.go:359 at 0ba35231.) All 2820 upstream
+        fixtures that declare an httpCall carry impIDs. An earlier review asked
+        for the key to be omitted when the ctx did not supply it, which made the
+        two fixture templates agree with each other and both emit fixtures the
+        harness refuses to run -- `expected.ImpIDs must contain at least one imp
+        ID`, before any request or response comparison. The template now fails
+        at render instead.
+        """
         ctx = _kobler_exemplary_fixture_ctx()
-        # imp_ids deliberately not set
-        rendered = _render("exemplary-fixture.json.j2", ctx)
+        for call in ctx["http_calls"]:
+            call.pop("imp_ids", None)
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("exemplary-fixture.json.j2", ctx)
+        self.assertIn("ERROR_every_http_call_requires_imp_ids", str(cm.exception))
+
+    def test_imp_ids_emitted_for_every_http_call(self):
+        rendered = _render("exemplary-fixture.json.j2", _kobler_exemplary_fixture_ctx())
         parsed = json.loads(rendered)
-        self.assertNotIn("impIDs", parsed["httpCalls"][0]["expectedRequest"])
+        for call in parsed["httpCalls"]:
+            self.assertTrue(call["expectedRequest"]["impIDs"],
+                            "every expectedRequest needs a non-empty impIDs")
 
 
 class TestBidderGoJ2(unittest.TestCase):
@@ -337,8 +402,12 @@ class TestBidderGoJ2(unittest.TestCase):
         self.assertIn("adapters.CheckResponseStatusCodeForErrors(responseData)", rendered)
 
     def test_legacy_raw_status_when_rule_30_inapplicable(self):
+        # "legacy-raw-go" is the behavior-taxonomy value. The template's Inputs
+        # block used to also list "legacy-raw", which no branch consumed -- it
+        # reached the raw checks only by falling through, the same path a typo
+        # took. It is now rejected.
         ctx = _kobler_bidder_go_ctx()
-        ctx["http_status_kind"] = "legacy-raw"
+        ctx["http_status_kind"] = "legacy-raw-go"
         rendered = _render("bidder.go.j2", ctx)
         self.assertIn("responseData.StatusCode == http.StatusNoContent", rendered)
         self.assertIn("responseData.StatusCode != http.StatusOK", rendered)
@@ -700,7 +769,7 @@ class TestEndpointResolutionMacros(unittest.TestCase):
             "batching_kind": "single-batched",
             "batching_max_imps": None,
             "endpoint_resolution_kind": "template-macro",
-            "http_status_kind": "canonical-helpers",
+            "http_status_kind": KOBLER_HTTP_STATUS_KIND,
             "bid_type_resolution": "imp-mediatype-introspection",
             "has_extra_info": False,
             "module_version": GO_MODULE_VERSION,
@@ -1072,7 +1141,7 @@ class TestPerKeyBatching(unittest.TestCase):
                 {"macro": "PublisherID", "ext_field": "PublisherID",
                  "convert": "itoa"},
             ],
-            "http_status_kind": "canonical-helpers",
+            "http_status_kind": KOBLER_HTTP_STATUS_KIND,
             "bid_type_resolution": "imp-mediatype-introspection",
             "has_extra_info": False,
             "module_version": GO_MODULE_VERSION,
@@ -1527,7 +1596,7 @@ class TestImpIdCorrelation(unittest.TestCase):
                 {"macro": "PublisherID", "ext_field": "PublisherID",
                  "convert": "itoa"},
             ],
-            "http_status_kind": "canonical-helpers",
+            "http_status_kind": KOBLER_HTTP_STATUS_KIND,
             # F-new-7 EXT-B: imp-id-correlation
             "bid_type_resolution": "imp-id-correlation",
             "bid_type_fallback_value": "video",
@@ -1663,7 +1732,7 @@ class TestImpIdCorrelation(unittest.TestCase):
                 {"macro": "PublisherID", "ext_field": "PublisherID",
                  "convert": "itoa"},
             ],
-            "http_status_kind": "canonical-helpers",
+            "http_status_kind": KOBLER_HTTP_STATUS_KIND,
             "bid_type_resolution": "imp-id-correlation",
             "bid_type_fallback_value": "video",
             "has_extra_info": False,
@@ -2311,28 +2380,25 @@ class TestModuleVersionInOtherTemplates(unittest.TestCase):
 
 def _supplemental_fixture_ctx(scenario_kind: str) -> Dict[str, Any]:
     """Synthetic kobler-equivalent context for supplemental-fixture.json.j2."""
+    # imp.ext.bidder for the same reason as the exemplary ctx: an adapter that
+    # unmarshals imp.Ext unguarded (173 of 215, 80%) returns
+    # `failed parsing imp.ext` and the scenario under test never runs.
+    request = {
+        "id": "test-request-id",
+        "imp": [
+            {
+                "id": "test-imp-id",
+                "banner": {"format": [{"w": 300, "h": 250}]},
+                "ext": {"bidder": {"test": False}},
+            },
+        ],
+    }
     return {
         "scenario_kind": scenario_kind,
-        "mock_bid_request": {
-            "id": "test-request-id",
-            "imp": [
-                {
-                    "id": "test-imp-id",
-                    "banner": {"format": [{"w": 300, "h": 250}]},
-                },
-            ],
-        },
-        "uri": "http://fake.endpoint",
-        "expected_request_body": {
-            "id": "test-request-id",
-            "imp": [
-                {
-                    "id": "test-imp-id",
-                    "banner": {"format": [{"w": 300, "h": 250}]},
-                },
-            ],
-            "cur": ["USD"],
-        },
+        "http_status_kind": KOBLER_HTTP_STATUS_KIND,
+        "mock_bid_request": request,
+        "uri": KOBLER_ENDPOINT,
+        "expected_request_body": request,
         "imp_ids": ["test-imp-id"],
     }
 
@@ -2426,6 +2492,9 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
         self.assertEqual(errs[0]["comparison"], "literal")
 
     def test_no_response_body_emits_200_null_body(self):
+        """The mockResponse shape does not depend on http_status_kind; only the
+        expectations below it do, which is why they are asserted separately in
+        the legacy-raw-go and canonical-go-helpers tests."""
         ctx = _supplemental_fixture_ctx("no-response-body")
         rendered = _render("supplemental-fixture.json.j2", ctx)
         parsed = json.loads(rendered)
@@ -2435,9 +2504,20 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
         # no-response-body.json — adapterstest delivers Body==nil to the
         # adapter, which kobler-shape adapters short-circuit on).
         self.assertNotIn("body", mock)
-        # No errors expected (kobler short-circuits with (nil, nil)).
-        self.assertNotIn("expectedMakeBidsErrors", parsed)
-        self.assertEqual(parsed["expectedBidResponses"], [])
+
+    def test_no_response_body_canonical_helpers_expects_the_decode_error(self):
+        """A canonical-helpers adapter does not short-circuit an empty 200 body:
+        it falls through to jsonutil.Unmarshal and returns `expect { or n, but
+        found`. Recognising only the "canonical-helpers" alias here gave such an
+        adapter the legacy-raw-go expectations, and the fixture failed with
+        `MakeBids had wrong error count. Expected 0, got 1`."""
+        for spelling in ("canonical-go-helpers", "canonical-helpers"):
+            ctx = _supplemental_fixture_ctx("no-response-body")
+            ctx["http_status_kind"] = spelling
+            parsed = json.loads(_render("supplemental-fixture.json.j2", ctx))
+            self.assertIn("expectedMakeBidsErrors", parsed, spelling)
+            self.assertEqual(parsed["expectedMakeBidsErrors"][0]["comparison"],
+                             "startswith", spelling)
 
     def test_no_response_body_legacy_raw_go_unchanged(self):
         """F-new-23: explicit `http_status_kind="legacy-raw-go"` reproduces
@@ -2488,9 +2568,11 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
         absent OR explicitly None, the template defaults to
         legacy-raw-go (kobler-shape), preserving pre-F-new-23 callers
         verbatim. Pinned for both forms."""
-        # Form 1: key absent.
+        # Form 1: key absent. The shared ctx now declares http_status_kind so it
+        # agrees with the adapter the bidder template emits, so this test drops
+        # the key to exercise the pre-F-new-23 caller shape.
         ctx_absent = _supplemental_fixture_ctx("no-response-body")
-        self.assertNotIn("http_status_kind", ctx_absent)
+        ctx_absent.pop("http_status_kind", None)
         rendered_absent = _render("supplemental-fixture.json.j2", ctx_absent)
         parsed_absent = json.loads(rendered_absent)
         self.assertNotIn(
@@ -2559,19 +2641,18 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
         self.assertEqual(errs[0]["value"], 'expect { or n, but found "')
         self.assertEqual(errs[0]["comparison"], "literal")
 
-    def test_unknown_scenario_kind_renders_empty_or_errors(self):
-        """Defensive: unknown scenario_kind values render a parse-clean but
-        empty mockResponse + expectedBidResponses=[]. The renderer is
-        expected to validate scenario_kind upstream and reject unknowns
-        before invoking this template; this test pins the fail-graceful
-        behavior so a rogue ctx does not crash the render."""
+    def test_unknown_scenario_kind_is_a_hard_error(self):
+        """This used to render "fail-graceful": an unrecognised kind fell
+        through every branch and emitted an empty mockResponse. That is not
+        graceful at the point it matters -- adapterstest reads status 0 and
+        MakeBids fails with `Unexpected status code: 0. Run with request.debug =
+        1 for more info`, which names neither the fixture field nor the bad
+        value. The template's own docstring deferred the check to the caller;
+        it is enforced here instead."""
         ctx = _supplemental_fixture_ctx("status-200")  # unrecognized
-        rendered = _render("supplemental-fixture.json.j2", ctx)
-        parsed = json.loads(rendered)
-        # Empty mockResponse: only the structural braces, no status/body.
-        self.assertEqual(parsed["httpCalls"][0]["mockResponse"], {})
-        self.assertNotIn("expectedMakeBidsErrors", parsed)
-        self.assertEqual(parsed["expectedBidResponses"], [])
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("supplemental-fixture.json.j2", ctx)
+        self.assertIn("ERROR_unknown_scenario_kind", str(cm.exception))
 
     def test_imp_ids_emit_per_F_new_12(self):
         """F-new-12 (canary v2): adapterstest.RunJSONBidderTest asserts
@@ -2599,31 +2680,21 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
                 f"impIDs missing for kind={kind}",
             )
 
-    def test_imp_ids_omitted_when_absent_or_empty(self):
-        """Reviewer M6: previously the supplemental template emitted
-        `"impIDs": null` when ctx.imp_ids was missing — diverges from
-        exemplary template's `{% if call.imp_ids %}` guard. After the M6
-        fix the impIDs key is omitted entirely when absent or empty,
-        consistent with exemplary."""
+    def test_imp_ids_are_required_not_optional(self):
+        """Same hard requirement as the exemplary template -- see
+        TestExemplaryFixtureJ2.test_imp_ids_are_required_not_optional. This
+        template's Inputs block already documented ctx.imp_ids as "required by
+        adapterstest" while emitting it conditionally."""
         ctx = _supplemental_fixture_ctx("status-204")
-        # imp_ids deliberately missing
         ctx.pop("imp_ids", None)
-        rendered = _render("supplemental-fixture.json.j2", ctx)
-        parsed = json.loads(rendered)
-        self.assertNotIn(
-            "impIDs",
-            parsed["httpCalls"][0]["expectedRequest"],
-            "impIDs key should be omitted when ctx.imp_ids is absent (M6)",
-        )
-        # And same for empty list.
-        ctx2 = _supplemental_fixture_ctx("status-204")
-        ctx2["imp_ids"] = []
-        parsed2 = json.loads(_render("supplemental-fixture.json.j2", ctx2))
-        self.assertNotIn(
-            "impIDs",
-            parsed2["httpCalls"][0]["expectedRequest"],
-            "impIDs key should be omitted when ctx.imp_ids is empty list (M6)",
-        )
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("supplemental-fixture.json.j2", ctx)
+        self.assertIn("ERROR_supplemental_fixture_requires_ctx_imp_ids", str(cm.exception))
+
+    def test_imp_ids_emitted_when_supplied(self):
+        parsed = json.loads(_render("supplemental-fixture.json.j2",
+                                    _supplemental_fixture_ctx("status-204")))
+        self.assertTrue(parsed["httpCalls"][0]["expectedRequest"]["impIDs"])
 
     def test_passthrough_body_default(self):
         """The expected_request_body == mock_bid_request case (passthrough
@@ -2642,12 +2713,12 @@ class TestSupplementalFixtureJ2(unittest.TestCase):
         """The TEST_ENDPOINT URI must be emitted verbatim — adapterstest
         compares it to the URI the adapter constructs in MakeRequests."""
         ctx = _supplemental_fixture_ctx("status-204")
-        ctx["uri"] = "https://bid.essrtb.com/bid/prebid_server_rtb_call"
+        ctx["uri"] = KOBLER_ENDPOINT
         rendered = _render("supplemental-fixture.json.j2", ctx)
         parsed = json.loads(rendered)
         self.assertEqual(
             parsed["httpCalls"][0]["expectedRequest"]["uri"],
-            "https://bid.essrtb.com/bid/prebid_server_rtb_call",
+            KOBLER_ENDPOINT,
         )
 
 
@@ -2681,7 +2752,7 @@ def _vungle_bidder_go_ctx() -> Dict[str, Any]:
         "batching_kind": "per-imp",
         "batching_max_imps": None,
         "endpoint_resolution_kind": "static",
-        "http_status_kind": "canonical-helpers",
+        "http_status_kind": KOBLER_HTTP_STATUS_KIND,
         "bid_type_resolution": "constant",
         "bid_type_constant": "video",
         "bid_type_fallback_action": "throw",
@@ -2745,7 +2816,7 @@ def _adverxo_bidder_go_ctx() -> Dict[str, Any]:
         "batching_kind": "per-imp",
         "batching_max_imps": None,
         "endpoint_resolution_kind": "multi-token-substitution",
-        "http_status_kind": "canonical-helpers",
+        "http_status_kind": KOBLER_HTTP_STATUS_KIND,
         "bid_type_resolution": "by-bid-mtype",
         "bid_type_fallback_action": "throw",
         "has_extra_info": False,
@@ -2771,7 +2842,7 @@ def _thetradedesk_bidder_go_ctx() -> Dict[str, Any]:
         "batching_kind": "single-batched",
         "batching_max_imps": None,
         "endpoint_resolution_kind": "template-macro",
-        "http_status_kind": "canonical-helpers",
+        "http_status_kind": KOBLER_HTTP_STATUS_KIND,
         "bid_type_resolution": "by-bid-mtype",
         "bid_type_fallback_action": "throw",
         "has_extra_info": False,
@@ -2797,7 +2868,7 @@ def _adkerneladn_bidder_go_ctx() -> Dict[str, Any]:
         "batching_kind": "single-batched",
         "batching_max_imps": None,
         "endpoint_resolution_kind": "template-macro",
-        "http_status_kind": "canonical-helpers",
+        "http_status_kind": KOBLER_HTTP_STATUS_KIND,
         "bid_type_resolution": "by-bid-mtype",
         "bid_type_fallback_action": "return-default",
         "bid_type_fallback_value": "banner",
@@ -3034,7 +3105,7 @@ class TestNamingFormResolution(unittest.TestCase):
             "batching_kind": "single-batched",
             "batching_max_imps": None,
             "endpoint_resolution_kind": "static",
-            "http_status_kind": "canonical-helpers",
+            "http_status_kind": KOBLER_HTTP_STATUS_KIND,
             "bid_type_resolution": "imp-mediatype-introspection",
             "has_extra_info": False,
             "module_version": GO_MODULE_VERSION,
@@ -3200,6 +3271,127 @@ class TestRequiredArtifacts(unittest.TestCase):
             )
 
 
+
+
+class TestEmittedGoAdapterRunsUnderAdapterstest(unittest.TestCase):
+    """Defects found by running the emitted adapter under adapterstest.
+
+    `go build` and `go vet` had been run against the emitted Go; the fixture-driven
+    harness had not. Emitting bidder.go.j2 + bidder-test.go.j2 + params-test.go.j2
+    with one exemplary and five supplemental fixtures into prebid-server at
+    0ba35231 and running `go test` surfaced four separate reasons the emitted
+    adapter could not pass its own emitted fixtures. All four now pass:
+    TestJsonSamples, TestValidParams, TestInvalidParams, 6 fixtures, gofmt and vet
+    clean.
+    """
+
+    def test_builder_endpoint_comes_from_the_spec_not_a_placeholder(self):
+        """RunJSONBidderTest builds the adapter with the test file's endpoint and
+        then compares the request it produced against each fixture's
+        expectedRequest.uri. The template hardcoded "https://test.example.com/bid",
+        so every emitted adapter failed with `httpRequest[0].uri ... does not match
+        expected`. 241 of the 247 upstream adapters that have both a Builder
+        endpoint and exemplary uris match (97%); of the 6 that do not, two pass a
+        deliberately invalid endpoint and one leaves macros unexpanded."""
+        rendered = _render("bidder-test.go.j2", _kobler_bidder_test_ctx())
+        self.assertIn(KOBLER_ENDPOINT, rendered)
+        self.assertNotIn("test.example.com", rendered)
+
+    def test_builder_endpoint_is_required(self):
+        ctx = _kobler_bidder_test_ctx()
+        ctx.pop("endpoint", None)
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("bidder-test.go.j2", ctx)
+        self.assertIn("ERROR_bidder_test_requires_ctx_endpoint", str(cm.exception))
+
+    def test_every_fixture_context_agrees_on_the_endpoint(self):
+        """Three contexts feed one run: the Builder endpoint, the exemplary
+        fixture's uri and the supplemental fixture's uri. A placeholder in any one
+        of them fails the run, so they read one constant."""
+        self.assertEqual(_kobler_bidder_test_ctx()["endpoint"], KOBLER_ENDPOINT)
+        for call in _kobler_exemplary_fixture_ctx()["http_calls"]:
+            self.assertEqual(call["uri"], KOBLER_ENDPOINT)
+        self.assertEqual(_supplemental_fixture_ctx("status-204")["uri"], KOBLER_ENDPOINT)
+
+    def test_fixture_imps_carry_ext_bidder(self):
+        """173 of the 215 upstream adapters that unmarshal imp.Ext do it unguarded
+        (80%), and the emitted adapter is in that group, so an imp without
+        ext.bidder makes MakeRequests return `failed parsing imp.ext` before the
+        scenario under test runs. 1369 of 1413 upstream exemplary fixtures with an
+        imp carry ext.bidder (96%)."""
+        for ctx in (_kobler_exemplary_fixture_ctx(),
+                    _supplemental_fixture_ctx("status-204")):
+            for imp in ctx["mock_bid_request"]["imp"]:
+                self.assertIn("bidder", imp.get("ext") or {},
+                              "every fixture imp needs ext.bidder")
+
+    def test_expected_request_body_is_not_a_stub(self):
+        """The emitted kobler-shape adapter forwards the request unmodified. A
+        stub expected body reports `Expected RequestData was not returned by
+        adapters' MakeRequests() implementation` against a correct adapter."""
+        ctx = _kobler_exemplary_fixture_ctx()
+        self.assertEqual(ctx["http_calls"][0]["body"], ctx["mock_bid_request"])
+
+    def test_fixture_currency_is_set_by_the_mock_response(self):
+        """bidder.go.j2 assigns bidderResponse.Currency = bidResponse.Cur
+        unguarded, which is the corpus norm (101 of 141, 71%), so it overwrites
+        the "USD" that NewBidderResponse seeds. A fixture that asserts a currency
+        its mock response never sets fails with `Got , expected USD`; 290 of the
+        515 exemplary fixtures belonging to those 101 adapters set `cur` to match
+        (56%) and 214 assert no currency (41%)."""
+        ctx = _kobler_exemplary_fixture_ctx()
+        expected = ctx["expected_currency"]
+        curs = {c["response"].get("cur") for c in ctx["http_calls"]
+                if isinstance(c.get("response"), dict)}
+        self.assertIn(expected, curs,
+                      "the asserted currency must be one the mock response sets")
+
+    def test_canonical_helpers_branch_accepts_the_taxonomy_spelling(self):
+        """behavior-taxonomy.md spells the helper case `canonical-go-helpers`, and
+        that is what a source spec's code.make_bids.http_status_handling.kind
+        carries -- 11 of the golden specs declare it. The template tested only the
+        historical `canonical-helpers` alias, so passing the spec value through
+        fell to raw status checks: the pattern Rule 30 tells a Java-to-Go porter
+        NOT to emit, for the one value that means "use the helpers"."""
+        for spelling in ("canonical-go-helpers", "canonical-helpers"):
+            ctx = _kobler_bidder_go_ctx()
+            ctx["http_status_kind"] = spelling
+            rendered = _render("bidder.go.j2", ctx)
+            self.assertIn("adapters.IsResponseStatusCodeNoContent", rendered, spelling)
+            self.assertIn("adapters.CheckResponseStatusCodeForErrors", rendered, spelling)
+
+    def test_unknown_http_status_kind_is_a_hard_error(self):
+        """Falling through to raw checks on an unrecognised value is how the
+        alias mismatch above stayed invisible. `legacy-raw` was documented in the
+        Inputs block and consumed by no branch."""
+        for bad in ("legacy-raw", "canonical", "typo"):
+            ctx = _kobler_bidder_go_ctx()
+            ctx["http_status_kind"] = bad
+            with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+                _render("bidder.go.j2", ctx)
+            self.assertIn("ERROR_unknown_http_status_kind", str(cm.exception), bad)
+
+    def test_absent_http_status_kind_still_renders(self):
+        """Pre-F-new-23 callers did not pass the field; absence stays supported
+        and keeps the raw-check shape."""
+        ctx = _kobler_bidder_go_ctx()
+        ctx["http_status_kind"] = None
+        rendered = _render("bidder.go.j2", ctx)
+        self.assertIn("responseData.StatusCode", rendered)
+        self.assertNotIn("adapters.IsResponseStatusCodeNoContent", rendered)
+
+    def test_bidder_and_fixture_templates_normalise_the_kind_identically(self):
+        """The fixture's expectations must match the adapter that was emitted. If
+        only one template recognises a spelling, the pair is incoherent and the
+        no-response-body fixture fails with `MakeBids had wrong error count`."""
+        for spelling in ("canonical-go-helpers", "canonical-helpers"):
+            bctx = _kobler_bidder_go_ctx(); bctx["http_status_kind"] = spelling
+            uses_helpers = "adapters.IsResponseStatusCodeNoContent" in _render("bidder.go.j2", bctx)
+            fctx = _supplemental_fixture_ctx("no-response-body")
+            fctx["http_status_kind"] = spelling
+            expects_decode_error = "expectedMakeBidsErrors" in json.loads(
+                _render("supplemental-fixture.json.j2", fctx))
+            self.assertEqual(uses_helpers, expects_decode_error, spelling)
 
 
 class TestEmittedGoCompilesCleanly(unittest.TestCase):

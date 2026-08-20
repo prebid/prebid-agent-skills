@@ -100,17 +100,19 @@ public class {{ ctx.bidder_class_root }}BidderTest extends VertxTest {
 {% endif %}
     }
 
-    @Test
-    public void makeBidsShouldReturnEmptyResultOn204NoContent() {
-        final BidRequest bidRequest = givenBidRequest(identity());
-        final BidderCall<BidRequest> httpCall = givenHttpCall(204, "");
+{# No 204 test. The Go source adapter checks http.StatusNoContent in MakeBids
+    because Go hands the status to the adapter; Java does not. HttpBidderRequester
+    short-circuits NO_CONTENT before makeBids is invoked (HttpBidderRequester.java
+    :303 and :322 at e3ffd57), so a Java unit test feeding 204 to makeBids exercises
+    the framework's contract, not the bidder's, and asserting an empty result is a
+    Go semantic that cannot hold: decoding "" throws DecodeException and the bidder
+    returns badServerResponse.
 
-        final Result<List<BidderBid>> result = bidder.makeBids(httpCall, bidRequest);
-
-        assertThat(result.getValue()).isEmpty();
-        assertThat(result.getErrors()).isEmpty();
-    }
-
+    Corpus: 1 of 772 upstream bidder test directories feeds 204 to makeBids
+    (sparteo/SparteoBidderTest.java), and it asserts an ERROR, not an empty result,
+    because SparteoBidder carries no 204 guard either. Rule 30 keeps the guard out
+    of the emitted bidder; this keeps the contradicting test out of the emitted
+    suite. #}
     @Test
     public void makeBidsShouldReturnErrorOnMalformedResponse() {
         final BidRequest bidRequest = givenBidRequest(identity());
