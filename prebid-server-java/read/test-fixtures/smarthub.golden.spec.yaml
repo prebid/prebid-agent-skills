@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -218,16 +218,20 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-smarthub-bid-request.json
-        bytes: 0
+        sha256: d589092499b502c9275ed7a06c5e009b1880ef3ed61b5d836cf2b21493abcbca
+        bytes: 993
         role: bidder-bid-request
       - filename: test-smarthub-bid-response.json
-        bytes: 0
+        sha256: b24895dd45ca5d7d9e439fb5e6da77f2a46c7308386faa017a0b3273e68afe06
+        bytes: 396
         role: bidder-bid-response
       - filename: test-auction-smarthub-request.json
-        bytes: 0
+        sha256: a9005cc980623f19a01d8fe0ea11dd9f0bd69ba4923ac454d8be1171812000a5
+        bytes: 371
         role: auction-request
       - filename: test-auction-smarthub-response.json
-        bytes: 0
+        sha256: b34693a9f592b10f4f1027f3390578581b2492970daf554a679be20712d340fd
+        bytes: 841
         role: auction-response
   uses_canonical_harness: true
   unit_test_methods_count: 10

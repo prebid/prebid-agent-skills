@@ -170,15 +170,18 @@ assertions:
 
   config_class_location:
     go_path: "(N/A — Go has no Spring config)"
-    java_path: "src/main/java/org/prebid/server/spring/config/bidder/util/TeqblazeConfiguration.java"
+    java_path: "src/main/java/org/prebid/server/spring/config/bidder/TeqblazeConfiguration.java"
     canonical_path: "src/main/java/org/prebid/server/spring/config/bidder/<Name>Configuration.java"
-    severity: warn
+    severity: pass
     note: |
-      TeqblazeConfiguration lives in `spring/config/bidder/util/` subpackage instead
-      of the canonical `spring/config/bidder/`. Of 255 bidder Configuration classes,
-      teqblaze is the only one in the util/ subpackage today. Likely an upstream
-      port-time mis-placement. Cross-language fidelity NOT broken — Spring still
-      finds the @Configuration; this is a code-organization artifact only.
+      Canonical location, no divergence. This block previously asserted
+      `spring/config/bidder/util/TeqblazeConfiguration.java` and called teqblaze
+      "the only one in the util/ subpackage today". Neither holds at e3ffd57db:
+      the class is at `spring/config/bidder/TeqblazeConfiguration.java` with
+      `package org.prebid.server.spring.config.bidder;`, and
+      `spring/config/bidder/util/` contains no bidder Configuration class at all —
+      only BidderDepsAssembler, BidderInfoCreator and UsersyncerUtil. The count of
+      255 bidder Configuration classes is correct; none of them is in util/.
 
   yaml_field_name_typos:
     go: []

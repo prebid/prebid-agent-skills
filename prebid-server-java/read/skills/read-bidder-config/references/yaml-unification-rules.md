@@ -59,7 +59,11 @@ Maps each Java unified key to the corresponding canonical Adapter Specification 
 
 **`enabled: false` opt-in pattern** (Java edge case #30): Default for `bidder_info.default_enabled` is `true` when the key is absent. When YAML declares `enabled: false`, the bidder ships disabled and must be opt-in by the operator. Canonical opt-in pattern: Optidigital, Adverxo aliases.
 
-**`modifying-vast-xml-allowed`** (Java edge case #31): kebab-case Boolean. Default `false` when absent. Maps to `bidder_info.modifying_vast_xml_allowed`. Canonical: FeedAd PR #3869, Mediasquare PR #4031.
+**`modifying-vast-xml-allowed`** (Java edge case #31): kebab-case Boolean. Maps to `bidder_info.modifying_vast_xml_allowed`. Canonical: FeedAd PR #3869, Mediasquare PR #4031.
+
+> **The absent-key default is `true`, not `false`.** Verified at `e3ffd57db`: `src/main/resources/application.yaml:102` sets `modifying-vast-xml-allowed: true` under `adapter-defaults`, and `BidderConfigurationProperties.init():67-68` back-fills it through `ObjectUtils.defaultIfNull`, so a bidder-config that omits the key is effective `true` and `VastModifier.java:82` will rewrite VAST for that bidder. This reference previously stated `false`, which is Go's polarity (`config/bidderinfo.go:35` declares a plain `bool`).
+
+> **What this reader currently records is `false`, and that is a known inaccuracy.** Measured 2026-08-19 against the pinned commits: of 20 Java goldens carrying the field, 14 have no key upstream and record `false` — neither the file's value nor the effective value. Whether the field should hold raw `null` or the computed effective value is a corpus-wide decision deferred in ADR-010; it re-baselines those goldens and changes the R5 verdict on the pairs where Go is effective-false and Java is absent. Until it lands, do not read this field as an effective value, and do not carry it into a port without applying Rule 49's effective-value contract.
 
 ---
 

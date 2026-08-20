@@ -1,0 +1,26 @@
+# Upstream paths cited in the skills that do NOT resolve in a current checkout.
+#
+# `scripts/verify-upstream-claims.py --upstream` sweeps every upstream-shaped path
+# citation in the skill trees. A `path:line` citation is failed outright: either the
+# file has that many lines or the citation drifted. A path-only citation is different
+# — a skill legitimately names a file that is absent, and there is no heuristic that
+# separates the legitimate cases from rot. Three kinds recur:
+#
+#   rename      the pre-rename side of a documented rename, kept so a reader can
+#               recognise the old layout
+#   nonexistent cited in order to state that it does not exist upstream, usually to
+#               correct an earlier draft that assumed it did
+#   created     a file the port is instructed to produce, which by definition is not
+#               upstream yet
+#
+# So every unresolved path must be listed here with its kind and reason. The sweep
+# fails on an unresolved path that is absent from this file, AND on an entry here
+# that now resolves — a stale exemption is how a real regression gets waved through.
+#
+# One path per line: <path> | <kind> | <reason>
+
+src/main/java/org/prebid/server/spring/config/bidder/AdopplerConfiguration.java | rename | adoppler was renamed to elementaltv; junit-it-patterns.md lists the pre-rename paths beside their post-rename targets so the cascade is legible.
+src/test/java/org/prebid/server/it/AdopplerTest.java | rename | Same rename cascade; the post-rename ElementalTVTest.java is what exists.
+static/bidder-params/adoppler.json | rename | Same rename cascade; elementaltv.json is what exists.
+static/bidder-params/_schema.json | nonexistent | port-go2java's acceptance gates cite this path to record that it does NOT exist in upstream prebid-server-java, which validates via BidderParamValidator at runtime. Removing the citation would delete the correction.
+static/bidder-info/_schema.json | nonexistent | port-java2go's acceptance gates cite this path to record that Go has NO bidder-info JSON schema; bidder-info YAML is validated by the validate* functions in config/bidderinfo.go and exercised by config/bidderinfo_test.go. The citation exists to correct a gate that told a porter to validate against this file.

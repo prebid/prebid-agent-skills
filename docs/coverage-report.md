@@ -123,7 +123,7 @@ Reconnaissance totals (Round 3 inventory, ADR-003):
 
 ## 7. Per-rule master-sample coverage
 
-For each of the 46 rules, scan the rule body for bidder names and check whether the corpus has a golden for them. Rules with no specific bidder mentions (general patterns) show empty.
+For each of the 49 rules, scan the rule body for bidder names and check whether the corpus has a golden for them. Rules with no specific bidder mentions (general patterns) show empty.
 
 | # | Title | Mentioned bidders | Covered | Uncovered |
 |---|---|---|---|---|
@@ -143,10 +143,12 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 | Rule 12 | Query parameter augmentation | (generic) | 0 | 0 |
 | Rule 13 | Dev-prod toggle | (generic) | 0 | 0 |
 | Rule 14 | Region from country (runtime-region-selection) | (generic) | 0 | 0 |
-| Rule 15 | Deploy-time tokens | `rubicon` | 1 | 0 |
+| Rule 15 | Deploy-time tokens | `magnite`*, `rubicon`, `teqblaze` | 2 | 1 |
+| Rule 48 | Param-derived endpoint macros (parse a publisher param to fill macros) | `teqblaze` | 1 | 0 |
 | Rule 16 | max-imps-per-request split | (generic) | 0 | 0 |
 | Rule 17 | Pod-grouping by imp.id prefix | (generic) | 0 | 0 |
 | Rule 18 | Multi-format split (one request per media type) | (generic) | 0 | 0 |
+| Rule 47 | Grouped-by-key imp batching (one request per key group) | `huaweiads` | 1 | 0 |
 | Rule 19 | Standard headers via HttpUtil.headers / hand-rolled http.Header | (generic) | 0 | 0 |
 | Rule 20 | Pre-built basic-auth header in constructor | (generic) | 0 | 0 |
 | Rule 21 | Per-request HMAC digest | (generic) | 0 | 0 |
@@ -166,6 +168,7 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 | Rule 33 | Aliases inversion (child→parent vs parent→children) | (generic) | 0 | 0 |
 | Rule 34 | YAML unification (Go split vs Java unified) | `kobler` | 1 | 0 |
 | Rule 35 | Custom property subclass for extra YAML fields | `kobler` | 1 | 0 |
+| Rule 49 | Opposite-framework-default config keys (effective-value emission) | `adkernelAdn`, `adverxo`, `generic`, `thetradedesk`, `vungle` | 5 | 0 |
 | Rule 44 | Java alias-empire consolidation | `adkernel`, `adverxo`, `limelightDigital`, `nexx360`*, `smarthub`, `teqblaze` | 5 | 1 |
 | Rule 45 | Disabled-by-default Java alias | `audienceNetwork`*, `mgidX`*, `optidigital` | 1 | 2 |
 | Rule 46 | Naming-convention normalization | `adkernel`, `adkernelAdn`, `adkerneladn`, `audienceNetwork`*, `audiencenetwork`*, `boldwin_rapid`*, `boldwinrapid`*, `e_volution`*, `elementaltv`, `emx_digital`*, `emxdigital`, `evolution`*, `freewheelssp`, `lm_kiviads`*, `lmkiviads`*, `mgidX`*, `mgidx`*, `sa_lunamedia`*, `salunamedia`*, `sspBC`*, `sspbc`*, `stroeerCore`*, `stroeercore`*, `triplelift_native`*, `tripleliftnative`* | 6 | 19 |
@@ -174,7 +177,7 @@ For each of the 46 rules, scan the rule body for bidder names and check whether 
 | Rule 36 | Go httpCalls array vs Java 4-file split | `kobler` | 1 | 0 |
 | Rule 37 | Per-alias IT class requirement (Java-only) | (generic) | 0 | 0 |
 
-`*` after a name = bidder is named in rule body but NOT in the goldens corpus. 4 of 46 rules mention at least one uncovered bidder.
+`*` after a name = bidder is named in rule body but NOT in the goldens corpus. 5 of 49 rules mention at least one uncovered bidder.
 
 ---
 
@@ -201,9 +204,11 @@ _No port-report.json files discovered yet — the table below renders all-zero c
 | Rule 13 | Dev-prod toggle | 0 | 0 | 0 | 0 | 0 |
 | Rule 14 | Region from country (runtime-region-selection) | 0 | 0 | 0 | 0 | 0 |
 | Rule 15 | Deploy-time tokens | 0 | 0 | 0 | 0 | 0 |
+| Rule 48 | Param-derived endpoint macros (parse a publisher param to fill macros) | 0 | 0 | 0 | 0 | 0 |
 | Rule 16 | max-imps-per-request split | 0 | 0 | 0 | 0 | 0 |
 | Rule 17 | Pod-grouping by imp.id prefix | 0 | 0 | 0 | 0 | 0 |
 | Rule 18 | Multi-format split (one request per media type) | 0 | 0 | 0 | 0 | 0 |
+| Rule 47 | Grouped-by-key imp batching (one request per key group) | 0 | 0 | 0 | 0 | 0 |
 | Rule 19 | Standard headers via HttpUtil.headers / hand-rolled http.Header | 0 | 0 | 0 | 0 | 0 |
 | Rule 20 | Pre-built basic-auth header in constructor | 0 | 0 | 0 | 0 | 0 |
 | Rule 21 | Per-request HMAC digest | 0 | 0 | 0 | 0 | 0 |
@@ -223,6 +228,7 @@ _No port-report.json files discovered yet — the table below renders all-zero c
 | Rule 33 | Aliases inversion (child→parent vs parent→children) | 0 | 0 | 0 | 0 | 0 |
 | Rule 34 | YAML unification (Go split vs Java unified) | 0 | 0 | 0 | 0 | 0 |
 | Rule 35 | Custom property subclass for extra YAML fields | 0 | 0 | 0 | 0 | 0 |
+| Rule 49 | Opposite-framework-default config keys (effective-value emission) | 0 | 0 | 0 | 0 | 0 |
 | Rule 44 | Java alias-empire consolidation | 0 | 0 | 0 | 0 | 0 |
 | Rule 45 | Disabled-by-default Java alias | 0 | 0 | 0 | 0 | 0 |
 | Rule 46 | Naming-convention normalization | 0 | 0 | 0 | 0 | 0 |
@@ -249,6 +255,6 @@ Reflection loop (Phase F) consumes this section once port runs land. An always-z
 
 - Goldens: `prebid-server-{go,java}/read/test-fixtures/*.golden.spec.yaml` (42 files).
 - Dual-spec assertions: `cross-language-pairs/*.dual-spec-assertions.yaml` (17 files).
-- Port-translation rules (46 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.
-- Port reports (0 discovered): `prebid-server-go/port-java2go/output/*/port-report.json, prebid-server-java/port-go2java/output/*/port-report.json, .tmp/full-loop/*/port-report.json` (Phase D4.2 — sourced when port skills run).
+- Port-translation rules (49 rules): `prebid-server-go/read/skills/shared/port-translation-rules.yaml`.
+- Port reports (0 discovered): `prebid-server-go/port-java2go/output/*/port-report.json, prebid-server-java/port-go2java/output/*/port-report.json` (Phase D4.2 — sourced when port skills run).
 - ADRs driving the inventory: ADR-003 (empire), ADR-005 (Rule 46 pairs), ADR-006 (lifecycle sub-types), ADR-008 (Phase 5 plan).

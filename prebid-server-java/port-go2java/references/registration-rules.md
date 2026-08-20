@@ -14,20 +14,22 @@ Phase D1.3 deliverable — alphabetical insertion-position rules for Java-side f
 | `src/test/java/org/prebid/server/bidder/{bidder}/{Bidder}BidderTest.java` | Create | N/A | direct write |
 | `src/test/java/org/prebid/server/it/{Bidder}Test.java` | Create | N/A | direct write |
 | `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-*.json` | Create | N/A | direct write |
-| `src/test/resources/org/prebid/server/it/test-application.properties` | APPEND (not sorted) | none | append two lines |
+| `src/test/resources/org/prebid/server/it/test-application.properties` | INSERT into the `adapters.*` block (not sorted) | none | two lines |
 
 Java's Spring DI does most registry work automatically — there is no `bidders.go`-equivalent constants file or `adapter_builders.go`-equivalent dispatch map to keep alphabetical. The {Bidder}Configuration class is auto-discovered by Spring at startup.
 
-## test-application.properties append shape
+## test-application.properties insertion shape
 
-The IT-test resource at `src/test/resources/org/prebid/server/it/test-application.properties` carries one section per bidder. Append exactly two lines AT THE END of the file:
+The IT-test resource at `src/test/resources/org/prebid/server/it/test-application.properties` opens with a contiguous block of `adapters.*` entries and then carries unrelated settings. Insert exactly two lines at the END OF THE `adapters.*` BLOCK — not at the end of the file (F-new-110):
 
 ```properties
 adapters.{bidder}.enabled=true
 adapters.{bidder}.endpoint=http://localhost:8090/{bidder}-exchange
 ```
 
-NO alphabetical sort. NO empty-line separation between bidders. Entries land in the order they were added historically. Concurrent ports can both append without conflict.
+Measured at `e3ffd57db`: the `adapters.*` block is lines 1-707 (257 bidders), and the remaining 61 lines hold `http-client.*`, `auction.*`, `currency-converter.*`, `cache.*`, `host-cookie.*`, `settings.*`, `admin-endpoints.*`, `gdpr.*`, and `ccpa.enforce`. An end-of-file append therefore lands after `ccpa.enforce=false`, outside the block the file groups by.
+
+NO alphabetical sort. The block is only roughly alphabetical — at that commit it starts with `generic`, carries out-of-order insertions such as `elementaltv` among the `ad*` entries, and ends `zeroclickfraud, aax, zmaticoo, yearxero`, which is merge order rather than name order. NO empty-line separation between bidders. Concurrent ports can both insert at the block boundary without conflict.
 
 ## Why no `bidders.go`-equivalent exists
 

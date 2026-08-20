@@ -22,7 +22,7 @@ expected:
     family: error-handling
     severity: FAIL
     source: https://github.com/prebid/prebid-server/pull/4614#discussion_r2747036491
-    why_it_matters: "@bsardo: swallowing the unmarshal error here is fine, swallowing a marshaling error is not -- production marshal failures have signalled shared-memory corruption and must surface."
+    why_it_matters: "Swallowing the unmarshal error here is fine; swallowing a marshaling error is not -- production marshal failures have signalled shared-memory corruption and must surface."
 
   - id: trustx-bidmeta-assumes-nonempty-bidder-object
     path: adapters/trustx/trustx.go
@@ -50,3 +50,31 @@ expected:
     why_it_matters: The invalid set never exercises a wrong-typed uid or keywords, so the JSON schema's type constraints are asserted by nothing.
 
 forbidden: []
+
+# Findings this repo's own documented rules require, that no maintainer raised on
+# this PR. A citation must match the rule AS CURRENTLY SCOPED, not merely name it;
+# see review-evals/README.md for the two ordering rules.
+#  - WARN on the `Unsupported MType` error message. The rule exists
+#    (adapter-code-pr-review/SKILL.md:282) and states "Severity: **INFO** (NOTE) when
+#    it is omitted", so WARN is over the sanctioned severity. The note also
+#    paraphrases the rule's "**should** include the bid.ImpID" as "MUST", which is
+#    how a first pass at classifying this concluded the rule did not exist at all:
+#    grepping the paraphrase found nothing. Cite the rule's own words.
+#  - WARN on `headers.Set("X-Openrtb-Version", "2.6")`. Cross-field rule 12 does
+#    exist (bidder-info-pr-review/SKILL.md:645) but escalates to WARN "only when the
+#    adapter's own code depends on a field ConvertDownTo25 moves or clears", and the
+#    note does not establish that condition.
+#  - INFO on `NewBidderResponseWithBidsCapacity`.
+#    adapter-code-pr-review/SKILL.md:283 step 5 says the constructor "is
+#    not required -- the capacity argument is not a finding".
+#  - WARN on no-content-response.json. The same 204 exclusion as
+#    prebid-server-4287 and prebid-server-4765 --
+#    adapter-code-pr-review/SKILL.md:411 step 4, "This covers HTTP 204 / no-content".
+additional:
+  - id: trustx-go-ext-struct-tag-companion
+    path: openrtb_ext/imp_trustx.go
+    anchor: Uid      int             `json:"uid"`
+    family: cross-file-consistency
+    severity: INFO
+    rule: >-
+      adapter-code-pr-review/SKILL.md:137 — cross-file JSON tag consistency when the PR includes both openrtb_ext/imp_{bidder}.go and adapter Go files; INFO at most

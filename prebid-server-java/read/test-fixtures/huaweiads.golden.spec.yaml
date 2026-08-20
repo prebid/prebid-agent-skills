@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -428,48 +428,410 @@ tests:
     video: []
     videosupplemental: []
     integration:
-      - filename: test-huaweiads-bid-request.json
+      # All 96 IT fixtures, folder-qualified, following the `generic` golden's
+      # precedent for a multi-folder layout: 4 in the base directory and 92 across
+      # 23 subdirectories. Generated from `git show` at this golden's own
+      # resolved_commit.
+      #
+      # This bucket held only the four base-directory files by bare name, beside
+      # `integration_subdirs` (23 directory names), `integration_subdirs_count: 23`
+      # and `integration_subdirs_total_files: 92`. So the shape and the file count
+      # were recorded and the files themselves were not: the Java arm of
+      # sync-from-upstream's path resolver reads only `integration`, so those 92
+      # files were never resolved, never watched by the drift scan, and never
+      # reported as unresolvable.
+      #
+      # `fixture_handling: count-only` does not excuse it. Per
+      # read-adapter-code/SKILL.md, count-only means the JSON bodies are not
+      # inlined -- each entry still carries `{ filename, sha256, bytes }`.
+      #
+      # The three keys are replaced rather than kept: their counts are implied by
+      # the enumeration, and `_total_files: 92` beside 96 entries reads as a
+      # contradiction.
+      - filename: openrtb2/huaweiads/banner_app_promotion_type/test-huaweiads-auction-request.json
+        sha256: a05d45e7ece0ba5d285b16a70b68a2a0f7ce27fcde80821ab16f20894e28b4d7
+        bytes: 1199
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_app_promotion_type/test-huaweiads-auction-response.json
+        sha256: 701116af783c2722fb46f7b0ad18454f63330cebbf9da23cb8a5515be7d2ca31
+        bytes: 1803
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_app_promotion_type/test-huaweiads-bid-request.json
+        sha256: 6a22c6398f91edcd33580124826a3a486d8502af08340533dea79b03236f6ad3
+        bytes: 942
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_app_promotion_type/test-huaweiads-bid-response.json
+        sha256: 5fab61ee3653c56bbe301ff573b57d661828d5f9177c2bf05c1e959a33c5c86a
+        bytes: 1525
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_ch_endpoint/test-huaweiads-auction-request.json
+        sha256: e2cbd821e317a11f23924eb774ace6782203597d88ba511b2594075b9231aa4b
+        bytes: 1350
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_ch_endpoint/test-huaweiads-auction-response.json
+        sha256: 079c8cce2c7a8f9915c058c185d649426f48a19a679511a2d4ca4e93279e5049
+        bytes: 1980
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_ch_endpoint/test-huaweiads-bid-request.json
         sha256: 5a0f578649c142b278d0365588572f244fcd54777f89af6257081e2b1eaa2542
         bytes: 1037
         role: bidder-bid-request
-      - filename: test-huaweiads-bid-response.json
+      - filename: openrtb2/huaweiads/banner_ch_endpoint/test-huaweiads-bid-response.json
         sha256: 30dd08382491a34f9518596c9921b9bfde54add27a065a5354d17788c64c5aae
         bytes: 2073
         role: bidder-bid-response
-      - filename: test-huaweiads-auction-request.json
+      - filename: openrtb2/huaweiads/banner_eu_endpoint/test-huaweiads-auction-request.json
+        sha256: b25fe475c7cf30f7866266708b1026c870332d0f5d62d48276071e9eb064e9ce
+        bytes: 1194
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_eu_endpoint/test-huaweiads-auction-response.json
+        sha256: 079c8cce2c7a8f9915c058c185d649426f48a19a679511a2d4ca4e93279e5049
+        bytes: 1980
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_eu_endpoint/test-huaweiads-bid-request.json
+        sha256: 31afc6bc208421dda987071557d99ab234a6511f9784cb2a8f0a746e599896c9
+        bytes: 942
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_eu_endpoint/test-huaweiads-bid-response.json
+        sha256: 30dd08382491a34f9518596c9921b9bfde54add27a065a5354d17788c64c5aae
+        bytes: 2073
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_imei/test-huaweiads-auction-request.json
+        sha256: a5fd45a971fc39b0ede9bb863f164dd2c18ac71cab4cc5690b269f8d22a0787a
+        bytes: 1407
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_imei/test-huaweiads-auction-response.json
+        sha256: 079c8cce2c7a8f9915c058c185d649426f48a19a679511a2d4ca4e93279e5049
+        bytes: 1980
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_imei/test-huaweiads-bid-request.json
+        sha256: 837bd84fe1f7e9b457ccc644bf86f9865f4b3cd933603dde54e0e2773cde5f27
+        bytes: 1073
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_imei/test-huaweiads-bid-response.json
+        sha256: 30dd08382491a34f9518596c9921b9bfde54add27a065a5354d17788c64c5aae
+        bytes: 2073
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_interstitial_type/test-huaweiads-auction-request.json
+        sha256: 6803e2ae8985a83a68d12beba4f5bf8a2b554867e0c27e64d77fc803217cc1e4
+        bytes: 1203
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_interstitial_type/test-huaweiads-auction-response.json
+        sha256: 2da4e22dc024ec1e5999f236cf2529332f2ca23edb7bdebf31a3068e0a3fa216
+        bytes: 1820
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_interstitial_type/test-huaweiads-bid-request.json
+        sha256: 128f96c73c13bfd4b201fb8ff7dd16badcb75826a410d9e29db95f5236f4285f
+        bytes: 943
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_interstitial_type/test-huaweiads-bid-response.json
+        sha256: be8b7fb17e1039bbbc03bb6d76d15b39341737317f955d1e4fecada7659b75db
+        bytes: 1456
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_mccmnc/test-huaweiads-auction-request.json
+        sha256: 7f0d8734a8feb2754688563b0eba4f67989e0ced4f31e9e7123b0312bfc62901
+        bytes: 1231
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_mccmnc/test-huaweiads-auction-response.json
+        sha256: 14b5f9966637dc8cf89f3ca6a4b3bf3b4d7b06f9ee11f9fc370b1f109e20ae98
+        bytes: 1743
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_mccmnc/test-huaweiads-bid-request.json
+        sha256: a8f65ebabc4f92af6a3417d1563223e12704d1e946aa818cd174b47d96fc034b
+        bytes: 936
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_mccmnc/test-huaweiads-bid-response.json
+        sha256: 46130c03f5a8dca85ff3e03b38cd238e32ff5e731e37e07690da8f899618429b
+        bytes: 1702
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_non_integer_mccmnc/test-huaweiads-auction-request.json
+        sha256: 861eee782051f71e8a9f0bfb946e59180c002f84edf3de8eb46411cfb84ced46
+        bytes: 1233
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_non_integer_mccmnc/test-huaweiads-auction-response.json
+        sha256: 14b5f9966637dc8cf89f3ca6a4b3bf3b4d7b06f9ee11f9fc370b1f109e20ae98
+        bytes: 1743
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_non_integer_mccmnc/test-huaweiads-bid-request.json
+        sha256: 3a65cbb08c24b4819035cdc51153cf78b171846b8afe79690017422d38fa88b4
+        bytes: 937
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_non_integer_mccmnc/test-huaweiads-bid-response.json
+        sha256: 46130c03f5a8dca85ff3e03b38cd238e32ff5e731e37e07690da8f899618429b
+        bytes: 1702
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_not_app_promotion_type/test-huaweiads-auction-request.json
+        sha256: a05d45e7ece0ba5d285b16a70b68a2a0f7ce27fcde80821ab16f20894e28b4d7
+        bytes: 1199
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_not_app_promotion_type/test-huaweiads-auction-response.json
+        sha256: a9f1fa2d26e34683b1437c9194de0a20ffb714bf3cc5bf54da997f9419244736
+        bytes: 1820
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_not_app_promotion_type/test-huaweiads-bid-request.json
+        sha256: cb8fd061355c64739d17f219c02823463cb2c8e417f37199ba70d6eff77b68fa
+        bytes: 944
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_not_app_promotion_type/test-huaweiads-bid-response.json
+        sha256: 50c0971eeeff2711c9fd9e3b5dc6706ff659f61ca66bac67dc9fe7f2e94fc556
+        bytes: 1492
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_ru_endpoint/test-huaweiads-auction-request.json
+        sha256: fbb54dc41cdaab663116cdf50fba16920a4d92a4c08521e6f9cbbef3030b8108
+        bytes: 1231
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_ru_endpoint/test-huaweiads-auction-response.json
+        sha256: 73dadd0200798bf0a18605f939fe28ecab418cc1e97aac1ef8db8fe15616973e
+        bytes: 1744
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_ru_endpoint/test-huaweiads-bid-request.json
+        sha256: f3b3c24ed2e01da2e80ca8446eb0929e28f349c19b24e1943b53c07172b07ef7
+        bytes: 936
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_ru_endpoint/test-huaweiads-bid-response.json
+        sha256: 46130c03f5a8dca85ff3e03b38cd238e32ff5e731e37e07690da8f899618429b
+        bytes: 1702
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_with_user_geo/test-huaweiads-auction-request.json
+        sha256: dbd1cbad078edfa7c98de1f685518264cd556e2ea2be920493787c79c63bc76d
+        bytes: 1262
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_with_user_geo/test-huaweiads-auction-response.json
+        sha256: 14b5f9966637dc8cf89f3ca6a4b3bf3b4d7b06f9ee11f9fc370b1f109e20ae98
+        bytes: 1743
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_with_user_geo/test-huaweiads-bid-request.json
+        sha256: befa3b49df0996c8b1c67af94fe9c9a1dc911e28ab7a233e79bdd6d11abd56e8
+        bytes: 920
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_with_user_geo/test-huaweiads-bid-response.json
+        sha256: 46130c03f5a8dca85ff3e03b38cd238e32ff5e731e37e07690da8f899618429b
+        bytes: 1702
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_without_device_geo/test-huaweiads-auction-request.json
+        sha256: d67e166457464c7514479ae1c29a38855a0c92544631ca92f565520ceaf3ff80
+        bytes: 1219
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_without_device_geo/test-huaweiads-auction-response.json
+        sha256: 14b5f9966637dc8cf89f3ca6a4b3bf3b4d7b06f9ee11f9fc370b1f109e20ae98
+        bytes: 1743
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_without_device_geo/test-huaweiads-bid-request.json
+        sha256: 0a710d2bd64e6b874607273b668bc38696d949ad9cfb6493bd3e0805caa90073
+        bytes: 919
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_without_device_geo/test-huaweiads-bid-response.json
+        sha256: 46130c03f5a8dca85ff3e03b38cd238e32ff5e731e37e07690da8f899618429b
+        bytes: 1702
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_without_userext/test-huaweiads-auction-request.json
+        sha256: b8851c719e64708aa84e9d2b74b3402ebbca8d3117eb1242ae79fc76e7b1118d
+        bytes: 1260
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_without_userext/test-huaweiads-auction-response.json
+        sha256: 3c551938a078a9c372bb78179cba8dbb03908454ceb6ebbfa6f9e61e733f7d73
+        bytes: 1979
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_without_userext/test-huaweiads-bid-request.json
+        sha256: 7b081c3b25beefaf9579f2daefc2a71b12c33de553cf0ce7e4f120f2a2f03b19
+        bytes: 1049
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_without_userext/test-huaweiads-bid-response.json
+        sha256: 30dd08382491a34f9518596c9921b9bfde54add27a065a5354d17788c64c5aae
+        bytes: 2073
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/banner_wrong_mccmnc/test-huaweiads-auction-request.json
+        sha256: 7d58e99415e12d7e99072b9b27cf976540cef3dade86557c1b85d6e4c898ed38
+        bytes: 1231
+        role: auction-request
+      - filename: openrtb2/huaweiads/banner_wrong_mccmnc/test-huaweiads-auction-response.json
+        sha256: 14b5f9966637dc8cf89f3ca6a4b3bf3b4d7b06f9ee11f9fc370b1f109e20ae98
+        bytes: 1743
+        role: auction-response
+      - filename: openrtb2/huaweiads/banner_wrong_mccmnc/test-huaweiads-bid-request.json
+        sha256: a51cfdbc9ff67d061a7fd61e04ee4741bb03fdca93104b12ce0f7617d23844cb
+        bytes: 936
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/banner_wrong_mccmnc/test-huaweiads-bid-response.json
+        sha256: 46130c03f5a8dca85ff3e03b38cd238e32ff5e731e37e07690da8f899618429b
+        bytes: 1702
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/native_include_video/test-huaweiads-auction-request.json
+        sha256: b47faea8cff319d8f52c021d5e41ec64fa0b04d5db3ddc3c340af5169b6f86e9
+        bytes: 1632
+        role: auction-request
+      - filename: openrtb2/huaweiads/native_include_video/test-huaweiads-auction-response.json
+        sha256: 314742058f0ecb6c2052c7984e5a2fab3c266ee69966aa3f73f92882122dae2b
+        bytes: 2963
+        role: auction-response
+      - filename: openrtb2/huaweiads/native_include_video/test-huaweiads-bid-request.json
+        sha256: 20ec2ddeb1ecaffdcbb465c15c332fba110a9fb917be01dd0a12afa305382736
+        bytes: 1347
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/native_include_video/test-huaweiads-bid-response.json
+        sha256: 6613407530161d42bd59429cc471c76517206b9b00626a9a1adbb1d76e4cc83e
+        bytes: 4920
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/native_single_image/test-huaweiads-auction-request.json
+        sha256: a406dbd2e282a1da504158bacc596be25be1687c7b356e9b5187fd99e33a0a02
+        bytes: 1490
+        role: auction-request
+      - filename: openrtb2/huaweiads/native_single_image/test-huaweiads-auction-response.json
+        sha256: 0b132507d2c50745031e54da42dad5f08fb40e1d04bf7e6f8ddb0b764eb44bb8
+        bytes: 1361
+        role: auction-response
+      - filename: openrtb2/huaweiads/native_single_image/test-huaweiads-bid-request.json
+        sha256: 7c513c32db9132c23796c2d01381aebbbcf9a13df1983324a0ee05b520155ba8
+        bytes: 1411
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/native_single_image/test-huaweiads-bid-response.json
+        sha256: ad8ca7ff2f3ff33b7aa558296d6f6663ea3d45c6a1382aa6da4ebcecc0b4053d
+        bytes: 4234
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/native_three_image/test-huaweiads-auction-request.json
+        sha256: c896050a69c13967276090166714e8d725b7a5192b2b63c0e43d62f9e4397864
+        bytes: 1579
+        role: auction-request
+      - filename: openrtb2/huaweiads/native_three_image/test-huaweiads-auction-response.json
+        sha256: 728355c8aeb62902dd4da9e045c818285aadfae5492d8c9df56fd435f1c4e4d5
+        bytes: 1487
+        role: auction-response
+      - filename: openrtb2/huaweiads/native_three_image/test-huaweiads-bid-request.json
+        sha256: 13199c24787ed16017dbddb6f2bac19011fdb456316310abde5d36965b8c0e15
+        bytes: 903
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/native_three_image/test-huaweiads-bid-response.json
+        sha256: 44bf938e95c81dfeca6334e9bd2b6a0974b24ec28a51405048bc11d7b2c98c21
+        bytes: 5095
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/native_three_image_include_icon/test-huaweiads-auction-request.json
+        sha256: ea47cc7e8a913de9f0eae4d15263104e2c2ab3d54b732ec13e91dd58cd943e48
+        bytes: 1593
+        role: auction-request
+      - filename: openrtb2/huaweiads/native_three_image_include_icon/test-huaweiads-auction-response.json
+        sha256: 138cb4da09eca7dab347da388663c5253110935deac2c1d1d504fcd38d5bbd4f
+        bytes: 1487
+        role: auction-response
+      - filename: openrtb2/huaweiads/native_three_image_include_icon/test-huaweiads-bid-request.json
+        sha256: 736d06bf3b7047d10acc1ff5a8aa55689c229c86773a4ecf47809eeb4ced1562
+        bytes: 899
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/native_three_image_include_icon/test-huaweiads-bid-response.json
+        sha256: 44bf938e95c81dfeca6334e9bd2b6a0974b24ec28a51405048bc11d7b2c98c21
+        bytes: 5095
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/simple_video/test-huaweiads-auction-request.json
+        sha256: d1caa0398e860f48616e99cbbc072a5db9a276059f2e2ffa0178eb4bd80662b7
+        bytes: 1233
+        role: auction-request
+      - filename: openrtb2/huaweiads/simple_video/test-huaweiads-auction-response.json
+        sha256: eb06f1daee6f9da1f087c458aeeba841245e923620bd496661a4de7466987dff
+        bytes: 2332
+        role: auction-response
+      - filename: openrtb2/huaweiads/simple_video/test-huaweiads-bid-request.json
+        sha256: c3c076be58bf5d82fe48e86f8e52d13ba4b1cc26856dcdb602dfbbcd0c10a2a4
+        bytes: 840
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/simple_video/test-huaweiads-bid-response.json
+        sha256: 206197b28de5a503a6f67c1dc28964d4bf62f25a988f372a63b659f9ab440059
+        bytes: 5159
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/test-huaweiads-auction-request.json
         sha256: f8e0ae5f1d28f09b57720295a8b79f17292ac028f6612630596929d4ce9a549d
         bytes: 1356
         role: auction-request
-      - filename: test-huaweiads-auction-response.json
+      - filename: openrtb2/huaweiads/test-huaweiads-auction-response.json
         sha256: 37cb4554ece8c518e322a486e47926d365e0f7aa2a04ac2b9e77fb8fad32c25f
         bytes: 1980
         role: auction-response
-    integration_subdirs_count: 23
-    integration_subdirs_total_files: 92
-    integration_subdirs:
-      - banner_app_promotion_type
-      - banner_ch_endpoint
-      - banner_eu_endpoint
-      - banner_imei
-      - banner_interstitial_type
-      - banner_mccmnc
-      - banner_non_integer_mccmnc
-      - banner_not_app_promotion_type
-      - banner_ru_endpoint
-      - banner_with_user_geo
-      - banner_without_device_geo
-      - banner_without_userext
-      - banner_wrong_mccmnc
-      - native_include_video
-      - native_single_image
-      - native_three_image
-      - native_three_image_include_icon
-      - simple_video
-      - video_interstitial_type
-      - video_rewarded_type_no_icons_no_images
-      - video_rewarded_type_with_icon
-      - video_rewarded_type_with_images
-      - video_roll_type
+      - filename: openrtb2/huaweiads/test-huaweiads-bid-request.json
+        sha256: 5a0f578649c142b278d0365588572f244fcd54777f89af6257081e2b1eaa2542
+        bytes: 1037
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/test-huaweiads-bid-response.json
+        sha256: 30dd08382491a34f9518596c9921b9bfde54add27a065a5354d17788c64c5aae
+        bytes: 2073
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/video_interstitial_type/test-huaweiads-auction-request.json
+        sha256: cbae5bbe2f6738b2d615b41adbbc0a833887c2ecef502575f277cbb3870c29ef
+        bytes: 1233
+        role: auction-request
+      - filename: openrtb2/huaweiads/video_interstitial_type/test-huaweiads-auction-response.json
+        sha256: 5974505166c5d681c7b45fbd70806fcb2d9117433273cbf4f7c58d2e98051b89
+        bytes: 2412
+        role: auction-response
+      - filename: openrtb2/huaweiads/video_interstitial_type/test-huaweiads-bid-request.json
+        sha256: f5d4ca3cc2cda87fcca8a25d8eeff84e88e3ac278bfec44dfeeb18f149f25f8d
+        bytes: 840
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/video_interstitial_type/test-huaweiads-bid-response.json
+        sha256: 94df75e0dbe61c3c9ad1e1f5a5be831630ea0f3d6a85439cff7cf4603b604d1f
+        bytes: 4972
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/video_rewarded_type_no_icons_no_images/test-huaweiads-auction-request.json
+        sha256: 976b545cd47afebd2df617dc51b714edfe7620f722938afc1a93f31f5674401f
+        bytes: 1229
+        role: auction-request
+      - filename: openrtb2/huaweiads/video_rewarded_type_no_icons_no_images/test-huaweiads-auction-response.json
+        sha256: 5974505166c5d681c7b45fbd70806fcb2d9117433273cbf4f7c58d2e98051b89
+        bytes: 2412
+        role: auction-response
+      - filename: openrtb2/huaweiads/video_rewarded_type_no_icons_no_images/test-huaweiads-bid-request.json
+        sha256: 4e80f43ebd749688fce62f549fcde4bb5f92cd5697b6c9f757f93de02adc3ea8
+        bytes: 839
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/video_rewarded_type_no_icons_no_images/test-huaweiads-bid-response.json
+        sha256: 6d90bc05fe2c6424177bbbdc678bdd2f4bb556a7b0e0293ac44d176b856cdaff
+        bytes: 4084
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_icon/test-huaweiads-auction-request.json
+        sha256: 976b545cd47afebd2df617dc51b714edfe7620f722938afc1a93f31f5674401f
+        bytes: 1229
+        role: auction-request
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_icon/test-huaweiads-auction-response.json
+        sha256: ebc654f6c36f9d64558c4263ddebab2640c2d4f2040dd1129641f6150df7f350
+        bytes: 2817
+        role: auction-response
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_icon/test-huaweiads-bid-request.json
+        sha256: e4abf51713b6eb8afb9904a3255c67e561bf0a17752d4664d1387b6dbdb42f50
+        bytes: 841
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_icon/test-huaweiads-bid-response.json
+        sha256: a79c0285209f274ff741ca8167e51dda9094a821e99fe7e51b8ae2c63d4657b4
+        bytes: 5099
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_images/test-huaweiads-auction-request.json
+        sha256: 976b545cd47afebd2df617dc51b714edfe7620f722938afc1a93f31f5674401f
+        bytes: 1229
+        role: auction-request
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_images/test-huaweiads-auction-response.json
+        sha256: 40b0a9cd28972beb57264195bec696f3a7fe0da505a67a89423d219863503f05
+        bytes: 2750
+        role: auction-response
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_images/test-huaweiads-bid-request.json
+        sha256: 4e80f43ebd749688fce62f549fcde4bb5f92cd5697b6c9f757f93de02adc3ea8
+        bytes: 839
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/video_rewarded_type_with_images/test-huaweiads-bid-response.json
+        sha256: e74eb31d933b9245556d208b8cf5c4123669b6b22236480b7b8d1df519b847ba
+        bytes: 4693
+        role: bidder-bid-response
+      - filename: openrtb2/huaweiads/video_roll_type/test-huaweiads-auction-request.json
+        sha256: 82b32effc1045f3c138dc221ed7d466338ede731e3055620d6a1128d6abc5a48
+        bytes: 1263
+        role: auction-request
+      - filename: openrtb2/huaweiads/video_roll_type/test-huaweiads-auction-response.json
+        sha256: 70f416965eb231c5aae897b227eff7ecbf5d1f73712582512adfc0b976595a5b
+        bytes: 2313
+        role: auction-response
+      - filename: openrtb2/huaweiads/video_roll_type/test-huaweiads-bid-request.json
+        sha256: 9438ca802b50be3daf7c70ef95f09c74b99d87214bad8309efe605122218dc3b
+        bytes: 867
+        role: bidder-bid-request
+      - filename: openrtb2/huaweiads/video_roll_type/test-huaweiads-bid-response.json
+        sha256: 5f4b157ee72ab1926d33528ad25bf5f17de498169f91fb47e0c40f4ba9f106dc
+        bytes: 5106
+        role: bidder-bid-response
   uses_canonical_harness: true
   unit_test_methods_count: 198
   unit_test_loc: 4880

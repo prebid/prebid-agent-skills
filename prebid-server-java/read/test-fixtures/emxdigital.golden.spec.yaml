@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -234,16 +234,20 @@ tests:
     videosupplemental: []
     integration:                              # Audit C4 resolves under `src/test/resources/org/prebid/server/it/openrtb2/emxdigital/`. The 4 cadent-alias fixtures (test-auction-cadentaperturemx-{request,response}.json + test-cadentaperturemx-bid-{request,response}.json under openrtb2/cadentaperturemx/) are documented in quirks/lifecycle but NOT enumerated here — audit base dir is parent-only.
       - filename: test-auction-emxdigital-request.json
-        bytes: 0
+        sha256: fa559f488b97752e1d020014ee728eb140b06cb56a7f04dd673e92080a3daa36
+        bytes: 366
         role: auction-request
       - filename: test-auction-emxdigital-response.json
-        bytes: 0
+        sha256: 6817241b931b577c13fb425cb8329f2d9cfb280d6ed0e855fe040de50c4c1aab
+        bytes: 887
         role: auction-response
       - filename: test-emxdigital-bid-request.json
-        bytes: 0
+        sha256: 7876088084c970458a5f41f6ab82568ba5860ea4c6160db643fbc397feec951b
+        bytes: 933
         role: bidder-bid-request
       - filename: test-emxdigital-bid-response.json
-        bytes: 0
+        sha256: e8636d8b9955ee1f9a56775e4ccd3305157a41a2a086b6a807a911c837c7375a
+        bytes: 467
         role: bidder-bid-response
   uses_canonical_harness: true
   unit_test_methods_count: null

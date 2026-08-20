@@ -29,3 +29,13 @@ expected:
     why_it_matters: A host operator has no way to learn the legal REGION values; the reviewer required them in the bidder docs or in a comment in this file, and a comment block is what merged.
 
 forbidden: []
+
+# Both findings scored as unexpected stay that way, and each names a rule that
+# excludes it:
+#  - WARN on appStockSSP.yaml `capabilities:` (redundant inherited fields).
+#    bidder-info-pr-review/SKILL.md:180 step 7
+#    is explicit that "a parent-identical block is what the repo routinely merges,
+#    not a defect" -- 43 of 113 alias files carry at least one parent-identical
+#    field at master @0ba3523.
+#  - INFO on the usersync `url:` line. The recorded finding carries no note, so it
+#    cites no rule; without a citation there is nothing to classify against.

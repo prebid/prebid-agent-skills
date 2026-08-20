@@ -38,7 +38,7 @@ expected:
     family: error-handling
     severity: WARN
     source: https://github.com/prebid/prebid-server-java/pull/4428#discussion_r2947256231
-    why_it_matters: "@CTMBNara: bidResponse cannot be null on this path, so the guard is dead code that hides which values the method really has to handle."
+    why_it_matters: "bidResponse cannot be null on this path, so the guard is dead code that hides which values the method really has to handle."
 
   - id: trustx-java-redundant-device-locals
     path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
@@ -50,3 +50,63 @@ expected:
     why_it_matters: The repo reads these through ObjectUtil.getIfNotNull inline; the local plus null-safe accessor pair is a second spelling of the same thing.
 
 forbidden: []
+
+# Findings this repo's own documented rules require, that no maintainer raised on
+# this PR. Every one of the seven cited a rule that exists and is scoped to admit
+# it, so none stays `unexpected`.
+#
+# On severity direction: a finding rated BELOW its sanctioned severity is still
+# additional -- the subject is right and severity_agreement records the gap. A
+# finding rated ABOVE it is not, because the over-rating is the harm (a blocking
+# comment where a note is sanctioned); see prebid-server-4287, where three findings
+# stay unexpected for that reason and for naming a rule that excludes them.
+additional:
+  - id: trustx-it-fixture-names-sibling-bidder
+    path: src/test/resources/org/prebid/server/it/openrtb2/trustx/test-auction-trustx-response.json
+    anchor: '"trustx": "{{ trustedstack.response_time_ms }}"'
+    family: naming-conventions
+    severity: FAIL
+    rule: >-
+      bidder-params-java-pr-review/SKILL.md:396 — bidder-id consistency inside an IT fixture. The response-time placeholder names `trustedstack`, not `trustx`, so the assertion does not check the adapter under test
+  - id: trustx-schema-property-without-pojo-field
+    path: src/main/resources/static/bidder-params/trustx.json
+    anchor: '"uid": {'
+    family: schema-pojo-sync
+    severity: FAIL
+    rule: >-
+      bidder-params-java-pr-review/SKILL.md:413 — property added in schema, POJO must add a matching field; severity FAIL
+  - id: trustx-badinput-for-server-fault
+    path: src/main/java/org/prebid/server/bidder/trustx/TrustxBidder.java
+    anchor: errors.add(BidderError.badInput(e.getMessage()));
+    family: error-handling
+    severity: WARN
+    rule: >-
+      shared/framework-utilities-java.md:826 — BidderError.badInput is for publisher/request faults, badServerResponse for upstream faults
+  - id: trustx-bid-ext-proto-naming
+    path: src/main/java/org/prebid/server/proto/openrtb/ext/request/trustx/ExtBidBidderTrustx.java
+    anchor: public class ExtBidBidderTrustx {
+    family: naming-conventions
+    severity: WARN
+    rule: >-
+      bidder-params-java-pr-review/SKILL.md:194 — helper proto in the same package follows ExtImp{X}BidExt. `ExtBidBidderTrustx` is the only file named ExtBidBidder* anywhere in upstream, and it is this PR's
+  - id: trustx-usersync-double-brace-macros
+    path: src/main/resources/bidder-config/trustx.yaml
+    anchor: 'url: https://static.cdn.trustx.org/x/user_sync.html?source=pbs&us_privacy={{us_privacy}}&gpp={{gpp}}&gpp_sid={{gpp_sid}}&redirect={{redirect_url}}'
+    family: usersync-macros
+    severity: WARN
+    rule: >-
+      bidder-config-pr-review/SKILL.md:327 — privacy macros are SINGLE brace; at e3ffd57 there are zero double-brace occurrences under src/, and a {{gdpr}} in a sync URL is FAIL. Reported here at WARN, below the sanctioned severity, which severity_agreement records
+  - id: trustx-redundant-gvl-zero
+    path: src/main/resources/bidder-config/trustx.yaml
+    anchor: 'vendor-id: 0'
+    family: gvl-vendor-id
+    severity: INFO
+    rule: >-
+      bidder-config-pr-review/SKILL.md:364 step 3 — GVL ID 0 redundancy: flag as INFO asking for removal, do not FAIL
+  - id: trustx-it-fixture-trailing-whitespace
+    path: src/test/resources/org/prebid/server/it/openrtb2/trustx/test-auction-trustx-request.json
+    anchor: src/test/resources/org/prebid/server/it/openrtb2/trustx/test-auction-trustx-request.json
+    family: it-fixture-format
+    severity: INFO
+    rule: >-
+      bidder-params-java-pr-review/SKILL.md:179 — F-new-49 IT-fixture trailing-whitespace companion check, recorded as INFO

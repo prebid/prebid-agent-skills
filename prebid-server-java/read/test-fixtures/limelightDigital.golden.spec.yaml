@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -219,16 +219,20 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-limelightDigital-bid-request.json
-        bytes: 0
+        sha256: e8058d68856a79af3540f96aae701d3ca9344a4e5fa08250e06a2bd8d9b3adc9
+        bytes: 590
         role: bidder-bid-request
       - filename: test-limelightDigital-bid-response.json
-        bytes: 0
+        sha256: 73e663a4027939b14023eeadf930f57192ff12b03929e4a533c55b3d368225d2
+        bytes: 211
         role: bidder-bid-response
       - filename: test-auction-limelightDigital-request.json
-        bytes: 0
+        sha256: 0f4d94133643085198143be04fd0d1b9a5f2aa8e7484943b298c2c9fe1f93c1d
+        bytes: 331
         role: auction-request
       - filename: test-auction-limelightDigital-response.json
-        bytes: 0
+        sha256: 70004bfdb6678b7a974edc929c7645229c5945b67ce15d876509d524560be092
+        bytes: 719
         role: auction-response
   uses_canonical_harness: true
   unit_test_methods_count: 17

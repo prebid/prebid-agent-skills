@@ -137,12 +137,22 @@ class FieldSpec(NamedTuple):
     adapter section, or the Go bidder-info root); the first one that
     resolves wins. `absent_default` is the value upstream is understood to
     mean when the key is missing — `None` means "cannot compare, skip".
+
+    `golden_keys_alt` holds further golden-side paths, tried in order when the
+    primary yields None. A reader may legitimately record one value in more than
+    one place: `read-bidder-info/SKILL.md` tells the Go reader that when
+    `openrtb:` is a nested map it should preserve the nested layout at
+    `bidder_info.yaml_extra_fields.openrtb.version` and leave top-level
+    `ortb_version: null`. Three goldens follow that policy exactly and were
+    reported as drifting against an upstream file they record faithfully, because
+    this comparison looked only at the top-level field.
     """
     name: str
     golden_keys: tuple
     upstream_keys: tuple
     severity: str
     absent_default: Any = None
+    golden_keys_alt: tuple = ()
 
 
 # YAML fields the script tracks for "data-only-drift" detection. These
@@ -156,8 +166,11 @@ GO_BIDDER_INFO_FIELDS: tuple[FieldSpec, ...] = (
               ("gvlVendorID",), SEVERITY_WARN, absent_default=0),
     FieldSpec("modifying_vast_xml_allowed", ("bidder_info", "modifying_vast_xml_allowed"),
               ("modifyingVastXmlAllowed",), SEVERITY_WARN, absent_default=False),
+    # The Go reader may record this at either of two documented places; see
+    # golden_keys_alt on FieldSpec.
     FieldSpec("ortb_version", ("bidder_info", "ortb_version"),
-              ("openrtb.version", "ortb-version"), SEVERITY_WARN),
+              ("openrtb.version", "ortb-version"), SEVERITY_WARN,
+              golden_keys_alt=(("bidder_info", "yaml_extra_fields", "openrtb", "version"),)),
     FieldSpec("disabled", ("meta", "disabled"), ("disabled",), SEVERITY_WARN,
               absent_default=False),
     FieldSpec("alias_of", ("meta", "alias_of"), ("aliasOf",), SEVERITY_FAIL),
@@ -733,12 +746,53 @@ def resolve_java_adapter_section(doc: dict, bidder: str, golden: dict) -> dict:
     return base
 
 
+def resolve_go_bidder_info(doc: dict, golden: dict, source: UpstreamSource) -> dict:
+    """The effective `static/bidder-info/{bidder}.yaml` mapping for this bidder.
+
+    A Go alias file carries `aliasOf` plus only the fields it overrides --
+    `152media.yaml` is `aliasOf: adkernel` and `gvlVendorID: 1111`, nothing else.
+    Go fills the rest from the parent at load time (`config/bidderinfo.go`
+    applies the parent's value wherever the alias's is empty), and goldens record
+    those effective values, so comparing against the alias file alone leaves every
+    inherited field unchecked.
+
+    Unchecked, not merely unequal: `compare_fields` skips a field whose upstream
+    key is absent and whose FieldSpec declares no `absent_default`, which is the
+    case for `endpoint` and `endpointCompression`. So an inherited endpoint could
+    change in the parent and no finding would fire. The Java path has had
+    `resolve_java_adapter_section` for this since it was written; this is its
+    Go counterpart.
+
+    Falls back to the alias's own doc when the parent is unreadable, so a missing
+    parent degrades to the previous behaviour instead of raising.
+    """
+    parent = doc.get("aliasOf") or _path(golden, "meta", "alias_of")
+    if not parent:
+        return doc
+    raw = source.fetch(f"static/bidder-info/{parent}.yaml")
+    if raw is None:
+        return doc
+    try:
+        parent_doc = yaml.safe_load(raw) or {}
+    except yaml.YAMLError:
+        return doc
+    if not isinstance(parent_doc, dict):
+        return doc
+    base = {k: v for k, v in parent_doc.items() if k != "aliases"}
+    overrides = {k: v for k, v in doc.items() if k != "aliasOf"}
+    return _deep_merge(base, overrides)
+
+
 def compare_fields(bidder: str, language: str, golden: dict, upstream: dict,
                    specs: tuple[FieldSpec, ...], where: str) -> list[Finding]:
     """Compare every tracked field. Drives both language paths."""
     findings: list[Finding] = []
     for spec in specs:
         golden_value = _path(golden, *spec.golden_keys)
+        for alt in spec.golden_keys_alt:
+            if golden_value is not None:
+                break
+            golden_value = _path(golden, *alt)
         upstream_value = None
         found = False
         for key in spec.upstream_keys:
@@ -1000,7 +1054,10 @@ def _compare_info(bidder: str, language: str, golden: dict, w: WatchedPath,
         section = resolve_java_adapter_section(doc, bidder, golden)
         return compare_fields(bidder, language, golden, section, field_specs, where)
 
-    findings = compare_fields(bidder, language, golden, doc, field_specs, where)
+    # Merged view for field comparison; the raw doc for the new-key check below,
+    # so a parent's key does not read as a new key on the alias.
+    effective = resolve_go_bidder_info(doc, golden, source) if is_alias else doc
+    findings = compare_fields(bidder, language, golden, effective, field_specs, where)
     golden_keys = set((_path(golden, "bidder_info", "yaml_extra_fields") or {}).keys())
     new_keys = set(doc.keys()) - GO_KNOWN_YAML_KEYS - golden_keys
     if new_keys:

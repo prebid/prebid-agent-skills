@@ -137,6 +137,36 @@ def _list_set_eq(a: Any, b: Any) -> bool:
            sorted(json.dumps(x, sort_keys=True, default=str) for x in b)
 
 
+def _compression_eq(a: Any, b: Any) -> bool:
+    """`endpoint_compression` equality, case-insensitively.
+
+    Both frameworks resolve the value case-insensitively, so `GZIP` and `gzip`
+    are the same setting and a case difference is not a cross-language
+    divergence. Verified upstream at prebid-server 0ba35231 and
+    prebid-server-java e3ffd57db:
+
+      Go    `exchange/bidder.go::getRequestBody` switches on
+            `strings.ToUpper(endpointCompression)`, and the field is a plain
+            string (`config/bidderinfo.go:51`). Upstream files use both
+            spellings -- 58 lowercase `gzip`, 16 uppercase.
+      Java  binds to `enum CompressionType { NONE, GZIP }`
+            (spring/config/bidder/model/CompressionType.java), so Spring's
+            relaxed binding maps either spelling to the same constant. All 66
+            upstream files write lowercase.
+
+    The goldens record what their upstream file says, which is what the drift
+    detector compares against; normalizing at read time made two Go goldens
+    disagree with their own pinned files and kept the detector permanently red on
+    a difference with no runtime effect. Normalization belongs here, alongside
+    `normalize_endpoint_macros`, for the same reason.
+
+    Non-strings fall through to `deep_eq`.
+    """
+    if isinstance(a, str) and isinstance(b, str):
+        return a.strip().lower() == b.strip().lower()
+    return deep_eq(a, b)
+
+
 def _maintainer_eq(a: Any, b: Any) -> bool:
     """Maintainer-block equality: only the email is the runtime invariant.
     Wave 11b B5 #2: prevents stale-FAILs when one language adds extra
@@ -159,8 +189,10 @@ def _maintainer_eq(a: Any, b: Any) -> bool:
 #   _list_set_eq (order-independent set equality).
 # - PROSE-BEARING keys (maintainer) use _maintainer_eq (compares only the
 #   runtime-invariant subfield, not advisory fields).
-# - PURE-DATA keys (gvl_vendor_id, endpoint_compression, modifying_vast_xml_allowed)
-#   use deep_eq (scalar equality).
+# - PURE-DATA keys (gvl_vendor_id, modifying_vast_xml_allowed) use deep_eq
+#   (scalar equality). endpoint_compression uses _compression_eq: both
+#   frameworks resolve the value case-insensitively, so GZIP and gzip are the
+#   same setting.
 #
 # When the dual-spec assertion says severity:warn, downgrade to WARN.
 # When dual-spec says severity:pass but runtime disagrees → FAIL (stale-pass).
@@ -177,7 +209,7 @@ R5_STRICT_KEYS: Tuple[Tuple[str, str, Callable[[Any, Any], bool]], ...] = (
     ("params.schema_interpretation.combinators_used",  "params_schema_interpretation",            _list_set_eq),
     ("params.schema_interpretation.flexible_types",    "params_schema_interpretation",            _list_set_eq),
     ("bidder_info.gvl_vendor_id",                      "bidder_info_gvl_vendor_id",               deep_eq),
-    ("bidder_info.endpoint_compression",               "bidder_info_endpoint_compression",        deep_eq),
+    ("bidder_info.endpoint_compression",               "bidder_info_endpoint_compression",        _compression_eq),
     ("bidder_info.geoscope",                           "bidder_info_geoscope",                    _list_set_eq),
     ("bidder_info.maintainer",                         "bidder_info_maintainer",                  _maintainer_eq),
     ("bidder_info.modifying_vast_xml_allowed",         "bidder_info_modifying_vast_xml_allowed",  deep_eq),

@@ -41,7 +41,7 @@ For framework-wide concerns (endpoint template macros canonical list, error type
 |---------|---------|-------|
 | `adapters/{bidder}/{bidder}.go` | `adapters/appnexus/appnexus.go` | Adapter implementation |
 | `adapters/{bidder}/{bidder}_test.go` | `adapters/appnexus/appnexus_test.go` | Adapter JSON test runner |
-| `adapters/{bidder}/*.go` (excl. `params_test.go`) | `adapters/appnexus/utils.go` | Additional adapter Go files |
+| `adapters/{bidder}/*.go` (excl. `params_test.go`) | `adapters/appnexus/models.go` | Additional adapter Go files |
 | `adapters/{bidder}/{bidder}test/exemplary/*.json` | `adapters/appnexus/appnexustest/exemplary/banner.json` | Exemplary test fixtures |
 | `adapters/{bidder}/{bidder}test/supplemental/*.json` | `adapters/appnexus/appnexustest/supplemental/bad-ext.json` | Supplemental test fixtures |
 | `adapters/{bidder}/{bidder}test/amp/*.json` | `adapters/appnexus/appnexustest/amp/site.json` | AMP test fixtures |

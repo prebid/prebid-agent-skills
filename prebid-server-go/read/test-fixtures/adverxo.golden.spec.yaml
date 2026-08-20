@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -217,47 +217,47 @@ tests:
   fixture_inventory:
     exemplary:
       - filename: banner.json
-        sha256: a53d8f923ea1a916921f253e6d7d33574d9dd01a
+        sha256: 651f2d2b19d10a56245a5f50e661c0e868331c84a82f1a26c845ea3d88dcdef2
         bytes: 2648
       - filename: native.json
-        sha256: e9df74b81dfd958b77e337eb96083f134f9b246d
+        sha256: de9e9c2dc8c5ad9e08a2ade100e10c3e57864fc21c260cf75d8ae4397caae8ae
         bytes: 3169
       - filename: video.json
-        sha256: a2c91fff78e8e06e3d0fd73f58b5a55a3d29f27f
+        sha256: 0c95b0e3feb25b3829cb106a841eacb51999ba391c939ecb2be849f2f193f29c
         bytes: 1819
     supplemental:
       - filename: bad_imp_ext.json
-        sha256: 9c5e16c98e5f2357ab6a0fc23e803d6fb8b9ee7e
+        sha256: 3c05618e236f2163fa20d5b55dc1b88040efe3b0440c743e74b6cbd7fb6fab6c
         bytes: 361
       - filename: bad_impext_bidder.json
-        sha256: c61652f53e63b0456825bc0d965b4e166471e084
+        sha256: f755c03c8aa73b20523c5304db52430d209949bf6d86f51deb50d99015754073
         bytes: 482
       - filename: currency_conversion.json
-        sha256: 3562b05e7a8490bd03d84b3ebf9b58635d661f10
+        sha256: 1faa6f14b430f4dc9b15fbf86e4dc5ccd54069775ef25d1ef6dc9a6ec163c8f1
         bytes: 3146
       - filename: currency_rate_not_found.json
-        sha256: 9bc2ef75fd9ce8e6bd664ce1d20892e02e5ce5d5
+        sha256: 5b34184f8feed7493debe585455ff5948c4364dbd8d6f377cd62e488d1bf34ff
         bytes: 824
       - filename: invalid_mtype.json
-        sha256: 5fcdee305fcf731d74188fc50169f81dcccc9cba
+        sha256: 1ee064de928e40b22e0f7f5ad804a2f7563166cb03d9e0110fd4ca5195d3858f
         bytes: 2369
       - filename: invalid_native_adm.json
-        sha256: 90694752e575a8ca136756423b08992ce2c60eab
+        sha256: 821cdfa143ee67419c4cb68c75e61f006f700258780df31bd1bbbca1b42ca536
         bytes: 2493
       - filename: multi_imps.json
-        sha256: f5eb56565f086aa536058da5693ef3a7f3bcf4f9
+        sha256: 20b51006feba6b3bccd05c99635c028e691052dab1598f2247e1d0ca9379cf83
         bytes: 4590
       - filename: multiformat.json
-        sha256: 06f3be7bd0bc9483d3e44a636655cc656ab17d48
+        sha256: 6f04d22b65200c67abad165fd832bb978beaeb39e03b40afe6e0eae7ed3f0a5a
         bytes: 2805
       - filename: no_bid.json
-        sha256: 0585f342047536683e82aa0c5ffc03fc04ae9471
+        sha256: 5948ab6ca8f89b04d44d262be7a360cd1695edf6baf5681e7b3045f3bd84b0b0
         bytes: 1754
       - filename: resolve_ortb_macro.json
-        sha256: 02840ea0d83ff999000fa7c183c26630ba497291
+        sha256: 537579bac22a0cc8d45fdd5675092a7b069463a159845e59f4059ae66c03edac
         bytes: 2653
       - filename: server_error.json
-        sha256: 47d29364f0458e412276efcf9a709f55719fa145
+        sha256: 10815e0c3e96561c23834ec2f273aed6c988de59b806c1e4e86e81fff0d122c2
         bytes: 1885
     amp: []
     video: []

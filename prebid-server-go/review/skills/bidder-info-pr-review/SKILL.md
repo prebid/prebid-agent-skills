@@ -1,7 +1,7 @@
 ---
 name: bidder-info-pr-review
 description: Reviews changes to bidder-info YAML files at static/bidder-info/*.yaml. USE WHEN a PR adds/modifies/removes any of these files. Verifies endpoint reachability, alias parent existence and inheritance, GVL vendor lookups, user-sync URL macros, white-label policy compliance, capability declarations, and SSL certificate validity. Do NOT use for static/bidder-params/*.json, openrtb_ext/imp_*.go, or adapter Go code.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Bidder Info PR Review
@@ -47,6 +47,9 @@ The pr-triage skill provides:
 - Duplicate PR search results
 - Bidder metadata (aliasOf status, capabilities if available from the PR)
 
+- `--- PRIOR AGENT FINDINGS ---` block (when a prior-agent review was recorded; consumed in Step 1d)
+- `--- PRIOR SPEC COMPARISON ---` block (same-language regression detection; opt-in; deduped like `--- PRIOR AGENT FINDINGS ---`)
+- `--- PRIOR SOURCE SPEC COMPARISON ---` block (cross-language port-fidelity detection; opt-in; consumed in Step 1g)
 **1b. Handle drift warnings.**
 
 If the triage manifest reports drift for bidder-info, include the drift warning in the review output. Do not re-fetch `bidderinfo.go`.
@@ -62,6 +65,7 @@ Cross-reference the PR comments from the triage manifest against your review fin
 - If a CI bot report indicates a failure relevant to your scope (e.g., YAML lint, config validation), use it as additional evidence for your verification steps
 - If the author has responded to reviewer feedback with fixes, check whether the current diff reflects those fixes
 
+- If the manifest carries a `--- PRIOR AGENT FINDINGS ---` block (a CodeRabbit / Copilot / ChatGPT review recorded via `agent_review: yes`), cross-reference each of your findings against the listed flags. An exact duplicate — same file, same rule, same severity — dedupes as `Previously flagged by prior agent` rather than emitting a fresh finding; net-new findings emit normally.
 **1e. Fetch full file content when needed.**
 
 For files with status `modified`, the patch contains only changed regions. When verification requires full file context (e.g., checking all required fields in an existing file, validating alias parent):
@@ -76,6 +80,29 @@ curl -sS "https://raw.githubusercontent.com/{owner}/{repo}/master/static/bidder-
 - For `added` files: full content is already in the patch (all `+` lines) — do NOT re-fetch
 - For `modified` files: only fetch if the verification workflow requires context beyond the diff hunks
 - Cache fetched content — do not re-fetch the same file multiple times
+
+**1g. Consume `--- PRIOR SOURCE SPEC COMPARISON ---` (cross-language ports).**
+
+When the manifest carries this block, the PR is a cross-language port — for a Go PR, typically a Java → Go port via `port-java2go`. Severity tiers, the dedup phrase, the Step 5 emission template, and reflection-loop routing all live in [the port-fidelity hook contract](../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract); do not restate them here. Use the source-spec context to inform Step 4 verification.
+
+If the block is absent, or reads `prior_source_spec not present — section omitted`, skip this substep: the PR is not a cross-language port.
+
+Worked examples for this skill's scope, each citing a dual-spec key path or a canary finding id:
+
+| Divergence | Severity | Evidence |
+|---|---|---|
+| `bidder_info.endpoint` macro form AND query-param key both differ (adverxo Go `?id={{.AdUnit}}&auth={{.TokenID}}` against Java `?adUnitId={{adUnitId}}&auth={{auth}}`). Both legitimate per Rule 11; confirm the backend accepts both keys. | `warn` | `adverxo.dual-spec-assertions.yaml` → `bidder_info_endpoint` |
+| Java appends an attribution query param the Go side omits (aax `?src={{PREBID_SERVER_ENDPOINT}}`). Bids still valid; attribution lost. | `warn` | `aax.dual-spec-assertions.yaml` → `bidder_info_endpoint` |
+| `gvlVendorID` 0-emit: Go omits the key at 0, Java may declare `gvl-vendor-id: 0`. | `info`, or `warn` when the source carries a NONZERO value the Go PR omits — that drops a shared field | `d3.8-kobler-canary-2026-05-05T0426Z-9f2a.md` → F9 |
+| `userSync` block serialization: Go convention is multi-line YAML with literal `&`; some rendering paths emit single-line JSON flow with `&amp;`. Same content, different serialization. | `info` per PR, `warn` if it spreads corpus-wide | `d3.8-teal-canary-2026-05-05T-canary8-teal.md` → F-new-43 |
+| Go-side YAML omits `ortb.version` / `multiformat-supported` / `gpp-supported` that the Java source declares. | `warn` | same trace → F-new-44 |
+| `endpointCompression` declared on one side only (elementaltv Go declares `gzip`, Java omits; the fix lives upstream in Java). | `warn` | `elementaltv.dual-spec-assertions.yaml` → `bidder_info_endpoint_compression` |
+| `capabilities` omission (mediasquare Java records an empty `site` list where Go declares three media types). R5-strict. | `warn` | `mediasquare.dual-spec-assertions.yaml` → `bidder_info_capabilities` |
+| `default_enabled` per-language idiom (optidigital Go `true` against Java `false`) — legitimate for a new bidder per Rule 45. | `info`, or `warn` when a PR flips the value with no explanatory commit | `optidigital.dual-spec-assertions.yaml` → `bidder_info_default_enabled` |
+| Tilde-stub alias with no counterpart registration: Java declares `ttd: ~`, Go has no `static/bidder-info/ttd.yaml`, so `bidders=ttd` resolves on Java and fails on Go. Same shape for vungle/`liftoff`. | `warn` | `thetradedesk.dual-spec-assertions.yaml` → `java_aliases` |
+| Disabled-by-default alias inversion (Rule 45, ADR-004): a Java disabled alias should reach Go as a 2-line `aliasOf` + `disabled: true` stub. | `warn` when the alias is missing entirely, `info` when only the form differs | `emxdigital.dual-spec-assertions.yaml` → `bidder_info_default_enabled` |
+
+Surface `warn` / `fail` / `urgent` in the Step 5 summary; suppress `info` unless the diff elevates it — for example a documented camelCase↔kebab-case `info` becomes `warn` when the Go-side change drops an R5-strict shared field entirely.
 
 ### Step 2: Extract Field-Level Changes From the Diff
 

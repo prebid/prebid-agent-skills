@@ -444,6 +444,42 @@ class TestR5(unittest.TestCase):
         self.assertTrue(eq(None, None))
         self.assertTrue(eq({}, {}))
 
+    def test_compression_eq_is_case_insensitive(self):
+        """`endpoint_compression` is an R5 STRICT key, and the two frameworks
+        resolve its value case-insensitively, so `GZIP` and `gzip` are the same
+        setting rather than a cross-language divergence.
+
+        Upstream at prebid-server 0ba35231 and prebid-server-java e3ffd57db: Go
+        stores a plain string and switches on
+        `strings.ToUpper(endpointCompression)` in
+        `exchange/bidder.go::getRequestBody`, with 58 lowercase and 16 uppercase
+        spellings across static/bidder-info; Java binds to
+        `enum CompressionType { NONE, GZIP }`, so Spring maps either spelling to
+        the same constant, and all 66 files write lowercase.
+
+        Before this comparator, two Go goldens lowercased the value their own
+        pinned upstream file spelled uppercase, which kept the drift detector
+        permanently red on a difference with no runtime effect. Recording the
+        file and normalizing here is the same split `normalize_endpoint_macros`
+        already uses for macro braces.
+        """
+        eq = rtci._compression_eq
+        self.assertTrue(eq("GZIP", "gzip"))
+        self.assertTrue(eq("gzip", "  GZIP  "))
+        self.assertTrue(eq(None, None))
+        # A real difference is still a difference.
+        self.assertFalse(eq("gzip", "none"))
+        self.assertFalse(eq("GZIP", None))
+        # Non-strings fall through to deep_eq.
+        self.assertFalse(eq(None, []))
+
+    def test_compression_key_uses_the_case_insensitive_comparator(self):
+        """The comparator existing is not enough -- R5_STRICT_KEYS has to select
+        it for this key. Reverting the registry entry to deep_eq is the
+        regression this pins."""
+        selected = {field: cmp for field, _dual, cmp in rtci.R5_STRICT_KEYS}
+        self.assertIs(rtci._compression_eq, selected["bidder_info.endpoint_compression"])
+
     def test_normalize_endpoint_macros_canonicalizes_forms(self):
         """Wave 11b B4 C1: normalize_endpoint_macros must canonicalize the
         recognized macro syntaxes (Go template, Java property reference,

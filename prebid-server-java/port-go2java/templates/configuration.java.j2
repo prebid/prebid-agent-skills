@@ -30,6 +30,16 @@ Inputs:
       bean_param   : str  — full Spring annotation form (e.g., "CurrencyConversionService currencyConversionService")
       lambda_arg   : str  — what the bidderCreator lambda passes through (e.g., "currencyConversionService")
   ctx.bidder_creator_extra_args: str|null — additional comma-separated args for the bidderCreator's `new {Bidder}Bidder(...)` call beyond `config.getEndpoint(), mapper`
+  ctx.typed_config_lambda_getters: list[str]|null — names of TYPED (subclass) properties the
+                                              bidderCreator must read, e.g. ["devEndpoint"].
+                                              Each is emitted as `config.get<Name>()` in the
+                                              lambda AND forces the explicit type witness on
+                                              forBidder, because without it CFG infers to
+                                              BidderConfigurationProperties and the getter does
+                                              not resolve. Requires has_typed_config_props.
+                                              Upstream canon: AdnuntiusBidderConfiguration
+                                              (getEuEndpoint), KoblerConfiguration
+                                              (getDevEndpoint).
   ctx.user_sync                : dict|null — user-sync configuration. Declared in bidder-config YAML ONLY.
                                               The Configuration class takes no usersync argument: BidderDepsAssembler
                                               derives the Usersyncer internally from the bound properties
@@ -85,9 +95,39 @@ is the atypical file on three of the four, so diffing this template against Kobl
 will suggest changes that move it AWAY from the corpus:
 
   @ConfigurationProperties argument   literal "adapters.x"   255/255   (concatenation: 0)
-  BidderDepsAssembler.forBidder       bare, no type witness  243/255   (Kobler has one)
+  BidderDepsAssembler.forBidder       bare, no type witness  243/255
   bidderCreator lambda parameter      `config`               253/254   (Kobler uses `cfg`)
   bidderDeps first parameter name     {bidder}ConfigurationProperties  14/15  (Kobler: `config`)
+
+The 243/255 bare figure is a population count, not a licence to omit the type witness.
+`forBidder` is `<CFG extends BidderConfigurationProperties> BidderDepsAssembler<CFG>`, so
+with no witness CFG infers to the BOUND and the bidderCreator's function parameter is a
+plain BidderConfigurationProperties. Where the creator needs the subclass, the witness is
+required for the file to compile at all.
+
+Established by compiling the upstream tree at e3ffd57, not by pattern-matching it. Each of
+the 12 witness-carrying configs was compiled unmodified (12/12 clean), then recompiled with
+only `.<Props>` removed:
+
+  witness removed -> compile fails    12/12   (Magnite 6 errors, the rest 1 each)
+  witness added to a bare config       0/4    errors, baseline 0/4
+
+So the witness is load-bearing everywhere upstream spells it, and harmless where upstream
+does not -- omitting it below is a corpus-matching choice, emitting it is a correctness one.
+Two failure spellings, both from the same inference:
+
+  inline lambda     cannot find symbol: method getDevEndpoint()
+                    location: variable cfg of type BidderConfigurationProperties
+  hoisted Function  Function<XProps,Bidder<?>> cannot be converted to
+                    Function<BidderConfigurationProperties,Bidder<?>>
+
+Regex over these 255 files is the wrong instrument for the question and gave three different
+answers on three attempts -- an inline-lambda matcher misses AudienceNetwork's hoisted
+`Function<Props, Bidder<?>>` local, an annotated-field matcher misses Magnite's fields, and
+counting reads off the bean parameter instead of the lambda parameter reverses the result
+(all 4 bare configs read typed getters -- off the bean parameter, which needs no witness).
+That is why ctx.typed_config_lambda_getters and the witness are emitted together below and
+cannot be set independently.
 
 Regenerate any of them with, e.g.:
 
@@ -192,9 +232,19 @@ public class {{ config_class }} {
 {% endif %}
             JacksonMapper mapper) {
 
-        return BidderDepsAssembler.forBidder(BIDDER_NAME)
+{% set _typed_getters = ctx.typed_config_lambda_getters or [] %}
+{% if _typed_getters and not ctx.has_typed_config_props %}
+{{ ERROR_typed_config_lambda_getters_requires_has_typed_config_props__there_is_no_subclass_to_read_them_from() }}
+{% endif %}
+{#- A hand-added subclass getter in the free-form extra args needs the witness too, and
+    the template cannot emit one for a name it was not told about. Fail rather than emit
+    code that does not compile. -#}
+{% if ctx.bidder_creator_extra_args and 'config.get' in ctx.bidder_creator_extra_args and not _typed_getters %}
+{{ ERROR_bidder_creator_extra_args_reads_a_config_getter__declare_it_in_typed_config_lambda_getters_so_the_type_witness_is_emitted() }}
+{% endif %}
+        return BidderDepsAssembler{% if _typed_getters %}.<{{ ctx.typed_config_class_name or (ctx.bidder_class_root ~ 'ConfigurationProperties') }}>{% else %}.{% endif %}forBidder(BIDDER_NAME)
                 .withConfig({{ ctx.bidder_name }}ConfigurationProperties)
-                .bidderCreator(config -> new {{ ctx.bidder_class_root }}Bidder(config.getEndpoint(){% if ctx.uses_currency_conversion %}, currencyConversionService{% endif %}{% if ctx.bidder_creator_extra_args %}, {{ ctx.bidder_creator_extra_args }}{% endif %}, mapper))
+                .bidderCreator(config -> new {{ ctx.bidder_class_root }}Bidder(config.getEndpoint(){% for g in _typed_getters %}, config.get{{ g[0] | upper }}{{ g[1:] }}(){% endfor %}{% if ctx.uses_currency_conversion %}, currencyConversionService{% endif %}{% if ctx.bidder_creator_extra_args %}, {{ ctx.bidder_creator_extra_args }}{% endif %}, mapper))
                 .assemble();
     }
 {% if ctx.has_typed_config_props %}

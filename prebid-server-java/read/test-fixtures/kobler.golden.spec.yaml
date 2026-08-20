@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -136,7 +136,7 @@ code:
     endpoint_resolution:
       kind: dev-prod-toggle
       mechanism_go: null
-      mechanism_java: string-replace
+      mechanism_java: literal
       macro_field_set: []
       template_params_struct_field_count: null
     helpers:

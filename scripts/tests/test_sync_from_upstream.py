@@ -1065,20 +1065,212 @@ _EXPR_SUBS = {
 }
 
 
-def _substitute(text: str, exit_code: str, claims: str = "0", refs: str = "0") -> str:
+def _substitute(text: str, exit_code: str, claims: str = "0", refs: str = "0",
+                baseline: str = "0", fixtures: str = "0") -> str:
     """Render a step's shell body with the step outputs it reads.
 
-    `claims` and `refs` default to "0" so the many callers that only care about
-    the sync exit keep working. An EMPTY string is a meaningful value, not a
-    default: GitHub renders an unset step output as the empty string, which is
-    what a step that died before its `echo` produces.
+    `claims`, `refs`, `baseline` and `fixtures` default to "0" so the many callers
+    that only care about the sync exit keep working. An EMPTY string is a meaningful value,
+    not a default: GitHub renders an unset step output as the empty string, which
+    is what a step that died before its `echo` produces.
     """
     text = re.sub(r"\$\{\{\s*steps\.sync\.outputs\.exit\s*\}\}", exit_code, text)
     text = re.sub(r"\$\{\{\s*steps\.claims\.outputs\.exit\s*\}\}", claims, text)
     text = re.sub(r"\$\{\{\s*steps\.refs\.outputs\.exit\s*\}\}", refs, text)
+    text = re.sub(r"\$\{\{\s*steps\.baseline\.outputs\.exit\s*\}\}", baseline, text)
+    text = re.sub(r"\$\{\{\s*steps\.fixtures\.outputs\.exit\s*\}\}", fixtures, text)
     for pat, val in _EXPR_SUBS.items():
         text = re.sub(pat, val, text)
     return text
+
+
+class TestGoldenKeysAlt(unittest.TestCase):
+    """A field the reader may record in either of two documented places.
+
+    `read-bidder-info/SKILL.md` tells the Go reader that when `openrtb:` is a
+    nested map it should preserve the nested layout at
+    `bidder_info.yaml_extra_fields.openrtb.version` and leave top-level
+    `ortb_version: null`. Three goldens (elementaltv, msft, optidigital) follow
+    that policy exactly and were reported as drifting against upstream files they
+    record faithfully, because this comparison read only the top-level field.
+    freewheelssp uses the other documented style and never drifted, which is why
+    the defect looked bidder-specific.
+    """
+
+    def test_nested_extra_fields_location_satisfies_the_comparison(self):
+        golden = {"bidder_info": {"ortb_version": None,
+                                  "yaml_extra_fields": {"openrtb": {"version": 2.6}}}}
+        found = sfu.compare_fields("b", "go", golden, {"openrtb": {"version": 2.6}},
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertEqual([], [f.type for f in found if f.type == "ortb_version_drift"])
+
+    def test_top_level_location_still_satisfies_it(self):
+        golden = {"bidder_info": {"ortb_version": "2.6"}}
+        found = sfu.compare_fields("b", "go", golden, {"openrtb": {"version": 2.6}},
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertEqual([], [f.type for f in found if f.type == "ortb_version_drift"])
+
+    def test_a_real_divergence_is_still_reported(self):
+        """The alternate path must not become a way to pass by recording anything
+        anywhere: a value that disagrees still drifts."""
+        golden = {"bidder_info": {"ortb_version": None,
+                                  "yaml_extra_fields": {"openrtb": {"version": 2.5}}}}
+        found = sfu.compare_fields("b", "go", golden, {"openrtb": {"version": 2.6}},
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertIn("ortb_version_drift", [f.type for f in found])
+
+    def test_absent_in_both_locations_still_reports_the_addition(self):
+        """thetradedesk's case: upstream added the key after the pin, and the
+        golden records it in neither place, so the finding is real."""
+        golden = {"bidder_info": {"ortb_version": None,
+                                  "yaml_extra_fields": {"openrtb": {"gpp_supported": True}}}}
+        found = sfu.compare_fields("b", "go", golden, {"openrtb": {"version": 2.6}},
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertIn("ortb_version_drift", [f.type for f in found])
+
+    def test_alt_paths_are_tried_in_order_and_stop_at_the_first_hit(self):
+        spec = sfu.FieldSpec("x", ("a",), ("a",), sfu.SEVERITY_WARN,
+                             golden_keys_alt=(("b",), ("c",)))
+        found = sfu.compare_fields("b", "go", {"b": 1, "c": 2}, {"a": 1}, (spec,), "w")
+        self.assertEqual([], found, "the first alternate should have satisfied it")
+
+
+class TestGoAliasInheritance(unittest.TestCase):
+    """A Go alias yaml carries only what it overrides, so the fields it inherits
+    were never compared.
+
+    `compare_fields` skips a field whose upstream key is absent and whose
+    FieldSpec declares no `absent_default` -- true of `endpoint` and
+    `endpointCompression`. So for `152media.yaml`, which is `aliasOf: adkernel`
+    plus `gvlVendorID`, the golden's recorded endpoint could diverge from the
+    parent's indefinitely with nothing reported. The Java path has resolved this
+    since it was written (`resolve_java_adapter_section`); these are the Go
+    counterpart's tests.
+    """
+
+    PARENT = "endpoint: \"http://parent/hb?zone={{.ZoneID}}\"\nendpointCompression: \"GZIP\"\ngvlVendorID: 14\n"
+
+    def _resolve(self, alias_yaml: str, golden: dict) -> dict:
+        source = make_source({"static/bidder-info/parent.yaml": self.PARENT})
+        return sfu.resolve_go_bidder_info(yaml.safe_load(alias_yaml), golden, source)
+
+    def test_inherited_fields_come_from_the_parent(self):
+        got = self._resolve("aliasOf: parent\ngvlVendorID: 1111\n",
+                            {"meta": {"alias_of": "parent"}})
+        self.assertEqual("http://parent/hb?zone={{.ZoneID}}", got["endpoint"])
+        self.assertEqual("GZIP", got["endpointCompression"])
+
+    def test_alias_overrides_win_over_the_parent(self):
+        got = self._resolve("aliasOf: parent\ngvlVendorID: 1111\n",
+                            {"meta": {"alias_of": "parent"}})
+        self.assertEqual(1111, got["gvlVendorID"])
+
+    def test_aliasof_is_not_carried_into_the_merged_view(self):
+        """`aliasOf` is the alias's own marker, not an inherited field; leaving it
+        in would compare against the parent's absent `aliasOf`."""
+        got = self._resolve("aliasOf: parent\n", {"meta": {"alias_of": "parent"}})
+        self.assertNotIn("aliasOf", got)
+
+    def test_parent_aliases_block_is_not_inherited(self):
+        """A parent's `aliases:` map describes its children, not this child."""
+        source = make_source({"static/bidder-info/parent.yaml":
+                              self.PARENT + "aliases:\n  sibling: ~\n"})
+        got = sfu.resolve_go_bidder_info(yaml.safe_load("aliasOf: parent\n"),
+                                         {"meta": {"alias_of": "parent"}}, source)
+        self.assertNotIn("aliases", got)
+
+    def test_non_alias_doc_is_returned_untouched(self):
+        source = make_source({})
+        doc = {"endpoint": "http://own/", "endpointCompression": "gzip"}
+        self.assertEqual(doc, sfu.resolve_go_bidder_info(doc, {"meta": {}}, source))
+
+    def test_unreadable_parent_degrades_instead_of_raising(self):
+        """A parent that cannot be fetched falls back to the alias's own doc --
+        the previous behaviour -- rather than failing the whole scan."""
+        source = make_source({})
+        doc = {"aliasOf": "gone", "gvlVendorID": 7}
+        self.assertEqual(doc, sfu.resolve_go_bidder_info(doc, {"meta": {"alias_of": "gone"}}, source))
+
+    def test_inherited_endpoint_drift_is_now_reported(self):
+        """End to end: the golden records the endpoint it inherited, the parent's
+        endpoint changes, and the finding fires. Before the resolver this
+        comparison was skipped because the alias yaml has no `endpoint` key."""
+        golden = {"meta": {"alias_of": "parent"},
+                  "bidder_info": {"endpoint": "http://old/hb"}}
+        effective = self._resolve("aliasOf: parent\n", golden)
+        found = sfu.compare_fields("152media", "go", golden, effective,
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertIn("endpoint_drift", [f.type for f in found])
+
+    def test_wiring_end_to_end_through_compare_bidder_go(self):
+        """The resolver being CALLED is the load-bearing part. Unit tests that
+        invoke it directly stay green when `_compare_info` stops using it, so
+        this one drives the whole comparison the way the scan does: an alias
+        golden whose recorded endpoint matches its parent's must produce no
+        endpoint finding, which is only true if the merge happened."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            golden_path = write_golden(tmp, "152media", {
+                "adapter_spec_version": "2.1.0",
+                "spec_kind": "prebid-server-adapter",
+                "source_language": "go",
+                "provenance": {"source": {"resolved_commit": "d" * 40}},
+                "meta": {"bidder_name": "152media", "is_alias": True,
+                         "alias_of": "adkernel", "disabled": False},
+                "bidder_info": {
+                    "endpoint": "http://pbs.adksrv.com/hb?zone={{.ZoneID}}",
+                    "endpoint_compression": "GZIP",
+                    "gvl_vendor_id": 1111,
+                    "maintainer": {"email": "x@y.z"},
+                },
+            })
+            upstream = {
+                "static/bidder-info/152media.yaml": "aliasOf: adkernel\ngvlVendorID: 1111\n",
+                "static/bidder-info/adkernel.yaml": yaml.safe_dump({
+                    "endpoint": "http://pbs.adksrv.com/hb?zone={{.ZoneID}}",
+                    "endpointCompression": "GZIP",
+                    "maintainer": {"email": "x@y.z"},
+                    "gvlVendorID": 14,
+                    "aliases": {"152media": None},
+                }),
+            }
+            findings = sfu.compare_bidder_go("152media", golden_path, make_source(upstream))
+            drift = [f.type for f in findings if f.type.endswith("_drift")]
+            self.assertEqual([], drift,
+                             f"inherited fields should compare clean once merged; got {findings}")
+
+    def test_wiring_reports_inherited_divergence_end_to_end(self):
+        """The other direction: the parent's endpoint moves, the alias yaml still
+        declares nothing, and the finding fires."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            golden_path = write_golden(tmp, "152media", {
+                "adapter_spec_version": "2.1.0",
+                "spec_kind": "prebid-server-adapter",
+                "source_language": "go",
+                "provenance": {"source": {"resolved_commit": "d" * 40}},
+                "meta": {"bidder_name": "152media", "is_alias": True,
+                         "alias_of": "adkernel", "disabled": False},
+                "bidder_info": {"endpoint": "http://pbs.adksrv.com/hb?zone={{.ZoneID}}",
+                                "maintainer": {"email": "x@y.z"}},
+            })
+            upstream = {
+                "static/bidder-info/152media.yaml": "aliasOf: adkernel\n",
+                "static/bidder-info/adkernel.yaml": yaml.safe_dump({
+                    "endpoint": "http://MOVED.example/hb?zone={{.ZoneID}}",
+                    "maintainer": {"email": "x@y.z"},
+                }),
+            }
+            findings = sfu.compare_bidder_go("152media", golden_path, make_source(upstream))
+            self.assertIn("endpoint_drift", [f.type for f in findings])
+
+    def test_matching_inherited_endpoint_is_not_drift(self):
+        golden = {"meta": {"alias_of": "parent"},
+                  "bidder_info": {"endpoint": "http://parent/hb?zone={{.ZoneID}}"}}
+        effective = self._resolve("aliasOf: parent\n", golden)
+        found = sfu.compare_fields("152media", "go", golden, effective,
+                                   sfu.GO_BIDDER_INFO_FIELDS, "bidder_info")
+        self.assertNotIn("endpoint_drift", [f.type for f in found])
 
 
 class TestWorkflowEscalation(unittest.TestCase):
@@ -1182,9 +1374,16 @@ class TestWorkflowEscalation(unittest.TestCase):
         self.assertIn("could not scan", body)
 
     def test_exit_code_enforcement(self):
-        """The sync exit alone, with the other two steps clean."""
+        """The sync exit alone, with the other steps clean.
+
+        Exit 1 no longer fails the job on its own. The scan compares pinned
+        goldens against current master, so exit 1 means "findings exist", which
+        is its resting state; whether those findings are known is the
+        accepted-drift step's verdict, checked separately below. Exit 3 still
+        fails: a zero-input scan is an instrument failure, not a verdict.
+        """
         step = self.steps["Enforce sync exit code"]
-        for sync_exit, expected in (("0", 0), ("1", 1), ("2", 0), ("3", 1)):
+        for sync_exit, expected in (("0", 0), ("1", 0), ("2", 0), ("3", 1), ("7", 1)):
             body = _substitute(step["run"], sync_exit)
             self.assertNotIn("${{", body)
             proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
@@ -1202,19 +1401,39 @@ class TestWorkflowEscalation(unittest.TestCase):
         """
         step = self.steps["Enforce sync exit code"]
         cases = [
-            ("0", "0", "0", 0, "all clean"),
-            ("0", "1", "0", 1, "a registered claim no longer holds"),
-            ("0", "0", "1", 1, "a params ref no longer matches upstream"),
-            ("2", "1", "1", 1, "warn-only sync does not excuse the other two"),
-            ("0", "1", "1", 1, "both"),
+            ("0", "0", "0", "0", 0, "all clean"),
+            ("0", "1", "0", "0", 1, "a registered claim no longer holds"),
+            ("0", "0", "1", "0", 1, "a params ref no longer matches upstream"),
+            ("2", "1", "1", "0", 1, "warn-only sync does not excuse the others"),
+            ("0", "1", "1", "0", 1, "both"),
+            ("1", "0", "0", "1", 1, "drift that is not in the accepted-drift baseline"),
+            ("1", "0", "0", "0", 0, "drift that IS in the baseline is not a failure"),
+            ("1", "0", "0", "", 1, "the baseline step never reached its echo"),
         ]
-        for sync, claims, refs, expected, why in cases:
-            body = _substitute(step["run"], sync, claims, refs)
+        for sync, claims, refs, baseline, expected, why in cases:
+            body = _substitute(step["run"], sync, claims, refs, baseline)
             self.assertNotIn("${{", body)
             proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
             self.assertEqual(expected, proc.returncode,
-                             f"{why} (sync={sync} claims={claims} refs={refs}): "
-                             f"{proc.stdout}{proc.stderr}")
+                             f"{why}: {proc.stdout}{proc.stderr}")
+
+    def test_fixture_digest_verdict_reaches_the_exit_code(self):
+        """The fixture-digest step is `continue-on-error`, so the only thing that
+        turns it into a verdict is this step reading its output. A digest that
+        stopped describing its file, or a coverage regression, would otherwise be
+        reported into a log nobody reads."""
+        step = self.steps["Enforce sync exit code"]
+        cases = [
+            ("0", 0, "clean"),
+            ("1", 1, "a digest no longer describes its file, or coverage regressed"),
+            ("", 1, "the step never reached its echo"),
+        ]
+        for fixtures, expected, why in cases:
+            body = _substitute(step["run"], "0", "0", "0", "0", fixtures)
+            self.assertNotIn("${{", body)
+            proc = subprocess.run(["bash", "-c", body], capture_output=True, text=True)
+            self.assertEqual(expected, proc.returncode,
+                             f"{why} (fixtures={fixtures!r}): {proc.stdout}{proc.stderr}")
 
     def test_a_step_that_never_ran_is_not_a_pass(self):
         """An empty step output means the step died before its echo.

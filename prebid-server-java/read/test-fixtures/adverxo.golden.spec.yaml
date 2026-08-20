@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -221,15 +221,19 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-adverxo-bid-request.json
+        sha256: e0f442a3865d7ccd66c627773b53be9f55c490fa41303b7141ead6fd1604001f
         bytes: 798
         role: bidder-bid-request
       - filename: test-adverxo-bid-response.json
+        sha256: a06a558a398a97e26b7ecbe76ee23812e1e86590ba99c0a43ea2a66d137424ca
         bytes: 783
         role: bidder-bid-response
       - filename: test-auction-adverxo-request.json
+        sha256: 3328ac232b3c2a35157623c3785eab17473930f6b8a495640bcf54ce7d54cb6c
         bytes: 475
         role: auction-request
       - filename: test-auction-adverxo-response.json
+        sha256: 1d2e56fdfc7f7b70bdef4d1d4f1ca2729683794a95ac0b4ffe1c80118d9ca463
         bytes: 865
         role: auction-response
   uses_canonical_harness: true               # AdverxoBidderTest extends VertxTest

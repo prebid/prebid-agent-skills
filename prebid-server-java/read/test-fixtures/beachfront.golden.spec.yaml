@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -236,29 +236,35 @@ tests:
     video: []
     videosupplemental: []
     integration:
-      - filename: test-beachfront-banner-bid-request.json
-        sha256: pending-operator-fetch
-        bytes: 0
+      # The four files the IT folder actually holds, generated from upstream
+      # bytes rather than transcribed. Verified with `git ls-tree` at this
+      # golden's own resolved_commit and at e3ffd57db: identical file set, and
+      # each file byte-identical between the two, so these digests describe the
+      # pin and current master alike.
+      #
+      # This block previously named test-beachfront-{banner,video}-bid-
+      # {request,response}.json with `sha256: pending-operator-fetch` and
+      # `bytes: 0`. Those four have never existed upstream --
+      # `git log --all --diff-filter=A` over the folder shows numbered variants
+      # (-1/-2/-3) and never a banner/video split. The split reads as inferred
+      # from the adapter having two endpoints, and the placeholder digests meant
+      # nothing ever fetched them to find out. `integration_test_pattern` already
+      # said 4-file-split beside six entries.
+      - filename: test-beachfront-bid-request.json
+        sha256: e6db51052485d7faccf7585ce9daf1659391066120b281769a177edfb7818c59
+        bytes: 449
         role: bidder-bid-request
-      - filename: test-beachfront-banner-bid-response.json
-        sha256: pending-operator-fetch
-        bytes: 0
-        role: bidder-bid-response
-      - filename: test-beachfront-video-bid-request.json
-        sha256: pending-operator-fetch
-        bytes: 0
-        role: bidder-bid-request
-      - filename: test-beachfront-video-bid-response.json
-        sha256: pending-operator-fetch
-        bytes: 0
+      - filename: test-beachfront-bid-response.json
+        sha256: 63f4c400788b7d3202b5b15f269ad2694c4de1b45b215c5575f3f21d37ac0a27
+        bytes: 208
         role: bidder-bid-response
       - filename: test-auction-beachfront-request.json
-        sha256: pending-operator-fetch
-        bytes: 0
+        sha256: 1d1460aa396aa1dbb071f54fcdbd91d48843188076b69e0ab22a8438012d5ae0
+        bytes: 386
         role: auction-request
       - filename: test-auction-beachfront-response.json
-        sha256: pending-operator-fetch
-        bytes: 0
+        sha256: ddb3cfcd76a5b6a3fd0eb413c878aae7e361988593032e037fffeb58237aa259
+        bytes: 903
         role: auction-response
   uses_canonical_harness: true
   unit_test_methods_count: null

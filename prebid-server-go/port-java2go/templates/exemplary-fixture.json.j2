@@ -44,6 +44,16 @@ expected_bids is typically empty and httpCalls returns a non-200 status
 or malformed body. The SKILL Step 5 emits those into
 adapters/{bidder}/{bidder}test/supplemental/.
 #}
+{# impIDs is not optional. adapterstest rejects a fixture without it before it
+    compares anything: `if len(expected.ImpIDs) < 1 { return fmt.Errorf(
+    "expected.ImpIDs must contain at least one imp ID") }` (test_json.go:359 at
+    0ba35231). All 2820 upstream fixtures with an httpCall carry it. Emitting it
+    conditionally produced fixtures the harness refuses to run. #}
+{% for call in ctx.http_calls %}
+{% if not call.imp_ids %}
+{{ ERROR_every_http_call_requires_imp_ids__adapterstest_rejects_a_fixture_whose_expectedRequest_has_no_impIDs() }}
+{% endif %}
+{% endfor %}
 {
   "mockBidRequest": {{ ctx.mock_bid_request | tojson }},
   "httpCalls": [
@@ -51,9 +61,8 @@ adapters/{bidder}/{bidder}test/supplemental/.
     {
       "expectedRequest": {
         "uri": {{ call.uri | tojson }},
-        "body": {{ call.body | tojson }}{% if call.imp_ids %},
-        "impIDs": {{ call.imp_ids | tojson }}{% endif %}
-
+        "body": {{ call.body | tojson }},
+        "impIDs": {{ call.imp_ids | tojson }}
       },
       "mockResponse": {
         "status": {{ call.status }}{% if call.response %},

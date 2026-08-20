@@ -39,3 +39,37 @@ Against the Go corpus the same suites score 91.7% on the Teal PR this program wa
 built from. The gap is not depth, it is coverage of what Java reviewers actually
 raise — consistent with the Java suite having been derived from the Go suite's
 architecture rather than from Java review history.
+
+## A third contamination channel, recorded 2026-08-19
+
+The branch that added checks 8 and 9 to `bidder-class-pr-review` (the helper-naming
+and redundant-construction classes) was authored by an agent that had read
+`prebid-server-java-4428`'s complete `expected.yaml` — all four findings, quoted, with
+their discussion URLs — and then wrote checks aimed at those sites. It also read the
+full `expected.yaml` of `prebid-server-4765`, `-4287`, `-4614`, `-java-4552`, and the
+`forbidden` lists of `-4211`, `-4216`, `-4651`.
+
+**No run was recorded from that session.** A run produced by a reader of the answer
+key is not a measurement of the skills, and recording one would have consumed the
+one blind pass this corpus has left and set a floor on a number that measured nothing.
+`baseline.yaml` stays `unmeasured` for the reason stated above, plus this one.
+
+What that session established instead, by reading the skill text against the
+fixture's own captured patch rather than by scoring a run — checkable by anyone,
+independent of who wrote the checks:
+
+- **The trigger fires for all four sites.** `Workflow: Private Helper Changed` is
+  scoped to "a `private` (or package-private) method on the bidder class is added or
+  modified", and all four enclosing methods in the patch are private:
+  `tryParseImpExt`, `modifyImpExt`, `bidsFromResponse`, `makeHeaders`.
+- **Each site has a step that names its shape.** Check 8 covers the helper name;
+  check 9's three bullets cover a builder reproducing its input, a guard for a state
+  the path cannot reach, and a local bound once and used once.
+- **Text coverage is necessary, not sufficient.** Check 9's bullets require reading
+  the method body and its caller, and say so. A reviewer directed to the right method
+  may still not reach the finding. Whether the checks fire is what the next blind run
+  measures; this establishes only that a reviewer following the skill is pointed at
+  each of the four methods, which was not true before.
+
+The next blind run should be performed by a reader who has not opened any fixture's
+`expected.yaml` or `CORPUS.md`.

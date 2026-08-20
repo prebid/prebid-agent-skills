@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -226,16 +226,20 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-auction-thetradedesk-request.json
-        bytes: 0
+        sha256: 12caa364b2480bb55fdeaec024b75b230fe6b889c907636c35540234eacea3fe
+        bytes: 347
         role: auction-request
       - filename: test-auction-thetradedesk-response.json
-        bytes: 0
+        sha256: 2fe3dc0d1c8c98e90448164c60eb18a8ea5ffaf1dfed73d08264b84284846c3f
+        bytes: 774
         role: auction-response
       - filename: test-thetradedesk-bid-request.json
-        bytes: 0
+        sha256: 391c8bcf3b6c6d2aab3a1f8d733e91a37ddd80fcb8f59239550ca12624a74c8f
+        bytes: 992
         role: bidder-bid-request
       - filename: test-thetradedesk-bid-response.json
-        bytes: 0
+        sha256: e6a764d15cc09e004dcd871c32982b9b37acf8714b6dda5b87cb94fd2a08750f
+        bytes: 299
         role: bidder-bid-response
   uses_canonical_harness: true
   unit_test_methods_count: null

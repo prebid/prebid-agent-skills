@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: go
@@ -219,44 +219,44 @@ tests:
   fixture_inventory:
     exemplary:
       - filename: banner.json
-        sha256: ""                            # SHA from upstream API (verbatim).
+        sha256: 3ddb3f3c63509b6c33720550f3305687268819a7a1d43e7cc901b2bec9c46682                            # SHA from upstream API (verbatim).
         bytes: 3648
       - filename: native.json
-        sha256: ""
+        sha256: 61cf3947a10bd1e15278ed3e7172fc8ffb411b0cac2aa41913df29208d086d47
         bytes: 4374
       - filename: video.json
-        sha256: ""
+        sha256: 6e713606dfecc16f677751b8a156a80388e3a9a78facd9d08844db82d04cb306
         bytes: 4437
     supplemental:
       - filename: bad-response.json
-        sha256: ""
+        sha256: 23bcd66e16c9f27868f08b89873257581ed1b62e82aad82c7f8e375a1b66d18c
         bytes: 2274
       - filename: empty-seatbid-0-bid.json
-        sha256: ""
+        sha256: 4c4e6e64d0e2b00cd18a5a86588d30dc59c3f3448f01a3b51ecf419bfcb0d6c2
         bytes: 2544
       - filename: empty-seatbid.json
-        sha256: ""
+        sha256: ea48763fc06893f7515f45a4b86cfe52eab02d70c3816a4dcbb4544d11257abc
         bytes: 2444
       - filename: invalid-ext-bidder-object.json
-        sha256: ""
+        sha256: dc3ceafbdc5939b95f06476ac0cd810721f39b434588a6ccd6c20275a447c3c7
         bytes: 786
       - filename: invalid-ext-object.json
-        sha256: ""
+        sha256: d7dccfc4156ca70686058f1941bc245f58807bf48364efc30a1b8d9b2094d895
         bytes: 767
       - filename: status-204.json
-        sha256: ""
+        sha256: ce8b16d7fc879e0cba19224470cdf1c052edeb30ab24b393d9bd0a164ef4b641
         bytes: 2151
       - filename: status-400.json
-        sha256: ""
+        sha256: 1c7f4d1b0ef29c4a296c4498082166933eb1d1f864d186016cc411c4ae48bead
         bytes: 2330
       - filename: status-503.json
-        sha256: ""
+        sha256: 36622cddc43d1661e46e17d9501eab9b7c2fd1653e9716e3b49a0c920b439ae3
         bytes: 2281
       - filename: unexpected-status.json
-        sha256: ""
+        sha256: 326ac1582c178eda963d2dcd2f62fe142de02183a573b279056515875e8f43c1
         bytes: 2304
       - filename: wrong-bidtype.json
-        sha256: ""
+        sha256: bfcdab85d078933cc89932ca457ec7fc8484b18ec2c0dd60f4e58d06b25440e1
         bytes: 3131
     amp: []
     video: []

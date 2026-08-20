@@ -187,6 +187,8 @@ For each fixture file in `inputs.files.integration_test_fixtures`:
 
 A complete 4-file set has exactly one of each role. When a set is incomplete (e.g., missing `auction-response`), set `tests.integration_test_pattern: custom` and emit a quirk.
 
+> `custom` is also the value for a set that is complete but larger than a named shape. The named values are count-based, so a folder with extra bidder calls has no other home: appnexus carries eight files because `AppnexusVideoTest` stubs two bidder calls plus a cache call plus the auction pair, and it was labelled `6-file-with-cache` until the count was checked against the inventory. When the pattern is `custom`, the shape must stay readable from `fixture_inventory.integration[]` roles.
+
 ### Worked example — Kobler 4-file set
 
 The Kobler IT folder `src/test/resources/org/prebid/server/it/openrtb2/kobler/` contains:
@@ -232,21 +234,21 @@ test-cache-{xyz}-request.json    → role: cache-request
 test-cache-{xyz}-response.json   → role: cache-response
 ```
 
-When the IT folder has 6 files matching the 4 standard + 2 cache patterns, set `tests.integration_test_pattern: 6-file-with-cache`. Record all 6 in `fixture_inventory.integration[]`. The cache-* roles are extensions; record them with the appropriate `role` value.
+When the IT folder has 6 files matching the 4 standard + 2 cache patterns, set `tests.integration_test_pattern: 6-file-with-cache`. Record all 6 in `fixture_inventory.integration[]`. The cache-* roles are extensions; record them with the appropriate `role` value. **Count the files.** `6-file-with-cache` means six; a cache pair beside more than one bidder call is `custom`, and `scripts/tests/test_fixture_inventory_shape.py` fails a count-named label that disagrees with the inventory beside it.
 
 ---
 
-## Multi-folder pattern (Rubicon)
+## Multi-folder pattern (huaweiads)
 
-Rubicon-style adapters split fixtures into multiple sibling folders for different test flows:
+A few adapters split fixtures into sibling folders, one per scenario. Only two do at e3ffd57: `openrtb2/huaweiads/` with 23 subfolders and `openrtb2/epsilon/` with one (`alias`). huaweiads is the canonical case:
 
 ```
-src/test/resources/org/prebid/server/it/openrtb2/rubicon/auction/
-src/test/resources/org/prebid/server/it/openrtb2/rubicon/amp/
-src/test/resources/org/prebid/server/it/openrtb2/rubicon/video/
+src/test/resources/org/prebid/server/it/openrtb2/huaweiads/banner_ch_endpoint/
+src/test/resources/org/prebid/server/it/openrtb2/huaweiads/banner_eu_endpoint/
+src/test/resources/org/prebid/server/it/openrtb2/huaweiads/native_single_image/
 ```
 
-Set `tests.integration_test_pattern: multi-folder` and `tests.java_it_folder_naming: multi-folder`. Record fixtures from all subfolders, each with its parent folder noted (e.g., `auction/test-rubicon-bid-request.json`).
+Set `tests.integration_test_pattern: multi-folder` and `tests.java_it_folder_naming: multi-folder`. Record fixtures from all subfolders, each with its parent folder noted (e.g., `banner_ch_endpoint/test-huaweiads-bid-request.json`).
 
 ---
 
@@ -258,7 +260,7 @@ When the parent's YAML declares aliases, EACH alias requires its own IT class + 
 src/test/java/org/prebid/server/it/AdverxoTest.java
 src/test/java/org/prebid/server/it/AdportTest.java
 src/test/java/org/prebid/server/it/BidsmindTest.java
-src/test/java/org/prebid/server/it/MobuppsTest.java
+src/test/java/org/prebid/server/it/HarrenmediaTest.java
 ```
 
 Each alias has its own IT class AND its own fixture folder:
@@ -267,7 +269,7 @@ Each alias has its own IT class AND its own fixture folder:
 src/test/resources/org/prebid/server/it/openrtb2/adverxo/test-adverxo-bid-request.json (etc.)
 src/test/resources/org/prebid/server/it/openrtb2/adport/test-adport-bid-request.json (etc.)
 src/test/resources/org/prebid/server/it/openrtb2/bidsmind/test-bidsmind-bid-request.json (etc.)
-src/test/resources/org/prebid/server/it/openrtb2/mobupps/test-mobupps-bid-request.json (etc.)
+src/test/resources/org/prebid/server/it/openrtb2/harrenmedia/test-harrenmedia-bid-request.json (etc.)
 ```
 
 ### Detection rules

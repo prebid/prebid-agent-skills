@@ -188,6 +188,7 @@ def load_fixture(fixture_id: str, fixtures_dir: pathlib.Path) -> dict:
         "files": files,
         "expected": expected.get("expected") or [],
         "forbidden": expected.get("forbidden") or [],
+        "additional": expected.get("additional") or [],
         "patches": {normalize_path(f["filename"]): normalize_patch(f.get("patch"))
                     for f in files},
         "neutralised_families": _neutral,
@@ -215,8 +216,22 @@ def validate_fixture(fx: dict) -> list[str]:
                 problems.append(
                     f"{fx['id']}/{key}/{entry.get('id', '?')}: anchor not present in the "
                     f"captured patch for {path}: {anchor!r}")
-    if key_dupes := _dupes([e["id"] for e in fx["expected"] + fx["forbidden"] if e.get("id")]):
+    for entry in fx["additional"]:
+        if not str(entry.get("rule") or "").strip():
+            problems.append(
+                f"{fx['id']}/{entry.get('id', '?')}: an `additional` entry must cite the "
+                f"documented rule it rests on in `rule:`. Without one it is indistinguishable "
+                f"from raising the unexpected ceiling.")
+    if key_dupes := _dupes([e["id"] for e in fx["expected"] + fx["forbidden"] + fx["additional"]
+                            if e.get("id")]):
         problems.append(f"{fx['id']}: duplicate finding ids {sorted(key_dupes)}")
+    for entry in fx["forbidden"]:
+        floor = entry.get("forbidden_at_or_above")
+        if floor is not None and str(floor).upper() not in SEVERITY_RANK:
+            problems.append(
+                f"{fx['id']}/{entry.get('id', '?')}: forbidden_at_or_above={floor!r} "
+                f"is not one of {SEVERITIES}; an unparseable floor would tolerate "
+                f"every severity and forbid nothing")
     return problems
 
 
@@ -343,17 +358,49 @@ def score_fixture(fx: dict, actual: dict) -> dict:
     exp_matched, exp_used = assign(fx["expected"], actual["findings"])
     remaining = [f for i, f in enumerate(actual["findings"]) if i not in exp_used]
     forb_matched, forb_used = assign(fx["forbidden"], remaining)
-    unexpected = [f for i, f in enumerate(remaining) if i not in forb_used]
 
-    # A rule whose upstream fact postdates this PR could not have been raised on
-    # it. Such findings are neutralised: they do not count against the unexpected
-    # ceiling, and they are reported separately so the exemption stays visible
-    # rather than quietly shrinking the denominator.
+    # A forbidden entry may forbid a VERDICT rather than a subject. adtg_org's
+    # http endpoint is the case that forced this: the corpus records "blocking on
+    # it contradicts the merge bar the maintainers apply", and the Go skill
+    # instructs "flag HTTP as INFO ... never FAIL". Both are right, and a matcher
+    # that ignores severity called the skill's INFO note a hard false positive.
+    #
+    # `forbidden_at_or_above: WARN` on the entry means a note below WARN is
+    # tolerated. Tolerated findings count neither as forbidden hits nor as
+    # unexpected, and are reported separately so the allowance stays visible
+    # instead of shrinking a denominator.
+    by_id = {e["id"]: e for e in fx["forbidden"] if e.get("id")}
+    tolerated: list[dict] = []
+    for fid, ai in list(forb_matched.items()):
+        floor = (by_id.get(fid) or {}).get("forbidden_at_or_above")
+        if not floor:
+            continue
+        got = str(remaining[ai].get("severity") or "").upper()
+        want = str(floor).upper()
+        # Validated at load time by validate_fixture; unreachable here.
+        if got in SEVERITY_RANK and SEVERITY_RANK[got] < SEVERITY_RANK[want]:
+            tolerated.append({**remaining[ai], "forbidden_id": fid,
+                              "tolerated_below": want})
+            del forb_matched[fid]
+
+    after_forbidden = [f for i, f in enumerate(remaining) if i not in forb_used]
+
+    # Neutralisation comes BEFORE `additional`, and the order is load-bearing. A
+    # rule whose upstream fact postdates this PR could not have been raised on it
+    # at all, which is a stronger statement than "documented and unraised" -- so an
+    # `additional` entry must not be able to claim such a finding and quietly take
+    # it out of the neutralised report. Writing the entries for
+    # prebid-server-java-4428 produced exactly that: a substring match assigned the
+    # epoch-neutralised `framework-idiom` finding an `additional` id, which would
+    # have moved it from NEUTRALISED to ADDITIONAL and hidden the exemption.
     neutral = fx.get("neutralised_families") or {}
-    neutralised = [f for f in unexpected
+    neutralised = [f for f in after_forbidden
                    if (f.get("family") or "").strip().lower() in neutral]
-    if neutral:
-        unexpected = [f for f in unexpected if f not in neutralised]
+    classifiable = [f for f in after_forbidden if f not in neutralised]
+
+    add_matched, add_used = assign(fx.get("additional") or [], classifiable)
+    additional = [f for i, f in enumerate(classifiable) if i in add_used]
+    unexpected = [f for i, f in enumerate(classifiable) if i not in add_used]
 
     total_expected = len(fx["expected"])
     recall = (len(exp_matched) / total_expected) if total_expected else None
@@ -413,6 +460,16 @@ def score_fixture(fx: dict, actual: dict) -> dict:
         "recall": recall,
         "forbidden_total": len(fx["forbidden"]),
         "forbidden_hits": sorted(forb_matched),
+        "additional_total": len(fx.get("additional") or []),
+        "additional_matched": len(add_matched),
+        "additional_detail": [
+            f"{f.get('severity')} {f.get('path')} {str(f.get('anchor'))[:60]}"
+            for f in additional],
+        "tolerated": len(tolerated),
+        "tolerated_detail": [
+            f"{t.get('severity')} {t.get('path')} {str(t.get('anchor'))[:60]!r} "
+            f"(tolerated below {t['tolerated_below']} by {t['forbidden_id']})"
+            for t in tolerated],
         "unexpected": len(unexpected),
         "neutralised": len(neutralised),
         "neutralised_detail": [
@@ -543,7 +600,12 @@ def render_table(results: list[dict], baseline: dict, breaches: list[str]) -> st
         for u in r["unexpected_detail"]:
             lines.append(f"UNEXPECTED {r['fixture']}: {u['severity'] or '?'} {u['path']} "
                          f"{u['anchor']}")
-    if any(r["scan_note"] or r["forbidden_hits"] or r["unexpected_detail"] for r in results):
+        for a in r.get("additional_detail") or []:
+            lines.append(f"ADDITIONAL {r['fixture']}: {a}")
+        for t in r.get("tolerated_detail") or []:
+            lines.append(f"TOLERATED {r['fixture']}: {t}")
+    if any(r["scan_note"] or r["forbidden_hits"] or r["unexpected_detail"]
+           or r.get("tolerated_detail") for r in results):
         lines.append("")
 
     unmeasured = [k for k, v in (baseline.get("fixtures") or {}).items()

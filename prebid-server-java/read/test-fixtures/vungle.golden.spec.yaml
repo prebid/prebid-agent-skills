@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -201,16 +201,20 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-vungle-bid-request.json
-        bytes: 0
+        sha256: c8a3d08f99820238463776fbed35b0deffc006b9e44d1be88ae5ae2a065ca3ba
+        bytes: 1076
         role: bidder-bid-request
       - filename: test-vungle-bid-response.json
-        bytes: 0
+        sha256: 3adf9405b9c54ef3e12695e16f05b891ffc047e0d94452388fa4240d0592da43
+        bytes: 354
         role: bidder-bid-response
       - filename: test-auction-vungle-request.json
-        bytes: 0
+        sha256: 9a0513eeda5c54c1845b20b0a2a78c8dd3b74378340f7f3a11c4f8ee8e429138
+        bytes: 448
         role: auction-request
       - filename: test-auction-vungle-response.json
-        bytes: 0
+        sha256: 1692b8d13b28b0e55b79e5093e077f01688c6dc3c8a6582bc27b922b7b9f768f
+        bytes: 822
         role: auction-response
   uses_canonical_harness: true
   unit_test_methods_count: 17

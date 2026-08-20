@@ -18,18 +18,78 @@ the SKILL passes from the source spec):
   ctx.imp_ext_class_root       : str  — typically same as bidder_class_root; used for ExtImp{X}
   ctx.imp_ext_unmarshal_kind   : str  — one of {"standard-two-phase", "direct"}; Rule 1/2
   ctx.batching_kind            : str  — one of {"single-batched", "per-imp", "max-imps-per-request",
-                                          "format-split", "pod-grouping"}; Rule 16/17/18
+                                          "grouped-by-key", "format-split", "pod-grouping"};
+                                          Rule 16/17/18/47. NOTE the cross-skill spelling
+                                          asymmetry: this value tracks the SPEC driver
+                                          (`batching.rules[].kind: grouped-by-key`), while
+                                          port-java2go's ctx spells the same kind "per-key".
+                                          Both feed a ctx.batching_per_key dict.
   ctx.batching_max_imps        : int|null  — when batching_kind == "max-imps-per-request"
+  ctx.batching_per_key         : dict|null — Rule 47, when batching_kind ==
+                                          "grouped-by-key". Selects WHAT the groups are keyed
+                                          on. Two shapes, both drawn from merged upstream
+                                          adapters:
+                                            absent / key_field null
+                                              Key on the WHOLE ExtImp{X} object:
+                                              `Map<ExtImp{X}, List<Imp>>`. This is the default
+                                              because it is what upstream does most —
+                                              AdkernelBidder, DatablocksBidder and
+                                              ZeroclickfraudBidder all key on their ext type,
+                                              and every Go grouper does the same
+                                              (`map[openrtb_ext.ExtImp{X}][]openrtb2.Imp`), so
+                                              it is also what port-java2go emits. Requires the
+                                              ext POJO to carry `@Value` for equals/hashCode,
+                                              which ext-imp-pojo.java.j2 emits.
+                                            {key_field, key_type}
+                                              Key on ONE field: `Map<{key_type}, List<Imp>>`
+                                              keyed on `extImp.get<Field>()`. Upstream uses
+                                              this with String (ThirtyThreeAcrossBidder),
+                                              Integer (AdtargetBidder) and an enum
+                                              (TaboolaBidder), so key_type is REQUIRED here
+                                              rather than assumed to be String — the previous
+                                              revision hardcoded String and therefore could
+                                              not express adkernel, whose key is an Integer
+                                              zoneId. key_field must be a lower-camelCase Java
+                                              identifier; the SKILL owns any snake_case
+                                              normalization (Rule 46) before it lands here.
+                                          `HashMap`, not `LinkedHashMap`: all six merged Java
+                                          groupers use HashMap, and Go's own fixture harness
+                                          matches requests order-insensitively on purpose
+                                          (`adapters/adapterstest/test_json.go`: "try to match
+                                          expected to actual without assuming order, as the use
+                                          of maps in some adapters purposely randomizes
+                                          order"). If a bidder genuinely needs a stable
+                                          outgoing order, that is a per-bidder decision to make
+                                          explicitly, not a default to inherit.
   ctx.endpoint_resolution_kind : str  — one of {"static", "single-token-substitution",
                                           "query-parameter-augmentation", "dev-prod-toggle",
                                           "multi-token-substitution"}; Rule 11/12/13/14
   ctx.headers_collapse         : bool — Rule 19; emit HttpUtil.headers() shorthand
-  ctx.http_status_kind         : str  — one of {"canonical-helpers", "legacy-raw"}; Rule 30
+  ctx.http_status_kind         : str  — the source spec's
+                                        code.make_bids.http_status_handling.kind, passed
+                                        through unchanged. Only "custom-status-checks" and
+                                        "custom" put status handling in the emitted bidder,
+                                        and then as a TODO; every other value emits none,
+                                        per Rule 30
   ctx.bid_type_resolution      : str  — one of {"imp-mediatype-introspection",
                                           "ext-prebid-video-placement",
                                           "constant-banner",
                                           "by-bid-mtype",
                                           "method-chain-fallback"}; Rule 23-25
+  ctx.bid_type_error_tolerance : str  — one of {"abort-all" (default), "per-bid-skip"}.
+                                          Only meaningful with
+                                          bid_type_resolution == "by-bid-mtype"; any other
+                                          pairing fails at render. "abort-all" throws
+                                          PreBidException on an unresolved mtype, which
+                                          discards the whole makeBids result;
+                                          "per-bid-skip" accumulates a badServerResponse
+                                          error and SKIPS that bid while its siblings
+                                          continue. Read this off the SOURCE bid loop, not
+                                          off taste: Go `errs = append(errs, err); continue`
+                                          inside the seatbid walk is per-bid-skip, a Go
+                                          `return nil, err` is abort-all. Target-repo shape
+                                          for per-bid-skip: ZentotemBidder (68 upstream
+                                          adapters take an errors list into extractBids).
   ctx.multiformat_supported    : bool — mirrors bidder-config meta-info
                                           {app,site,dooh}-media-types declaring
                                           >1 media type. When true, resolveBidType
@@ -72,9 +132,6 @@ import org.prebid.server.bidder.model.BidderBid;
 import org.prebid.server.bidder.model.BidderCall;
 import org.prebid.server.bidder.model.BidderError;
 import org.prebid.server.bidder.model.HttpRequest;
-{% if ctx.http_status_kind != "canonical-helpers" %}
-import org.prebid.server.bidder.model.HttpResponse;
-{% endif %}
 import org.prebid.server.bidder.model.Result;
 {% if ctx.uses_currency_conversion %}
 import org.prebid.server.currency.CurrencyConversionService;
@@ -90,7 +147,13 @@ import org.prebid.server.util.HttpUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
+{% if ctx.batching_kind == "grouped-by-key" %}
+import java.util.HashMap;
+{% endif %}
 import java.util.List;
+{% if ctx.batching_kind == "grouped-by-key" %}
+import java.util.Map;
+{% endif %}
 import java.util.Objects;
 
 {% if ctx.javadoc_summary %}
@@ -98,6 +161,19 @@ import java.util.Objects;
  * {{ ctx.javadoc_summary }}
  */
 {% endif %}
+{#- Rule 30 vocabulary. A Go source spec carries `canonical-go-helpers` or
+    `legacy-raw-go` (behavior-taxonomy.md); a Java one carries `framework-default`
+    or `framework-default-plus-empty-seatbid-shortcircuit`. This template used to
+    test only the historical alias `canonical-helpers`, so BOTH real Go values fell
+    through to a hand-rolled 204/non-200 check -- the shape Rule 30 tells a
+    Go-to-Java porter not to emit, and one that 0 of 253 upstream Java bidders
+    contain. Only a bespoke policy gets adapter-level code, and it gets a TODO
+    rather than an invented check. -#}
+{% set _status_kind = ctx.http_status_kind %}
+{% if _status_kind and _status_kind not in ("canonical-go-helpers", "canonical-helpers", "legacy-raw-go", "framework-default", "framework-default-plus-empty-seatbid-shortcircuit", "custom-status-checks", "custom") %}
+{{ ERROR_unknown_http_status_kind__expected_a_behavior_taxonomy_value_canonical_go_helpers_legacy_raw_go_framework_default_custom_status_checks_or_custom() }}
+{% endif %}
+{% set _custom_status_policy = _status_kind in ("custom-status-checks", "custom") %}
 public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 
     private static final TypeReference<ExtPrebid<?, ExtImp{{ ctx.imp_ext_class_root }}>> {{ ctx.bidder_class_root | upper }}_EXT_TYPE_REFERENCE =
@@ -263,6 +339,78 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
                 errors.add(BidderError.badInput(e.getMessage()));
             }
         }
+{% elif ctx.batching_kind == "grouped-by-key" %}
+{# Rule 47. Two keying shapes, both taken from merged adapters. Defaulting to
+   the whole ext object matches AdkernelBidder / DatablocksBidder /
+   ZeroclickfraudBidder and every Go grouper, so it is also what port-java2go
+   emits. A single-field key must declare its TYPE: upstream uses String,
+   Integer and an enum for this, and hardcoding String is what made the previous
+   revision unable to express adkernel's Integer zoneId. #}
+{%- set _per_key = ctx.batching_per_key or {} -%}
+{%- set group_key_field = _per_key.key_field if _per_key else none -%}
+{%- if group_key_field -%}
+{%- set _JAVA_IDENT_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' -%}
+{%- if (group_key_field | reject('in', _JAVA_IDENT_CHARS) | list) or group_key_field[0] not in 'abcdefghijklmnopqrstuvwxyz' -%}
+{{ ERROR_rule47_key_field_must_be_a_lower_camelCase_java_identifier__normalize_it_in_the_skill() }}
+{%- endif -%}
+{%- if not _per_key.key_type -%}
+{{ ERROR_rule47_key_field_requires_key_type__upstream_uses_String_Integer_and_enum_keys_so_String_cannot_be_assumed() }}
+{%- endif -%}
+{%- endif -%}
+{%- set group_key_type = _per_key.key_type if group_key_field else ("ExtImp" ~ ctx.imp_ext_class_root) -%}
+{%- set group_key_expr = ("extImp.get" ~ group_key_field[0] | upper ~ group_key_field[1:] ~ "()") if group_key_field else "extImp" %}
+        // Rule 47 — grouped-by-key batching: one outgoing request per distinct
+{% if group_key_field %}
+        // imp.ext.bidder.{{ group_key_field }}.
+{% else %}
+        // imp.ext.bidder value, keyed on the parsed ext object as
+        // AdkernelBidder, DatablocksBidder and ZeroclickfraudBidder do.
+{% endif %}
+        // HashMap matches all six merged Java groupers. Request order is not
+        // pinned here on purpose: Go's fixture harness matches requests
+        // order-insensitively by design, so a stable order is a per-bidder
+        // decision rather than something this shape owes.
+        final Map<{{ group_key_type }}, List<Imp>> impsByGroup = new HashMap<>();
+        for (Imp imp : bidRequest.getImp()) {
+            try {
+                final ExtImp{{ ctx.imp_ext_class_root }} extImp = parseImpExt(imp);
+{% if ctx.entity_strategies and ctx.entity_strategies.Imp and ctx.entity_strategies.Imp not in ("passthrough", "none") %}
+                // TODO[port-go2java]: apply Imp mutation per source spec
+                // entity_strategies.Imp={{ ctx.entity_strategies.Imp }} before grouping.
+                // See the single-batched branch for the common mutation patterns
+                // (bidfloor cur-convert, tagid promotion, imp.ext repack F-new-91).
+                final Imp modifiedImp = imp.toBuilder()
+                        // .bidfloor(...) .ext(...) .tagid(...) etc.
+                        .build();
+{% else %}
+                final Imp modifiedImp = imp;
+{% endif %}
+                impsByGroup.computeIfAbsent({{ group_key_expr }}, key -> new ArrayList<>())
+                        .add(modifiedImp);
+            } catch (PreBidException e) {
+                errors.add(BidderError.badInput(e.getMessage()));
+            }
+        }
+
+        for (Map.Entry<{{ group_key_type }}, List<Imp>> groupEntry : impsByGroup.entrySet()) {
+            try {
+                final BidRequest groupRequest = bidRequest.toBuilder()
+                        .imp(groupEntry.getValue())
+                        .build();
+                // TODO[port-go2java]: when the group key drives endpoint macros
+                // (Rule 48 — param-derived-endpoint-macros), resolve the endpoint
+                // from groupEntry.getKey() instead of the request. Rule 48 is
+                // deliberately operator-fill: the parse/validate helper is
+                // vendor-specific. A group whose key is invalid is rejected with
+                // badInput WITHOUT affecting other groups (catch below).
+                httpRequests.add(BidderUtil.defaultRequest(
+                        groupRequest,
+                        resolveEndpoint(groupRequest),
+                        mapper));
+            } catch (PreBidException e) {
+                errors.add(BidderError.badInput(e.getMessage()));
+            }
+        }
 {% else %}
         // TODO[port-go2java]: batching_kind={{ ctx.batching_kind }} is not yet
         // template-mapped. Operator must hand-fill makeHttpRequests body.
@@ -278,23 +426,31 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 
     @Override
     public Result<List<BidderBid>> makeBids(BidderCall<BidRequest> httpCall, BidRequest bidRequest) {
-{% if ctx.http_status_kind == "canonical-helpers" %}
-        // Rule 30 (canonical-helpers): no explicit status check — Java's HTTP
-        // layer handles 204 NO_CONTENT and non-200 codes before makeBids is
-        // invoked (matches upstream KoblerBidder; framework-default pattern).
+{% if _custom_status_policy %}
+        // TODO[port-go2java]: the source declares http_status_handling.kind=
+        // {{ ctx.http_status_kind }}, a bespoke status policy with no Java corpus
+        // precedent to copy — 0 of the 253 upstream Java bidders read a status
+        // code at all. Decide with a reviewer whether the behaviour survives the
+        // port: HttpBidderRequester already turns 204 into an empty result and any
+        // non-200 into badServerResponse, so a per-status distinction (say
+        // 400 -> BadInput) has to be justified, not transcribed.
 {% else %}
-        final HttpResponse response = httpCall.getResponse();
-        if (response.getStatusCode() == 204) {
-            return Result.empty();
-        }
-        if (response.getStatusCode() != 200) {
-            return Result.withError(BidderError.badServerResponse(
-                    "Unexpected status code: " + response.getStatusCode()));
-        }
+        // Rule 30: no explicit status check. HttpBidderRequester handles
+        // NO_CONTENT and non-200 before makeBids is invoked
+        // (HttpBidderRequester.java:303 and :322), which is why 0 of the 253
+        // upstream Java bidders reference a status code. This holds whatever the
+        // Go source did: `legacy-raw-go` hand-rolls those checks because Go hands
+        // the adapter the status, and porting them across would emit a shape the
+        // Java corpus does not contain.
 {% endif %}
         try {
             final BidResponse bidResponse = mapper.decodeValue(httpCall.getResponse().getBody(), BidResponse.class);
+{% if ctx.bid_type_error_tolerance == "per-bid-skip" %}
+            final List<BidderError> errors = new ArrayList<>();
+            return Result.of(extractBids(bidResponse, errors), errors);
+{% else %}
             return Result.withValues(extractBids(bidResponse, bidRequest));
+{% endif %}
         } catch (DecodeException e) {
             return Result.withError(BidderError.badServerResponse(e.getMessage()));
         }
@@ -359,6 +515,36 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {% endif %}
     }
 
+{% if ctx.bid_type_error_tolerance == "per-bid-skip" %}
+{# F-new-108. Per-bid tolerance: resolveBidType returns null for an unresolved
+   mtype instead of throwing, so the stream filters that bid out and its
+   siblings survive. Target-repo shape: ZentotemBidder (errors list threaded
+   through extractBids -> makeBidderBid -> the type resolver). #}
+    private List<BidderBid> extractBids(BidResponse bidResponse, List<BidderError> errors) {
+        if (bidResponse == null || bidResponse.getSeatbid() == null) {
+            return Collections.emptyList();
+        }
+        return bidResponse.getSeatbid().stream()
+                .filter(Objects::nonNull)
+                .map(SeatBid::getBid)
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .filter(Objects::nonNull)
+{% if ctx.has_bid_post_processing_macros %}
+                .map(this::applyBidPostProcessingMacros)
+{% endif %}
+                .map(bid -> makeBidderBid(bid, bidResponse.getCur(), errors))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private BidderBid makeBidderBid(Bid bid, String currency, List<BidderError> errors) {
+        final BidType bidType = resolveBidType(bid, errors);
+        return bidType != null
+                ? BidderBid.of(bid, bidType, currency)
+                : null;
+    }
+{% else %}
     private List<BidderBid> extractBids(BidResponse bidResponse, BidRequest bidRequest) {
         if (bidResponse == null || bidResponse.getSeatbid() == null) {
             return Collections.emptyList();
@@ -374,6 +560,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
                 .map(bid -> BidderBid.of(bid, resolveBidType(bid, bidRequest), bidResponse.getCur()))
                 .toList();
     }
+{% endif %}
 {% if ctx.has_bid_post_processing_macros %}
 
     private Bid applyBidPostProcessingMacros(Bid bid) {
@@ -395,7 +582,6 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
     }
 {% endif %}
 
-    private BidType resolveBidType(Bid bid, BidRequest bidRequest) {
 {# Multiformat guard (Teal #4765). A multiformat adapter can receive an imp
    carrying more than one media type at once (e.g. banner+video), so imp-only
    resolution (fixed video>native>audio>banner priority) cannot tell which
@@ -405,11 +591,43 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
    resolution is selected for a multiformat adapter (mirrors the Go template
    guard; Java has no vouching surface to excuse a silent constant). #}
 {%- if (ctx.multiformat_supported | default(false)) and ctx.bid_type_resolution == "imp-mediatype-introspection" -%}
-{{ {}.multiformat_adapter_must_use_by_bid_mtype_resolution.fail }}
+{{ ERROR_multiformat_adapter_must_use_by_bid_mtype_resolution() }}
 {%- endif -%}
+{# Tolerance guard (F-new-108). "per-bid-skip" threads an errors list through
+   extractBids and returns null for an unresolved type; only the by-bid-mtype
+   resolution has that null-means-skip contract -- every other arm returns a
+   BidType unconditionally, so the null branch would be unreachable and the
+   errors parameter unused (checkstyle would flag it). Any other pairing is a
+   context-assembly bug, so fail at render rather than emit it. #}
+{%- if (ctx.bid_type_error_tolerance | default("abort-all")) == "per-bid-skip" and ctx.bid_type_resolution != "by-bid-mtype" -%}
+{{ ERROR_per_bid_skip_tolerance_requires_by_bid_mtype_resolution() }}
+{%- endif -%}
+{% if ctx.bid_type_error_tolerance == "per-bid-skip" %}
+    private BidType resolveBidType(Bid bid, List<BidderError> errors) {
+{% else %}
+    private BidType resolveBidType(Bid bid, BidRequest bidRequest) {
+{% endif %}
 {% if ctx.bid_type_resolution == "constant-banner" %}
         return BidType.banner;
 {% elif ctx.bid_type_resolution == "by-bid-mtype" %}
+{% if ctx.bid_type_error_tolerance == "per-bid-skip" %}
+        // Rule 23 — classify by the response's own bid.mtype (OpenRTB 2.6:
+        // 1=banner, 2=video, 3=audio, 4=native). Per-bid tolerance
+        // (F-new-108): an unresolved mtype surfaces badServerResponse and
+        // SKIPS this bid; sibling bids in the same response continue, which
+        // mirrors the Go `errs = append(errs, err); continue` loop.
+        return switch (bid.getMtype()) {
+            case 1 -> BidType.banner;
+            case 2 -> BidType.video;
+            case 3 -> BidType.audio;
+            case 4 -> BidType.xNative;
+            case null, default -> {
+                errors.add(BidderError.badServerResponse(
+                        "Unsupported bid.mtype " + bid.getMtype() + " for impId: " + bid.getImpid()));
+                yield null;
+            }
+        };
+{% else %}
         // Rule 23 — classify by the response's own bid.mtype (OpenRTB 2.6:
         // 1=banner, 2=video, 3=audio, 4=native). Authoritative for multiformat
         // imps where a single imp carries co-present formats. Unresolved mtype
@@ -427,6 +645,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
             default -> throw new PreBidException(
                     "Unsupported bid.mtype " + mType + " for impId: " + bid.getImpid());
         };
+{% endif %}
 {% elif ctx.bid_type_resolution == "imp-mediatype-introspection" %}
         // Walk bid.impid → matching imp; classify by populated mediatype field.
         for (Imp imp : bidRequest.getImp()) {

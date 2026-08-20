@@ -82,7 +82,7 @@ class HarnessTestCase(unittest.TestCase):
     # -- corpus construction ------------------------------------------------
 
     def make_fixture(self, fid="demo", outcome="defective", expected=None, forbidden=None,
-                     files=None):
+                     files=None, additional=None):
         d = self.fixtures / fid
         files = files if files is not None else [{
             "filename": "adapters/demo/demo.go", "status": "added",
@@ -101,7 +101,8 @@ class HarnessTestCase(unittest.TestCase):
             """))
         body = {"pr": "prebid/prebid-server#1",
                 "expected": expected if expected is not None else [DEFAULT_EXPECTED],
-                "forbidden": forbidden or []}
+                "forbidden": forbidden or [],
+                "additional": additional or []}
         write(d / "expected.yaml", _yaml(body))
         return fid
 
@@ -263,6 +264,175 @@ class TestFalsePositives(HarnessTestCase):
         self.assertEqual(data["corpus"]["unexpected"], 0,
                          "a forbidden hit is classified, not double-counted as unexpected")
         self.assertEqual(rc, scorer.EXIT_FAIL)
+
+    def test_a_severity_floor_tolerates_a_note_and_forbids_a_verdict(self):
+        """`forbidden_at_or_above` separates the subject from the verdict.
+
+        adtg_org's http endpoint is the case that forced this. The corpus records
+        that BLOCKING on it contradicts the merge bar, and the Go bidder-info skill
+        instructs "flag HTTP as INFO ... never FAIL". Both are correct, and a
+        matcher that ignored severity scored the skill's INFO note as a hard false
+        positive — the one forbidden hit in the whole corpus was the suite doing
+        what it was told.
+        """
+        forbidden = [{
+            "id": "demo-http-endpoint-permitted",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "forbidden_at_or_above": "WARN",
+            "source": "https://example.invalid/pull/1#discussion_r2",
+            "why_it_matters": "blocking on it contradicts the merge bar; a note is fine",
+        }]
+        for got, want_forb, want_tol in (("INFO", 0, 1), ("WARN", 1, 0), ("FAIL", 1, 0)):
+            with self.subTest(severity=got):
+                fid = self.make_fixture(forbidden=forbidden)
+                hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+                       "family": "endpoint-config", "severity": got}
+                self.write_actual(fid, [MATCHING_FINDING, hit])
+                summary = self.tmp / f"summary-{got}.json"
+                rc = self.run_scorer("--json", str(summary))
+                data = json.loads(summary.read_text())
+                self.assertEqual(want_forb, data["corpus"]["forbidden_hits"],
+                                 f"{got}: forbidden_hits")
+                self.assertEqual(0, data["corpus"]["unexpected"],
+                                 f"{got}: a tolerated finding must not become unexpected")
+                self.assertEqual(scorer.EXIT_PASS if want_forb == 0 else scorer.EXIT_FAIL, rc,
+                                 f"{got}: exit code")
+
+    def test_a_forbidden_entry_without_a_floor_still_forbids_any_severity(self):
+        """The default must not change: an entry with no floor forbids the subject
+        outright, at INFO as much as at FAIL."""
+        forbidden = [{
+            "id": "demo-outright",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "source": "https://example.invalid/pull/1#discussion_r2",
+            "why_it_matters": "never raise this at all",
+        }]
+        fid = self.make_fixture(forbidden=forbidden)
+        hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+               "family": "endpoint-config", "severity": "INFO"}
+        self.write_actual(fid, [MATCHING_FINDING, hit])
+        summary = self.tmp / "summary.json"
+        rc = self.run_scorer("--json", str(summary))
+        data = json.loads(summary.read_text())
+        self.assertEqual(1, data["corpus"]["forbidden_hits"])
+        self.assertEqual(scorer.EXIT_FAIL, rc)
+
+    def test_an_unparseable_severity_floor_is_an_instrument_error(self):
+        """A typo in the floor must not silently forbid nothing."""
+        forbidden = [{
+            "id": "demo-bad-floor",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "forbidden_at_or_above": "CRITICAL",
+            "source": "https://example.invalid/pull/1#discussion_r2",
+            "why_it_matters": "typo in the floor",
+        }]
+        fid = self.make_fixture(forbidden=forbidden)
+        hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+               "family": "endpoint-config", "severity": "INFO"}
+        self.write_actual(fid, [MATCHING_FINDING, hit])
+        rc = self.run_scorer()
+        self.assertNotEqual(scorer.EXIT_PASS, rc,
+                            "an invalid floor must not read as a clean run")
+
+    def test_an_additional_finding_is_not_unexpected(self):
+        """`additional` is what this repo's own rules require and no maintainer
+        raised on that PR.
+
+        On `prebid-server-4765` all ten so-called unexpected findings cite a rule
+        that exists in the skills — the alias GVL rule, the two re-validation
+        anti-patterns, the destructive-clobber rule, and so on. Counting them
+        against `max_unexpected` penalised the suite for finding true things the
+        human did not, which for a review assistant is the point.
+        """
+        additional = [{
+            "id": "demo-documented-but-unraised",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "rule": "shared/framework-utilities.md — the documented anti-pattern",
+        }]
+        fid = self.make_fixture(additional=additional)
+        hit = {"path": "adapters/demo/demo.go", "anchor": "for i := range imps {",
+               "family": "endpoint-config", "severity": "WARN"}
+        self.write_actual(fid, [MATCHING_FINDING, hit])
+        summary = self.tmp / "summary.json"
+        rc = self.run_scorer("--json", str(summary))
+        data = json.loads(summary.read_text())
+        self.assertEqual(0, data["corpus"]["unexpected"],
+                         "a classified additional finding must not count as unexpected")
+        self.assertEqual(0, data["corpus"]["forbidden_hits"])
+        self.assertEqual(scorer.EXIT_PASS, rc)
+
+    def test_an_additional_entry_without_a_rule_citation_is_an_error(self):
+        """A citation is what separates classifying a finding from raising the
+        ceiling. Without one the class is a blank cheque."""
+        additional = [{
+            "id": "demo-uncited",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+        }]
+        fid = self.make_fixture(additional=additional)
+        self.write_actual(fid, [MATCHING_FINDING])
+        rc = self.run_scorer()
+        self.assertEqual(scorer.EXIT_ERROR, rc)
+
+    def test_an_unmatched_additional_entry_is_not_a_miss(self):
+        """`additional` describes what a correct review MAY report, not what it
+        must. Recall is measured against `expected` alone."""
+        additional = [{
+            "id": "demo-not-reported",
+            "path": "adapters/demo/demo.go",
+            "anchor": "for i := range imps {",
+            "family": "endpoint-config",
+            "severity": "WARN",
+            "rule": "shared/framework-utilities.md — the documented anti-pattern",
+        }]
+        fid = self.make_fixture(additional=additional)
+        self.write_actual(fid, [MATCHING_FINDING])
+        summary = self.tmp / "summary.json"
+        rc = self.run_scorer("--json", str(summary))
+        data = json.loads(summary.read_text())
+        self.assertEqual(1.0, data["corpus"]["recall"],
+                         "an unreported additional finding must not reduce recall")
+        self.assertEqual(scorer.EXIT_PASS, rc)
+
+    def test_neutralisation_beats_an_additional_entry(self):
+        """Order is load-bearing: neutralised, then additional, then unexpected.
+
+        "The rule did not exist yet" is a stronger statement than "documented and
+        unraised", so an `additional` entry must not be able to claim an
+        epoch-neutralised finding and take it out of the neutralised report.
+        Classifying `prebid-server-java-4428` produced exactly that: a substring
+        match gave the epoch-exempt `framework-idiom` finding an `additional` id,
+        which moved it from NEUTRALISED to ADDITIONAL and hid the exemption.
+        """
+        fx = {"id": "t", "meta": {}, "files": [{"filename": "a.java"}],
+              "expected": [], "forbidden": [], "patches": {"a.java": ""},
+              "additional": [{"id": "would-claim-it", "path": "a.java", "anchor": "x",
+                              "family": "framework-idiom", "severity": "FAIL",
+                              "rule": "shared/framework-utilities-java.md — a real rule"}],
+              "neutralised_families": {"framework-idiom": {"upstream": "java#4444"}}}
+        actual = {"files_scanned": 1, "findings": [
+            {"path": "a.java", "anchor": "x", "severity": "FAIL", "family": "framework-idiom"},
+        ]}
+        res = scorer.score_fixture(fx, actual)
+        self.assertEqual(1, res["neutralised"],
+                         "the epoch-exempt finding must stay neutralised")
+        self.assertEqual(0, res.get("additional_matched"),
+                         "an additional entry must not claim a neutralised finding")
+        self.assertEqual(0, res["unexpected"])
 
     def test_clean_fixture_with_no_findings_passes(self):
         """The pass arm of the false-positive gate: saying nothing about a PR
@@ -649,6 +819,60 @@ class TestRealCorpus(unittest.TestCase):
             self.assertTrue(meta.get("captured_at"), fid)
             self.assertIn(meta.get("outcome"), ("clean", "defective"), fid)
 
+
+
+class TestEveryResidualIsAccountedFor(unittest.TestCase):
+    """A finding left in `unexpected` carries a written reason.
+
+    `unexpected` is the noise class, and noise nobody has looked at is
+    indistinguishable from noise somebody decided to keep. Each of the ten residual
+    findings names a rule that does not admit it — three over the sanctioned
+    severity, four citing rule text that does not exist or a condition the note does
+    not establish, two on subjects the rule explicitly calls "not a defect" / "not a
+    finding", and one carrying no citation at all.
+
+    The count is a ratchet. A new residual finding must be classified as
+    `additional` with a rule citation, or excluded with a written reason.
+    """
+
+    BULLET = "#  - "
+
+    def test_residual_count_matches_recorded_exclusions(self):
+        import importlib
+        fixtures = scorer.discover_fixtures(scorer.FIXTURES_DIR)
+        residual = recorded = 0
+        detail = []
+        for fid in sorted(fixtures):
+            actual_path = REPO_ROOT / "review-evals" / "actual" / f"{fid}.yaml"
+            if not actual_path.exists():
+                continue
+            fx = scorer.load_fixture(fid, scorer.FIXTURES_DIR)
+            res = scorer.score_fixture(fx, scorer.load_actual(actual_path, fid))
+            n = res["unexpected"]
+            text = (scorer.FIXTURES_DIR / fid / "expected.yaml").read_text(encoding="utf-8")
+            bullets = text.count(self.BULLET)
+            residual += n
+            recorded += bullets
+            if n != bullets:
+                detail.append(f"{fid}: {n} unexpected but {bullets} recorded exclusion(s)")
+        self.assertEqual([], detail,
+                         "every residual unexpected finding needs a written reason:\n  "
+                         + "\n  ".join(detail))
+        self.assertEqual(residual, recorded)
+
+    def test_the_residual_count_does_not_grow(self):
+        """Ratchet. Ten at the point the corpus was first fully classified."""
+        fixtures = scorer.discover_fixtures(scorer.FIXTURES_DIR)
+        residual = 0
+        for fid in sorted(fixtures):
+            actual_path = REPO_ROOT / "review-evals" / "actual" / f"{fid}.yaml"
+            if not actual_path.exists():
+                continue
+            fx = scorer.load_fixture(fid, scorer.FIXTURES_DIR)
+            residual += scorer.score_fixture(fx, scorer.load_actual(actual_path, fid))["unexpected"]
+        self.assertLessEqual(residual, 10,
+                             f"residual unexpected findings grew to {residual}; classify the new "
+                             f"one as additional with a rule citation, or record why it is excluded")
 
 
 class TestRuleEpochs(unittest.TestCase):

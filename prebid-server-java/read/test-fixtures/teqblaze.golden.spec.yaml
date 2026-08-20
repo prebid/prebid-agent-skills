@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -209,15 +209,19 @@ tests:
     videosupplemental: []
     integration:
       - filename: test-teqblaze-bid-request.json
+        sha256: 36b39f8ba96aa5be960fff67d9db50e1d15abd7bc3333d745dc4e67b11d0d456
         bytes: 914
         role: bidder-bid-request
       - filename: test-teqblaze-bid-response.json
+        sha256: 7c2847b4ee5ef644a6b53841133daf9d80b9439a7184ab4226dbf389435aa457
         bytes: 334
         role: bidder-bid-response
       - filename: test-auction-teqblaze-request.json
+        sha256: 279208a7907567b4ac7efa1ea7a289dc7b9fc067e285bdd76f930b78223e4089
         bytes: 303
         role: auction-request
       - filename: test-auction-teqblaze-response.json
+        sha256: 7166ecb3330d19c17d49ff73807db2947a2b3abf3e744451aff212abf36c63d5
         bytes: 709
         role: auction-response
   uses_canonical_harness: true

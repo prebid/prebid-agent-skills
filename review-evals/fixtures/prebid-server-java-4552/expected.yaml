@@ -37,3 +37,29 @@ expected:
     why_it_matters: The reviewer's first instruction was to update the branch with latest master; the integration-test registration is the file that breaks when bidder wiring moves upstream.
 
 forbidden: []
+
+# Findings this repo's own documented rules require, that no maintainer raised on
+# this PR. A citation must match the rule AS CURRENTLY SCOPED, not merely name it;
+# see review-evals/README.md for the two ordering rules.
+additional:
+  - id: rtbstack-double-brace-endpoint
+    path: src/main/resources/bidder-config/rtbstack.yaml
+    anchor: 'endpoint: https://{{Region}}-adx-admixer.rtb-stack.com/pbs?ssp={{SspID}}&endpoint={{ZoneID}}&client={{PartnerId}}'
+    family: framework-idiom
+    severity: FAIL
+    rule: >-
+      bidder-config-pr-review Endpoint Changed step 5 and shared/framework-utilities-java.md:373 — framework macros in bidder-config are SINGLE brace since upstream #4444; at e3ffd57 there are zero double-brace occurrences under src/. This PR's epoch is 2026-08-18, after the 2026-07-20 change, so the framework-idiom epoch does not neutralise it
+  - id: rtbstack-required-string-without-minlength
+    path: src/main/resources/static/bidder-params/rtbstack.json
+    anchor: '"tagId": {'
+    family: port-fidelity
+    severity: WARN
+    rule: >-
+      bidder-params-java-pr-review/SKILL.md:251 step 5 — minLength: 1 on a required string field the adapter cannot accept as empty; its absence is called the canonical port-fidelity bug
+  - id: rtbstack-it-fixture-trailing-whitespace
+    path: src/test/resources/org/prebid/server/it/openrtb2/rtbstack/test-auction-rtbstack-request.json
+    anchor: src/test/resources/org/prebid/server/it/openrtb2/rtbstack/test-auction-rtbstack-request.json
+    family: it-fixture-format
+    severity: INFO
+    rule: >-
+      bidder-params-java-pr-review/SKILL.md:179 — F-new-49 IT-fixture trailing-whitespace companion check, recorded as INFO

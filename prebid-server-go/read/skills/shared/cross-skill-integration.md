@@ -228,7 +228,7 @@ The `read/specs/` directory is `.gitignore`'d by default. Users opt into checkin
 | PR changes `adapter` struct field from `endpoint string` to `endpointTemplate *template.Template` | `prior_spec.code.adapter_struct.fields` shows old shape; `prior_spec.code.builder.template_parsed_at_build: false` | "Builder now parses template at build time. `endpoint_resolution.mechanism_go` should change to `text/template`." |
 | PR adds `disabled: true` to `static/bidder-info/{xyz}.yaml` | `prior_spec.meta.disabled: false` | "Bidder being disabled. If a deploy-time token is being introduced (`#{REGION}#`-style), confirm with reviewer. Reference: PR #4502 appStockSSP." |
 
-### 5.3 What the hook does NOT do
+### 5.3 What the same-language hook does NOT do
 
 - The hook does NOT block PR review or change activation rules. Reviewer skills run their full workflows regardless of whether `prior_spec` is present.
 - The hook does NOT auto-update the spec after the PR merges — that's the user's responsibility (re-run the orchestrator on the post-merge commit).
@@ -237,6 +237,27 @@ The `read/specs/` directory is `.gitignore`'d by default. Users opt into checkin
 ### 5.4 Where the hook is documented
 
 The opt-in section is added to `pr-triage/SKILL.md` (separate file). See `## Optional: Prior-Spec Comparison (read/ integration)` in that file for the user-facing instructions and detection examples.
+
+### 5.5 Cross-language port-fidelity consumption (`prior_source_spec`)
+
+The hook above (`prior_spec`) detects regressions within one language. Reviewing a PORTED PR needs a second, separate hook that detects cross-language port-fidelity divergences, and both `pr-triage` and `pr-triage-java` expose a `prior_source_spec` slot for it. The two hooks are distinct: a different slot, a different manifest block, and a dedicated Step 1g in each downstream review skill rather than the implicit dedup the same-language block relies on.
+
+**Slot resolution.** Reviewing a Go PR ported from Java, pr-triage loads the Java source spec as `prior_source_spec`. First match wins:
+
+1. `--prior-source-spec={path}` CLI override
+2. `${PRIOR_SOURCE_SPEC_PATH}` environment variable
+3. `.tmp/full-loop/{run-id}/{lang}/{bidder}.yaml` when `${FULL_LOOP_RUN_ID}` is set — the Teal-flow orchestrator path
+4. `prebid-server-{lang}/read/specs/{bidder}/latest.yaml`, user-persisted via `read-{adapter,bidder}-orchestrator --persist`
+
+If none resolve, the comparison is omitted. The hook is opt-in, and its absence is not a finding.
+
+**Block authoring.** Both pr-triage skills emit a literal `--- PRIOR SOURCE SPEC COMPARISON ---` block when the slot resolves, each finding carrying a `PRIOR-SOURCE-SPEC:` prefix and an inline `[severity: info | warn | fail | urgent]` tag. Producer sections: [`pr-triage/SKILL.md` §Cross-language ports](../../../review/skills/pr-triage/SKILL.md#cross-language-ports-prior_source_spec) and [`pr-triage-java/SKILL.md` §Cross-language ports](../../../../prebid-server-java/review/skills/pr-triage-java/SKILL.md#cross-language-ports-prior_source_spec).
+
+**Consumers.** Step 1g in all six downstream review skills — Go: `adapter-code-pr-review`, `bidder-info-pr-review`, `bidder-params-pr-review`; Java: `bidder-class-pr-review`, `bidder-config-pr-review`, `bidder-params-java-pr-review`. Each carries worked examples scoped to its own surface, and each example cites a dual-spec assertion key path or a canary-trace finding id. The Go side authored the block for some time before any Go skill read it, which is the asymmetry Step 1g closed.
+
+**One source of truth.** The four severity tiers, the `Previously flagged by prior_source_spec — confirm with reviewer if intentional` dedup phrase, and the `[severity] file:line — finding / Evidence / Recommendation` emission template all live at [`framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../../../review/skills/shared/framework-utilities.md#cross-language-port-fidelity-hook-contract). All six consumers reference that section instead of restating it, so the tiers cannot drift apart between skills or languages.
+
+**Reflection-loop routing.** Findings flow into the [reflection-loop matrix](../../../../docs/methodology/reflection-loop.md); the severity tag picks the row, and the routing table lives in the contract section rather than here. When in doubt, emit at `info` with a citation.
 
 ---
 
@@ -339,7 +360,7 @@ Example: msft's `iab_categories.go` has a 95-entry hardcoded map with custom cur
 
 The Adapter Specification is the unidirectional contract between `read/` and four downstream consumers. Each consumer reads the spec independently; no consumer talks to another consumer through the spec. Determinism (R4) and cross-language structural parity (R5) are the two correctness guarantees that survive the contract — everything else is a hint, a TODO, or a quirk for human judgment.
 
-The 46 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 15 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
+The 49 port-translation rules at [`port-translation-rules.md`](port-translation-rules.md) are the contract for the language-pivoting consumers (`port-go2java`, `port-java2go`); the 15 enumerated behavioral fields at [`behavior-taxonomy.md`](behavior-taxonomy.md) are the contract for the language-internal consumer (`write/`).
 
 The opt-in `pr-triage` hook is the only reverse-direction integration: review/ reads a spec to detect regressions on PR diffs. It is purely additive — review/ continues to function without read/.
 
@@ -414,4 +435,4 @@ Don't translate the R-rules into per-skill `script_eval` entries. The result wou
 - Opt-in hook in pr-triage: [`../../../review/skills/pr-triage/SKILL.md`](../../../review/skills/pr-triage/SKILL.md) — `## Optional: Prior-Spec Comparison (read/ integration)` section.
 - Golden specs cited: [`../../test-fixtures/optidigital.golden.spec.yaml`](../../test-fixtures/optidigital.golden.spec.yaml), [`../../test-fixtures/kobler.golden.spec.yaml`](../../test-fixtures/kobler.golden.spec.yaml), [`../../test-fixtures/msft.golden.spec.yaml`](../../test-fixtures/msft.golden.spec.yaml), [`../../../../prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/optidigital.golden.spec.yaml), [`../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/appnexus.golden.spec.yaml), [`../../../../prebid-server-java/read/test-fixtures/rubicon.golden.spec.yaml`](../../../../prebid-server-java/read/test-fixtures/rubicon.golden.spec.yaml).
 - Reference lists: `prebid-server-go/references/new-bid-adapter-prs.md` (Go new-adapter PRs with `Patterns Demonstrated` tags), `prebid-server-java/references/new-bid-adapter-prs.md` (Java new-adapter PRs; `port-from-go` tag identifies port pairs).
-- Phase 2 reconnaissance findings (in master plan): cross-language hypothesis confirmation, 17 Go + 17 Java edge cases, taxonomy refactor (scalar→rules-list), 46 port-translation rules.
+- Phase 2 reconnaissance findings (in master plan): cross-language hypothesis confirmation, 17 Go + 17 Java edge cases, taxonomy refactor (scalar→rules-list), 49 port-translation rules.

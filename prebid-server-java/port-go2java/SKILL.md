@@ -1,16 +1,16 @@
 ---
 name: port-go2java
-description: Translates a Go-source Adapter Spec (prebid-server-go/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/go/{bidder}.yaml) into Java artifacts under prebid-server-java/src/main/java/org/prebid/server/bidder/{bidder}/ plus paired YAML, bidder-params, IT fixtures, and Spring config. USE WHEN porting a new (or existing) Go bid adapter to the Java codebase. Walks the 46 port-translation rules, applies the 7-step pipeline, emits port-report.json.
+description: Translates a Go-source Adapter Spec (prebid-server-go/read/specs/{bidder}/latest.yaml or .tmp/full-loop/{run-id}/go/{bidder}.yaml) into Java artifacts under prebid-server-java/src/main/java/org/prebid/server/bidder/{bidder}/ plus paired YAML, bidder-params, IT fixtures, and Spring config. USE WHEN porting a new (or existing) Go bid adapter to the Java codebase. Walks the 49 port-translation rules, applies the 7-step pipeline, emits port-report.json.
 version: 0.5.0
 ---
 
 # port-go2java (Go → Java)
 
-> **Status: D2.8 operator validation complete (2026-05-11).** All 6 MVP pairs (`kobler`, `aax`, `adkernelAdn`, `adverxo`, `vungle`, `thetradedesk`) demonstrably portable Go → Java end-to-end via a 6-canary batch run (`feat/d2.8-port-go2java-validation`). Final state: **4/7 D2.3 gates green for every MVP pair** (Gate 1 mvn compile, Gate 4 mvn checkstyle:check, Gate 6 port-report.json schema v0.2.0, Gate 7 r5_check.state matches per-pair expectation). Gates 2 (mvn test) + 3 (Jacoco ≥ 90%) blocked on operator-fillable test scaffolds; Gate 5 has a doc gap in execution-plan-phase-d.md §183 (referenced schema files don't exist in upstream Java; F-new-62). Pipeline prose (D2.1); 10 Jinja templates (D2.1-D2.7; `configuration-properties.java.j2` since removed, its subclass emitted nested by `configuration.java.j2`); F2 SKILL fixes landed Tier 0 (universal checkstyle), Tier 1 (universal javac), Tier 3 (entity-mutation scaffold per Rule 5 + 4 endpoint-resolution scaffolds per Rule 11/12/13 + F3/F4/imp.ext single-canary scaffolds); `extract_entity_strategies` port_engine helper. Traces under `docs/runs/d2.8-*-canary-2026-05-11.md`; cross-canary findings at `docs/runs/d2.8-cross-canary-summary.md`. Frontmatter bumps to 1.0.0 once Gates 2 + 3 are routinely cleared by operator-completed scaffolds AND a green-field validation canary lands (D3.8-canary-8 analog).
+> **Status: 0.5.0 — the green-field validation canary ran and its submission has not cleared review.** The 0.5.0 status block set two conditions for promotion to 1.0.0: Gates 2 and 3 routinely cleared by operator-completed test scaffolds, and a green-field validation canary. The canary ran on `rtbstack` (an adapter outside the 6-pair MVP corpus, ported Go → Java end to end) and cleared every local gate: compile, checkstyle 0 violations on the full reactor, unit 27/27 first run and 29/29 after review fixes, aggregate suite 8,595/8,595, Jacoco 100% line coverage on the emitted bidder, IT 1/1, port-report schema-valid, `r5_check.state=pass`. It also cleared a 6-reviewer internal gauntlet at 25 findings and 0 FAIL. **It was submitted upstream as `prebid/prebid-server-java#4552` and is OPEN at CHANGES_REQUESTED** (reviewDecision read 2026-08-19; last upstream activity 2026-08-07). The review raised two FAILs the gauntlet did not: hand-substituted endpoint macros with per-parameter `HttpUtil.encodeUrl` where the repo builds bidder URIs through `Uri` (the pattern Rule 48's first cut taught — corrected since), and `UsersyncerCreator.create(...)`, deleted upstream in 2880782f (#4464), which does not compile against the current base. This repo's own rules also flag a third FAIL nobody raised — a double-brace `{{Region}}` endpoint in bidder-config, single-brace since upstream #4444. All three are now fixed at the skill level: Rule 48 carries the `Uri` path, a render test and an `absence` claim pin the `UsersyncerCreator` deletion, and the endpoint-macro epoch is enforced. **Promotion to 1.0.0 waits on a submission that clears upstream review**, not on the gates, which are already green. Gate 5 resolved as runtime validation via `BidderParamValidator`. Prior operator validation: the D2.8 6-pair MVP batch (2026-05-11) cleared Gates 1/4/6/7 for every pair — traces at `docs/runs/d2.8-*-canary-2026-05-11.md`, cross-canary findings at `docs/runs/d2.8-cross-canary-summary.md`. Canary trace: `docs/runs/f6-rtbstack-greenfield-canary-2026-07-06.md`; reflection: ADR-010.
 
 ## What this skill does
 
-Takes a structured Go-source Adapter Spec (read by `prebid-server-go/read/skills/read-adapter-orchestrator`) and emits the Java artifacts that satisfy R5-strict cross-language equivalence at port time. Applies the 46 port-translation rules from `../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`. Emits a `port-report.json` documenting what was applied, what was novel, and what needs human review.
+Takes a structured Go-source Adapter Spec (read by `prebid-server-go/read/skills/read-adapter-orchestrator`) and emits the Java artifacts that satisfy R5-strict cross-language equivalence at port time. Applies the 49 port-translation rules from `../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`. Emits a `port-report.json` documenting what was applied, what was novel, and what needs human review.
 
 **Source** (this skill consumes): `prebid-server-go/read/specs/{bidder}/latest.yaml`, or transient at `.tmp/full-loop/{run-id}/go/{bidder}.yaml` when running under the Teal flow.
 
@@ -25,7 +25,7 @@ Takes a structured Go-source Adapter Spec (read by `prebid-server-go/read/skills
 - `src/test/java/org/prebid/server/it/{Bidder}Test.java`
 - `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-auction-{bidder}-{request,response}.json`
 - `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-{bidder}-bid-{request,response}.json`
-- `src/test/resources/org/prebid/server/it/test-application.properties` (append two lines)
+- `src/test/resources/org/prebid/server/it/test-application.properties` (insert two lines into the `adapters.*` cluster — NOT at end-of-file)
 
 **Out of scope** (handled elsewhere or future): writing a Java adapter from scratch (`write/`, future); reviewing post-merge (`review/`, future composition); analytics modules / RTD modules / general modules / delta-ports (deferred per execution-plan-phase-d.md "Out of scope").
 
@@ -105,9 +105,9 @@ For alias-child shapes, the SKILL loads the parent spec (the alias inherits pare
 1. Read `rule.spec_field_driver` (a dotted path like `bidder_info.endpoint`). If the driver field is absent / null on `source_spec`, emit `verdict: skipped-not-applicable` with `summary: "spec_field_driver={path} is null/absent"` and continue.
 2. Otherwise check `rule.applies_when` (when present): a YAML predicate over the spec. If the predicate is false, emit `verdict: skipped-not-applicable` and continue.
 3. Check `rule.directionality`: some rules are source-language-only (e.g., a Go-specific quirk that has no Java analog). If `directionality: go-source-only`, emit `verdict: skipped-source-side-only` and continue.
-4. Otherwise apply the rule. The application path differs for mechanical-ready rules (priority list below) versus prose-driven rules (the remaining 36).
+4. Otherwise apply the rule. The application path differs for mechanical-ready rules (priority list below) versus prose-driven rules (the remaining 39).
 
-**Mechanical-ready rules (10 of 46).** Each has a port_engine helper that performs the transformation. The SKILL invokes the helper, captures the output, and updates the working state.
+**Mechanical-ready rules (10 of 49).** Each has a port_engine helper that performs the transformation. The SKILL invokes the helper, captures the output, and updates the working state.
 
 | # | Rule | Helper | Output |
 |---|---|---|---|
@@ -122,7 +122,7 @@ For alias-child shapes, the SKILL loads the parent spec (the alias inherits pare
 | 9 | Rule 19 — standard headers (`HttpUtil.headers()` collapse) | inline | When source's `headers_constructed.has_only_standard_headers == true`, the Java template uses `HttpUtil.headers()` shorthand instead of explicit `MultiMap.add(...)` calls. |
 | 10 | Rule 30 — canonical Go status helpers ↔ Java framework default | inline | Source's `code.make_bids.http_status_handling.kind` ∈ {`canonical-go-helpers`, `legacy-raw-go`} maps to Java's framework-default behavior (no explicit status-check code in `MakeBids`). Quirk emitted if source uses `legacy-raw-go` (suggests upstream-Go cleanup opportunity). |
 
-**Prose-driven rules (36 of 46).** For each, walk the rule's prose `description` and `worked_examples[]` and apply the translation inline. Capture artifact-level outputs (e.g., new fields on the destination spec, new lines on the dest YAML) in the working state. Examples:
+**Prose-driven rules (39 of 49).** For each, walk the rule's prose `description` and `worked_examples[]` and apply the translation inline. Capture artifact-level outputs (e.g., new fields on the destination spec, new lines on the dest YAML) in the working state. Examples:
 
 - **Rule 1 — Imp.ext two-phase unmarshal**: emit `static final TypeReference<ExtPrebid<?, ExtImp{Bidder}>> {BIDDER}_EXT_TYPE_REFERENCE` + `mapper.mapper().convertValue(imp.getExt(), {BIDDER}_EXT_TYPE_REFERENCE).getBidder()` in `{Bidder}Bidder.java`'s parsing helper.
 - **Rule 5 — mutation strategy pairing**: source `entity_strategies.{Imp,Device,User,Site,App,Cur,Banner}.kind` translates to Java's `lombok-tobuilder` immutable-rebuild pattern in the corresponding `make_requests` template path. The full `entity_strategies` dict from `source_spec.code.make_requests.mutation.entity_strategies` is extracted via [`port_engine.extract_entity_strategies(source_spec)`](../../scripts/lib/port_engine.py) and passed as `ctx.entity_strategies` to `bidder.java.j2`. The template's makeHttpRequests body emits a `BidRequest.toBuilder()...build()` scaffold with per-entity TODO comments for non-passthrough/non-none strategies (operator fills the specific mutation logic). Strategy-specific guidance is layered onto the TODOs: F-new-86 (Site `replace-with-app-synthesis` / App `synthesize-app-replacement`, vungle ADR-007 F3 master sample) and F-new-91/F-new-92 (Imp `imp.ext` three-key wrapper repack + buyer-UID promotion) call out their distinctive emit patterns inline.
@@ -130,6 +130,9 @@ For alias-child shapes, the SKILL loads the parent spec (the alias inherits pare
 - **ADR-007 F4 / F-new-100 — bid-post-processing-macro substitution**: when source spec carries a `bid-post-processing-macro` edge-case taxon in `quirks_emitted[]` (thetradedesk is the master sample), the subagent sets `ctx.has_bid_post_processing_macros=true`. `bidder.java.j2` then inserts a `.map(this::applyBidPostProcessingMacros)` step in the extractBids stream and emits an `applyBidPostProcessingMacros(Bid)` helper scaffold with TODO guidance for `${AUCTION_PRICE}` substitution into `bid.nurl/adm/burl`. Operator wires the actual substitution per source spec helpers (e.g., thetradedesk's `resolveAuctionPriceMacros` using `bid.getPrice().toPlainString()`).
 - **Rule 11 — multi-token-substitution endpoint**: emit a `String.format(...)` or Spring EL `#{...}` substitution depending on the macro count (`> 2` → Spring EL via `BidderConfigurationProperties`; `≤ 1` → simple `String.replace`).
 - **Rule 30 — canonical-helpers status handling maps to Java framework-default**: source `code.make_bids.http_status_handling.kind ∈ {canonical-go-helpers, legacy-raw-go}` translates to **no explicit status-check code** in Java's `MakeBids`. Java's HTTP layer handles 204 NO_CONTENT and non-200 codes before `makeBids` is invoked (matches upstream `KoblerBidder` pattern). When `ctx.http_status_kind == "canonical-helpers"`, `bidder.java.j2` emits a 3-line Java `//` comment explaining the rule application (so reviewers of the emitted code understand why there's no status check) and skips the `HttpResponse response = httpCall.getResponse()` extraction. The `HttpResponse` import is made conditional on the same predicate. F-new-90 retired the non-existent `BidderUtil.isResponseStatusCodeNoContent` / `.checkResponseStatusCode` calls our template had previously emitted under the canonical-helpers branch.
+- **Rule 47 — grouped-by-key batching**: `batching.rules[]: [{kind: grouped-by-key, key: <field>}]` sets `ctx.batching_kind="grouped-by-key"`. Leave `ctx.batching_per_key` unset to key the map on the whole `ExtImp{X}` object, which is what `AdkernelBidder`, `DatablocksBidder` and `ZeroclickfraudBidder` do and what every merged Go grouper does, so it is also what port-java2go emits. Set `ctx.batching_per_key={key_field, key_type}` only for the minority single-field shape — upstream uses `String` (thirtythreeacross), `Integer` (adtarget) and an enum (taboola), so `key_type` is required and `String` must not be assumed. `key_field` must reach the template as a lower-camelCase Java identifier; the template derives `get<Field>()` and fails at render on anything else, so apply Rule 46 normalization first. Per-imp versus per-group failures stay isolated as two separate `badInput` catches. Do NOT reach for `LinkedHashMap` or an order slice: all six merged Java groupers use `HashMap`, no merged Go grouper keeps an order slice, and Go's fixture harness matches requests order-insensitively on purpose. Note the ctx spelling asymmetry: port-java2go calls the same kind `"per-key"`.
+- **Rule 48 — param-derived endpoint macros**: deliberately NOT template-mapped. The parse/validate/substitute helper is vendor-specific by construction (hostname-label extraction, a code-level component allow-list, required query params), so emit the closest endpoint TODO scaffold, record `unresolved_translations[]: novel-pattern`, and port the helper per Rule 48's worked example. Substitute through the config endpoint's `Uri` — `endpointUrl.replaceMacro(NAME, value).…expand()`, macro constants holding bare names against single-brace `{Name}` placeholders in bidder-config. Do NOT hand-encode a value on the way in: `Uri.expand()` delegates to Vert.x `UriTemplate`, so a per-parameter `HttpUtil.encodeUrl` is a second encoding, and that is what upstream review rejected on the master sample. Record the Go-versus-Java substitution asymmetry in `human_todos[]: framework-asymmetry` and pin it with a differential unit test built from a value containing a URL-special character — read the expected output off a run rather than predicting it.
+- **Rule 23 tolerance variant (F-new-108)**: set `ctx.bid_type_error_tolerance` from the SOURCE bid loop's error semantics, never from taste. A Go `errs = append(errs, err); continue` inside the seatbid walk is `"per-bid-skip"` — accumulate `badServerResponse`, skip that bid, let siblings continue; a Go loop that returns the error is `"abort-all"`, the default `PreBidException` shape. Only `by-bid-mtype` resolution accepts the per-bid variant; the template fails at render on any other pairing. Target-repo shape for per-bid-skip: `ZentotemBidder`.
 
 #### Filename ↔ class-name pairing for Configuration.java (`ctx.config_class_name`)
 
@@ -159,12 +162,16 @@ The SKILL must NOT skip a prose-driven rule silently. If the rule's `spec_field_
 - `bidder_info.endpoint_compression`
 - `bidder_info.geoscope`
 - `bidder_info.maintainer`
-- `bidder_info.modifying_vast_xml_allowed`
+- `bidder_info.modifying_vast_xml_allowed` — carried as the source-EFFECTIVE value, not the raw source file value; see the effective-value contract below
 - `bidder_info.endpoint` (form-divergent per language; Step 3 Rule 11 already normalized)
 - `params.schema_interpretation.{required_fields, combinators_used, flexible_types}`
 - `bidder_params_ref` (the whole `{path, resolved_commit, sha256, bytes}` block, unchanged except that `path` is re-rooted to `src/main/resources/static/bidder-params/{bidder}.json` for Java's layout — `resolved_commit`, `sha256` and `bytes` are NEVER recomputed)
 
-`bidder_params_sha256` mirrors `bidder_params_ref.sha256`; set it from the ref, not by hashing anything. `bidder_params_json` was removed at 2.0.0, so there is nothing inline to carry across; if a dual-spec consumers still validate, but treat it as non-normative: no field on `dest_spec` may be derived from it. When the source spec has no `bidder_params_json` at all, omit it — nothing downstream requires it.
+`bidder_params_sha256` mirrors `bidder_params_ref.sha256`; set it from the ref, not by hashing anything. `bidder_params_json` was removed at 2.0.0, so there is nothing inline to carry across. A pre-2.0.0 source spec may still carry the field; read it as non-normative and derive no `dest_spec` field from it, because it holds the reader's transcription rather than upstream's bytes.
+
+**Effective-value contract (Rule 49).** For every `bidder_info` field the TARGET framework backs with an adapter-default, the value carried onto `dest_spec` MUST be what the EMITTED artifact plus the target defaults yield — never a raw carry-over of the source file's contents. The canonical case is `modifying_vast_xml_allowed`: Go's `config/bidderinfo.go` declares a plain `bool`, so an absent key there means `false`, while Java's `application.yaml` `adapter-defaults` sets `modifying-vast-xml-allowed: true` and `BidderConfigurationProperties.init()` back-fills it through `ObjectUtils.defaultIfNull`. Absent means the opposite thing on each side.
+
+This matters because R5 compares spec values and is blind to framework back-fill: a carried-over `false` beside an emission that omits the key compares equal and reports `pass` while the deployed artifacts behave differently on every video bid. Audit the same class per key — `ortb-version` (Java adapter-default `2.5`; declare it when the source speaks another version), `enabled` (intentionally asymmetric, Rule 45-adjacent), `pbs-enforces-ccpa` (defaults `true` on both sides).
 
 **Java-specific construction.** Build the Java-only spec blocks:
 
@@ -185,12 +192,19 @@ port_lineage:
   source_pr: <source_spec.provenance.source.pr_url or null>
   destination_language: java
   destination_pr: null   # not yet opened; Step 7 emits PR draft
-  port_translation_rules_version: <from rules YAML>
-  port_skill_version: <from this SKILL.md frontmatter>
   fidelity_review_themes:
     - port-fidelity
     - <one entry per applied prose-driven rule, e.g., 'rule-46-naming-normalization'>
 ```
+
+> **Closed schema (F-new-113).** `$defs/CrossLanguage.port_lineage` sets
+> `additionalProperties: false` and declares exactly the five keys above. Earlier
+> drafts of this block also told the porter to emit `port_translation_rules_version`
+> and `port_skill_version` here, which the schema rejects — a spec built by
+> following those lines fails its own Step 4 validation. Both belong to the
+> port-report layer instead: `port_translation_rules_version` is a top-level
+> `port-report.json` field written in Step 7, and the skill version is readable
+> from the port-report's provenance.
 
 **Rule 38 materialise-from-ref invariant.** Never hash inline text to produce a ref — that is what `bidder_params_json` did before 2.0.0 removed it, and hashing the reader's own transcription proves only that the reader is self-consistent. First confirm `source_spec.bidder_params_ref` is present with all four keys; a source spec that carries only the deprecated `bidder_params_json` cannot satisfy Rule 38, so abort with `ERROR: source spec has no bidder_params_ref; re-run the read orchestrator to mint one — Rule 38 cannot be satisfied from bidder_params_json alone`. Never synthesise a ref by hashing the inline string: that reproduces the self-consistent-hash hole the ref exists to close. Then assert against the bytes, in this order:
 
@@ -220,10 +234,10 @@ port_lineage:
 | `src/main/java/org/prebid/server/bidder/{bidder}/{Bidder}Bidder.java` | `bidder.java.j2` | Implements `Bidder<BidRequest>`; Rule-specific control flow per `rules_consumed`. |
 | `src/main/java/org/prebid/server/spring/config/bidder/{Bidder}Configuration.java` | `configuration.java.j2` | Spring DI; `BidderDepsAssembler` factory bean. Under Rule 35 this file also carries the typed config subclass, nested. It is **not** a separate file: all 16 Rule-35 subclasses upstream are nested in their `{Bidder}Configuration.java`, 15 of them `private static`, and the name is `{Bidder}ConfigurationProperties` — the `{Bidder}BidderConfigurationProperties` form has no upstream instance and its suffix names two framework classes. So the emitted file count does not change when Rule 35 fires. |
 | `src/test/java/org/prebid/server/bidder/{bidder}/{Bidder}BidderTest.java` | `bidder-test.java.j2` | JUnit 5; ≥90% line-coverage target. |
-| `src/test/java/org/prebid/server/it/{Bidder}Test.java` | `it-test.java.j2` | IT class; one `@Test` per fixture pair. |
+| `src/test/java/org/prebid/server/it/{Bidder}Test.java` | `it-test.java.j2` | IT class; one `@Test` per fixture pair. Run it with **surefire**, not failsafe: upstream's failsafe executions include only `**/*Spec` (the Groovy functional tests), so these Java `it/*Test.java` classes are picked up by surefire's default `**/*Test.java` include and run during `mvn package`. Verified green against `e3ffd57` — one test, Spring Boot 4.0.6 context with WireMock, driving the emitted bidder, Configuration, bidder-config YAML, params JSON and all four fixtures. Two prerequisites are easy to miss because neither is a template: `static/bidder-params/{bidder}.json` must exist or the context fails to start with `Could not find file at path: static/bidder-params/{bidder}.json`, and the two `adapters.{bidder}.*` lines must be in `test-application.properties`. A third is a property of the build, not the port: compile with parameter names retained (`-Dmaven.compiler.parameters=true`, which upstream's pom does not set), or Spring cannot resolve the properties bean by name and every bidder's IT fails with `expected single matching bean but found 256` — upstream's own `KoblerTest` fails identically without it, so that error is not a signal about the emitted code. |
 | `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-auction-{bidder}-{request,response}.json` | `it-fixture-auction-{request,response}.json.j2` | Per-call fixtures; populated from `tests.fixture_inventory.exemplary[]`. |
 | `src/test/resources/org/prebid/server/it/openrtb2/{bidder}/test-{bidder}-bid-{request,response}.json` | `it-fixture-bid-{request,response}.json.j2` | Per Rule 36. |
-| `src/test/resources/org/prebid/server/it/test-application.properties` | NO TEMPLATE — append two lines | `adapters.{bidder}.enabled=true\nadapters.{bidder}.endpoint=http://localhost:8090/{bidder}-exchange\n` appended at end-of-file. |
+| `src/test/resources/org/prebid/server/it/test-application.properties` | NO TEMPLATE — insert two lines | `adapters.{bidder}.enabled=true\nadapters.{bidder}.endpoint=http://localhost:8090/{bidder}-exchange\n` inserted at the END of the contiguous `adapters.*` block, NOT at end-of-file (F-new-110). At `e3ffd57db` that block is lines 1-707 and the remaining 61 lines are non-adapter settings (`http-client.*`, `auction.*`, … `ccpa.enforce`), so an end-of-file append lands outside it. The block is only roughly alphabetical — measured at that commit, 257 bidders with `generic` first and several out-of-order insertions, the last four being `zeroclickfraud, aax, zmaticoo, yearxero` — so append to the block rather than sorting into it. See `references/registration-rules.md`. |
 
 Templates emit checkstyle-compliant code by construction (ImportOrder strict 3-group, EmptyLineSeparator, LineLength≤120 — see `references/java-artifact-shapes.md` §4-6). The SKILL renders each template, writes to disk, and records the file path on `port_run.emitted_files[]`.
 
@@ -247,6 +261,8 @@ The helper is hermetic (dependency-injected runner for tests); see `scripts/test
 ### Step 6 — R5-strict check at port time
 
 **Re-read the destination spec.** Step 5 emitted the Java artifacts. To verify R5, the SKILL re-reads them as if it were a fresh read (using `prebid-server-java/read/skills/read-bidder-orchestrator` semantics, but invoked in-memory rather than re-running the orchestrator skill — the helper at `port_engine.r5_check_at_port_time(source_spec, dest_spec)` operates directly on the in-memory dicts).
+
+**Effective-value re-derivation before comparing (Rule 49).** For every adapter-default-backed `bidder_info` field, re-derive the value from the EMITTED `bidder-config/{bidder}.yaml` plus Java's `adapter-defaults` table: the emitted key's value when the key is present, else the adapter-default. If that differs from what Step 4 carried, the emission dropped a divergent key — fix the emission by declaring the key, not the spec. Skipping this step is what lets the comparator report `pass` on artifacts that behave differently: R5 compares recorded values and cannot see a back-fill that happens at Spring startup.
 
 **Comparator invocation.** Call `port_engine.r5_check_at_port_time(source_spec=source_spec, dest_spec=dest_spec)`. The helper routes through `r5_check.compare_pair(go_spec, java_spec, assertions=None, overall=None)` (no dual-spec assertions — the pair file may not exist for a new bidder). The result is an `R5Result` containing `diagnostics: list[R5Diagnostic]` and `state: str`.
 
@@ -289,7 +305,7 @@ report = {
     "pre_submit_rebase": pre_submit_rebase_result_or_null,
     "human_todos": human_todos,                 # accumulated across Steps 3, 5, 6
     "unresolved_translations": unresolved_translations,
-    "port_translation_rules_version": "0.3.0",
+    "port_translation_rules_version": "0.4.0",
 }
 ```
 
@@ -320,7 +336,7 @@ A port-time R5 fail is a `human_todos[]` entry, not a CI failure. The port still
 D2 considers the skill production-ready only when, for each MVP pair:
 
 1. Emitted Java compiles cleanly via `mvn -B compile --file extra/pom.xml`.
-2. Emitted unit tests pass via `mvn -B test -Dtest={Bidder}BidderTest`.
+2. Emitted unit tests pass via `mvn -B test -Dtest={Bidder}BidderTest`. A fresh emission does not satisfy this gate on its own: `bidder-test.java.j2` emits one `@Test` per `tests.fixture_inventory.exemplary[]` entry whose body is `Assertions.fail("scenario ... not yet implemented")`, so the operator fills those bodies first. The scaffolds fail rather than pass vacuously so an unfilled one cannot be mistaken for coverage. The three baseline methods the template writes in full (constructor invariants, malformed-response error, single-bid happy path) do pass as emitted — verified by compiling the emission against upstream at e3ffd57 and executing its assertions.
 3. Jacoco line-coverage on the new `{Bidder}Bidder.java` ≥ 90%. This is OUR acceptance bar, measured from a local `mvn` run. It matches the level upstream asks contributors to self-certify (`docs/developers/contributing.md:17`; PR-template checkbox), but upstream declares Jacoco `prepare-agent` + `report` only (`extra/pom.xml:325-344`) with no `check` goal and no coverage step in `pr-java-ci.yml` — so a green upstream CI run is not evidence for this gate.
 4. `mvn -B checkstyle:check` exits 0.
 5. Runtime validation via Java's `BidderParamValidator.java` accepts the emitted bidder-params JSON. NOTE: the literal schema files `bidder-info-schema.json` and `static/bidder-params/_schema.json` referenced in earlier drafts of `docs/execution-plan-phase-d.md` §183 do NOT exist in upstream `prebid-server-java`; Java validates via runtime code, not JSON schema files. Tracked as F-new-62 (LOW; doc gap, not a SKILL defect). For D2.8 this gate is N/A pending an execution-plan rewrite to invoke `BidderParamValidator` at mvn-test time.
@@ -331,7 +347,7 @@ D2 considers the skill production-ready only when, for each MVP pair:
 
 - **Design doc**: [`../../docs/methodology/port-skills-design.md`](../../docs/methodology/port-skills-design.md) — 7-step pipeline + conflict resolution + novel-pattern handling.
 - **Execution plan**: [`../../docs/execution-plan-phase-d.md`](../../docs/execution-plan-phase-d.md) — D2 acceptance criteria + per-pair expectations.
-- **Rules corpus**: [`../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`](../../prebid-server-go/read/skills/shared/port-translation-rules.yaml) — 46 rules at v0.2.0; the SKILL pins to this version.
+- **Rules corpus**: [`../../prebid-server-go/read/skills/shared/port-translation-rules.yaml`](../../prebid-server-go/read/skills/shared/port-translation-rules.yaml) — 49 rules at v0.4.0; the SKILL pins to this version.
 - **Output schema**: [`../../prebid-server-go/read/skills/shared/port-report.schema.json`](../../prebid-server-go/read/skills/shared/port-report.schema.json) — port-report contract (v0.2.0).
 - **Source-spec schema**: [`../../prebid-server-go/read/skills/shared/adapter-spec.schema.json`](../../prebid-server-go/read/skills/shared/adapter-spec.schema.json) — what the source spec must satisfy.
 - **R5 lib**: [`../../scripts/lib/r5_check.py`](../../scripts/lib/r5_check.py) — R5 comparator (Phase D0.1).

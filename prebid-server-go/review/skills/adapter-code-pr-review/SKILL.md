@@ -1,7 +1,7 @@
 ---
 name: adapter-code-pr-review
 description: Reviews changes to adapter Go code, adapter tests, JSON test fixtures (exemplary/supplemental/amp/video/videosupplemental), and bidder registration entries. USE WHEN a PR touches adapters/{bidder}/*.go (excluding params_test.go), any {bidder}test/**/*.json, exchange/adapter_builders.go, or openrtb_ext/bidders.go. Do NOT use for static/bidder-info/*.yaml, static/bidder-params/*.json, openrtb_ext/imp_*.go, or params_test.go — those are owned by sibling skills.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Adapter Code PR Review
@@ -65,6 +65,9 @@ The pr-triage skill provides:
 - Duplicate PR search results
 - Bidder metadata per bidder: `aliasOf` status and `capabilities` (extracted from PR or "not in PR — downstream must fetch from master")
 
+- `--- PRIOR AGENT FINDINGS ---` block (when a prior-agent review was recorded; consumed in Step 1d)
+- `--- PRIOR SPEC COMPARISON ---` block (same-language regression detection; opt-in; deduped like `--- PRIOR AGENT FINDINGS ---`)
+- `--- PRIOR SOURCE SPEC COMPARISON ---` block (cross-language port-fidelity detection; opt-in; consumed in Step 1g)
 **1b. Handle drift warnings.**
 
 If the triage manifest reports drift for adapter-code, include the drift warning in the review output. Do not re-fetch `test_json.go`.
@@ -80,6 +83,7 @@ Cross-reference the PR comments from the triage manifest against your review fin
 - If a CI bot report indicates a failure relevant to your scope (e.g., test failures, build errors), use it as additional evidence for your verification steps
 - If the author has responded to reviewer feedback with fixes, check whether the current diff reflects those fixes
 
+- If the manifest carries a `--- PRIOR AGENT FINDINGS ---` block (a CodeRabbit / Copilot / ChatGPT review recorded via `agent_review: yes`), cross-reference each of your findings against the listed flags. An exact duplicate — same file, same rule, same severity — dedupes as `Previously flagged by prior agent` rather than emitting a fresh finding; net-new findings emit normally.
 **1e. Fetch full file content and capabilities.**
 
 For files with status `modified`, the patch contains only changed regions. When verification requires full file context (e.g., understanding the complete adapter flow, checking all error paths):
@@ -104,6 +108,25 @@ If the triage manifest indicates PR type is `infrastructure` and this skill's fi
   - Verify the same change was applied consistently across all affected bidders
   - Flag any bidders that deviate from the pattern (outliers)
   - Focus detailed review only on net-new adapter code that is NOT part of the bulk pattern
+
+**1g. Consume `--- PRIOR SOURCE SPEC COMPARISON ---` (cross-language ports).**
+
+When the manifest carries this block, the PR is a cross-language port — for a Go PR, typically a Java → Go port via `port-java2go`. Severity tiers, the dedup phrase, the Step 5 emission template, and reflection-loop routing all live in [the port-fidelity hook contract](../shared/framework-utilities.md#cross-language-port-fidelity-hook-contract); do not restate them here. Use the source-spec context to inform Step 4 verification.
+
+If the block is absent, or reads `prior_source_spec not present — section omitted`, skip this substep: the PR is not a cross-language port.
+
+Worked examples for this skill's scope, each citing a dual-spec key path, a canary finding id, or a numbered rule:
+
+| Divergence | Severity | Evidence |
+|---|---|---|
+| Endpoint macro substitution mechanism differs — Go `macros.ResolveMacros` against Java `Uri.replaceMacro(...).expand()`. Legitimate per Rule 11/48. Do NOT ask for a per-parameter `HttpUtil.encodeUrl` on the Java side: `Uri.expand()` already encodes, and upstream review rejected the double encoding. | `info` | Rules 11 and 48 in `port-translation-rules.md` |
+| Imp grouping loses first-seen key order — Go needs an explicit order slice beside the map because map iteration is randomized, where Java gets it from `LinkedHashMap`. A Java → Go port that drops the order slice produces nondeterministic request order, and small-map iteration often looks stable in tests. | `warn` | Rule 47 in `port-translation-rules.md` |
+| Bid-type error tolerance flips — the source accumulates a per-bid error and continues, the port aborts the whole response (or the reverse). Changes how many bids survive a malformed response. | `warn` | Rule 23 tolerance variant, F-new-108 |
+| Bid post-processing macro substitution (`${AUCTION_PRICE}` into `nurl` / `adm` / `burl`) present on one side only, or formatting the price differently across languages. | `warn` | `thetradedesk.dual-spec-assertions.yaml` → `bid_post_processing` |
+| Mutation strategy diverges — Go rebuilds imps in place where Java uses `toBuilder()`. Legitimate per Rule 5 when the observable request is identical; `warn` when the set of mutated fields differs. | `info`, `warn` on a field-set difference | Rule 5 in `port-translation-rules.md` |
+| A fuzz- or nil-input-reachable panic that exists on one side only (teal's nil-map panic on JSON `null`). High severity for the affected bidder even though it is corpus-rare. | `fail` | `d3.8-teal-canary-2026-05-05T-canary8-teal.md` → F-new-45 |
+
+Surface `warn` / `fail` / `urgent` in the Step 5 summary; suppress `info` unless the diff elevates it — for example a documented camelCase↔kebab-case `info` becomes `warn` when the Go-side change drops an R5-strict shared field entirely.
 
 ### Step 2: Extract Changes From the Diff
 

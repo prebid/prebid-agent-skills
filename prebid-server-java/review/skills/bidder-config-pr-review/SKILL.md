@@ -156,7 +156,7 @@ Severity policy (symmetric with Go side):
 - `warn` when divergence touches a Rule 38 byte-fidelity assertion or R5-strict cross-language equivalence
 - `fail` when the divergence is a documented `cross-language-pairs/{bidder}.dual-spec-assertions.yaml` `severity: fail` entry
 
-**Note**: this skill's port-fidelity check is the Java-side first downstream consumer of `prior_source_spec` (audit item 25 LANDED in this F4 PR). pr-triage-java emits the block; this skill, `bidder-class-pr-review`, and `bidder-params-java-pr-review` each consume it via their Step 1g. The Go-side symmetric consumer is still pending as of audit time (per `docs/runs/post-d3.8-remaining-work.md:36`).
+**Note**: this skill is one of three Java-side consumers of `prior_source_spec`, alongside `bidder-class-pr-review` and `bidder-params-java-pr-review`. pr-triage-java emits the block; each consumes it in its own Step 1g. The Go-side symmetric consumers are `prebid-server-go/review/skills/{adapter-code,bidder-info,bidder-params}-pr-review`, which landed after the Java side and read the same policy from [`prebid-server-go/review/skills/shared/framework-utilities.md` §Cross-Language Port-Fidelity Hook Contract](../../../../prebid-server-go/review/skills/shared/framework-utilities.md#cross-language-port-fidelity-hook-contract).
 
 ### Step 2: Extract Changes From the Diff
 

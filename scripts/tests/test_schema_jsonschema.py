@@ -25,6 +25,7 @@ YAML data. They check different invariants and run independently.
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 from typing import Any
@@ -624,7 +625,7 @@ class TestPortReportV020Invariants(unittest.TestCase):
 # The version a reader is told to emit must be one the schema can validate.
 # ---------------------------------------------------------------------------
 
-CURRENT_SPEC_VERSION = "2.0.0"
+CURRENT_SPEC_VERSION = "2.1.0"
 
 # Skills that instruct a reader to write adapter_spec_version. Both orchestrators
 # now do; before 2.0.0 only the Java one did, and it named a version whose
@@ -734,6 +735,125 @@ class TestTaxonomyVersionFloor(unittest.TestCase):
         self.assertLessEqual(floor, current,
                              f"taxonomy floor {floor} is above the version readers emit "
                              f"({CURRENT_SPEC_VERSION})")
+
+
+class TestParamsTestFileIsObserved(unittest.TestCase):
+    """`params.params_test.file` names a file that exists, or it is null.
+
+    Two Go goldens recorded `adapters/{bidder}/params_test.go` for adapters that
+    have never had one, with a comment calling it "the canonical-pluralised path".
+    That is a derived value in a field whose meaning is an observation, and
+    `adkernel` records null for the identical situation, so the corpus contradicted
+    itself. The drift detector FAILed both, correctly.
+
+    The upstream-existence half needs a checkout and lives in the drift detector.
+    What is checkable hermetically is the signature that gave it away: a claimed
+    file with both case counts null means nothing was ever counted, so nothing was
+    ever opened.
+    """
+
+    GO_FIXTURES = REPO_ROOT / "prebid-server-go" / "read" / "test-fixtures"
+
+    def test_a_claimed_params_test_file_has_counts(self):
+        bad = []
+        for f in sorted(self.GO_FIXTURES.glob("*.golden.spec.yaml")):
+            d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            pt = ((d.get("params") or {}).get("params_test") or {})
+            if not pt.get("file"):
+                continue
+            if pt.get("valid_cases_count") is None and pt.get("invalid_cases_count") is None:
+                bad.append(f"{f.name}: params_test.file={pt['file']} with both case counts "
+                           f"null -- the file was named but never opened")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+    def test_a_null_params_test_file_carries_no_derived_siblings(self):
+        """The mirror: no file means no constant reference either. Leaving one
+        behind is the same derivation showing through."""
+        bad = []
+        for f in sorted(self.GO_FIXTURES.glob("*.golden.spec.yaml")):
+            d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            pt = ((d.get("params") or {}).get("params_test") or {})
+            if pt.get("file"):
+                continue
+            leftovers = {k: v for k, v in pt.items()
+                         if k != "file" and v not in (None, [], {}, "")}
+            if leftovers:
+                bad.append(f"{f.name}: params_test.file is null but {leftovers} survive")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+
+class TestFixtureInventoryDigests(unittest.TestCase):
+    """A `sha256` field holds a sha256, or nothing.
+
+    `adverxo` carried 14 fixture digests of 40 hex characters — the length of a
+    sha1, though not the sha1 of the file either, and not the sha256. Every
+    `bytes` value beside them was exactly right, so the lengths were measured and
+    the digests were not. Nothing checked: R2 covers `bidder_params_ref` only, and
+    a 40-character string in a field named `sha256` passed every gate for as long
+    as the corpus has existed.
+
+    Verifying a digest against upstream needs a checkout and belongs beside R2c.
+    What is checkable hermetically is the shape, and the shape was the tell: 148
+    entries carry 64 lowercase hex characters and 14 did not.
+    """
+
+    FIXTURE_DIRS = (
+        REPO_ROOT / "prebid-server-go" / "read" / "test-fixtures",
+        REPO_ROOT / "prebid-server-java" / "read" / "test-fixtures",
+    )
+    HEX64 = re.compile(r"^[0-9a-f]{64}$")
+    # The one non-digest string the corpus admits, and only where a fixture has
+    # genuinely not been fetched yet. It is a promise to measure, not a digest.
+    PLACEHOLDER = "pending-operator-fetch"
+
+    def _entries(self):
+        for base in self.FIXTURE_DIRS:
+            for f in sorted(base.glob("*.golden.spec.yaml")):
+                d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+                fi = ((d.get("tests") or {}).get("fixture_inventory") or {})
+                if not isinstance(fi, dict):
+                    continue
+                for bucket, entries in fi.items():
+                    if not isinstance(entries, list):
+                        continue
+                    for e in entries:
+                        if isinstance(e, dict):
+                            yield f.name, bucket, e
+
+    def test_every_recorded_digest_is_64_lowercase_hex(self):
+        bad = []
+        for name, bucket, e in self._entries():
+            s = e.get("sha256")
+            if s is None or s == "" or s == self.PLACEHOLDER:
+                continue
+            if not self.HEX64.match(str(s)):
+                bad.append(f"{name} [{bucket}] {e.get('filename')}: sha256={s!r} "
+                           f"({len(str(s))} chars) is not a sha256")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+    def test_a_digest_and_a_byte_count_travel_together(self):
+        """One without the other means only half the fixture was measured, and
+        `bytes` is the witness that catches a digest taken over the wrong text."""
+        bad = []
+        for name, bucket, e in self._entries():
+            s, nb = e.get("sha256"), e.get("bytes")
+            has_digest = bool(s) and s != self.PLACEHOLDER
+            has_bytes = isinstance(nb, int) and nb > 0
+            if has_digest != has_bytes:
+                bad.append(f"{name} [{bucket}] {e.get('filename')}: "
+                           f"sha256={'set' if has_digest else 'unset'} "
+                           f"bytes={nb!r}")
+        self.assertEqual([], bad, "\n  ".join(bad))
+
+    def test_the_placeholder_stays_confined(self):
+        """`pending-operator-fetch` is a promise to measure. It is a ratchet: 11
+        entries in the two beachfront goldens, and it must not spread."""
+        holders = [f"{n} [{b}] {e.get('filename')}" for n, b, e in self._entries()
+                   if e.get("sha256") == self.PLACEHOLDER]
+        self.assertLessEqual(len(holders), 11,
+                             "unmeasured fixture entries grew:\n  " + "\n  ".join(holders))
+        stray = sorted({h.split()[0] for h in holders} - {"beachfront.golden.spec.yaml"})
+        self.assertEqual([], stray, f"placeholder spread beyond beachfront: {stray}")
 
 
 if __name__ == "__main__":

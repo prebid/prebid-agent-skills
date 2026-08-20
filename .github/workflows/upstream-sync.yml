@@ -43,19 +43,19 @@ jobs:
       issues: write            # file/update/close the single drift tracking issue
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       # Shallow checkouts of both upstream repos so the claim verifier can
       # re-derive every registered claim from source. This is the networked half
       # of the upstream-claims gate; round-trip-ci.yml runs the hermetic half.
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: prebid/prebid-server
           ref: master
           path: .upstream/go
           fetch-depth: 1
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: prebid/prebid-server-java
           ref: master
@@ -63,7 +63,7 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.11'
 
@@ -88,6 +88,21 @@ jobs:
           # failure (empty scan set / unusable source). This step never fails;
           # the exit code is enforced after the issue has been filed.
           echo "exit=$EXIT" >> $GITHUB_OUTPUT
+
+      # The scan compares pinned goldens against current master, so its resting
+      # state is NOT empty and enforcing its exit code alone leaves this job
+      # permanently red. `.github/accepted-drift.txt` records which findings are
+      # known; this step is what makes a green run mean "nothing NEW moved". It
+      # also fails on a stale entry, so the accepted list cannot outlive its
+      # findings. Non-blocking here so it cannot mask the drift report; folded
+      # into the enforcement step below.
+      - name: Check drift against the accepted-drift baseline
+        id: baseline
+        continue-on-error: true
+        run: |
+          set +e
+          python3 scripts/check-drift-baseline.py
+          echo "exit=$?" >> $GITHUB_OUTPUT
 
       # A registered claim that no longer holds upstream is the same class of
       # event as golden drift: the skills are asserting something false to
@@ -119,6 +134,26 @@ jobs:
           set +e
           python3 scripts/verify-params-refs.py \
             --go-checkout .upstream/go --java-checkout .upstream/java
+          echo "exit=$?" >> $GITHUB_OUTPUT
+
+      # The same question for fixture-inventory digests, which had no upstream
+      # check at all: does each recorded digest and byte length describe the file
+      # it names at the golden's own pinned commit? The drift scan compares those
+      # digests against master, which cannot distinguish a digest that never
+      # described the file from one upstream moved past -- fourteen sha1-length
+      # digests in the Go adverxo golden sat unnoticed under exactly that gap.
+      # --min-coverage 1.0 holds the achieved state: every resolvable entry
+      # carries a checkable claim, so a new entry cannot land unmeasured. No
+      # --allow-unverifiable: nothing currently needs excusing, and a flag that
+      # excuses one entry is how the next one gets excused too.
+      - name: Verify fixture-inventory digests against upstream
+        id: fixtures
+        continue-on-error: true
+        run: |
+          set +e
+          python3 scripts/verify-fixture-digests.py \
+            --go-checkout .upstream/go --java-checkout .upstream/java \
+            --min-coverage 1.0
           echo "exit=$?" >> $GITHUB_OUTPUT
 
       - name: Upload drift-report artifact
@@ -213,7 +248,9 @@ jobs:
           EXIT="${{ steps.sync.outputs.exit }}"
           CLAIMS="${{ steps.claims.outputs.exit }}"
           REFS="${{ steps.refs.outputs.exit }}"
-          echo "sync=$EXIT claims=$CLAIMS refs=$REFS"
+          BASELINE="${{ steps.baseline.outputs.exit }}"
+          FIXTURES="${{ steps.fixtures.outputs.exit }}"
+          echo "sync=$EXIT claims=$CLAIMS refs=$REFS baseline=$BASELINE fixtures=$FIXTURES"
           STATUS=0
           # An EMPTY output is not a pass: it means the step never reached its
           # echo, so nothing was checked. Treated as a failure, because the whole
@@ -232,13 +269,31 @@ jobs:
             echo "::error::A bidder_params_ref no longer matches upstream, or could not be verified (exit $REFS)."
             STATUS=1
           fi
+          if [ -z "$FIXTURES" ]; then
+            echo "::error::the fixture-digest step produced no exit code — it did not run to completion."
+            STATUS=1
+          elif [ "$FIXTURES" != "0" ]; then
+            echo "::error::A fixture digest does not describe the file it names at its golden's pin, or coverage regressed."
+            STATUS=1
+          fi
+          if [ -z "$BASELINE" ]; then
+            echo "::error::the accepted-drift step produced no exit code — it did not run to completion."
+            STATUS=1
+          elif [ "$BASELINE" != "0" ]; then
+            echo "::error::Drift that is not in .github/accepted-drift.txt, or an accepted entry that no longer fires. See the step log."
+            STATUS=1
+          fi
+          # The sync exit code itself is NOT enforced for drift any more: the
+          # baseline step above decides whether the findings are known. Exit 3
+          # still fails, because a zero-input run is an instrument failure rather
+          # than a verdict about drift.
           case "$EXIT" in
-            0|2) ;;
+            0|1|2) ;;
             3)
               echo "::error::sync-from-upstream could not scan (exit 3). A zero-input run is not a clean verdict."
               STATUS=1 ;;
             *)
-              echo "::error::Upstream drift detected — see the tracking issue and the drift-report artifact."
+              echo "::error::sync-from-upstream exited $EXIT, which is not a code it defines."
               STATUS=1 ;;
           esac
           exit $STATUS

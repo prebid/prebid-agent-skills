@@ -280,7 +280,11 @@ claims:
       vendor-owned VAST behavior.
     sites:
       - path: prebid-server-java/port-go2java/templates/bidder-config.yaml.j2
-        assert: "modifying-vast-xml-allowed"
+        # Anchored on the emit line, not the bare key: the key now also appears
+        # in the template's header note (which quotes application.yaml), and a
+        # bare-key anchor cannot go stale on the regression this claim exists to
+        # catch -- a revert to `{% if ctx.modifying_vast_xml %}` omit-when-false.
+        assert: "modifying-vast-xml-allowed: {{ 'true' if ctx.modifying_vast_xml else 'false' }}"
 
   - id: java.adapter-defaults.multiformat-supported
     kind: config_value
@@ -562,3 +566,395 @@ claims:
     sites:
       - path: prebid-server-java/port-go2java/SKILL.md
         assert: has no upstream instance and its suffix names two framework classes
+
+  # ---------------------------------------------------------------------------
+  # Java endpoint macro substitution. The taxonomy described `string-replace` as
+  # "Adapter calls endpoint.replace(\"{{.X}}\", value)" and 8 goldens declared it.
+  # Upstream #4444 (2026-07-20) moved every adapter to Vert.x UriTemplate, so that
+  # mechanism now has zero instances. The `.replace(` calls that remain in bidder
+  # classes are ${AUCTION_PRICE} bid post-processing, not endpoint construction.
+  - id: java.endpoint.uri-template-is-the-mechanism
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    mode: files
+    pattern: '[\w)]\s*\.replaceMacro\('
+    expect: 88
+    why: >
+      The mechanism a Java reader records for endpoint resolution.
+      88, not the 89 files that merely MENTION the name: adverxo defines its own
+      `private static String replaceMacro(String, String)` helper for the
+      ${AUCTION_PRICE} macro, so the bare name over-counts. The pattern below
+      matches the invocation, and has to be receiver-agnostic -- `Uri.of(x)
+      .replaceMacro(` is preceded by `)`, not by a word character, which an
+      earlier matcher missed on trustedstack and sparteo. The whitespace has to sit
+      BETWEEN the receiver and the call, not after a `)` alone: the dominant style
+      chains onto the next line
+      (`return endpointUrl` / `        .replaceMacro(...)`), so a pattern anchored to
+      the character immediately before `.replaceMacro` finds 79 of the 88. A count that
+      drops toward zero would mean upstream moved again; what must not drift is
+      that this is the mechanism and `endpoint.replace(...)` is not.
+    regenerate: |
+      git grep -lP '[\w)]\s*\.replaceMacro\(' \
+        -- 'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | wc -l
+    sites:
+      - path: prebid-server-go/read/skills/shared/behavior-taxonomy.yaml
+        assert: 88 of 89 bidder classes call `.replaceMacro(...)`
+
+  - id: java.endpoint.string-replace-is-extinct
+    kind: absence
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    absent: 'endpoint.replace('
+    why: >
+      The historical mechanism, pinned as absent at current upstream. The
+      vocabulary KEEPS the value -- eight goldens are pinned before #4444 and
+      state it truthfully -- so what this guards is that a NEW read never reaches
+      for it: if the construct reappears upstream the epoch is wrong, and if it
+      does not, a spec declaring it must also carry a pre-2026-07-20 pin.
+    sites:
+      - path: prebid-server-go/read/skills/shared/behavior-taxonomy.yaml
+        assert: zero instances after it
+
+  # ---------------------------------------------------------------------------
+  # The imp-ext parse-helper naming convention. The Java review suite had no
+  # naming check at all and missed a `tryParseImpExt` on prebid-server-java#4428;
+  # the count is what makes the check citable rather than an assertion of taste.
+  - id: java.bidder.parse-imp-ext-helper-name
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    mode: files
+    pattern: '\bparseImpExt\s*\('
+    expect: 155
+    why: >
+      152 declare it as a private helper and three more reference it, against 18
+      `parseExtImp` and 13 `parseAndValidateImpExt`. What must not drift is that a
+      `try` prefix has no instance -- these helpers already return null on
+      failure, so the prefix names something the corpus does not distinguish.
+    regenerate: |
+      git grep -lP '\bparseImpExt\s*\(' \
+        -- 'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | wc -l
+    sites:
+      - path: prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md
+        assert: 152 bidder classes declare `parseImpExt`
+
+  - id: java.bidder.no-try-prefixed-parse-helper
+    kind: absence
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    absent: 'tryParseImpExt'
+    why: >
+      The spelling the review missed. Pinned as absent so the INFO check keeps a
+      referent: if a `try`-prefixed helper ever merges, the convention changed and
+      the check should soften rather than keep citing a count.
+    sites:
+      - path: prebid-server-java/review/skills/bidder-class-pr-review/SKILL.md
+        assert: '**zero** carry a `try` prefix'
+
+  - id: java.bidder-config.phantom-keys
+    kind: absence
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: '*.yaml'
+    absent: gvl-vendor-id
+    why: 'The port reference showed `gvl-vendor-id:` under `meta-info`. Zero of the
+      255 bidder-config files carry it; the live key is `vendor-id`, which all 255
+      carry. A key that does not bind is silently ignored at startup, so the
+      emission looks complete and the vendor id is simply absent at runtime.
+
+      '
+    regenerate: 'git grep -l "gvl-vendor-id" -- src/main/resources/bidder-config
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/references/java-artifact-shapes.md
+        assert: "`gvl-vendor-id:` | 0 | `vendor-id:` (under `meta-info`) | 255"
+
+  - id: java.bidder-config.usersync-is-one-word
+    kind: absence
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: '*.yaml'
+    absent: 'user-sync:'
+    why: 'Same silent-binding class as gvl-vendor-id. Zero of the 255 bidder-config
+      files carry `user-sync:`; 162 carry `usersync:`. The hyphenated spelling is
+      what kebab-case convention suggests and what the port reference showed.
+
+      '
+    regenerate: 'git grep -l "user-sync:" -- src/main/resources/bidder-config
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/references/java-artifact-shapes.md
+        assert: "`user-sync:` | 0 | `usersync:` (one word) | 162"
+
+  - id: java.bidder-config.usersync-file-count
+    kind: count
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: '*.yaml'
+    mode: files
+    pattern: "(?m)^\\s*usersync:"
+    expect: 162
+    strict: true
+    why: 'Pins the positive half of the two absence claims above. Without it, a
+      corpus-wide rename to `user-sync:` would satisfy both absences (nothing named
+      user-sync would be missing) while making the reference wrong again.
+
+      '
+    regenerate: 'git grep -lP ''^\s*usersync:'' -- src/main/resources/bidder-config | wc -l
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/references/java-artifact-shapes.md
+        assert: "162 carry `usersync:`"
+
+  - id: go.adapterstest.request-order-insensitive
+    kind: count
+    repo: go
+    upstream_path: adapters/adapterstest
+    glob: test_json.go
+    mode: files
+    pattern: without assuming order
+    expect: 1
+    strict: true
+    why: 'Rule 47 told porters that emitting a HashMap "breaks deterministic request
+      order and fixture matching" and that Java->Go must re-introduce an explicit order
+      slice. The harness those fixtures run through matches requests order-insensitively
+      on purpose. A rule that invents a constraint the target repo does not have sends
+      a porter to add code a reviewer will ask them to remove.
+
+      '
+    regenerate: 'git grep -n "without assuming order" -- adapters/adapterstest/test_json.go
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: as the use of maps in some adapters purposely randomizes
+
+  - id: java.imp-grouping.no-linkedhashmap
+    kind: absence
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: '*Bidder.java'
+    absent: 'List<Imp>> impsBy'
+    why: 'Pins the shape of the grouping idiom by pinning what it is NOT. All six merged
+      groupers declare their map inline with HashMap; none names it impsBy* with a
+      LinkedHashMap, which is what an earlier revision of the Rule 47 template emitted.
+      A future adapter adopting that shape should force this claim to be re-decided
+      rather than passing quietly.
+
+      '
+    regenerate: 'git grep -l "List<Imp>> impsBy" -- src/main/java/org/prebid/server/bidder
+
+      '
+    sites:
+      - path: prebid-server-java/port-go2java/templates/bidder.java.j2
+        assert: HashMap matches all six merged Java groupers
+
+  - id: java.adkernel.grouping-key-is-not-a-string
+    kind: symbol
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder/adkernel/AdkernelBidder.java
+    symbol: 'Map<ExtImpAdkernel, List<Imp>>'
+    why: 'The single fact that disproves a String-keyed grouping template. adkernel is in
+      this repo''s golden corpus, groups imps, and keys on its whole ext type -- whose own
+      key field is an Integer zoneId. A template hardcoding Map<String, ...> cannot emit
+      this adapter at all.
+
+      '
+    regenerate: 'git grep -n "Map<ExtImpAdkernel, List<Imp>>" -- src/main/java/org/prebid/server/bidder/adkernel
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: Integer (adtarget) and an enum (taboola)
+
+  - id: java.clydo.geographic-host-param-is-optional
+    kind: count
+    repo: java
+    upstream_path: src/main/resources/static/bidder-params
+    glob: clydo.json
+    mode: files
+    pattern: '"required":\s*\[\s*"partnerId"\s*\]'
+    expect: 1
+    strict: true
+    why: 'The merged precedent for Rule 48''s geographic-host constraint. clydo puts
+      {Region} in its hostname and still leaves `region` OUT of the params required
+      list, so the publisher is never forced to supply the geo component. The PR
+      template''s "geographic host parameters are NOT required" is otherwise a line
+      with no worked example, and Rule 48''s own example does the opposite.
+
+      '
+    regenerate: 'git grep -n ''"required"'' -- src/main/resources/static/bidder-params/clydo.json
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: '`\"required\": [\"partnerId\"]` only'
+
+  - id: java.clydo.default-region-fallback
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder/clydo
+    glob: ClydoBidder.java
+    mode: files
+    pattern: DEFAULT_REGION
+    expect: 1
+    strict: true
+    why: 'The other half of the same precedent: an absent or unrecognized region
+      resolves to a default rather than failing the request. Without this, "optional in
+      the schema" would still mean a broken request when the param is omitted.
+
+      '
+    regenerate: 'git grep -n DEFAULT_REGION -- src/main/java/org/prebid/server/bidder/clydo
+
+      '
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: 'carries `DEFAULT_REGION = \"us\"`'
+
+  - id: java.configuration.type-witness-count
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder
+    glob: "*Configuration.java"
+    mode: files
+    pattern: 'BidderDepsAssembler\s*\.\s*<'
+    expect: 12
+    strict: true
+    why: >-
+      port-go2java emits the explicit type witness on forBidder exactly when the bidderCreator reads a
+      Rule 35 subclass getter, and the template's header justifies that against this population. Each of
+      these 12 was compiled with only the witness removed and each fails, so the figure is not decoration:
+      if it moves, the claim that the witness is load-bearing everywhere upstream spells it needs re-deriving.
+    regenerate: >-
+      git grep -lP 'BidderDepsAssembler\s*\.\s*<' --
+      'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/configuration.java.j2
+        assert: "witness removed -> compile fails    12/12"
+
+  - id: java.configuration.class-total
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder
+    glob: "*Configuration.java"
+    mode: files
+    pattern: 'BidderDepsAssembler'
+    expect: 255
+    why: >-
+      The denominator for every per-config form the template header measures. A porter diffing the template
+      against one file needs to know how atypical that file is, and each ratio is meaningless if the total drifts.
+    regenerate: >-
+      git grep -l 'BidderDepsAssembler' --
+      'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/configuration.java.j2
+        assert: "FORMS MEASURED across the 255 upstream"
+
+  - id: java.bidder-tests.makebids-204-cases
+    kind: count
+    repo: java
+    upstream_path: src/test/java/org/prebid/server/bidder
+    glob: "*BidderTest.java"
+    mode: files
+    pattern: 'givenHttpCall\(204|HttpResponse\.of\(\s*204'
+    expect: 1
+    strict: true
+    why: >-
+      port-go2java emits no 204 case against makeBids because HttpBidderRequester short-circuits NO_CONTENT
+      before the bidder is invoked, so an emitted assertion of an empty result cannot hold. This is the corpus
+      evidence for that omission. The single hit is sparteo, and it asserts an error rather than an empty
+      result. If the count grows, the Java framework contract may have changed and the omission needs revisiting.
+    regenerate: >-
+      git grep -lP 'givenHttpCall\(204|HttpResponse\.of\(\s*204' --
+      'src/test/java/org/prebid/server/bidder/**/*BidderTest.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/bidder-test.java.j2
+        assert: "1 of 254 upstream bidder test directories feeds 204 to makeBids"
+
+  - id: go.bidder-info.deploy-time-token-delimited
+    kind: count
+    repo: go
+    upstream_path: static/bidder-info
+    glob: "*.yaml"
+    mode: files
+    pattern: '(?m)^\s*endpoint:.*#\{'
+    expect: 3
+    strict: true
+    why: >-
+      Rule 15 distinguishes the delimited deploy-time token from the bare form and states the disable-flag
+      convention per entry kind. Both statements are derived from exactly these three files (appStockSSP,
+      m152, selectmedia); m152 is the alias that carries no disabled key, which is why the rule's MUST is
+      scoped to standalone entries.
+    regenerate: "git grep -lP '^\\s*endpoint:.*#\\{' -- 'static/bidder-info/*.yaml' | wc -l"
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: "appears on three Go endpoints"
+
+  - id: java.bidder-config.deploy-time-token-delimited
+    kind: count
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: "*.yaml"
+    mode: files
+    pattern: '(?m)^\s*endpoint:.*#\{'
+    expect: 1
+    strict: true
+    why: >-
+      The Java side of the same rule. The single hit is teqblaze.yaml, and the token sits on its appStockSSP
+      alias rather than on a standalone entry -- which is the shape Rule 15 now teaches, after citing a
+      bidder-config/rubicon.yaml that does not exist.
+    regenerate: "git grep -lP '^\\s*endpoint:.*#\\{' -- 'src/main/resources/bidder-config/*.yaml' | wc -l"
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: "and one Java endpoint (`teqblaze.yaml:42`"
+
+  - id: go.adapterstest.impids-required
+    kind: count
+    repo: go
+    upstream_path: adapters/adapterstest
+    glob: test_json.go
+    mode: matches
+    pattern: 'expected\.ImpIDs must contain at least one imp ID'
+    expect: 1
+    strict: true
+    regenerate: "git grep -cF 'expected.ImpIDs must contain at least one imp ID' -- adapters/adapterstest/test_json.go"
+    why: >-
+      The harness rejects a fixture with no impIDs before it compares any request or response, which is why
+      both port-java2go fixture templates emit the key unconditionally and fail at render without it. If this
+      guard is removed upstream the templates could relax, and if its wording changes the fixture templates'
+      justification no longer points at anything.
+    sites:
+      - path: prebid-server-go/port-java2go/templates/exemplary-fixture.json.j2
+        assert: "expected.ImpIDs must contain at least one imp ID"
+
+  - id: java.bidders.no-status-code-reads
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: "*Bidder.java"
+    mode: files
+    pattern: 'getStatusCode\(\)|HttpResponseStatus\.'
+    expect: 0
+    strict: true
+    why: >-
+      Rule 30 says a Go-to-Java porter must not emit explicit status checks, and this is the corpus
+      evidence: not one upstream Java bidder reads a status code, because HttpBidderRequester turns
+      NO_CONTENT into an empty result and any non-200 into badServerResponse before makeBids is
+      invoked. bidder.java.j2 emits none for every taxonomy value as a result. A non-zero count means
+      some bidder now does inspect the status, and the rule needs re-deriving before the template
+      keeps omitting it. The denominator is 253 classes that declare makeBids; it is deliberately not
+      part of this claim, because the count that matters is the numerator being zero.
+    regenerate: >-
+      git grep -lP 'getStatusCode\(\)|HttpResponseStatus\.' --
+      'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/bidder.java.j2
+        assert: "which is why 0 of the 253"

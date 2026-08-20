@@ -146,6 +146,7 @@ Split into `kind` (semantic, cross-language) + `mechanism_go` / `mechanism_java`
 | `multi-token-substitution` | Multiple macros substituted. | rubicon (`{{.AccountID}}` + `{{.ZoneID}}`) |
 | `query-parameter-augmentation` | Endpoint URL has query params appended at request time (e.g., `?member_id=123`). | appnexus (`member_id`) |
 | `runtime-region-selection` | Endpoint URL chosen from a runtime context (e.g., country code → region). | huaweiads |
+| `param-derived-endpoint-macros` | Endpoint macros filled by PARSING a publisher-supplied param value (typically a routing URL) — components validated against a code-level allow-list before substitution; parent domain stays pinned in config. Port-translation Rule 48. | rtbstack (route URL → Go `{{.Region}}`/`{{.SspID}}`; Java `{Region}`/`{SspID}` since #4444) |
 | `deploy-time-token` | Endpoint URL has a non-Go-template placeholder substituted pre-deployment by the operator. Surfaces in `deploy_time_tokens[]`. | rubicon (`REGION` token) |
 | `dev-prod-toggle` | Endpoint chosen between two literal URLs based on a request-time flag. | kobler (`testMode` flag toggles between endpoint and devEndpoint) |
 | `custom` | Anything else. REQUIRES `quirks` entry. | n/a |
@@ -166,10 +167,30 @@ Split into `kind` (semantic, cross-language) + `mechanism_go` / `mechanism_java`
 
 | Mechanism | When |
 |---|---|
-| `string-replace` | Adapter calls `endpoint.replace("{{.X}}", value)`. |
+| `uri-template` | Adapter calls `Uri.of(endpoint).replaceMacro(NAME, value).expand()`. The dominant form: 89 of the bidder classes at `e3ffd57`. |
+| `uri-template-at-bean-construction` | Same call, but in the `{X}Configuration` class rather than the bidder, so the endpoint is resolved once at startup instead of per request. Canonical: `AaxConfiguration.resolveEndpoint(configEndpoint, externalUrl)` substituting `PREBID_SERVER_ENDPOINT` from `${external-url}`. |
 | `URIBuilder` | Adapter uses `org.apache.http.client.utils.URIBuilder`. |
-| `custom-resolver-class` | Adapter uses a co-located resolver class (e.g., `RubiconUriBuilder`). |
+| `custom-resolver-class` | Adapter uses a co-located resolver class (e.g., `MagniteUriBuilder`). |
+| `literal` | The endpoint carries no macro. A `dev-prod-toggle` picking between two literal URLs is this, not a substitution. Canonical: kobler. |
 | `null` | When no mechanism applies (Go-source spec). |
+
+| `string-replace` | Adapter calls `endpoint.replace("{{X}}", value)`. **Historical**: correct until #4444 merged 2026-07-20, zero instances after it. |
+
+`string-replace` is kept, not retired. It has no instance at current upstream —
+88 of 89 bidder classes call `.replaceMacro(...)` and none resolves its endpoint
+with `endpoint.replace(...)` — but a golden pinned before 2026-07-20 states it
+truthfully, and a spec cannot be made to claim a mechanism its own
+`provenance.source.resolved_commit` does not have. Mechanism and pin move
+together or not at all. Eight goldens carry it today and every one is correct at
+its own pin; verified in the clone rather than inferred.
+
+Two traps in measuring this. `.replace(...)` calls that remain in bidder classes
+are usually `${AUCTION_PRICE}` bid post-processing (`adverxo`, `thetradedesk`),
+which belongs to `make_bids.bid_post_processing`, not to endpoint construction.
+And `adverxo` defines its own `private static String replaceMacro(String, String)`
+helper for that price macro, so grepping the bare name counts a file that is not
+using the framework call at all — match on the invocation
+(`\)\s*\.replaceMacro\(` or `\w\.replaceMacro\(`), not the name.
 
 A spec emits `kind` always and the relevant `mechanism_*` for its source language; the other-language mechanism is null.
 
@@ -437,6 +458,7 @@ The flat list of all known taxa, each grounded in Phase 2 findings. A `custom` v
 | `empty-response-as-error` | Adapter treats an empty response (e.g., zero-length result list) as a protocol error rather than a no-bid. Canonical: huaweiads empty `multiad`. | quirks |
 | `high-test-method-count` | Adapter has an unusually large unit-test count (>50 `@Test` methods or >2000 LOC of tests). Canonical: huaweiads (~198 @Test methods, ~4880 LOC). | quirks + tests.unit_test_methods_count |
 | `nested-configuration-properties` | `XyzConfigurationProperties` declares a nested non-trivial inner sub-class with multiple fields. Canonical: huaweiads `ExtraInfo` (6 fields nested inside `HuaweiAdsConfigurationProperties`). | quirks + spring_config.configuration_properties_class.nested_classes |
+| `param-derived-endpoint-macros` | Endpoint macros filled by parsing a publisher-supplied param value (typically a routing URL) — parsed components validated against a code-level allow-list before substitution; the endpoint's parent domain stays pinned in bidder config. Same value as `endpoint_resolution.kind: param-derived-endpoint-macros`; port-translation Rule 48. Canonical: rtbstack (route URL hostname label → region {us, eu, sg}; client/endpoint/ssp query params → macros). | quirks + endpoint_resolution |
 | `parameterized-request-type` | Java bidder class declares `Bidder<CustomType>` with a non-default request body type. Canonical: huaweiads (`Bidder<HuaweiAdsRequest>`), mediasquare (`Bidder<MediasquareRequest>`). | quirks + bidder_class.parameterized_request_type |
 | `per-request-cryptographic-auth` | Adapter computes per-request HMAC/signature for the Authorization header (not pre-built basic auth or static bearer). Canonical: huaweiads HMAC-SHA-256 Digest. | quirks + headers_constructed.authentication_kind |
 | `redundant-work` | **[anti-pattern]** Adapter performs duplicate work without caching (e.g., parses `imp.ext` twice per request cycle). Canonical: huaweiads `parseImpExt` called once in `makeHttpRequests` and again in `makeBids`. | quirks |

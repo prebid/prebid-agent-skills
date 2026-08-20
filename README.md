@@ -7,7 +7,7 @@ Agent skills, reference documentation, golden test fixtures, and a CI harness fo
 - **Read skills** that extract a structured Adapter Specification (a YAML document capturing provenance, code-level behavior, schema, test inventory, and cross-language port concerns) from any Go or Java bidder adapter:
   - `prebid-server-go/read/skills/` — for `prebid/prebid-server`
   - `prebid-server-java/read/skills/` — for `prebid/prebid-server-java`
-- **Canonical references** at `prebid-server-go/read/skills/shared/` — the schema (`adapter-spec.md`), the closed enumeration registry (`behavior-taxonomy.md`), and 46 cross-language port-translation rules (`port-translation-rules.md`). The Java suite links to these as source of truth.
+- **Canonical references** at `prebid-server-go/read/skills/shared/` — the schema (`adapter-spec.md`), the closed enumeration registry (`behavior-taxonomy.md`), and 49 cross-language port-translation rules (`port-translation-rules.md`). The Java suite links to these as source of truth.
 - **Golden fixtures** at `prebid-server-{go,java}/read/test-fixtures/` — hand-authored Adapter Specification YAMLs pinned to specific upstream commits, used as round-trip determinism oracles (R4) and cross-language consistency contracts (R5).
 - **Cross-language pairs** at `cross-language-pairs/` — dual-spec assertion files declaring per-bidder cross-language equivalence and divergence.
 - **CI harness** at `scripts/round-trip-ci.py` — validates R1–R10 spec rules and the dual-spec assertions.

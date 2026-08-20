@@ -1,4 +1,4 @@
-adapter_spec_version: "2.0.0"
+adapter_spec_version: "2.1.0"
 taxonomy_version: "1.0.0"
 spec_kind: prebid-server-adapter
 source_language: java
@@ -525,7 +525,14 @@ tests:
   fixture_handling: count-only
   test_application_properties_entries_added: 7
   integration_test_class: AppnexusVideoTest
-  integration_test_pattern: 6-file-with-cache
+  # `custom`, not 6-file-with-cache: the folder holds EIGHT files, and
+  # junit-it-patterns.md defines 6-file-with-cache by count ("has 6 files
+  # matching the 4 standard + 2 cache patterns"). AppnexusVideoTest.java is one
+  # @Test that stubs TWO bidder calls (bid-request/response -1 and -2), one cache
+  # call (request + response-matcher), and asserts against the auction pair.
+  # The shape stays readable from fixture_inventory.integration[] roles, which
+  # record all eight with real digests.
+  integration_test_pattern: custom
 
 spring_config:
   factory_class: AppnexusConfiguration

@@ -361,6 +361,105 @@ DISCOVERY_PATTERNS = {
 }
 
 
+# A `path:line` citation into an upstream file is the one citation form with no
+# legitimate ambiguity: either the file has that many lines or the citation has
+# drifted. Registered claims do not cover these -- the manifest holds symbols,
+# counts and absences, while a line number sits in prose -- so a citation could
+# rot silently. It did: an AppnexusBidder.java LOC example read 561 against a
+# file that upstream had shrunk to 553.
+#
+# Path-only citations are deliberately NOT failed here. A skill legitimately
+# cites the pre-rename side of a documented rename (adoppler -> elementaltv), a
+# file a port is instructed to create (rtbstack on the Java side), and
+# placeholder names in worked examples. Failing those would bury the signal.
+CITATION_RX = re.compile(
+    r"`(?P<path>(?:adapters|openrtb_ext|config|exchange|usersync|endpoints|macros|util)/[\w/.-]+\.go"
+    r"|src/(?:main|test)/(?:java|resources)/[\w/.$-]+\.(?:java|json|yaml)"
+    r"|static/bidder-(?:info|params)/[\w.-]+\.(?:yaml|json))"
+    r"(?::(?P<lo>\d+)(?:[-\u2013](?P<hi>\d+))?)?`"
+)
+
+ALLOWLIST = REPO_ROOT / ".github" / "accepted-missing-citations.txt"
+
+
+def _load_citation_allowlist() -> dict[str, str]:
+    """path -> "kind | reason". A path-only citation that does not resolve is not
+    automatically rot: a skill legitimately names the pre-rename side of a rename,
+    a file it is recording as absent, or a file the port creates. No heuristic
+    separates those from drift, so each one is listed with its reason and the
+    sweep fails on anything unlisted -- and on a listing that now resolves, since
+    a stale exemption waves a real regression through."""
+    out: dict[str, str] = {}
+    if not ALLOWLIST.is_file():
+        return out
+    for line in ALLOWLIST.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        path, _, rest = line.partition("|")
+        out[path.strip()] = rest.strip()
+    return out
+
+
+def check_line_citations(roots: dict[str, Path]) -> list[Result]:
+    """Verify every upstream citation in the skill trees resolves.
+
+    Line-numbered citations are failed outright. Path-only citations are checked
+    against .github/accepted-missing-citations.txt, in both directions.
+    """
+    out: list[Result] = []
+    allow = _load_citation_allowlist()
+    seen_unresolved: set[str] = set()
+    checked = 0
+    for tree in DISCOVERY_TREES:
+        for f in sorted((REPO_ROOT / tree).rglob("*.md")):
+            rel = f.relative_to(REPO_ROOT)
+            for lineno, line in enumerate(
+                    f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                for m in CITATION_RX.finditer(line):
+                    path = m.group("path")
+                    lo = int(m.group("lo")) if m.group("lo") else None
+                    hi = int(m.group("hi")) if m.group("hi") else lo
+                    # A Java path cited from a Go-side doc is a legitimate
+                    # cross-reference, so try every supplied checkout.
+                    hits = [r / path for r in roots.values() if (r / path).is_file()]
+                    cid = f"citation.{rel}:{lineno}"
+                    if not hits:
+                        seen_unresolved.add(path)
+                        if path in allow:
+                            continue
+                        out.append(Result(cid, FAIL,
+                                          f"{path} does not resolve in any supplied checkout and "
+                                          f"is not in {ALLOWLIST.name}; add it with its kind and "
+                                          f"reason, or fix the citation"))
+                        continue
+                    if lo is None:
+                        continue
+                    checked += 1
+                    total = len(hits[0].read_text(encoding="utf-8",
+                                                  errors="replace").splitlines())
+                    if hi > total:
+                        out.append(Result(cid, FAIL,
+                                          f"{path}:{m.group('lo')}"
+                                          f"{'-' + m.group('hi') if m.group('hi') else ''} "
+                                          f"cited, file has {total} lines"))
+    stale = sorted(p for p in allow if p not in seen_unresolved)
+    for path in stale:
+        out.append(Result("citation.allowlist", FAIL,
+                          f"{ALLOWLIST.name} exempts {path}, which now resolves or is no longer "
+                          f"cited -- drop the entry so a real regression cannot hide behind it"))
+    if checked == 0:
+        # An empty scan is a setup error, not a pass.
+        out.append(Result("citation.sweep", FAIL,
+                          "no resolvable line-numbered citations were found -- "
+                          "the sweep reached nothing"))
+    else:
+        out.append(Result("citation.sweep", PASS,
+                          f"{checked} line-numbered citation(s) resolved and in range; "
+                          f"{len(allow)} path-only exemption(s) all still needed"))
+    return out
+
+
 def discover(manifest: dict) -> tuple[list[Result], dict[str, set[str]]]:
     """Report claim-shaped strings that are not registered, so coverage grows."""
     registered = set()
@@ -425,6 +524,7 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write("ERROR: --upstream needs --go-checkout and/or --java-checkout\n")
             return 3
         results += check_upstream(manifest, roots)
+        results += check_line_citations(roots)
     if args.discover:
         disc, hits = discover(manifest)
         results += disc

@@ -26,6 +26,56 @@ scripts/tests/test_score_review_evals.py   self-tests for the scorer
 
 ---
 
+## The four dispositions
+
+An actual finding lands in exactly one of these, in this order:
+
+| class | what it means | counts toward |
+|---|---|---|
+| `expected` | a maintainer raised it on that PR | recall |
+| `forbidden` | a maintainer ruled it out. `forbidden_at_or_above: WARN` forbids only a blocking verdict, leaving a note tolerated | a hard false positive |
+| `additional` | this repo's own documented rules require it and no maintainer raised it on that PR. Each entry MUST cite the rule in `rule:` | nothing; reported |
+| `unexpected` | the residual | the false-positive ceiling |
+
+`additional` exists because the ceiling was measuring the wrong thing. On
+`prebid-server-4765` all ten findings scored as unexpected cited a rule that exists
+in the skills — the alias-GVL rule, the two re-validation anti-patterns, the
+destructive-clobber rule — so the gate was penalising the suite for finding true
+things the maintainers did not. A review assistant exceeding the human review is the
+point, not a defect.
+
+The `rule:` citation is what separates classifying a finding from raising the
+ceiling. An entry without one is an instrument error, not a pass.
+
+`additional` describes what a correct review MAY report, never what it must: an
+unreported `additional` entry does not reduce recall. Only `expected` does.
+
+### Two rules the classification has to follow
+
+**Neutralisation wins.** The order is neutralised, then additional, then unexpected.
+"The rule did not exist yet" is a stronger statement than "documented and unraised",
+so an `additional` entry must not claim an epoch-exempt finding and take it out of
+the neutralised report. Writing `prebid-server-java-4428`'s entries produced exactly
+that error before the order was fixed.
+
+**Severity direction decides borderline cases.** A finding rated *below* its
+sanctioned severity is still `additional` — the subject is right and
+`severity_agreement` records the gap. A finding rated *above* it is not, because the
+over-rating is the harm: a blocking comment where a note is sanctioned. Three
+findings on `prebid-server-4287` stay `unexpected` for that reason or because the
+rule they name explicitly excludes them:
+
+- a supplemental-coverage absence reported at WARN where the rule says "as a single
+  INFO … never as a FAIL";
+- a test-runner endpoint literal, where the reference is explicit that "a
+  test-runner endpoint is not a finding at any severity";
+- a 204 fixture with no expected errors, where the rule says "Do NOT flag a fixture
+  asserting graceful degradation … This covers HTTP 204 / no-content".
+
+All three quote pre-calibration wording, so the recorded run predates the
+re-scoping now in the skills. A citation must match the rule **as currently
+scoped**, not merely name it.
+
 ## The corpus
 
 Nine fixtures. Six Go, three Java; six carry defects a maintainer raised, three

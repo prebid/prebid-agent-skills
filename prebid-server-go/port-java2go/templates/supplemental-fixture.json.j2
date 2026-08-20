@@ -117,15 +117,35 @@ unknown values before invoking this template.
    Default to "legacy-raw-go" when absent or None to preserve
    pre-F-new-23 callers (kobler-shape) that didn't pass this field. #}
 {% set status_kind = ctx.http_status_kind if ctx.http_status_kind else "legacy-raw-go" %}
+{# The fixture's expectations must match what bidder.go.j2 emitted, so the two
+   templates normalise http_status_kind the same way. The taxonomy spells the
+   helper case "canonical-go-helpers"; "canonical-helpers" is the historical
+   alias. Recognising only the alias here made a canonical-helpers adapter get
+   legacy-raw-go expectations, and the no-response-body fixture then failed with
+   `MakeBids had wrong error count. Expected 0, got 1`. #}
+{% set _canonical_status_helpers = status_kind in ("canonical-go-helpers", "canonical-helpers") %}
+{# An unrecognised scenario_kind used to fall through every branch below, emitting
+   an empty mockResponse. adapterstest then reads status 0 and MakeBids fails with
+   `Unexpected status code: 0. Run with request.debug = 1 for more info` -- a
+   failure that names neither the fixture field nor the bad value. The docstring
+   above deferred this check to the caller; it is enforced here instead. #}
+{% if kind not in ("status-204", "status-400", "status-404", "no-response-body", "malformed-body") %}
+{{ ERROR_unknown_scenario_kind__expected_one_of_status_204_status_400_status_404_no_response_body_malformed_body() }}
+{% endif %}
+{# Same hard requirement as the exemplary template: adapterstest rejects a
+    fixture whose expectedRequest has no impIDs (test_json.go:359). The Inputs
+    block above already called it required; it is now enforced. #}
+{% if not ctx.imp_ids %}
+{{ ERROR_supplemental_fixture_requires_ctx_imp_ids__adapterstest_rejects_a_fixture_whose_expectedRequest_has_no_impIDs() }}
+{% endif %}
 {
   "mockBidRequest": {{ ctx.mock_bid_request | tojson }},
   "httpCalls": [
     {
       "expectedRequest": {
         "uri": {{ ctx.uri | tojson }},
-        "body": {{ ctx.expected_request_body | tojson }}{% if ctx.imp_ids %},
-        "impIDs": {{ ctx.imp_ids | tojson }}{% endif %}
-
+        "body": {{ ctx.expected_request_body | tojson }},
+        "impIDs": {{ ctx.imp_ids | tojson }}
       },
       "mockResponse": {
 {% if kind == "status-204" %}
@@ -147,7 +167,7 @@ unknown values before invoking this template.
   ],
 {% if kind == "status-204" %}
   "expectedBidResponses": []
-{% elif kind == "no-response-body" and status_kind == "canonical-helpers" %}
+{% elif kind == "no-response-body" and _canonical_status_helpers %}
   "expectedMakeBidsErrors": [
     {
       "value": "expect { or n, but found",

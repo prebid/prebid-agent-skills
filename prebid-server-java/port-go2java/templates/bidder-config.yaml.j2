@@ -6,7 +6,18 @@ Inputs:
   ctx.maintainer_email      : str  — from bidder_info.maintainer.email
   ctx.gvl_vendor_id         : int|null
   ctx.endpoint_compression  : str|null
-  ctx.modifying_vast_xml    : bool
+  ctx.modifying_vast_xml    : bool — the SOURCE-EFFECTIVE value (the declared
+                              source value, else the SOURCE framework's absent-key
+                              default; Go's `ModifyingVastXmlAllowed bool` in
+                              config/bidderinfo.go is a plain bool, so absent → false).
+                              Rule 49: emitted in BOTH polarities because Java's
+                              absent-key default is the OPPOSITE — `adapter-defaults:
+                              modifying-vast-xml-allowed: true` in application.yaml,
+                              back-filled by BidderConfigurationProperties.init()
+                              through ObjectUtils.defaultIfNull. Omitting the key for a
+                              source-effective false silently flips VastModifier on
+                              every video bid (F-new-105). Required, not defaulted: an
+                              absent ctx key would render `false` and look deliberate.
   ctx.geoscope              : list[str]  — alphabetical sort applied by caller
   ctx.site_media_types      : list[str]|null  — from capabilities.site.mediaTypes (sorted)
   ctx.app_media_types       : list[str]|null  — from capabilities.app.mediaTypes (sorted)
@@ -40,9 +51,10 @@ adapters:
 {% for region in ctx.geoscope %}
       - {{ region }}
 {% endfor %}
-{% if ctx.modifying_vast_xml %}
-    modifying-vast-xml-allowed: true
+{% if ctx.modifying_vast_xml is undefined or ctx.modifying_vast_xml is none %}
+{{ ERROR_rule49_modifying_vast_xml_is_required__a_missing_key_would_render_false_and_read_as_deliberate() }}
 {% endif %}
+    modifying-vast-xml-allowed: {{ 'true' if ctx.modifying_vast_xml else 'false' }}
     meta-info:
       maintainer-email: {{ ctx.maintainer_email | tojson }}
 {% if ctx.gvl_vendor_id is not none %}

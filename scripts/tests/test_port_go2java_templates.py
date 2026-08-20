@@ -123,12 +123,44 @@ class TestBidderConfigYamlJ2(unittest.TestCase):
         self.assertEqual(meta["app-media-types"], ["banner"])
         self.assertNotIn("dooh-media-types", meta)  # null in ctx → omitted
 
-    def test_modifying_vast_xml_omitted_when_false(self):
-        """Java convention: emit `modifying-vast-xml-allowed: true` only when
-        the bidder modifies VAST XML; omit the key entirely when false (the
-        default). Verified against upstream kobler bidder-config: no such key."""
+    def test_modifying_vast_xml_explicit_false_when_false(self):
+        """Rule 49 / F-new-105. The two frameworks disagree on what an absent
+        key means, so a Go-effective `false` MUST be declared explicitly in the
+        Java emission.
+
+        Upstream at e3ffd57db: `src/main/resources/application.yaml:102` sets
+        `adapter-defaults: modifying-vast-xml-allowed: true`, back-filled by
+        `BidderConfigurationProperties.init()` at lines 67-68 through
+        `ObjectUtils.defaultIfNull`; Go's `config/bidderinfo.go:35` declares a
+        plain `bool`, so absent means false there. Omitting the key therefore
+        flips VastModifier on for every video bid.
+
+        The test this replaced asserted the key was omitted, reasoning from
+        upstream kobler's own bidder-config carrying no such key. True of that
+        file, wrong for a port: kobler-the-Java-adapter was never ported FROM a
+        Go-effective-false source by this skill."""
         rendered = _render("bidder-config.yaml.j2", _kobler_ctx())
-        self.assertNotIn("modifying-vast-xml-allowed", rendered)
+        parsed = yaml.safe_load(rendered)
+        self.assertIs(parsed["adapters"]["kobler"]["modifying-vast-xml-allowed"], False)
+
+    def test_modifying_vast_xml_explicit_true_when_true(self):
+        """Emitted in both polarities. Explicit `true` has live upstream
+        precedent (aax, freewheelssp, mediasquare, vungle all declare it)."""
+        ctx = _kobler_ctx()
+        ctx["modifying_vast_xml"] = True
+        rendered = _render("bidder-config.yaml.j2", ctx)
+        parsed = yaml.safe_load(rendered)
+        self.assertIs(parsed["adapters"]["kobler"]["modifying-vast-xml-allowed"], True)
+
+    def test_modifying_vast_xml_absent_from_ctx_fails_loudly(self):
+        """Not defaulted. A missing ctx key would render `false`, which is
+        indistinguishable from a deliberate declaration -- and `false` is the
+        polarity that is wrong to guess, because it is Java's non-default."""
+        ctx = _kobler_ctx()
+        del ctx["modifying_vast_xml"]
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("bidder-config.yaml.j2", ctx)
+        self.assertIn("rule49_modifying_vast_xml_is_required", str(cm.exception))
 
     def test_aliases_block_emitted_when_present(self):
         ctx = _kobler_ctx()
@@ -663,6 +695,92 @@ class TestRule35NestedSubclass(unittest.TestCase):
         self.assertNotIn('"adapters." + BIDDER_NAME', rendered)
 
 
+class TestTypedConfigTypeWitness(unittest.TestCase):
+    """`BidderDepsAssembler.<Props>forBidder` -- required, not stylistic.
+
+    `forBidder` is `<CFG extends BidderConfigurationProperties>
+    BidderDepsAssembler<CFG>`. With no witness CFG infers to the bound, so the
+    bidderCreator's function parameter is a plain BidderConfigurationProperties
+    and any subclass getter read off it does not resolve.
+
+    Grounded by compiling the upstream tree at e3ffd57 rather than by matching
+    it: all 12 witness-carrying configs compile unmodified, and all 12 fail with
+    only `.<Props>` removed (Magnite 6 errors, the rest 1 each). Adding a witness
+    to the 4 bare Rule-35 configs leaves them at 0 errors, so bare is the
+    minimal form, not a requirement -- which is why the population count
+    (243/255 bare) cannot decide this and the declared getters must.
+    """
+
+    def _typed(self, **overrides):
+        ctx = _adverxo_typed_config_ctx()
+        ctx.update(overrides)
+        return _render("configuration.java.j2", ctx)
+
+    def test_witness_emitted_when_the_creator_reads_a_typed_getter(self):
+        rendered = self._typed(typed_config_lambda_getters=["auctionEndpoint"])
+        self.assertIn("BidderDepsAssembler.<AdverxoConfigurationProperties>forBidder(BIDDER_NAME)",
+                      rendered)
+
+    def test_no_witness_when_no_typed_getter_is_declared(self):
+        """The corpus default. 243 of 255 upstream configs are bare."""
+        rendered = self._typed()
+        self.assertIn("BidderDepsAssembler.forBidder(BIDDER_NAME)", rendered)
+        self.assertNotIn("BidderDepsAssembler.<", rendered)
+
+    def test_declared_getters_are_threaded_into_the_creator_call(self):
+        """Emitting the witness without the read, or the read without the
+        witness, is what does not compile -- so one ctx key drives both."""
+        rendered = self._typed(typed_config_lambda_getters=["auctionEndpoint",
+                                                           "registrationEndpoint"])
+        self.assertIn("config.getEndpoint(), config.getAuctionEndpoint(), "
+                      "config.getRegistrationEndpoint()", rendered)
+
+    def test_witness_and_getter_reads_are_emitted_together(self):
+        """The coupling is the invariant: every rendering either has both or
+        neither. A rendering with one is the shape javac rejects."""
+        for getters in ([], ["auctionEndpoint"], ["auctionEndpoint", "registrationEndpoint"]):
+            rendered = self._typed(typed_config_lambda_getters=getters)
+            has_witness = "BidderDepsAssembler.<" in rendered
+            has_reads = "config.getAuctionEndpoint()" in rendered
+            self.assertEqual(has_witness, has_reads,
+                             f"witness={has_witness} reads={has_reads} for {getters}")
+
+    def test_witness_type_defaults_to_the_bidder_root_suffix(self):
+        rendered = self._typed(typed_config_class_name=None,
+                               typed_config_lambda_getters=["auctionEndpoint"])
+        self.assertIn("BidderDepsAssembler.<AdverxoConfigurationProperties>forBidder", rendered)
+
+    def test_getters_without_a_subclass_is_a_hard_error(self):
+        """There is no subclass to read them from, so the emission would not
+        compile. Fail at render rather than hand a reviewer broken Java.
+
+        typed_fields is cleared so the neighbouring
+        `typed_fields_supplied_but_has_typed_config_props_is_false` guard cannot
+        fire first -- its message also contains has_typed_config_props, so a
+        substring assertion passes while this guard is absent.
+        """
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            self._typed(has_typed_config_props=False, typed_fields=None,
+                        typed_config_constraint_imports=None, typed_config_javadoc=None,
+                        typed_config_lambda_getters=["auctionEndpoint"])
+        self.assertIn("ERROR_typed_config_lambda_getters_requires_has_typed_config_props",
+                      str(cm.exception))
+
+    def test_a_config_getter_in_free_form_extra_args_is_a_hard_error(self):
+        """bidder_creator_extra_args is pasted through verbatim, so a subclass
+        getter hidden in it needs the witness the template was not told to
+        emit. Upstream Magnite is this shape: 4 typed reads in the creator."""
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            self._typed(bidder_creator_extra_args="config.getAuctionEndpoint()")
+        self.assertIn("ERROR_bidder_creator_extra_args_reads_a_config_getter",
+                      str(cm.exception))
+
+    def test_extra_args_without_a_config_getter_still_renders(self):
+        """The guard must not fire on args that read something else."""
+        rendered = self._typed(bidder_creator_extra_args="versionInfo.getVersion()")
+        self.assertIn("versionInfo.getVersion()", rendered)
+
+
 class TestBidderJ2(unittest.TestCase):
     """Tests for templates/bidder.java.j2 — the heaviest port-go2java template."""
 
@@ -701,29 +819,69 @@ class TestBidderJ2(unittest.TestCase):
             rendered,
         )
 
-    def test_canonical_helpers_emit_when_rule_30_applies(self):
-        """Rule 30 'canonical-helpers' maps to Java's framework-default behavior:
-        the HTTP layer handles 204 and non-200 before makeBids is invoked, so
-        the template emits NO explicit status-check code (matches upstream
-        KoblerBidder.makeBids; F-new-90 retired the non-existent
-        BidderUtil.isResponseStatusCodeNoContent / .checkResponseStatusCode
-        method calls our earlier template had emitted).
+    def test_no_status_check_is_emitted_whatever_the_source_declared(self):
+        """Rule 30: "A porter Go->Java should NOT include explicit status checks
+        (Java framework handles it)." HttpBidderRequester turns NO_CONTENT into an
+        empty result and any non-200 into badServerResponse before makeBids is
+        invoked (HttpBidderRequester.java:303 and :322), and 0 of the 253 upstream
+        Java bidders reference a status code.
+
+        This held for the alias `canonical-helpers` only. Both spellings a Go
+        source spec actually carries -- `canonical-go-helpers` and `legacy-raw-go`
+        (behavior-taxonomy.md) -- fell through to a hand-rolled
+        `response.getStatusCode() == 204` / `!= 200` pair, so a Go adapter using
+        the canonical helpers ported to a Java bidder that hand-rolls the checks:
+        a shape with zero corpus precedent, emitted for every real input.
         """
-        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
-        self.assertNotIn("BidderUtil.isResponseStatusCodeNoContent", rendered)
-        self.assertNotIn("BidderUtil.checkResponseStatusCode", rendered)
-        # Emit should explain WHY there's no explicit status check (review-readability).
-        self.assertIn("Rule 30 (canonical-helpers)", rendered)
+        for kind in ("canonical-go-helpers", "canonical-helpers", "legacy-raw-go",
+                     "framework-default", "framework-default-plus-empty-seatbid-shortcircuit",
+                     None):
+            ctx = _kobler_bidder_ctx()
+            ctx["http_status_kind"] = kind
+            rendered = _render("bidder.java.j2", ctx)
+            self.assertNotIn("getStatusCode()", rendered, f"kind={kind}")
+            self.assertNotIn("BidderUtil.isResponseStatusCodeNoContent", rendered)
+            self.assertNotIn("BidderUtil.checkResponseStatusCode", rendered)
+            # The emission has to say WHY there is no check, or a reviewer reads
+            # the absence as an omission.
+            self.assertIn("Rule 30: no explicit status check", rendered, f"kind={kind}")
+
+    def test_a_bespoke_status_policy_gets_a_todo_not_an_invented_check(self):
+        """`custom-status-checks` / `custom` are the only kinds that put anything
+        in the bidder, and they get a TODO: there is no Java shape to copy, so
+        transcribing the Go branches would invent one."""
+        for kind in ("custom-status-checks", "custom"):
+            ctx = _kobler_bidder_ctx()
+            ctx["http_status_kind"] = kind
+            rendered = _render("bidder.java.j2", ctx)
+            self.assertIn("TODO[port-go2java]", rendered, kind)
+            self.assertIn(kind, rendered, kind)
+            self.assertNotIn("getStatusCode()", rendered, kind)
+
+    def test_an_unknown_status_kind_is_a_hard_error(self):
+        """Falling through on an unrecognised value is how the alias mismatch
+        stayed invisible. `legacy-raw` was named in the Inputs block and consumed
+        by no branch."""
+        for bad in ("legacy-raw", "canonical", "typo"):
+            ctx = _kobler_bidder_ctx()
+            ctx["http_status_kind"] = bad
+            with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+                _render("bidder.java.j2", ctx)
+            self.assertIn("ERROR_unknown_http_status_kind", str(cm.exception), bad)
+
+    def test_the_emission_names_no_unrelated_bidder(self):
+        """The status comment used to read "matches upstream KoblerBidder", which
+        every emitted bidder carried whatever it was porting. It cites the
+        framework file now."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bidder_class_root"] = "Portprobe"
+        ctx["imp_ext_class_root"] = "Portprobe"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertNotIn("KoblerBidder", rendered)
+        self.assertIn("HttpBidderRequester.java:303", rendered)
         # mapper.decodeValue must still wire through (the bid-response parsing path)
         self.assertIn("mapper.decodeValue(httpCall.getResponse().getBody()", rendered)
 
-    def test_legacy_raw_status_when_rule_30_inapplicable(self):
-        ctx = _kobler_bidder_ctx()
-        ctx["http_status_kind"] = "legacy-raw"
-        rendered = _render("bidder.java.j2", ctx)
-        self.assertIn("response.getStatusCode() == 204", rendered)
-        self.assertIn("response.getStatusCode() != 200", rendered)
-        self.assertNotIn("isResponseStatusCodeNoContent", rendered)
 
     def test_per_imp_batching_loops_through_imps(self):
         """Per-imp batching emits a per-imp loop with toBuilder rebuild.
@@ -774,6 +932,142 @@ class TestBidderJ2(unittest.TestCase):
         self.assertIn("case 2 -> BidType.video;", rendered)
         self.assertIn("case 4 -> BidType.xNative;", rendered)
 
+    def test_grouped_by_key_defaults_to_keying_on_the_whole_ext_object(self):
+        """Rule 47. The default shape is what upstream does most.
+
+        Measured at prebid-server-java e3ffd57db and prebid-server 0ba35231, the
+        merged adapters that group imps key their map on:
+
+            ExtImpAdkernel / ExtImpDatablocks / ExtImpZeroclickfraud  (whole ext)
+            Integer  (adtarget)
+            MediaType enum  (taboola)
+            String  (thirtythreeacross)
+
+        so the whole-ext shape is 3 of 6, and on the Go side it is 4 of 4
+        (`map[openrtb_ext.ExtImpAdkernel][]openrtb2.Imp`). port-java2go already
+        emits that, so defaulting to it here also makes the two port skills
+        agree. An earlier revision hardcoded `Map<String, …>` keyed on one field,
+        which is 1 of 6 and could not express adkernel at all.
+        """
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "grouped-by-key"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("final Map<ExtImpKobler, List<Imp>> impsByGroup = new HashMap<>();", rendered)
+        self.assertIn("impsByGroup.computeIfAbsent(extImp, key -> new ArrayList<>())", rendered)
+        self.assertIn("for (Map.Entry<ExtImpKobler, List<Imp>> groupEntry : impsByGroup.entrySet())",
+                      rendered)
+        # Per-imp AND per-group failures stay isolated.
+        self.assertEqual(rendered.count("errors.add(BidderError.badInput(e.getMessage()));"), 2)
+        self.assertNotIn("UnsupportedOperationException", rendered)
+
+    def test_grouped_by_key_uses_hashmap_not_linkedhashmap(self):
+        """All six merged Java groupers use `new HashMap<>()`; none uses
+        LinkedHashMap. An earlier revision emitted LinkedHashMap and carried a
+        comment calling HashMap a defect that "breaks deterministic request order
+        and fixture matching" -- which Go's own harness contradicts:
+        `adapters/adapterstest/test_json.go` matches requests order-insensitively
+        on purpose, "as the use of maps in some adapters purposely randomizes
+        order"."""
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "grouped-by-key"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("new HashMap<>()", rendered)
+        self.assertNotIn("LinkedHashMap", rendered)
+
+    def test_grouped_by_key_typed_field_key(self):
+        """The minority shape: key on one field, with its type carried across."""
+        for key_type, field, getter in (("String", "route", "getRoute"),
+                                        ("Integer", "zoneId", "getZoneId")):
+            ctx = _kobler_bidder_ctx()
+            ctx["batching_kind"] = "grouped-by-key"
+            ctx["batching_per_key"] = {"key_field": field, "key_type": key_type}
+            with self.subTest(key_type=key_type):
+                rendered = _render("bidder.java.j2", ctx)
+                self.assertIn(f"final Map<{key_type}, List<Imp>> impsByGroup = new HashMap<>();",
+                              rendered)
+                self.assertIn(f"impsByGroup.computeIfAbsent(extImp.{getter}(), "
+                              f"key -> new ArrayList<>())", rendered)
+
+    def test_typed_field_key_without_a_type_fails_loudly(self):
+        """`String` cannot be assumed: adtarget keys on Integer and taboola on an
+        enum, so a field key with no declared type would emit a map whose type is
+        a guess. adkernel's own key is `Integer zoneId`."""
+        ctx = _kobler_bidder_ctx()
+        ctx["batching_kind"] = "grouped-by-key"
+        ctx["batching_per_key"] = {"key_field": "zoneId"}
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("bidder.java.j2", ctx)
+        self.assertIn("rule47_key_field_requires_key_type", str(cm.exception))
+
+    def test_grouped_by_key_non_identifier_key_field_fails_loudly(self):
+        """A source-side JSON field name may be snake_case or hyphenated; the
+        getter derivation only works on a lower-camelCase Java identifier, so
+        normalization belongs in the SKILL (Rule 46), not in a silent render."""
+        for bad in ("account_id", "account-id", "AccountId", "9lives"):
+            ctx = _kobler_bidder_ctx()
+            ctx["batching_kind"] = "grouped-by-key"
+            ctx["batching_per_key"] = {"key_field": bad, "key_type": "String"}
+            with self.subTest(key_field=bad):
+                with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+                    _render("bidder.java.j2", ctx)
+                self.assertIn("rule47_key_field_must_be_a_lower_camelCase_java_identifier",
+                              str(cm.exception))
+
+    def test_grouping_imports_absent_for_other_batching_kinds(self):
+        """The grouping imports are conditional -- checkstyle UnusedImports would
+        fail the build on any other batching kind."""
+        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
+        self.assertNotIn("import java.util.HashMap;", rendered)
+        self.assertNotIn("import java.util.Map;", rendered)
+
+    def test_per_bid_skip_mtype_accumulates_and_continues(self):
+        """F-new-108. An unresolved mtype adds badServerResponse and yields
+        null; the extractBids stream filters the null so sibling bids in the
+        same response survive -- the Go `errs = append(errs, err); continue`
+        shape. Target-repo precedent at e3ffd57db: ZentotemBidder threads the
+        errors list through extractBids -> makeBidderBid -> the type resolver,
+        and 68 upstream adapters take an errors list into extractBids."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        ctx["bid_type_error_tolerance"] = "per-bid-skip"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn("case null, default ->", rendered)
+        self.assertIn("errors.add(BidderError.badServerResponse(", rendered)
+        self.assertIn("yield null;", rendered)
+        self.assertIn("return Result.of(extractBids(bidResponse, errors), errors);", rendered)
+        self.assertIn("private List<BidderBid> extractBids(BidResponse bidResponse, List<BidderError> errors)",
+                      rendered)
+        self.assertIn("private BidType resolveBidType(Bid bid, List<BidderError> errors)", rendered)
+        self.assertIn("private BidderBid makeBidderBid(Bid bid, String currency, List<BidderError> errors)",
+                      rendered)
+        # The abort-all shape must not co-emit: two resolveBidType overloads
+        # would not compile, and the throw would pre-empt the skip.
+        self.assertNotIn('"Missing bid.mtype for bid with impId: "', rendered)
+        self.assertNotIn("private BidType resolveBidType(Bid bid, BidRequest bidRequest)", rendered)
+        self.assertNotIn("extractBids(bidResponse, bidRequest)", rendered)
+
+    def test_per_bid_skip_requires_by_bid_mtype(self):
+        """Only by-bid-mtype has the null-means-skip contract. Every other arm
+        returns a BidType unconditionally, so the errors parameter would be
+        unused and the null branch unreachable."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "imp-mediatype-introspection"
+        ctx["bid_type_error_tolerance"] = "per-bid-skip"
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+            _render("bidder.java.j2", ctx)
+        self.assertIn("per_bid_skip_tolerance_requires_by_bid_mtype_resolution", str(cm.exception))
+
+    def test_abort_all_mtype_is_the_default(self):
+        """Regression pin: with no tolerance flag, by-bid-mtype keeps the
+        abort-all PreBidException shape (the Teal #4765 baseline)."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bid_type_resolution"] = "by-bid-mtype"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertIn('"Missing bid.mtype for bid with impId: "', rendered)
+        self.assertNotIn("case null, default ->", rendered)
+        self.assertNotIn("makeBidderBid", rendered)
+        self.assertIn("return Result.withValues(extractBids(bidResponse, bidRequest));", rendered)
+
     def test_multiformat_imp_introspection_fails_loudly(self):
         """A multiformat adapter cannot resolve bid type by imp introspection —
         a co-present-format imp mis-types every non-first bid. Selecting
@@ -783,8 +1077,9 @@ class TestBidderJ2(unittest.TestCase):
         ctx = _kobler_bidder_ctx()
         ctx["multiformat_supported"] = True
         ctx["bid_type_resolution"] = "imp-mediatype-introspection"
-        with self.assertRaises(Exception):
+        with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
             _render("bidder.java.j2", ctx)
+        self.assertIn("multiformat_adapter_must_use_by_bid_mtype_resolution", str(cm.exception))
 
     def test_single_format_imp_introspection_still_renders(self):
         """No regression: a single-format adapter may still resolve by imp
@@ -824,11 +1119,15 @@ class TestBidderTestJ2(unittest.TestCase):
         )
 
     def test_baseline_test_methods_present(self):
-        """The four canonical baseline @Test methods (constructor invariants,
-        204 no-content, malformed-response error, valid single-bid) all emit."""
+        """The three canonical baseline @Test methods emit: constructor
+        invariants, malformed-response error, valid single-bid.
+
+        There is no 204 method. It used to be emitted and it asserted a Go
+        semantic that cannot hold in Java -- see
+        TestEmittedJavaTestsExecute.test_no_204_case_is_emitted_against_makeBids.
+        """
         rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
         self.assertIn("public void creationShouldFailOnInvalidEndpointUrl()", rendered)
-        self.assertIn("public void makeBidsShouldReturnEmptyResultOn204NoContent()", rendered)
         self.assertIn("public void makeBidsShouldReturnErrorOnMalformedResponse()", rendered)
         self.assertIn("public void makeBidsShouldReturnSingleBannerBidForCanonicalResponse()", rendered)
 
@@ -852,6 +1151,134 @@ class TestBidderTestJ2(unittest.TestCase):
         self.assertGreater(idx, 0, "ExtImpKobler.of( call must be emitted")
         # The default value should be within the call's arg span (~100 char window)
         self.assertIn("true", rendered[idx:idx + 100])
+
+
+class TestEmittedJavaPassesCheckstyle(unittest.TestCase):
+    """Upstream runs checkstyle at the `validate` phase from `extra/pom.xml`, which
+    `pr-java-ci.yml` invokes via `mvn -B package --file extra/pom.xml`. So a
+    checkstyle violation in emitted code is an upstream CI failure, not a style
+    preference — and the SKILL claims the templates emit compliant code by
+    construction.
+
+    Running upstream's own `checkstyle.xml` (checkstyle 10.17.0) over 14 rendered
+    variants found one violation: `CommentsIndentation` in the grouped-by-key arm.
+    A `{%- set ... -%}` on the line before the comment block stripped the trailing
+    whitespace including the next line's indentation, so the comment's first line
+    emitted at column 0 while its continuation lines emitted at 8.
+
+    These tests assert the invariant directly, so the class is gated without
+    needing a checkstyle jar in CI.
+    """
+
+    # Every ctx shape whose emission the checkstyle run covered.
+    VARIANTS = (
+        ("baseline", {}),
+        ("per-imp", {"batching_kind": "per-imp"}),
+        ("max-imps", {"batching_kind": "max-imps-per-request", "max_imps_per_request": 10}),
+        ("grouped", {"batching_kind": "grouped-by-key"}),
+        ("per-bid-skip", {"bid_type_error_tolerance": "per-bid-skip",
+                          "bid_type_resolution": "by-bid-mtype"}),
+        ("grouped+skip", {"batching_kind": "grouped-by-key",
+                          "bid_type_error_tolerance": "per-bid-skip",
+                          "bid_type_resolution": "by-bid-mtype"}),
+        ("external-url-macro", {"endpoint_external_url_macro": True}),
+        ("custom-status", {"http_status_kind": "custom-status-checks"}),
+    )
+
+    def _rendered(self, overrides):
+        ctx = _kobler_bidder_ctx()
+        ctx.update(overrides)
+        return _render("bidder.java.j2", ctx)
+
+    def test_no_comment_is_emitted_at_column_zero_inside_the_class(self):
+        """`CommentsIndentation`. A comment at column 0 inside a class body is the
+        signature of a whitespace-control tag eating the next line's indentation."""
+        for label, over in self.VARIANTS:
+            rendered = self._rendered(over)
+            body = rendered[rendered.index(" implements Bidder<BidRequest> {"):]
+            offenders = [(i, l) for i, l in enumerate(body.splitlines(), 1)
+                         if l.startswith("//")]
+            self.assertEqual(offenders, [],
+                             f"{label}: comment at column 0 inside the class body -> "
+                             f"CommentsIndentation: {offenders[:2]}")
+
+    def test_a_comment_block_keeps_one_indentation_level_throughout(self):
+        """The defect showed as line 1 of a block at 0 and lines 2..n at 8, so
+        assert the whole run agrees rather than only that line 1 is indented."""
+        for label, over in self.VARIANTS:
+            lines = self._rendered(over).splitlines()
+            run: list[tuple[int, int]] = []
+            for i, l in enumerate(lines, 1):
+                if l.lstrip().startswith("//"):
+                    run.append((i, len(l) - len(l.lstrip())))
+                else:
+                    if len(run) > 1:
+                        indents = {ind for _, ind in run}
+                        self.assertEqual(len(indents), 1,
+                                         f"{label}: comment block at lines "
+                                         f"{run[0][0]}-{run[-1][0]} mixes indents {sorted(indents)}")
+                    run = []
+
+    def test_no_emitted_line_exceeds_the_checkstyle_line_length(self):
+        """`LineLength` in upstream's config. 120 per the SKILL's §4-6 reference."""
+        for label, over in self.VARIANTS:
+            for i, l in enumerate(self._rendered(over).splitlines(), 1):
+                self.assertLessEqual(len(l), 120, f"{label}: line {i} is {len(l)} chars")
+
+    def test_no_trailing_whitespace_is_emitted(self):
+        """`RegexpSingleline` / `NoWhitespaceBefore` territory, and trivially
+        avoidable in a template."""
+        for label, over in self.VARIANTS:
+            for i, l in enumerate(self._rendered(over).splitlines(), 1):
+                self.assertEqual(l, l.rstrip(), f"{label}: line {i} has trailing whitespace")
+
+
+class TestEmittedJavaTestsExecute(unittest.TestCase):
+    """Defects found by compiling the emitted Java tests and running them.
+
+    bidder-test.java.j2 and it-test.java.j2 had never been handed to a compiler.
+    Both compile clean against upstream at e3ffd57 (javac 25.0.2, Lombok
+    annotation processing on, 3093 main + 949 test classes). Executing the unit
+    test surfaced one behavioural defect that no substring assertion on the
+    rendered text would have caught.
+    """
+
+    def test_no_204_case_is_emitted_against_makeBids(self):
+        """A Go-ism. Go hands MakeBids the status code, so a Go adapter checks
+        http.StatusNoContent -- and the emitted Go bidder does. Java does not:
+        HttpBidderRequester short-circuits NO_CONTENT before makeBids is invoked
+        (HttpBidderRequester.java:303 and :322). The emitted test asserted an
+        empty result on 204, which cannot hold -- decoding "" throws
+        DecodeException and the bidder returns badServerResponse, so the emitted
+        suite failed its own emitted bidder.
+
+        Corpus: 1 of 254 upstream bidder test directories feeds 204 to makeBids
+        (sparteo), and it asserts an error, not an empty result.
+        """
+        rendered = _render("bidder-test.java.j2", _kobler_bidder_test_ctx())
+        self.assertNotIn("givenHttpCall(204", rendered)
+        self.assertNotIn("204NoContent", rendered)
+
+    def test_the_go_direction_keeps_its_204_check(self):
+        """The mirror must not be 'fixed' the same way: in Go the status check
+        belongs in the adapter, so removing it there would be the defect."""
+        go_tpl = (REPO_ROOT / "prebid-server-go" / "port-java2go" / "templates"
+                  / "bidder.go.j2").read_text()
+        self.assertIn("http.StatusNoContent", go_tpl)
+
+    def test_scenario_scaffolds_fail_by_construction(self):
+        """The remaining failure in a fresh emission is deliberate: one @Test per
+        fixture_inventory.exemplary[] entry whose body the operator fills. They
+        fail rather than pass-vacuously, so an unfilled scaffold cannot be
+        mistaken for coverage -- which is why the acceptance gate on emitted
+        tests is a post-fill gate, not a property of a fresh emission."""
+        ctx = _kobler_bidder_test_ctx()
+        scenarios = ctx.get("scenario_methods") or []
+        if not scenarios:
+            self.skipTest("this ctx declares no scenario_methods")
+        rendered = _render("bidder-test.java.j2", ctx)
+        self.assertEqual(rendered.count("not yet implemented"), len(scenarios))
+        self.assertIn("TODO[port-go2java]", rendered)
 
 
 class TestItTestJ2(unittest.TestCase):
