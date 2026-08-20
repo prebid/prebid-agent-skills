@@ -819,29 +819,69 @@ class TestBidderJ2(unittest.TestCase):
             rendered,
         )
 
-    def test_canonical_helpers_emit_when_rule_30_applies(self):
-        """Rule 30 'canonical-helpers' maps to Java's framework-default behavior:
-        the HTTP layer handles 204 and non-200 before makeBids is invoked, so
-        the template emits NO explicit status-check code (matches upstream
-        KoblerBidder.makeBids; F-new-90 retired the non-existent
-        BidderUtil.isResponseStatusCodeNoContent / .checkResponseStatusCode
-        method calls our earlier template had emitted).
+    def test_no_status_check_is_emitted_whatever_the_source_declared(self):
+        """Rule 30: "A porter Go->Java should NOT include explicit status checks
+        (Java framework handles it)." HttpBidderRequester turns NO_CONTENT into an
+        empty result and any non-200 into badServerResponse before makeBids is
+        invoked (HttpBidderRequester.java:303 and :322), and 0 of the 254 upstream
+        Java bidders reference a status code.
+
+        This held for the alias `canonical-helpers` only. Both spellings a Go
+        source spec actually carries -- `canonical-go-helpers` and `legacy-raw-go`
+        (behavior-taxonomy.md) -- fell through to a hand-rolled
+        `response.getStatusCode() == 204` / `!= 200` pair, so a Go adapter using
+        the canonical helpers ported to a Java bidder that hand-rolls the checks:
+        a shape with zero corpus precedent, emitted for every real input.
         """
-        rendered = _render("bidder.java.j2", _kobler_bidder_ctx())
-        self.assertNotIn("BidderUtil.isResponseStatusCodeNoContent", rendered)
-        self.assertNotIn("BidderUtil.checkResponseStatusCode", rendered)
-        # Emit should explain WHY there's no explicit status check (review-readability).
-        self.assertIn("Rule 30 (canonical-helpers)", rendered)
+        for kind in ("canonical-go-helpers", "canonical-helpers", "legacy-raw-go",
+                     "framework-default", "framework-default-plus-empty-seatbid-shortcircuit",
+                     None):
+            ctx = _kobler_bidder_ctx()
+            ctx["http_status_kind"] = kind
+            rendered = _render("bidder.java.j2", ctx)
+            self.assertNotIn("getStatusCode()", rendered, f"kind={kind}")
+            self.assertNotIn("BidderUtil.isResponseStatusCodeNoContent", rendered)
+            self.assertNotIn("BidderUtil.checkResponseStatusCode", rendered)
+            # The emission has to say WHY there is no check, or a reviewer reads
+            # the absence as an omission.
+            self.assertIn("Rule 30: no explicit status check", rendered, f"kind={kind}")
+
+    def test_a_bespoke_status_policy_gets_a_todo_not_an_invented_check(self):
+        """`custom-status-checks` / `custom` are the only kinds that put anything
+        in the bidder, and they get a TODO: there is no Java shape to copy, so
+        transcribing the Go branches would invent one."""
+        for kind in ("custom-status-checks", "custom"):
+            ctx = _kobler_bidder_ctx()
+            ctx["http_status_kind"] = kind
+            rendered = _render("bidder.java.j2", ctx)
+            self.assertIn("TODO[port-go2java]", rendered, kind)
+            self.assertIn(kind, rendered, kind)
+            self.assertNotIn("getStatusCode()", rendered, kind)
+
+    def test_an_unknown_status_kind_is_a_hard_error(self):
+        """Falling through on an unrecognised value is how the alias mismatch
+        stayed invisible. `legacy-raw` was named in the Inputs block and consumed
+        by no branch."""
+        for bad in ("legacy-raw", "canonical", "typo"):
+            ctx = _kobler_bidder_ctx()
+            ctx["http_status_kind"] = bad
+            with self.assertRaises(jinja2.exceptions.UndefinedError) as cm:
+                _render("bidder.java.j2", ctx)
+            self.assertIn("ERROR_unknown_http_status_kind", str(cm.exception), bad)
+
+    def test_the_emission_names_no_unrelated_bidder(self):
+        """The status comment used to read "matches upstream KoblerBidder", which
+        every emitted bidder carried whatever it was porting. It cites the
+        framework file now."""
+        ctx = _kobler_bidder_ctx()
+        ctx["bidder_class_root"] = "Portprobe"
+        ctx["imp_ext_class_root"] = "Portprobe"
+        rendered = _render("bidder.java.j2", ctx)
+        self.assertNotIn("KoblerBidder", rendered)
+        self.assertIn("HttpBidderRequester.java:303", rendered)
         # mapper.decodeValue must still wire through (the bid-response parsing path)
         self.assertIn("mapper.decodeValue(httpCall.getResponse().getBody()", rendered)
 
-    def test_legacy_raw_status_when_rule_30_inapplicable(self):
-        ctx = _kobler_bidder_ctx()
-        ctx["http_status_kind"] = "legacy-raw"
-        rendered = _render("bidder.java.j2", ctx)
-        self.assertIn("response.getStatusCode() == 204", rendered)
-        self.assertIn("response.getStatusCode() != 200", rendered)
-        self.assertNotIn("isResponseStatusCodeNoContent", rendered)
 
     def test_per_imp_batching_loops_through_imps(self):
         """Per-imp batching emits a per-imp loop with toBuilder rebuild.

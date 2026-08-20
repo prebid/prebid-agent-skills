@@ -65,7 +65,12 @@ the SKILL passes from the source spec):
                                           "query-parameter-augmentation", "dev-prod-toggle",
                                           "multi-token-substitution"}; Rule 11/12/13/14
   ctx.headers_collapse         : bool — Rule 19; emit HttpUtil.headers() shorthand
-  ctx.http_status_kind         : str  — one of {"canonical-helpers", "legacy-raw"}; Rule 30
+  ctx.http_status_kind         : str  — the source spec's
+                                        code.make_bids.http_status_handling.kind, passed
+                                        through unchanged. Only "custom-status-checks" and
+                                        "custom" put status handling in the emitted bidder,
+                                        and then as a TODO; every other value emits none,
+                                        per Rule 30
   ctx.bid_type_resolution      : str  — one of {"imp-mediatype-introspection",
                                           "ext-prebid-video-placement",
                                           "constant-banner",
@@ -127,9 +132,6 @@ import org.prebid.server.bidder.model.BidderBid;
 import org.prebid.server.bidder.model.BidderCall;
 import org.prebid.server.bidder.model.BidderError;
 import org.prebid.server.bidder.model.HttpRequest;
-{% if ctx.http_status_kind != "canonical-helpers" %}
-import org.prebid.server.bidder.model.HttpResponse;
-{% endif %}
 import org.prebid.server.bidder.model.Result;
 {% if ctx.uses_currency_conversion %}
 import org.prebid.server.currency.CurrencyConversionService;
@@ -159,6 +161,19 @@ import java.util.Objects;
  * {{ ctx.javadoc_summary }}
  */
 {% endif %}
+{#- Rule 30 vocabulary. A Go source spec carries `canonical-go-helpers` or
+    `legacy-raw-go` (behavior-taxonomy.md); a Java one carries `framework-default`
+    or `framework-default-plus-empty-seatbid-shortcircuit`. This template used to
+    test only the historical alias `canonical-helpers`, so BOTH real Go values fell
+    through to a hand-rolled 204/non-200 check -- the shape Rule 30 tells a
+    Go-to-Java porter not to emit, and one that 0 of 254 upstream Java bidders
+    contain. Only a bespoke policy gets adapter-level code, and it gets a TODO
+    rather than an invented check. -#}
+{% set _status_kind = ctx.http_status_kind %}
+{% if _status_kind and _status_kind not in ("canonical-go-helpers", "canonical-helpers", "legacy-raw-go", "framework-default", "framework-default-plus-empty-seatbid-shortcircuit", "custom-status-checks", "custom") %}
+{{ ERROR_unknown_http_status_kind__expected_a_behavior_taxonomy_value_canonical_go_helpers_legacy_raw_go_framework_default_custom_status_checks_or_custom() }}
+{% endif %}
+{% set _custom_status_policy = _status_kind in ("custom-status-checks", "custom") %}
 public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 
     private static final TypeReference<ExtPrebid<?, ExtImp{{ ctx.imp_ext_class_root }}>> {{ ctx.bidder_class_root | upper }}_EXT_TYPE_REFERENCE =
@@ -411,19 +426,22 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 
     @Override
     public Result<List<BidderBid>> makeBids(BidderCall<BidRequest> httpCall, BidRequest bidRequest) {
-{% if ctx.http_status_kind == "canonical-helpers" %}
-        // Rule 30 (canonical-helpers): no explicit status check — Java's HTTP
-        // layer handles 204 NO_CONTENT and non-200 codes before makeBids is
-        // invoked (matches upstream KoblerBidder; framework-default pattern).
+{% if _custom_status_policy %}
+        // TODO[port-go2java]: the source declares http_status_handling.kind=
+        // {{ ctx.http_status_kind }}, a bespoke status policy with no Java corpus
+        // precedent to copy — 0 of the 254 upstream Java bidders read a status
+        // code at all. Decide with a reviewer whether the behaviour survives the
+        // port: HttpBidderRequester already turns 204 into an empty result and any
+        // non-200 into badServerResponse, so a per-status distinction (say
+        // 400 -> BadInput) has to be justified, not transcribed.
 {% else %}
-        final HttpResponse response = httpCall.getResponse();
-        if (response.getStatusCode() == 204) {
-            return Result.empty();
-        }
-        if (response.getStatusCode() != 200) {
-            return Result.withError(BidderError.badServerResponse(
-                    "Unexpected status code: " + response.getStatusCode()));
-        }
+        // Rule 30: no explicit status check. HttpBidderRequester handles
+        // NO_CONTENT and non-200 before makeBids is invoked
+        // (HttpBidderRequester.java:303 and :322), which is why 0 of the 254
+        // upstream Java bidders reference a status code. This holds whatever the
+        // Go source did: `legacy-raw-go` hand-rolls those checks because Go hands
+        // the adapter the status, and porting them across would emit a shape the
+        // Java corpus does not contain.
 {% endif %}
         try {
             final BidResponse bidResponse = mapper.decodeValue(httpCall.getResponse().getBody(), BidResponse.class);
