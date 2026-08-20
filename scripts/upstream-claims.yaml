@@ -934,3 +934,27 @@ claims:
     sites:
       - path: prebid-server-go/port-java2go/templates/exemplary-fixture.json.j2
         assert: "expected.ImpIDs must contain at least one imp ID"
+
+  - id: java.bidders.no-status-code-reads
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/bidder
+    glob: "*Bidder.java"
+    mode: files
+    pattern: 'getStatusCode\(\)|HttpResponseStatus\.'
+    expect: 0
+    strict: true
+    why: >-
+      Rule 30 says a Go-to-Java porter must not emit explicit status checks, and this is the corpus
+      evidence: not one upstream Java bidder reads a status code, because HttpBidderRequester turns
+      NO_CONTENT into an empty result and any non-200 into badServerResponse before makeBids is
+      invoked. bidder.java.j2 emits none for every taxonomy value as a result. A non-zero count means
+      some bidder now does inspect the status, and the rule needs re-deriving before the template
+      keeps omitting it. The denominator is 253 classes that declare makeBids; it is deliberately not
+      part of this claim, because the count that matters is the numerator being zero.
+    regenerate: >-
+      git grep -lP 'getStatusCode\(\)|HttpResponseStatus\.' --
+      'src/main/java/org/prebid/server/bidder/*/*Bidder.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/bidder.java.j2
+        assert: "which is why 0 of the 253"

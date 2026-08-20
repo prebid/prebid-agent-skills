@@ -166,7 +166,7 @@ import java.util.Objects;
     or `framework-default-plus-empty-seatbid-shortcircuit`. This template used to
     test only the historical alias `canonical-helpers`, so BOTH real Go values fell
     through to a hand-rolled 204/non-200 check -- the shape Rule 30 tells a
-    Go-to-Java porter not to emit, and one that 0 of 254 upstream Java bidders
+    Go-to-Java porter not to emit, and one that 0 of 253 upstream Java bidders
     contain. Only a bespoke policy gets adapter-level code, and it gets a TODO
     rather than an invented check. -#}
 {% set _status_kind = ctx.http_status_kind %}
@@ -429,7 +429,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {% if _custom_status_policy %}
         // TODO[port-go2java]: the source declares http_status_handling.kind=
         // {{ ctx.http_status_kind }}, a bespoke status policy with no Java corpus
-        // precedent to copy — 0 of the 254 upstream Java bidders read a status
+        // precedent to copy — 0 of the 253 upstream Java bidders read a status
         // code at all. Decide with a reviewer whether the behaviour survives the
         // port: HttpBidderRequester already turns 204 into an empty result and any
         // non-200 into badServerResponse, so a per-status distinction (say
@@ -437,7 +437,7 @@ public class {{ ctx.bidder_class_root }}Bidder implements Bidder<BidRequest> {
 {% else %}
         // Rule 30: no explicit status check. HttpBidderRequester handles
         // NO_CONTENT and non-200 before makeBids is invoked
-        // (HttpBidderRequester.java:303 and :322), which is why 0 of the 254
+        // (HttpBidderRequester.java:303 and :322), which is why 0 of the 253
         // upstream Java bidders reference a status code. This holds whatever the
         // Go source did: `legacy-raw-go` hand-rolls those checks because Go hands
         // the adapter the status, and porting them across would emit a shape the

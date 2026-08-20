@@ -823,7 +823,7 @@ class TestBidderJ2(unittest.TestCase):
         """Rule 30: "A porter Go->Java should NOT include explicit status checks
         (Java framework handles it)." HttpBidderRequester turns NO_CONTENT into an
         empty result and any non-200 into badServerResponse before makeBids is
-        invoked (HttpBidderRequester.java:303 and :322), and 0 of the 254 upstream
+        invoked (HttpBidderRequester.java:303 and :322), and 0 of the 253 upstream
         Java bidders reference a status code.
 
         This held for the alias `canonical-helpers` only. Both spellings a Go
