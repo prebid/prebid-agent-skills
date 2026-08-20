@@ -819,3 +819,118 @@ claims:
       - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
         assert: 'carries `DEFAULT_REGION = \"us\"`'
 
+  - id: java.configuration.type-witness-count
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder
+    glob: "*Configuration.java"
+    mode: files
+    pattern: 'BidderDepsAssembler\s*\.\s*<'
+    expect: 12
+    strict: true
+    why: >-
+      port-go2java emits the explicit type witness on forBidder exactly when the bidderCreator reads a
+      Rule 35 subclass getter, and the template's header justifies that against this population. Each of
+      these 12 was compiled with only the witness removed and each fails, so the figure is not decoration:
+      if it moves, the claim that the witness is load-bearing everywhere upstream spells it needs re-deriving.
+    regenerate: >-
+      git grep -lP 'BidderDepsAssembler\s*\.\s*<' --
+      'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/configuration.java.j2
+        assert: "witness removed -> compile fails    12/12"
+
+  - id: java.configuration.class-total
+    kind: count
+    repo: java
+    upstream_path: src/main/java/org/prebid/server/spring/config/bidder
+    glob: "*Configuration.java"
+    mode: files
+    pattern: 'BidderDepsAssembler'
+    expect: 255
+    why: >-
+      The denominator for every per-config form the template header measures. A porter diffing the template
+      against one file needs to know how atypical that file is, and each ratio is meaningless if the total drifts.
+    regenerate: >-
+      git grep -l 'BidderDepsAssembler' --
+      'src/main/java/org/prebid/server/spring/config/bidder/*Configuration.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/configuration.java.j2
+        assert: "FORMS MEASURED across the 255 upstream"
+
+  - id: java.bidder-tests.makebids-204-cases
+    kind: count
+    repo: java
+    upstream_path: src/test/java/org/prebid/server/bidder
+    glob: "*BidderTest.java"
+    mode: files
+    pattern: 'givenHttpCall\(204|HttpResponse\.of\(\s*204'
+    expect: 1
+    strict: true
+    why: >-
+      port-go2java emits no 204 case against makeBids because HttpBidderRequester short-circuits NO_CONTENT
+      before the bidder is invoked, so an emitted assertion of an empty result cannot hold. This is the corpus
+      evidence for that omission. The single hit is sparteo, and it asserts an error rather than an empty
+      result. If the count grows, the Java framework contract may have changed and the omission needs revisiting.
+    regenerate: >-
+      git grep -lP 'givenHttpCall\(204|HttpResponse\.of\(\s*204' --
+      'src/test/java/org/prebid/server/bidder/**/*BidderTest.java' | wc -l
+    sites:
+      - path: prebid-server-java/port-go2java/templates/bidder-test.java.j2
+        assert: "1 of 772 upstream bidder test directories feeds 204 to makeBids"
+
+  - id: go.bidder-info.deploy-time-token-delimited
+    kind: count
+    repo: go
+    upstream_path: static/bidder-info
+    glob: "*.yaml"
+    mode: files
+    pattern: '(?m)^\s*endpoint:.*#\{'
+    expect: 3
+    strict: true
+    why: >-
+      Rule 15 distinguishes the delimited deploy-time token from the bare form and states the disable-flag
+      convention per entry kind. Both statements are derived from exactly these three files (appStockSSP,
+      m152, selectmedia); m152 is the alias that carries no disabled key, which is why the rule's MUST is
+      scoped to standalone entries.
+    regenerate: "git grep -lP '^\\s*endpoint:.*#\\{' -- 'static/bidder-info/*.yaml' | wc -l"
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: "appears on three Go endpoints"
+
+  - id: java.bidder-config.deploy-time-token-delimited
+    kind: count
+    repo: java
+    upstream_path: src/main/resources/bidder-config
+    glob: "*.yaml"
+    mode: files
+    pattern: '(?m)^\s*endpoint:.*#\{'
+    expect: 1
+    strict: true
+    why: >-
+      The Java side of the same rule. The single hit is teqblaze.yaml, and the token sits on its appStockSSP
+      alias rather than on a standalone entry -- which is the shape Rule 15 now teaches, after citing a
+      bidder-config/rubicon.yaml that does not exist.
+    regenerate: "git grep -lP '^\\s*endpoint:.*#\\{' -- 'src/main/resources/bidder-config/*.yaml' | wc -l"
+    sites:
+      - path: prebid-server-go/read/skills/shared/port-translation-rules.yaml
+        assert: "and one Java endpoint (`teqblaze.yaml:42`"
+
+  - id: go.adapterstest.impids-required
+    kind: count
+    repo: go
+    upstream_path: adapters/adapterstest
+    glob: test_json.go
+    mode: matches
+    pattern: 'expected\.ImpIDs must contain at least one imp ID'
+    expect: 1
+    strict: true
+    regenerate: "git grep -cF 'expected.ImpIDs must contain at least one imp ID' -- adapters/adapterstest/test_json.go"
+    why: >-
+      The harness rejects a fixture with no impIDs before it compares any request or response, which is why
+      both port-java2go fixture templates emit the key unconditionally and fail at render without it. If this
+      guard is removed upstream the templates could relax, and if its wording changes the fixture templates'
+      justification no longer points at anything.
+    sites:
+      - path: prebid-server-go/port-java2go/templates/exemplary-fixture.json.j2
+        assert: "expected.ImpIDs must contain at least one imp ID"
